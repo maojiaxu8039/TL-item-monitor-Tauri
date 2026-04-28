@@ -8,7 +8,8 @@ use parking_lot::RwLock;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
@@ -88,6 +89,13 @@ pub struct FirePriceResponse {
     pub data: Option<Vec<FirePriceRecord>>,
     pub error: Option<String>,
     pub source: String,
+}
+
+#[derive(serde::Serialize)]
+struct FirePriceUI {
+    price_per_wan: f64,
+    record_time: String,
+    source: String,
 }
 
 // ============================================================================
@@ -305,6 +313,46 @@ async fn scrape_fire_price_async() -> Result<FirePriceResponse, String> {
 }
 
 fn scrape_fire_price_blocking() -> FirePriceResponse {
+    // 优先使用 Node.js 直连千岛 API（速度快，成功率高）
+    let script_path = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.join("qiandao_fire.js")))
+        .unwrap_or_else(|| std::path::PathBuf::from("qiandao_fire.js"));
+
+    let mode_arg = "普通"; // TODO: 从配置读取
+    if let Ok(output) = std::process::Command::new("node")
+        .arg(&script_path)
+        .arg(mode_arg)
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Ok(data) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                let ten_k = data.get("ten_k").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let fire_per_rmb = data.get("fire_per_rmb").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let record = FirePriceRecord {
+                    id: None,
+                    item_name: "火价".to_string(),
+                    price: (ten_k * 10000.0) as i32,
+                    unit: "元/万火".to_string(),
+                    timestamp: data.get("ts").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    category: "fire_price".to_string(),
+                };
+                info!("Fire price via Node.js: {} 元/万火", ten_k);
+                return FirePriceResponse {
+                    success: true,
+                    data: Some(vec![record]),
+                    error: None,
+                    source: "千岛-Node.js".to_string(),
+                };
+            }
+        }
+        warn!("Node.js scraper failed, falling back to HTTP: {}", String::from_utf8_lossy(&output.stderr));
+    } else {
+        warn!("Failed to execute node script, falling back to HTTP");
+    }
+
+    // HTTP fallback
     let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
     match rt.block_on(scrape_fire_price_async()) {
         Ok(r) => r,
@@ -447,9 +495,28 @@ fn load_sections_from_file(app: &AppHandle) -> Vec<Section> {
 // ============================================================================
 
 #[tauri::command]
-fn get_fire_price(state: State<'_, Arc<AppState>>) -> Result<Option<FirePriceResponse>, String> {
+fn get_fire_price(state: State<'_, Arc<AppState>>) -> Result<FirePriceUI, String> {
     let guard = state.fire_price.read();
-    Ok(guard.clone())
+    if let Some(ref fp) = *guard {
+        // Extract price_per_wan from the first record in data
+        let price_per_wan = if let Some(ref records) = fp.data {
+            if let Some(first) = records.first() {
+                (first.price as f64) / 10000.0
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+        let record_time = fp.data.as_ref().and_then(|r| r.first()).map(|rec| rec.timestamp.clone()).unwrap_or_default();
+        Ok(FirePriceUI {
+            price_per_wan,
+            record_time,
+            source: fp.source.clone(),
+        })
+    } else {
+        Err("No fire price data yet".to_string())
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -871,6 +938,278 @@ fn start_background_tasks(app: AppHandle, state: Arc<AppState>) {
 // Main Entry Point
 // ============================================================================
 
+
+// ============================================================================
+// Internal HTTP Server for Frontend (bypasses broken Tauri IPC in embedded mode)
+// ============================================================================
+
+fn start_http_server(state: Arc<AppState>, port: u16) {
+    let listener = match TcpListener::bind(format!("127.0.0.1:{}", port)) {
+        Ok(l) => l,
+        Err(e) => { log::error!("HTTP bind error: {}", e); return; }
+    };
+    if let Err(e) = listener.set_nonblocking(true) { log::error!("set_nonblocking: {}", e); }
+    log::info!("HTTP server listening on http://127.0.0.1:{}", port);
+
+    loop {
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                let state = state.clone();
+                std::thread::spawn(move || {
+                    let mut buf = [0u8; 65536];
+                    let n = match stream.read(&mut buf) { Ok(n) => n, Err(_) => return };
+                    let request = String::from_utf8_lossy(&buf[..n]);
+                    let first_line = request.lines().next().unwrap_or("/");
+                    let parts: Vec<&str> = first_line.split_whitespace().collect();
+                    let method = parts.get(0).unwrap_or(&"GET");
+                    let path = parts.get(1).unwrap_or(&"/");
+                    let has_body = request.lines().any(|l| l.trim().is_empty());
+                    let body = if *method == "POST" && has_body {
+                        request.split("\r\n\r\n").nth(1).map(|s| s.to_string()).unwrap_or_default()
+                    } else {
+                        String::new()
+                    };
+                    let response = http_handle_request(&state, path, method, &body);
+                    let resp = format!(
+                        "HTTP/1.1 200 OK
+Content-Type: application/json
+Access-Control-Allow-Origin: *
+Content-Length: {}
+
+{}",
+                        response.len(), response
+                    );
+                    stream.write_all(resp.as_bytes()).ok();
+                });
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(_) => {}
+        }
+    }
+}
+
+fn http_handle_request(state: &Arc<AppState>, path: &str, method: &str, body: &str) -> String {
+    // GET routes
+    if path == "/health" || path == "/api/health" {
+        return r#"{"ok":true}"#.to_string();
+    }
+    if path == "/api/fire_price" {
+        let guard = state.fire_price.read();
+        if let Some(ref fp) = *guard {
+            let price = fp.data.as_ref().and_then(|r| r.first())
+                .map(|rec| (rec.price as f64) / 10000.0).unwrap_or(0.0);
+            let record_time = fp.data.as_ref().and_then(|r| r.first())
+                .map(|rec| rec.timestamp.clone()).unwrap_or_default();
+            return format!(r#"{{"price_per_wan":{},"record_time":"{}","source":"{}"}}"#, price, record_time, fp.source);
+        }
+        return r#"{"error":"no fire price data"}"#.to_string();
+    }
+    if path == "/api/items" {
+        let guard = state.items_data.read();
+        let items: Vec<String> = guard.iter().take(200).map(|i| {
+            let name = i.name.replace('"', "\"");
+            std::format!(r#"{{"name":"{}"}}"#, name)
+        }).collect();
+        return format!(r#"{{"items":[{}]}}"#, items.join(","));
+    }
+    // GET /api/config
+    if path == "/api/config" && method == "GET" {
+        let guard = state.config.read();
+        return format!(r#"{{"input":{}}}"#, serde_json::to_string(&*guard).unwrap_or_default());
+    }
+    // GET /api/sections
+    if path == "/api/sections" && method == "GET" {
+        let guard = state.sections.read();
+        return serde_json::to_string(&*guard).unwrap_or_else(|_| "[]".to_string());
+    }
+    // POST /api/config
+    if path == "/api/config" && method == "POST" {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(body) {
+            let input = json.get("input")
+                .or(json.get("fire_price"))
+                .cloned()
+                .unwrap_or(json.clone());
+            let mut cfg = state.config.write();
+            if let Some(mode) = input.get("mode").and_then(|v| v.as_str()) {
+                cfg.mode = mode.to_string();
+            }
+            if let Some(interval) = input.get("scrape_interval")
+                .and_then(|v| v.as_u64()) {
+                cfg.fire_price_scrape_interval = interval.max(60);
+            }
+            if let Some(interval) = input.get("items_reload_interval")
+                .or(input.get("reload_interval"))
+                .and_then(|v| v.as_u64()) {
+                cfg.items_reload_interval = interval.max(60);
+            }
+            drop(cfg);
+            info!("Config updated via HTTP");
+            return r#"{"status":"ok"}"#.to_string();
+        }
+        return r#"{"error":"invalid config body"}"#.to_string();
+    }
+    // POST /api/sections
+    if path == "/api/sections" && method == "POST" {
+        if let Ok(sections) = serde_json::from_str::<Vec<Section>>(body) {
+            let mut guard = state.sections.write();
+            *guard = sections;
+            info!("Sections saved via HTTP");
+            return r#"{"ok":true}"#.to_string();
+        }
+        return r#"{"error":"invalid sections body"}"#.to_string();
+    }
+    // POST /api/scrape_fire
+    if path == "/api/scrape_fire" && method == "POST" {
+        info!("Fire scrape triggered via HTTP");
+        let result = scrape_fire_price_blocking();
+        if result.success {
+            if let Some(ref records) = result.data {
+                {
+                    let mut fp = state.fire_price.write();
+                    *fp = Some(result.clone());
+                }
+                if let Some(first) = records.first() {
+                    let mut rec = state.fire_price_record.write();
+                    *rec = Some(first.clone());
+                }
+                let price = records.first().map(|r| (r.price as f64) / 10000.0).unwrap_or(0.0);
+                let _ = log_fire_price_to_db(&state.db_path, records);
+                return format!(r#"{{"ok":true,"price_per_wan":{}}}"#, price);
+            }
+        }
+        return format!(r#"{{"ok":false,"error":"{}"}}"#, result.error.unwrap_or_default());
+    }
+    // GET /api/db_stats
+    if path == "/api/db_stats" || path == "/api/db/stats" {
+        if let Ok(conn) = Connection::open(&state.db_path) {
+            let item_count: i64 = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).unwrap_or(0);
+            let log_count: i64 = conn.query_row("SELECT COUNT(*) FROM fire_price_log", [], |r| r.get(0)).unwrap_or(0);
+            let last_log: Option<i64> = conn.query_row(
+                "SELECT MAX(scraped_at) FROM fire_price_log", [], |r| r.get(0)
+            ).ok().filter(|&v| v > 0);
+            let last_str = last_log.map(|ts| {
+                chrono::DateTime::from_timestamp(ts, 0)
+                    .map(|dt| dt.format("%m-%d %H:%M").to_string())
+                    .unwrap_or_default()
+            }).unwrap_or_default();
+            return format!(r#"{{"item_count":{},"log_count":{},"last_log_at":"{}"}}"#, item_count, log_count, last_str);
+        }
+        return r#"{"item_count":0,"log_count":0}"#.to_string();
+    }
+    // GET /api/db/items
+    if path.starts_with("/api/db/items") {
+        let page = path.split("page=").nth(1).and_then(|s| s.split('&').next())
+            .and_then(|s| s.parse::<i64>().ok()).unwrap_or(1);
+        let page_size = path.split("page_size=").nth(1).and_then(|s| s.split('&').next())
+            .and_then(|s| s.parse::<i64>().ok()).unwrap_or(100);
+        let keyword = path.split("keyword=").nth(1).and_then(|s| {
+            Some(urlencoding_decode(s.split('&').next().unwrap_or("")))
+        }).unwrap_or_default();
+        let offset = (page - 1) * page_size;
+        if let Ok(conn) = Connection::open(&state.db_path) {
+            let rows: Vec<serde_json::Value> = if keyword.is_empty() {
+                let mut stmt = match conn.prepare("SELECT item_id, name, item_type, price FROM items ORDER BY name LIMIT ? OFFSET ?") {
+                    Ok(s) => s,
+                    Err(_) => return r#"{"items":[],"total":0}"#.to_string(),
+                };
+                let mut rows_out = vec![];
+                let mut rows = match stmt.query(rusqlite::params![page_size, offset]) {
+                    Ok(r) => r,
+                    Err(_) => return r#"{"items":[],"total":0}"#.to_string(),
+                };
+                while let Ok(row) = rows.next() {
+                    let row = match row {
+                        Some(r) => r,
+                        None => break,
+                    };
+                    let item_id: String = rusqlite::Row::get(row, 0).ok().unwrap_or_default();
+                    let name: String = rusqlite::Row::get(row, 1).ok().unwrap_or_default();
+                    let item_type: String = rusqlite::Row::get(row, 2).ok().unwrap_or_default();
+                    let price: f64 = rusqlite::Row::get(row, 3).ok().unwrap_or(0.0);
+                    rows_out.push(serde_json::json!({
+                        "item_id": item_id,
+                        "name": name,
+                        "item_type": item_type,
+                        "price": price
+                    }));
+                }
+                rows_out
+            } else {
+                vec![]
+            };
+            let total: i64 = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).unwrap_or(0);
+            return format!(r#"{{"items":{},"total":{},"page":{},"page_size":{}}}"#,
+                serde_json::to_string(&rows).unwrap_or_else(|_| "[]".to_string()), total, page, page_size);
+        }
+        return r#"{"items":[],"total":0}"#.to_string();
+    }
+    // GET /api/db/fire_record_history
+    if path.starts_with("/api/db/fire_record_history") {
+        let hours = path.split("hours=").nth(1).and_then(|s| s.split('&').next())
+            .and_then(|s| s.parse::<i64>().ok()).unwrap_or(24);
+        let since = chrono::Utc::now().timestamp() - hours * 3600;
+        if let Ok(conn) = Connection::open(&state.db_path) {
+            let mut stmt = match conn.prepare(
+                "SELECT ten_k, fire_per_rmb, increase_ratio, ts, scraped_at FROM fire_price_record WHERE scraped_at >= ? ORDER BY scraped_at ASC"
+            ) {
+                Ok(s) => s,
+                Err(_) => return r#"{"history":[]}"#.to_string(),
+            };
+            let mut rows_out = vec![];
+            let mut rows = match stmt.query(rusqlite::params![since]) {
+                Ok(r) => r,
+                Err(_) => return r#"{"history":[]}"#.to_string(),
+            };
+            while let Ok(Some(row)) = rows.next() {
+                let scraped_at: i64 = rusqlite::Row::get(&row, 4).ok().unwrap_or(0);
+                let ts_str = chrono::DateTime::from_timestamp(scraped_at, 0)
+                    .map(|dt| dt.format("%m-%d %H:%M").to_string())
+                    .unwrap_or_default();
+                rows_out.push(serde_json::json!({
+                    "ten_k": rusqlite::Row::get::<_, f64>(&row, 0).ok().unwrap_or(0.0),
+                    "fire_per_rmb": rusqlite::Row::get::<_, f64>(&row, 1).ok().unwrap_or(0.0),
+                    "increase_ratio": rusqlite::Row::get::<_, f64>(&row, 2).ok().unwrap_or(0.0),
+                    "ts": rusqlite::Row::get::<_, String>(&row, 3).ok().unwrap_or_default(),
+                    "scraped_at": scraped_at,
+                    "scraped_time": ts_str
+                }));
+            }
+            return format!(r#"{{"history":{}}}"#, serde_json::to_string(&rows_out).unwrap_or_else(|_| "[]".to_string()));
+        }
+        return r#"{"history":[]}"#.to_string();
+    }
+    r#"{"error":"not found"}"#.to_string()
+}
+
+fn urlencoding_decode(s: &str) -> String {
+    let mut result = String::new();
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let hex: String = chars.by_ref().take(2).collect();
+            if hex.len() == 2 {
+                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                    result.push(byte as char);
+                } else {
+                    result.push('%');
+                    result.push_str(&hex);
+                }
+            } else {
+                result.push('%');
+                result.push_str(&hex);
+            }
+        } else if c == '+' {
+            result.push(' ');
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .format_timestamp_millis()
@@ -927,7 +1266,13 @@ fn main() {
 
             start_background_tasks(app.handle().clone(), state.clone());
 
-            app.manage(state);
+            app.manage(state.clone());
+
+            // Start HTTP server for frontend (bypasses broken Tauri IPC)
+            let http_state = state.clone();
+            std::thread::spawn(move || {
+                start_http_server(http_state, 19899);
+            });
 
             // Setup system tray
             let show_item = MenuItemBuilder::with_id("show", "显示窗口").build(app)?;
