@@ -1,0 +1,30 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for TL Monitor",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-set-focus",
+    "core:window:allow-is-visible",
+    "core:window:allow-center",
+    "core:event:default",
+    "core:event:allow-emit",
+    "core:event:allow-listen",
+    "shell:allow-open",
+    "shell:allow-execute",
+    "shell:allow-spawn",
+    "core:tray:default",
+    "core:tray:allow-new",
+    "core:tray:allow-set-icon",
+    "core:tray:allow-set-menu",
+    "core:menu:default",
+    "core:menu:allow-new",
+    "core:menu:allow-append"
+  ]
+}

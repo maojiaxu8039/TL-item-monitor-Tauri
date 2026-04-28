@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TL物品火价监控</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        /* ─── Reset & Base ─────────────────────────────────────────────── */
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0b0e17;
+            --surface: #13172a;
+            --surface2: #1a2035;
+            --border: #252a40;
+            --fire: #f59e0b;
+            --rmb: #34d399;
+            --danger: #f87171;
+            --text: #e2e8f0;
+            --muted: #64748b;
+            --primary: #818cf8;
+            --success: #4ade80;
+            --warning: #fbbf24;
+        }
+        html, body {
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-size: 14px;
+            overflow: hidden;
+        }
+
+        /* ─── App Shell ─────────────────────────────────────────────────── */
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* ─── Top Bar ────────────────────────────────────────────────────── */
+        #topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            height: 56px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        #topbar-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text);
+        }
+        #fire-price-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 6px 14px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        #fire-price-badge:hover { border-color: var(--fire); }
+        #fire-price-badge .fp-icon { font-size: 16px; }
+        #fire-price-badge .fp-value { color: var(--fire); font-size: 15px; }
+        #fire-price-badge .fp-time { color: var(--muted); font-size: 11px; font-weight: 400; }
+        #fire-price-refreshing {
+            display: none;
+            width: 14px; height: 14px;
+            border: 2px solid var(--fire);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ─── Tab Navigation ─────────────────────────────────────────────── */
+        #tabs {
+            display: flex;
+            gap: 2px;
+            padding: 0 20px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .tab {
+            padding: 10px 18px;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: color 0.2s, border-color 0.2s;
+            user-select: none;
+        }
+        .tab:hover { color: var(--text); }
+        .tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        /* ─── Main Content ───────────────────────────────────────────────── */
+        #content {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 20px;
+        }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* ─── Scrollbar ──────────────────────────────────────────────────── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+        /* ─── Panel Cards ────────────────────────────────────────────────── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px 20px;
+            margin-bottom: 16px;
+        }
+        .card-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 14px;
+        }
+
+        /* ─── Section Management ─────────────────────────────────────────── */
+        #sections-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .section-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 16px;
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .section-name-input {
+            flex: 1;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 14px;
+            font-weight: 600;
+            padding: 6px 10px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .section-name-input:focus { border-color: var(--primary); }
+        .damage-input {
+            width: 90px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--fire);
+            font-size: 13px;
+            padding: 6px 8px;
+            text-align: right;
+            outline: none;
+        }
+        .damage-input:focus { border-color: var(--primary); }
+        .damage-label { color: var(--muted); font-size: 12px; }
+
+        /* Section item table */
+        .section-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .section-table th {
+            text-align: left;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            padding: 4px 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        .section-table th:last-child { text-align: right; }
+        .section-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid rgba(37, 42, 64, 0.5);
+            vertical-align: middle;
+        }
+        .section-table tr:last-child td { border-bottom: none; }
+        .section-table tr:hover td { background: rgba(255,255,255,0.02); }
+        .item-name { color: var(--text); font-weight: 500; }
+        .item-type-badge {
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            margin-left: 4px;
+        }
+        .more-input, .count-input {
+            width: 60px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 12px;
+            padding: 3px 6px;
+            text-align: right;
+            outline: none;
+        }
+        .more-input:focus, .count-input:focus { border-color: var(--primary); }
+        .worth-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .worth-yes { background: rgba(74, 222, 128, 0.15); color: var(--success); }
+        .worth-no { background: rgba(248, 113, 113, 0.15); color: var(--danger); }
+        .rmb-col { color: var(--rmb); font-weight: 500; }
+        .ten-more-col { color: var(--primary); font-size: 12px; }
+        .time-col { color: var(--muted); font-size: 11px; }
+        .del-item-btn {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 14px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            transition: color 0.2s, background 0.2s;
+        }
+        .del-item-btn:hover { color: var(--danger); background: rgba(248,113,113,0.1); }
+        .add-item-row td { padding-top: 10px; }
+        .add-item-row select {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 12px;
+            padding: 4px 6px;
+            outline: none;
+            max-width: 140px;
+        }
+        .add-item-row input {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 12px;
+            padding: 4px 6px;
+            width: 60px;
+            text-align: right;
+            outline: none;
+        }
+        .add-item-row button {
+            background: var(--primary);
+            border: none;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 12px;
+            padding: 4px 10px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .add-item-row button:hover { opacity: 0.85; }
+
+        .section-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .btn-sm {
+            padding: 5px 12px;
+            border-radius: 5px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--muted);
+            transition: all 0.2s;
+        }
+        .btn-sm:hover { color: var(--text); border-color: var(--muted); }
+        .btn-sm.danger:hover { color: var(--danger); border-color: var(--danger); }
+        .btn-sm.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .btn-sm.primary:hover { opacity: 0.85; }
+
+        #add-section-btn {
+            width: 100%;
+            padding: 10px;
+            background: var(--surface2);
+            border: 1px dashed var(--border);
+            border-radius: 8px;
+            color: var(--muted);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 4px;
+        }
+        #add-section-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+        /* ─── Search Panel ───────────────────────────────────────────────── */
+        #search-bar-wrap {
+            position: relative;
+            margin-bottom: 16px;
+        }
+        #search-input {
+            width: 100%;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            padding: 10px 16px 10px 38px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        #search-input:focus { border-color: var(--primary); }
+        #search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--muted);
+            font-size: 14px;
+        }
+        #search-dropdown {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            max-height: 280px;
+            overflow-y: auto;
+            z-index: 100;
+            display: none;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+        #search-dropdown.show { display: block; }
+        .search-item {
+            padding: 9px 14px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.15s;
+            border-bottom: 1px solid rgba(37,42,64,0.5);
+        }
+        .search-item:last-child { border-bottom: none; }
+        .search-item:hover, .search-item.highlighted { background: var(--surface); }
+        .search-item-name { color: var(--text); font-size: 13px; }
+        .search-item-price { color: var(--rmb); font-size: 12px; }
+        .search-item-type {
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            margin-left: 6px;
+        }
+        .no-results {
+            padding: 14px;
+            color: var(--muted);
+            text-align: center;
+            font-size: 13px;
+        }
+
+        /* ─── Items Grid ─────────────────────────────────────────────────── */
+        #all-items-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        .item-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            cursor: pointer;
+            transition: border-color 0.2s, transform 0.1s;
+        }
+        .item-card:hover { border-color: var(--primary); transform: translateY(-1px); }
+        .item-card-name { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 6px; }
+        .item-card-price { font-size: 12px; color: var(--rmb); }
+        .item-card-time { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+        /* ─── History Panel ─────────────────────────────────────────────── */
+        #history-chart-wrap {
+            position: relative;
+            height: 300px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .history-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+        .history-controls select, .history-controls input {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 13px;
+            padding: 6px 10px;
+            outline: none;
+        }
+        .history-controls select:focus, .history-controls input:focus { border-color: var(--primary); }
+        .history-controls button {
+            background: var(--primary);
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 13px;
+            padding: 6px 14px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .history-controls button:hover { opacity: 0.85; }
+
+        /* ─── Settings Panel ─────────────────────────────────────────────── */
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        @media (max-width: 700px) {
+            .settings-grid { grid-template-columns: 1fr; }
+        }
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .setting-label {
+            font-size: 12px;
+            color: var(--muted);
+            font-weight: 500;
+        }
+        .setting-input, .setting-select {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 14px;
+            padding: 8px 12px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .setting-input:focus, .setting-select:focus { border-color: var(--primary); }
+        .settings-actions {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 8px 20px;
+            border-radius: 7px;
+            font-size: 14px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--surface2);
+            color: var(--text);
+            transition: all 0.2s;
+        }
+        .btn:hover { border-color: var(--muted); }
+        .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .btn.primary:hover { opacity: 0.85; }
+        .btn.danger { color: var(--danger); border-color: var(--danger); }
+        .btn.danger:hover { background: rgba(248,113,113,0.1); }
+        .settings-section {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        /* ─── Toast ──────────────────────────────────────────────────────── */
+        #toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 18px;
+            font-size: 13px;
+            color: var(--text);
+            z-index: 9999;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.25s, transform 0.25s;
+            pointer-events: none;
+            max-width: 320px;
+        }
+        #toast.show { opacity: 1; transform: translateY(0); }
+        #toast.success { border-color: var(--success); }
+        #toast.error { border-color: var(--danger); }
+
+        /* ─── Loading Overlay ────────────────────────────────────────────── */
+        #loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(11, 14, 23, 0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            transition: opacity 0.3s;
+        }
+        #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+        .loading-spinner {
+            width: 40px; height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .loading-text {
+            margin-top: 14px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        /* ─── Refresh buttons ───────────────────────────────────────────── */
+        .refresh-btn {
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--muted);
+            font-size: 12px;
+            padding: 5px 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .refresh-btn:hover { color: var(--text); border-color: var(--muted); }
+        .refresh-btn .spinning {
+            display: inline-block;
+            width: 12px; height: 12px;
+            border: 2px solid var(--primary);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        /* ─── Stats row ──────────────────────────────────────────────────── */
+        .stats-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 18px;
+            flex: 1;
+            min-width: 140px;
+        }
+        .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+        .stat-value { font-size: 20px; font-weight: 700; color: var(--text); }
+        .stat-value.fire { color: var(--fire); }
+        .stat-value.rmb { color: var(--rmb); }
+        .stat-value.primary { color: var(--primary); }
+    </style>
+</head>
+<body>
+<div id="app">
+    <!-- Top Bar -->
+    <div id="topbar">
+        <div id="topbar-title">🔥 TL物品火价监控</div>
+        <div id="fire-price-badge" onclick="manualScrapeFire()" title="点击刷新火价">
+            <span class="fp-icon">🔥</span>
+            <span class="fp-value" id="fp-value">--</span>
+            <span style="color:var(--muted);font-size:12px;">元/万火</span>
+            <span class="fp-time" id="fp-time"></span>
+            <div id="fire-price-refreshing"></div>
+        </div>
+        <button class="refresh-btn" onclick="manualReloadItems()">
+            <span id="items-reloading-spin" style="display:none" class="spinning"></span>
+            <span id="items-reloading-text">刷新物品</span>
+        </button>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div id="tabs">
+        <div class="tab active" data-tab="monitor">监控面板</div>
+        <div class="tab" data-tab="search">物品搜索</div>
+        <div class="tab" data-tab="history">历史走势</div>
+        <div class="tab" data-tab="settings">设置</div>
+    </div>
+
+    <!-- Content -->
+    <div id="content">
+        <!-- ── Monitor Panel ── -->
+        <div id="panel-monitor" class="tab-panel active">
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-label">当前火价</div>
+                    <div class="stat-value fire" id="stat-fire">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">监控分区</div>
+                    <div class="stat-value primary" id="stat-sections">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">监控物品</div>
+                    <div class="stat-value" id="stat-items">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">数据库记录</div>
+                    <div class="stat-value primary" id="stat-db">--</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">监控分区管理</div>
+                <div id="sections-container">
+                    <!-- Sections rendered here -->
+                </div>
+                <button id="add-section-btn" onclick="addSection()">+ 添加新分区</button>
+            </div>
+        </div>
+
+        <!-- ── Search Panel ── -->
+        <div id="panel-search" class="tab-panel">
+            <div class="card">
+                <div class="card-title">物品搜索</div>
+                <div id="search-bar-wrap">
+                    <span id="search-icon">🔍</span>
+                    <input type="text" id="search-input" placeholder="输入物品名称搜索..." autocomplete="off">
+                    <div id="search-dropdown"></div>
+                </div>
+                <div id="all-items-grid">
+                    <!-- Items rendered here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ── History Panel ── -->
+        <div id="panel-history" class="tab-panel">
+            <div class="card">
+                <div class="card-title">火价历史走势</div>
+                <div class="history-controls">
+                    <select id="history-mode">
+                        <option value="普通">赛季普通</option>
+                        <option value="赛季专家">赛季专家</option>
+                    </select>
+                    <select id="history-hours">
+                        <option value="6">最近6小时</option>
+                        <option value="12">最近12小时</option>
+                        <option value="24" selected>最近24小时</option>
+                        <option value="72">最近3天</option>
+                        <option value="168">最近7天</option>
+                    </select>
+                    <button onclick="loadFireHistory()">刷新图表</button>
+                </div>
+                <div id="history-chart-wrap">
+                    <canvas id="history-canvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Settings Panel ── -->
+        <div id="panel-settings" class="tab-panel">
+            <div class="card">
+                <div class="card-title">基本设置</div>
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label class="setting-label">模式</label>
+                        <select id="cfg-mode" class="setting-select">
+                            <option value="普通">赛季普通</option>
+                            <option value="赛季专家">赛季专家</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label">火价抓取间隔（秒）</label>
+                        <input type="number" id="cfg-scrape-interval" class="setting-input" value="300" min="60">
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label">物品刷新间隔（秒）</label>
+                        <input type="number" id="cfg-reload-interval" class="setting-input" value="300" min="60">
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label">访问码</label>
+                        <input type="text" id="cfg-access-code" class="setting-input" placeholder="可选">
+                    </div>
+                </div>
+                <div class="settings-actions">
+                    <button class="btn primary" onclick="saveSettings()">保存设置</button>
+                    <button class="btn" onclick="loadSettings()">重置</button>
+                </div>
+            </div>
+
+            <div class="card settings-section">
+                <div class="card-title">关于</div>
+                <p style="color:var(--muted);font-size:13px;line-height:1.8;">
+                    TL物品火价监控 v1.0.0<br>
+                    基于 Tauri 2.0 + Rust 构建<br>
+                    火价数据来源：千岛API · 物品数据来源：115.231.176.101
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay" class="hidden">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">正在初始化...</div>
+</div>
+
+<script>
+// ─── Globals ─────────────────────────────────────────────────────────────────
+const invoke = (...args) => window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke(...args);
+let allItems = [];
+let sections = [];
+let currentFirePrice = null;
+let historyChart = null;
+
+// ─── Utils ────────────────────────────────────────────────────────────────────
+function $(id) { return document.getElementById(id); }
+function showToast(msg, type = '') {
+    const toast = $('toast');
+    toast.textContent = msg;
+    toast.className = 'show ' + type;
+    setTimeout(() => { toast.className = ''; }, 3000);
+}
+function fmtTime(isoStr) {
+    if (!isoStr) return '--';
+    // "2026-04-28 13:45" -> "13:45"
+    return isoStr.split(' ')[1] || isoStr;
+}
+function fmtDate(isoStr) {
+    if (!isoStr) return '--';
+    return isoStr.replace('T', ' ').slice(0, 16);
+}
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+// ─── API Helpers ─────────────────────────────────────────────────────────────
+async function apiGetFirePrice() {
+    try { return await invoke('get_fire_price'); } catch(e) { console.error(e); return null; }
+}
+async function apiGetItems() {
+    try { return await invoke('get_items'); } catch(e) { console.error(e); return null; }
+}
+async function apiGetConfig() {
+    try { return await invoke('get_config'); } catch(e) { console.error(e); return null; }
+}
+async function apiSetConfig(cfg) {
+    try { return await invoke('set_config', { input: cfg }); } catch(e) { console.error(e); return null; }
+}
+async function apiGetDbStats() {
+    try { return await invoke('get_db_stats'); } catch(e) { console.error(e); return null; }
+}
+async function apiGetFireHistory(hours, mode) {
+    try { return await invoke('get_fire_history', { hours, mode }); } catch(e) { console.error(e); return null; }
+}
+async function apiGetSections() {
+    try { return await invoke('get_sections'); } catch(e) { console.error(e); return null; }
+}
+async function apiSaveSections(sections) {
+    try { return await invoke('save_sections', { sections }); } catch(e) { console.error(e); return null; }
+}
+async function apiTriggerScrapeFire() {
+    try { return await invoke('trigger_scrape_fire'); } catch(e) { console.error(e); return null; }
+}
+async function apiTriggerItemsReload() {
+    try { return await invoke('trigger_items_reload'); } catch(e) { console.error(e); return null; }
+}
+
+// ─── Fire Price ───────────────────────────────────────────────────────────────
+function updateFirePriceUI(fp) {
+    if (!fp) return;
+    const val = fp.price_per_wan > 0 ? fp.price_per_wan.toFixed(2) : '--';
+    $('fp-value').textContent = val;
+    $('fp-time').textContent = fmtTime(fp.record_time);
+    $('stat-fire').textContent = val;
+    currentFirePrice = fp;
+}
+async function manualScrapeFire() {
+    const badge = $('fire-price-badge');
+    const spinner = $('fire-price-refreshing');
+    spinner.style.display = 'block';
+    const result = await apiTriggerScrapeFire();
+    spinner.style.display = 'none';
+    if (result && result.ok) {
+        updateFirePriceUI({ price_per_wan: parseFloat(result.message.match(/[\d.]+/)[0]), record_time: new Date().toISOString().replace('T',' ').slice(0,16), source: 'manual' });
+        showToast('火价已刷新', 'success');
+    } else {
+        showToast(result ? result.message : '抓取失败', 'error');
+    }
+}
+async function manualReloadItems() {
+    const spin = $('items-reloading-spin');
+    const text = $('items-reloading-text');
+    spin.style.display = 'inline-block';
+    text.textContent = '刷新中...';
+    const result = await apiTriggerItemsReload();
+    spin.style.display = 'none';
+    text.textContent = '刷新物品';
+    if (result && result.ok) {
+        const resp = await apiGetItems();
+        if (resp) {
+            allItems = resp.items;
+            renderAllItems();
+        }
+        showToast('物品已刷新', 'success');
+    } else {
+        showToast(result ? result.message : '刷新失败', 'error');
+    }
+}
+
+// ─── Tab Navigation ──────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        $('panel-' + tab.dataset.tab).classList.add('active');
+        if (tab.dataset.tab === 'history' && !historyChart) {
+            setTimeout(loadFireHistory, 100);
+        }
+    });
+});
+
+// ─── Sections ─────────────────────────────────────────────────────────────────
+function renderSections() {
+    const container = $('sections-container');
+    container.innerHTML = '';
+    let totalItems = 0;
+    sections.forEach((sec, si) => {
+        totalItems += sec.items.length;
+        const secDiv = document.createElement('div');
+        secDiv.className = 'section-card';
+        secDiv.innerHTML = `
+            <div class="section-header">
+                <input class="section-name-input" value="${escHtml(sec.name)}"
+                    onchange="updateSection(${si}, 'name', this.value)"
+                    placeholder="分区名称">
+                <input class="damage-input" type="number" value="${sec.damage}"
+                    onchange="updateSection(${si}, 'damage', parseFloat(this.value) || 0)"
+                    placeholder="基准" step="0.01">
+                <span class="damage-label">伤害基准</span>
+                <button class="btn-sm danger" onclick="deleteSection(${si})" title="删除分区">删除</button>
+            </div>
+            <table class="section-table">
+                <thead>
+                    <tr>
+                        <th>物品名称</th>
+                        <th style="width:70px">MORE</th>
+                        <th style="width:50px">数量</th>
+                        <th style="width:60px">火价</th>
+                        <th style="width:60px">RMB</th>
+                        <th style="width:80px">10more/火</th>
+                        <th style="width:60px">是否值</th>
+                        <th style="width:80px">更新时间</th>
+                        <th style="width:40px"></th>
+                    </tr>
+                </thead>
+                <tbody id="sec-items-${si}">
+                    ${sec.items.map((item, ii) => renderSectionItemRow(si, ii, item)).join('')}
+                </tbody>
+                <tbody>
+                    <tr class="add-item-row">
+                        <td colspan="2">
+                            <select id="add-item-select-${si}">
+                                <option value="">-- 选择物品 --</option>
+                                ${allItems.map(it => `<option value="${escHtml(it.id)}" data-name="${escHtml(it.name)}">${escHtml(it.name)}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td><input type="number" id="add-more-${si}" placeholder="MORE" step="0.01" style="width:55px"></td>
+                        <td><input type="number" id="add-count-${si}" placeholder="
