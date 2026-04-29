@@ -1,0 +1,156 @@
+use std::sync::Arc;
+use tauri::{
+    menu::{MenuBuilder, MenuItemBuilder},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager,
+};
+use tokio::sync::Mutex;
+
+use crate::core::events::{emit_fire_price_updated, FirePricePayload};
+use crate::db::repo_fire;
+use crate::scraper;
+
+/// Shared mutable state for tray tooltip updates.
+#[derive(Clone)]
+pub struct TrayState {
+    #[allow(dead_code)]
+    pub tooltip: Arc<Mutex<String>>,
+}
+
+fn get_fire_price_display(app: &AppHandle) -> String {
+    app.state::<Arc<crate::core::state::AppState>>()
+        .fire_price
+        .read()
+        .as_ref()
+        .map(|s| format!("{:.2}", s.price_per_wan))
+        .unwrap_or_else(|| "无".to_string())
+}
+
+/// Refresh fire price from web and update tray tooltip.
+async fn refresh_and_sync_fire_price(app: AppHandle) {
+    let snapshot = match scraper::scrape_fire_price().await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("Tray refresh fire price failed: {}", e);
+            return;
+        }
+    };
+
+    // Persist to DB
+    {
+        let state = app.state::<Arc<crate::core::state::AppState>>();
+        let ctx = state.active_context.read().clone();
+        if let Err(e) = repo_fire::insert_fire_record(
+            &state.db,
+            &ctx.season_id,
+            ctx.market_mode.as_str(),
+            &snapshot,
+        )
+        .await
+        {
+            tracing::error!("Failed to persist fire record: {}", e);
+        }
+        // Update in-memory state
+        {
+            let mut fire = state.fire_price.write();
+            *fire = Some(snapshot.clone());
+        }
+        {
+            let mut status = state.task_status.write();
+            status.last_fire_scrape = Some(chrono::Utc::now().timestamp());
+        }
+    }
+
+    // Emit event to frontend
+    let _ = emit_fire_price_updated(
+        &app,
+        FirePricePayload {
+            rmb_per_10k_fire: snapshot.rmb_per_10k_fire,
+            fire_per_rmb: snapshot.fire_per_rmb,
+            increase_ratio: snapshot.increase_ratio,
+            trading_volume: snapshot.trading_volume.clone(),
+            source: snapshot.source.clone(),
+            source_time: snapshot.source_time.clone(),
+            scraped_at: snapshot.scraped_at,
+        },
+    );
+
+    // Update tray tooltip
+    let tooltip = format!("火价: {:.2}元/万火", snapshot.price_per_wan);
+    tracing::info!("Tray synced fire price: {}", tooltip);
+}
+
+pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let app_handle = app.handle().clone();
+
+    // Initial fire price text for tooltip
+    let initial_price = get_fire_price_display(&app_handle);
+    let initial_tooltip = format!("火价: {}元/万火", initial_price);
+
+    // Build menu items
+    let show_item = MenuItemBuilder::with_id("show", "显示主窗口").build(app)?;
+    let refresh_item = MenuItemBuilder::with_id("refresh", "刷新火价").build(app)?;
+    let quit_item = MenuItemBuilder::with_id("quit", "退出").build(app)?;
+
+    // Disabled fire price display item
+    let fire_text = format!("火价: {}元/万火", initial_price);
+    let fire_item = MenuItemBuilder::with_id("fire_price", &fire_text)
+        .enabled(false)
+        .build(app)?;
+
+    let menu = MenuBuilder::new(app)
+        .item(&show_item)
+        .separator()
+        .item(&fire_item)
+        .item(&refresh_item)
+        .separator()
+        .item(&quit_item)
+        .build()?;
+
+    // Create and store TrayState for potential tooltip updates
+    let tray_state = TrayState {
+        tooltip: Arc::new(Mutex::new(initial_tooltip.clone())),
+    };
+    app.manage(tray_state);
+
+    let _tray = TrayIconBuilder::new()
+        .menu(&menu)
+        .tooltip(&initial_tooltip)
+        .on_menu_event(move |app, event| {
+            match event.id().as_ref() {
+                "show" => {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+                "refresh" => {
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        refresh_and_sync_fire_price(app).await;
+                    });
+                }
+                "quit" => {
+                    app.exit(0);
+                }
+                _ => {}
+            }
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}

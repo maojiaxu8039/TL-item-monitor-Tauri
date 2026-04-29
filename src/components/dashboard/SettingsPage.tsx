@@ -1,0 +1,298 @@
+import { useState, useEffect } from "react";
+import { cmd, type AppConfig, type OkResponse } from "@/lib/commands";
+import { useMutation } from "@tanstack/react-query";
+import { RefreshCw, Save, Settings, Bell, Database, Globe } from "lucide-react";
+import { motion } from "framer-motion";
+
+const INTERVAL_OPTIONS = [
+  { label: "5 分钟", value: 300 },
+  { label: "10 分钟", value: 600 },
+  { label: "30 分钟", value: 1800 },
+  { label: "60 分钟", value: 3600 },
+];
+
+const SOURCE_OPTIONS = [
+  { label: "千岛 API", value: "api" },
+  { label: "本地 JSON", value: "local" },
+  { label: "其他", value: "other" },
+];
+
+const DEFAULT_JSON_PATH = "/Users/mc/Library/Application Support/com.tlmonitor.app/data/full_table.json";
+
+export default function SettingsPage() {
+  const [fireEnabled, setFireEnabled] = useState(true);
+  const [fireInterval, setFireInterval] = useState(300);
+  const [itemsEnabled, setItemsEnabled] = useState(false);
+  const [itemsInterval, setItemsInterval] = useState(300);
+  const [itemsSource, setItemsSource] = useState("api");
+  const [jsonPath] = useState(DEFAULT_JSON_PATH);
+  const [seasonId, setSeasonId] = useState("ss12");
+  const [itemCount, setItemCount] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+
+  const saveMutation = useMutation<OkResponse, Error, AppConfig>({
+    mutationFn: (config) => cmd.saveConfig(config),
+    onSuccess: (res) => {
+      if (res.ok) console.log("Config saved:", res.message);
+    },
+  });
+
+  const refreshMutation = useMutation<OkResponse, Error, void>({
+    mutationFn: () => cmd.refreshItems(),
+    onSuccess: (res) => {
+      if (res.ok) console.log("Items refreshed:", res.message);
+    },
+  });
+
+  useEffect(() => {
+    cmd.getConfig().then((cfg) => {
+      setFireEnabled(cfg.scrape.fire_price_scrape_enabled);
+      setFireInterval(cfg.scrape.fire_price_scrape_interval);
+      setItemsEnabled(cfg.scrape.auto_reload);
+      setItemsInterval(cfg.scrape.items_reload_interval);
+      setItemsSource(cfg.scrape.items_source);
+      setSeasonId(cfg.app.season_id);
+      setLoaded(true);
+    }).catch(console.error);
+
+    cmd.getDashboardSummary().then((summary) => {
+      setItemCount(summary.item_count);
+    }).catch(console.error);
+  }, []);
+
+  const handleSave = () => {
+    const config: AppConfig = {
+      schema_version: 1,
+      scrape: {
+        fire_price_mode: "season_normal",
+        fire_price_scrape_enabled: fireEnabled,
+        fire_price_scrape_interval: fireInterval,
+        items_source: itemsSource,
+        items_json_path: jsonPath,
+        items_reload_interval: itemsInterval,
+        auto_reload: itemsEnabled,
+      },
+      desktop: {
+        auto_start: false,
+        tray_on_close: true,
+        mini_mode: false,
+        free_layout: false,
+      },
+      notification: {
+        system_notifications: true,
+        quiet_start: null,
+        quiet_end: null,
+      },
+      data: {
+        history_retention: "permanent",
+        compress_history: false,
+      },
+      app: {
+        season_id: seasonId,
+        language: "zh-CN",
+        auto_update: false,
+      },
+    };
+    saveMutation.mutate(config);
+  };
+
+  const handleRefreshItems = () => {
+    refreshMutation.mutate();
+  };
+
+  if (!loaded) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="w-5 h-5 text-slate-400 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="max-w-2xl mx-auto space-y-4"
+    >
+      {/* Page title */}
+      <div className="flex items-center gap-2 mb-2">
+        <Settings className="w-5 h-5 text-slate-600" />
+        <h1 className="text-[15px] font-semibold text-slate-800">系统设置</h1>
+      </div>
+
+      {/* Fire price settings */}
+      <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Bell className="w-4 h-4 text-red-500" />
+          <h2 className="text-sm font-semibold text-slate-700">火价设置</h2>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-slate-700">自动刷新火价</div>
+              <div className="text-xs text-slate-400 mt-0.5">开启后自动定期获取最新火价</div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={fireEnabled}
+                onChange={(e) => setFireEnabled(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium text-slate-700">刷新间隔</div>
+            <select
+              value={fireInterval}
+              onChange={(e) => setFireInterval(Number(e.target.value))}
+              disabled={!fireEnabled}
+              className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {INTERVAL_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </section>
+
+      {/* Items data settings */}
+      <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Database className="w-4 h-4 text-blue-500" />
+          <h2 className="text-sm font-semibold text-slate-700">物品数据设置</h2>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-slate-700">自动刷新物品</div>
+              <div className="text-xs text-slate-400 mt-0.5">开启后自动定期重新加载物品数据</div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={itemsEnabled}
+                onChange={(e) => setItemsEnabled(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium text-slate-700">刷新间隔</div>
+            <select
+              value={itemsInterval}
+              onChange={(e) => setItemsInterval(Number(e.target.value))}
+              disabled={!itemsEnabled}
+              className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {INTERVAL_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium text-slate-700">数据源</div>
+            <select
+              value={itemsSource}
+              onChange={(e) => setItemsSource(e.target.value)}
+              className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            >
+              {SOURCE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium text-slate-700">JSON 路径</div>
+            <input
+              type="text"
+              value={jsonPath}
+              readOnly
+              className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 text-slate-400 bg-slate-50 w-72 overflow-hidden text-ellipsis"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <div className="text-sm text-slate-500">
+              已加载 <span className="font-semibold text-slate-700">{itemCount}</span> 个物品
+            </div>
+            <button
+              onClick={handleRefreshItems}
+              disabled={refreshMutation.isPending}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
+              {refreshMutation.isPending ? "刷新中…" : "刷新物品"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Season settings */}
+      <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Globe className="w-4 h-4 text-purple-500" />
+          <h2 className="text-sm font-semibold text-slate-700">赛季设置</h2>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium text-slate-700">赛季 ID</div>
+            <div className="text-xs text-slate-400 mt-0.5">如 ss12、ss11 等</div>
+          </div>
+          <input
+            type="text"
+            value={seasonId}
+            onChange={(e) => setSeasonId(e.target.value)}
+            placeholder="ss12"
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 w-40 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          />
+        </div>
+      </section>
+
+      {/* Version */}
+      <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium text-slate-700">当前版本</div>
+            <div className="text-xs text-slate-400 mt-0.5">v2.0.0 · Tauri 2.0</div>
+          </div>
+          <button
+            onClick={() => window.open("https://github.com/your-repo/releases", "_blank")}
+            className="text-sm px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            检查更新
+          </button>
+        </div>
+      </section>
+
+      {/* Save button */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={saveMutation.isPending}
+          className="flex items-center gap-2 bg-blue-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+        >
+          <Save className="w-4 h-4" />
+          {saveMutation.isPending ? "保存中…" : "保存设置"}
+        </button>
+      </div>
+    </motion.div>
+  );
+}

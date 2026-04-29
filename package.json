@@ -2,17 +2,46 @@
   "name": "tl-item-monitor-tauri",
   "version": "1.0.0",
   "description": "TL Item Fire Price Monitor - Tauri Desktop App",
+  "type": "module",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
-    "debug": "RUST_BACKTRACE=1 cargo test"
+    "debug": "RUST_BACKTRACE=1 cargo test",
+    "vite:dev": "vite",
+    "vite:build": "vite build",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.10.1",
-    "@tauri-apps/plugin-shell": "^2",
-    "esbuild": "^0.28.0"
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@radix-ui/react-slot": "^1.2.0",
+    "@tailwindcss/vite": "^4.1.4",
+    "@tanstack/react-query": "^5.74.4",
+    "@tanstack/react-table": "^8.21.3",
+    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/plugin-dialog": "^2.2.1",
+    "@tauri-apps/plugin-fs": "^2.2.1",
+    "@tauri-apps/plugin-shell": "^2.2.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.9.2",
+    "lucide-react": "^0.503.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "recharts": "^2.15.3",
+    "sonner": "^2.0.3",
+    "tailwind-merge": "^3.2.0",
+    "tailwindcss": "^4.1.4",
+    "zod": "^3.24.3",
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "@tauri-apps/cli": "^2.5.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.3"
   }
 }

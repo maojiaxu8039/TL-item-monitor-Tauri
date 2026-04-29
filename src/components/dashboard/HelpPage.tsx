@@ -1,0 +1,110 @@
+import { CircleHelp, ExternalLink, MessageSquare, Info } from "lucide-react";
+
+export default function HelpPage() {
+  const faqs = [
+    {
+      q: "如何开始使用？",
+      a: "首次使用请先在「软件设置」中配置火价抓取间隔和物品数据源，然后就可以在「监控首页」查看火价和添加关注的物品了。",
+    },
+    {
+      q: "什么是赛季普通/专家模式？",
+      a: "普通模式和专家模式是游戏内两种不同的物价系统。你可以在顶部切换模式，不同模式下的火价和物品价格会分别显示。",
+    },
+    {
+      q: "如何添加关注的物品？",
+      a: "在「监控首页」点击「添加物品」，搜索你想要的物品，设置购买火价和数量，然后添加到你的板块中。系统会自动评估物品的性价比。",
+    },
+    {
+      q: "什么是 Worth 评估？",
+      a: "系统会根据你设置的购买火价和物品当前火价，评估物品是否值得购买：可买（绿色）、可考虑（橙色）、不值（红色）。",
+    },
+    {
+      q: "如何设置价格预警？",
+      a: "在「价格预警」页面，点击「添加预警规则」，设置目标火价和冷却时间。当物品价格达到你的目标时，系统会发送通知。",
+    },
+    {
+      q: "如何备份和恢复数据？",
+      a: "在「导入导出」页面，你可以导出关注列表 CSV、备份整个数据库。如果需要恢复，使用「恢复数据库」功能选择之前备份的文件。",
+    },
+    {
+      q: "托盘模式有什么用？",
+      a: "关闭窗口后，应用会在系统托盘继续运行，继续监控火价和发送预警。你可以在托盘图标上右键点击来恢复窗口或退出应用。",
+    },
+    {
+      q: "数据来源是什么？",
+      a: "火价数据来自千岛交易平台 API，物品数据来自刷图小助手。你可以在「赛季数据」页面查看数据源状态和诊断信息。",
+    },
+  ];
+
+  return (
+    <div className="p-6 max-w-4xl">
+      <div className="flex items-center gap-3 mb-6">
+        <CircleHelp className="h-6 w-6 text-blue-600" />
+        <h1 className="text-2xl font-bold text-slate-900">帮助文档</h1>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <div className="flex items-start gap-3">
+          <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+          <div>
+            <h3 className="font-semibold text-blue-900">版本信息</h3>
+            <p className="text-blue-700 text-sm mt-1">
+              TL 物品火价监控 v2.0.0 · 基于 Tauri 2 + React 构建
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold text-slate-900 mb-4">常见问题</h2>
+        <div className="space-y-4">
+          {faqs.map((faq, index) => (
+            <div key={index} className="bg-white border border-slate-200 rounded-lg p-4">
+              <h3 className="font-medium text-slate-900 mb-2">Q: {faq.q}</h3>
+              <p className="text-slate-600 text-sm">{faq.a}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-lg p-6">
+        <h2 className="text-lg font-semibold text-slate-900 mb-4">快捷键</h2>
+        <div className="space-y-2">
+          <div className="flex justify-between py-2 border-b">
+            <span className="text-slate-600">刷新火价</span>
+            <kbd className="px-2 py-1 bg-slate-100 rounded text-sm">Ctrl + R</kbd>
+          </div>
+          <div className="flex justify-between py-2 border-b">
+            <span className="text-slate-600">打开搜索</span>
+            <kbd className="px-2 py-1 bg-slate-100 rounded text-sm">Ctrl + K</kbd>
+          </div>
+          <div className="flex justify-between py-2">
+            <span className="text-slate-600">最小化到托盘</span>
+            <kbd className="px-2 py-1 bg-slate-100 rounded text-sm">Ctrl + W</kbd>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8 flex gap-4">
+        <a
+          href="https://github.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+        >
+          <ExternalLink className="h-4 w-4" />
+          GitHub
+        </a>
+        <a
+          href="https://discord.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          <MessageSquare className="h-4 w-4" />
+          加入讨论
+        </a>
+      </div>
+    </div>
+  );
+}

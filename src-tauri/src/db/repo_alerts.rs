@@ -1,0 +1,165 @@
+use crate::core::errors::AppError;
+use crate::db::models::{AlertEvent, AlertRule};
+use sqlx::SqlitePool;
+
+// ─── Alert Rules ───────────────────────────────────────────────────────────
+
+pub async fn get_alert_rules(pool: &SqlitePool) -> Result<Vec<AlertRule>, AppError> {
+    let rows: Vec<AlertRule> = sqlx::query_as(
+        "SELECT id, strategy_id, section_id, item_id, rule_type, threshold, enabled, cooldown_seconds, last_triggered_at, created_at, updated_at FROM alert_rules ORDER BY created_at DESC"
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn create_alert_rule(
+    pool: &SqlitePool,
+    strategy_id: Option<&str>,
+    section_id: Option<&str>,
+    item_id: Option<&str>,
+    rule_type: &str,
+    threshold: f64,
+    cooldown_seconds: i32,
+) -> Result<AlertRule, AppError> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().timestamp();
+
+    sqlx::query(
+        r#"INSERT INTO alert_rules (id, strategy_id, section_id, item_id, rule_type, threshold, enabled, cooldown_seconds, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)"#
+    )
+    .bind(&id)
+    .bind(strategy_id)
+    .bind(section_id)
+    .bind(item_id)
+    .bind(rule_type)
+    .bind(threshold)
+    .bind(cooldown_seconds)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await?;
+
+    Ok(AlertRule {
+        id,
+        strategy_id: strategy_id.map(|s| s.to_string()),
+        section_id: section_id.map(|s| s.to_string()),
+        item_id: item_id.map(|s| s.to_string()),
+        rule_type: rule_type.to_string(),
+        threshold,
+        enabled: 1,
+        cooldown_seconds,
+        last_triggered_at: None,
+        created_at: now,
+        updated_at: now,
+    })
+}
+
+pub async fn update_alert_rule(
+    pool: &SqlitePool,
+    id: &str,
+    strategy_id: Option<&str>,
+    section_id: Option<&str>,
+    item_id: Option<&str>,
+    rule_type: &str,
+    threshold: f64,
+    cooldown_seconds: i32,
+    enabled: bool,
+) -> Result<(), AppError> {
+    let now = chrono::Utc::now().timestamp();
+    sqlx::query(
+        r#"UPDATE alert_rules SET
+           strategy_id = ?, section_id = ?, item_id = ?, rule_type = ?,
+           threshold = ?, enabled = ?, cooldown_seconds = ?, updated_at = ?
+           WHERE id = ?"#
+    )
+    .bind(strategy_id)
+    .bind(section_id)
+    .bind(item_id)
+    .bind(rule_type)
+    .bind(threshold)
+    .bind(enabled)
+    .bind(cooldown_seconds)
+    .bind(now)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn toggle_alert_rule(pool: &SqlitePool, id: &str, enabled: bool) -> Result<(), AppError> {
+    let now = chrono::Utc::now().timestamp();
+    sqlx::query("UPDATE alert_rules SET enabled = ?, updated_at = ? WHERE id = ?")
+        .bind(enabled)
+        .bind(now)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn delete_alert_rule(pool: &SqlitePool, id: &str) -> Result<(), AppError> {
+    sqlx::query("DELETE FROM alert_rules WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+// ─── Alert Events ──────────────────────────────────────────────────────────
+
+pub async fn create_alert_event(
+    pool: &SqlitePool,
+    rule_id: &str,
+    section_item_id: Option<&str>,
+    message: &str,
+) -> Result<AlertEvent, AppError> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().timestamp();
+
+    sqlx::query(
+        r#"INSERT INTO alert_events (id, rule_id, section_item_id, triggered_at, message, seen, created_at)
+           VALUES (?, ?, ?, ?, ?, 0, ?)"#
+    )
+    .bind(&id)
+    .bind(rule_id)
+    .bind(section_item_id)
+    .bind(now)
+    .bind(message)
+    .bind(now)
+    .execute(pool)
+    .await?;
+
+    Ok(AlertEvent {
+        id,
+        rule_id: rule_id.to_string(),
+        section_item_id: section_item_id.map(|s| s.to_string()),
+        triggered_at: now,
+        message: message.to_string(),
+        seen: 0,
+        created_at: now,
+    })
+}
+
+pub async fn mark_alert_seen(pool: &SqlitePool, id: &str) -> Result<(), AppError> {
+    sqlx::query("UPDATE alert_events SET seen = 1 WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn get_alert_events(
+    pool: &SqlitePool,
+    limit: i64,
+) -> Result<Vec<AlertEvent>, AppError> {
+    let rows: Vec<AlertEvent> = sqlx::query_as(
+        r#"SELECT id, rule_id, section_item_id, triggered_at, message, seen, created_at
+           FROM alert_events ORDER BY triggered_at DESC LIMIT ?"#
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}

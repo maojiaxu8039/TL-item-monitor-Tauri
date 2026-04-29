@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@layer base {
+  * {
+    border-color: theme("colors.slate.200");
+  }
+  body {
+    background-color: theme("colors.slate.50");
+    color: theme("colors.slate.900");
+  }
+}
