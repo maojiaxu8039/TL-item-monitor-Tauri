@@ -32,8 +32,7 @@ export function AddItemModal({ sections, onClose, onAdded }: AddItemModalProps) 
       try {
         const res = await cmd.searchItems(searchKeyword.trim(), 1, 50);
         setSearchResults(res.items);
-      } catch (e) {
-        console.error("searchItems error:", e);
+      } catch {
         setSearchResults([]);
       } finally {
         setSearchLoading(false);
@@ -71,8 +70,8 @@ export function AddItemModal({ sections, onClose, onAdded }: AddItemModalProps) 
           setTimeout(onClose, 1000);
         }
       }, 600);
-    } catch (e) {
-      console.error("addSectionItem error:", e);
+    } catch {
+      // ignore
     } finally {
       setAddingIds(prev => { const s = new Set(prev); s.delete(item.item_id); return s; });
     }

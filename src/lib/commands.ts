@@ -235,12 +235,12 @@ export interface SourceDiagnostic {
 export const cmd = {
   getDashboardSummary: () => invoke<DashboardSummary>("get_dashboard_summary"),
   setActiveMarketContext: (seasonId: string, marketMode: string) =>
-    invoke("set_active_market_context", { season_id: seasonId, market_mode: marketMode }),
+    invoke("set_active_market_context", { seasonId, marketMode }),
 
   refreshFirePrice: () => invoke<FirePriceUI>("refresh_fire_price"),
   refreshItems: () => invoke<OkResponse>("refresh_items"),
   searchItems: (keyword: string, page = 1, pageSize = 50) =>
-    invoke<SearchResult>("search_items", { keyword, page, page_size: pageSize }),
+    invoke<SearchResult>("search_items", { keyword, page, pageSize }),
 
   getSections: () => invoke<Section[]>("get_sections"),
   createSection: (name: string) => invoke<Section>("create_section", { name }),

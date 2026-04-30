@@ -56,7 +56,6 @@ export default function DashboardContent() {
           refetch()
           toast.success("分组顺序已保存")
         } catch (err) {
-          console.error("Failed to reorder sections:", err)
           toast.error(`保存失败: ${err}`)
         }
       }
@@ -70,7 +69,6 @@ export default function DashboardContent() {
       toast.success("分组添加成功")
       refetch()
     } catch (err) {
-      console.error("Failed to create section:", err)
       toast.error(`添加失败: ${err}`)
     }
   }, [refetch])
@@ -82,7 +80,6 @@ export default function DashboardContent() {
         toast.success("分组已删除")
         refetch()
       } catch (err) {
-        console.error("Failed to delete section:", err)
         toast.error(`删除失败: ${err}`)
       }
     }

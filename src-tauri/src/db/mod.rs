@@ -1,4 +1,3 @@
-pub mod errors;
 pub mod models;
 pub mod repo_items;
 pub mod repo_sections;

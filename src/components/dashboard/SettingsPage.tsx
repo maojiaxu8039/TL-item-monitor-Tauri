@@ -32,16 +32,10 @@ export default function SettingsPage() {
 
   const saveMutation = useMutation<OkResponse, Error, AppConfig>({
     mutationFn: (config) => cmd.saveConfig(config),
-    onSuccess: (res) => {
-      if (res.ok) console.log("Config saved:", res.message);
-    },
   });
 
   const refreshMutation = useMutation<OkResponse, Error, void>({
     mutationFn: () => cmd.refreshItems(),
-    onSuccess: (res) => {
-      if (res.ok) console.log("Items refreshed:", res.message);
-    },
   });
 
   useEffect(() => {
@@ -53,11 +47,11 @@ export default function SettingsPage() {
       setItemsSource(cfg.scrape.items_source);
       setSeasonId(cfg.app.season_id);
       setLoaded(true);
-    }).catch(console.error);
+    }).catch(() => {});
 
     cmd.getDashboardSummary().then((summary) => {
       setItemCount(summary.item_count);
-    }).catch(console.error);
+    }).catch(() => {});
   }, []);
 
   const handleSave = () => {

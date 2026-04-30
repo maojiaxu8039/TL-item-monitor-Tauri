@@ -23,9 +23,19 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const { refreshSections, marketContext } = useSectionRefresh()
 
-  const { data: searchResult } = useQuery({
+  const { data: searchResult, error } = useQuery({
     queryKey: ["search", searchValue, marketContext.seasonId, marketContext.marketMode],
-    queryFn: () => cmd.searchItems(searchValue, 1, 20),
+    queryFn: async () => {
+      console.log("SearchBar queryFn called with:", { keyword: searchValue, seasonId: marketContext.seasonId, marketMode: marketContext.marketMode });
+      try {
+        const result = await cmd.searchItems(searchValue, 1, 20);
+        console.log("SearchBar queryFn result:", result);
+        return result;
+      } catch (e) {
+        console.error("SearchBar queryFn error:", e);
+        throw e;
+      }
+    },
     enabled: searchValue.length >= 1,
   })
 
@@ -107,6 +117,16 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       </div>
 
       <AnimatePresence>
+        {console.log("showResults:", showResults, "searchResult:", searchResult, "error:", error) || true}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="absolute top-full left-0 right-0 mt-2 bg-red-50 border border-red-200 rounded-xl p-4 z-50 text-red-600 text-sm"
+          >
+            搜索失败: {String(error)}
+          </motion.div>
+        )}
         {showResults && searchResult && searchResult.items.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: -5 }}

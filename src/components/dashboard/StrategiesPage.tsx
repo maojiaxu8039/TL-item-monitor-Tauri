@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cmd, type Section, type SectionItem } from "../../lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
+import { toast } from "sonner";
 import {
   Shield,
   Plus,
@@ -37,12 +38,22 @@ export default function StrategiesPage() {
       qc.invalidateQueries({ queryKey: ["sections", marketContext.seasonId, marketContext.marketMode] });
       setNewSectionName("");
       setCreatingSection(false);
+      toast.success("分组创建成功");
+    },
+    onError: (err) => {
+      toast.error(`创建失败: ${err}`);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: cmd.deleteSection,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["sections", marketContext.seasonId, marketContext.marketMode] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sections", marketContext.seasonId, marketContext.marketMode] });
+      toast.success("分组已删除");
+    },
+    onError: (err) => {
+      toast.error(`删除失败: ${err}`);
+    },
   });
 
   const updateMutation = useMutation({
@@ -50,14 +61,23 @@ export default function StrategiesPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["sections", marketContext.seasonId, marketContext.marketMode] });
       setEditingSection(null);
+      toast.success("分组名称已更新");
+    },
+    onError: (err) => {
+      toast.error(`更新失败: ${err}`);
     },
   });
 
   const removeItemMutation = useMutation({
     mutationFn: ({ sectionId, itemId }: { sectionId: string; itemId: string }) =>
       cmd.removeSectionItem(sectionId, itemId),
-    onSuccess: (_, { sectionId }) =>
-      qc.invalidateQueries({ queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode, sectionId] }),
+    onSuccess: (_, { sectionId }) => {
+      qc.invalidateQueries({ queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode, sectionId] });
+      toast.success("物品已移除");
+    },
+    onError: (err) => {
+      toast.error(`移除失败: ${err}`);
+    },
   });
 
   return (

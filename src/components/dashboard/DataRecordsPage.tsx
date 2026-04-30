@@ -40,8 +40,8 @@ export default function DataRecordsPage() {
       a.download = `fire_history_${hours}h.csv`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Export failed:", error);
+    } catch {
+      // ignore
     }
   };
 

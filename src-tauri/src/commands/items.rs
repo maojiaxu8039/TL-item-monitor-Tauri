@@ -6,22 +6,28 @@ use std::sync::Arc;
 use tauri::State;
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn search_items(
     state: State<'_, Arc<AppState>>,
     keyword: String,
     page: i64,
-    page_size: i64,
+    #[allow(non_snake_case)] pageSize: i64,
 ) -> Result<SearchResult, String> {
     let ctx = state.active_context.read().clone();
+    tracing::info!(
+        "search_items called: keyword={:?}, season_id={:?}, market_mode={:?}",
+        keyword, ctx.season_id, ctx.market_mode
+    );
     let (items, total) = repo_items::search_items(
         &state.db,
         &ctx.season_id,
         ctx.market_mode.as_str(),
         &keyword,
         page,
-        page_size,
+        pageSize,
     ).await?;
-    Ok(SearchResult { items, total, page, page_size })
+    tracing::info!("search_items result: {} items, total={}", items.len(), total);
+    Ok(SearchResult { items, total, page, page_size: pageSize })
 }
 
 #[tauri::command]

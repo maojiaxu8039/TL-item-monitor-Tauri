@@ -28,12 +28,15 @@ pub async fn scrape_expert_items() -> Result<Vec<Item>, AppError> {
 }
 
 /// Scrape items from Luosi API, selecting the correct season_id
-/// based on `season_id` (e.g. "ss12", "ss11") and `market_mode`
-/// ("season_normal" → suffix 01, "season_expert" → suffix 31).
+/// based on `season_id` and `market_mode`.
 ///
-/// season_id mapping:
-///   ss12 normal → 1401 | ss12 expert → 1431
-///   ss11 normal → 1301 | ss11 expert → 1331
+/// season_id mapping (刷图小助手 API):
+///   ss12 赛季普通 → 1401 | ss12 赛季专家 → 1431
+///   ss11 赛季普通 → 1201 | ss11 赛季专家 → 1231
+///
+/// 公式: 200 * season_num - 1000 + mode_suffix
+///   - season_num = 12 (from "ss12") or 11 (from "ss11")
+///   - mode_suffix = 1 (普通) 或 31 (专家)
 pub async fn scrape_items(season_id: &str, market_mode: &str) -> Result<Vec<Item>, AppError> {
     let season_num = match season_id.strip_prefix("ss") {
         Some(s) => s.parse::<i32>().ok(),
@@ -53,7 +56,7 @@ pub async fn scrape_items(season_id: &str, market_mode: &str) -> Result<Vec<Item
         _ => 1,
     };
 
-    let api_season_id = season_num * 100 + mode_suffix;
+    let api_season_id = 200 * season_num - 1000 + mode_suffix;
     scrape_by_season_id(api_season_id).await
 }
 
@@ -86,7 +89,6 @@ async fn scrape_by_season_id(api_season_id: i32) -> Result<Vec<Item>, AppError> 
     let now = chrono::Utc::now().timestamp();
     let items: Vec<Item> = map
         .into_iter()
-        .filter(|(_, item)| item.price > 0.0)
         .map(|(item_id, item)| Item {
             item_id,
             season_id: format!("ss{}", api_season_id / 100),
@@ -100,5 +102,6 @@ async fn scrape_by_season_id(api_season_id: i32) -> Result<Vec<Item>, AppError> 
         })
         .collect();
 
+    tracing::info!("Scraped {} items from Luosi API (no filtering)", items.len());
     Ok(items)
 }

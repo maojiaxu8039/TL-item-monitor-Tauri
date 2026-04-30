@@ -83,7 +83,7 @@ pub struct AlertEvent {
     pub section_item_id: Option<String>,
     pub triggered_at: i64,
     pub message: String,
-    pub seen: i32,
+    pub seen: bool,
     pub created_at: i64,
 }
 

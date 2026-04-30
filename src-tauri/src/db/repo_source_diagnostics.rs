@@ -87,6 +87,7 @@ pub async fn get_diagnostics(pool: &SqlitePool) -> Result<Vec<SourceDiagnostic>,
     Ok(rows)
 }
 
+#[allow(dead_code)]
 pub async fn get_diagnostic(pool: &SqlitePool, source: &str) -> Result<Option<SourceDiagnostic>, AppError> {
     let row: Option<SourceDiagnostic> = sqlx::query_as(
         "SELECT source, source_type, enabled, market_mode, local_path, last_success_at, last_failure_at, last_duration_ms, last_item_count, last_error, updated_at FROM source_diagnostics WHERE source = ?"

@@ -23,8 +23,8 @@ export function TopBar() {
       await cmd.setActiveMarketContext(seasonId, newMode)
     },
     onSuccess: () => {
-      const seasonId = summary?.season_name || "ss12"
-      setMarketContext({ seasonId, marketMode })
+      const season_id = summary?.season_name || "ss12"
+      setMarketContext({ seasonId: season_id, marketMode })
       toast.success("已切换到" + (marketMode === "season_normal" ? "赛季普通" : "赛季专家"))
       refreshData()
     },

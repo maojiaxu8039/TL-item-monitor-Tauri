@@ -184,3 +184,36 @@ pub async fn remove_section_item(pool: &SqlitePool, section_id: &str, item_id: &
         .await?;
     Ok(())
 }
+
+/// Calculate total fire and total RMB for all section items in current context.
+pub async fn get_totals(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<(f64, f64), crate::core::errors::AppError> {
+    let rows: Vec<(f64, i32, Option<f64>)> = sqlx::query_as(
+        r#"
+        SELECT si.purchase_fire_price, si.count, i.price as current_price
+        FROM section_items si
+        LEFT JOIN items i ON si.item_id = i.item_id AND si.season_id = i.season_id AND si.market_mode = i.market_mode
+        WHERE si.season_id = ? AND si.market_mode = ?
+        "#
+    )
+    .bind(season_id)
+    .bind(market_mode)
+    .fetch_all(pool)
+    .await?;
+
+    let mut total_fire: f64 = 0.0;
+    let mut total_rmb: f64 = 0.0;
+
+    for (purchase_fire_price, count, current_price) in rows {
+        let count_f = count as f64;
+        total_fire += purchase_fire_price * count_f;
+        if let Some(price) = current_price {
+            total_rmb += price * count_f;
+        }
+    }
+
+    Ok((total_fire, total_rmb))
+}

@@ -2,6 +2,7 @@ use crate::commands::types::{FirePriceUI, OkResponse, DashboardSummary};
 use crate::core::state::{AppState, MarketMode};
 use crate::db::repo_fire;
 use crate::db::repo_items;
+use crate::db::repo_sections;
 use crate::db::repo_history;
 use crate::scraper;
 use std::sync::Arc;
@@ -13,10 +14,13 @@ pub async fn get_dashboard_summary(state: State<'_, Arc<AppState>>) -> Result<Da
     let fire = state.fire_price.read().clone();
     let status = state.task_status.read().clone();
 
-    let (item_count, db_record_count) = tokio::join!(
+    let (item_count, db_record_count, totals) = tokio::join!(
         repo_items::get_items_count(&state.db),
-        repo_items::get_db_record_count(&state.db)
+        repo_items::get_db_record_count(&state.db),
+        repo_sections::get_totals(&state.db, &ctx.season_id, ctx.market_mode.as_str())
     );
+
+    let (total_fire, total_rmb) = totals.unwrap_or((0.0, 0.0));
 
     let last_fire_at = status.last_fire_scrape
         .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
@@ -28,8 +32,8 @@ pub async fn get_dashboard_summary(state: State<'_, Arc<AppState>>) -> Result<Da
 
     Ok(DashboardSummary {
         fire: fire.map(FirePriceUI::from),
-        total_fire: 0.0,
-        total_rmb: 0.0,
+        total_fire,
+        total_rmb,
         season_name: ctx.season_id.clone(),
         market_mode: ctx.market_mode.as_str().to_string(),
         item_count: item_count.unwrap_or(0),
@@ -41,18 +45,24 @@ pub async fn get_dashboard_summary(state: State<'_, Arc<AppState>>) -> Result<Da
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn set_active_market_context(
     state: State<'_, Arc<AppState>>,
-    season_id: String,
-    market_mode: String,
+    #[allow(non_snake_case)] seasonId: String,
+    #[allow(non_snake_case)] marketMode: String,
 ) -> Result<OkResponse, String> {
-    let mode = match market_mode.as_str() {
+    tracing::info!(
+        "set_active_market_context called with: seasonId={:?}, marketMode={:?}",
+        seasonId, marketMode
+    );
+
+    let mode = match marketMode.as_str() {
         "season_expert" => MarketMode::SeasonExpert,
         _ => MarketMode::SeasonNormal,
     };
     {
         let mut ctx = state.active_context.write();
-        ctx.season_id = season_id;
+        ctx.season_id = seasonId;
         ctx.market_mode = mode;
     }
     Ok(OkResponse::success("Market context updated"))
@@ -79,8 +89,27 @@ pub async fn refresh_fire_price(state: State<'_, Arc<AppState>>) -> Result<FireP
 }
 
 #[tauri::command]
-pub async fn refresh_items(_state: State<'_, Arc<AppState>>) -> Result<OkResponse, String> {
-    Ok(OkResponse::success("Items refreshed"))
+pub async fn refresh_items(state: State<'_, Arc<AppState>>) -> Result<OkResponse, String> {
+    let ctx = state.active_context.read().clone();
+    let items = crate::scraper::scrape_items(&ctx.season_id, ctx.market_mode.as_str())
+        .await
+        .map_err(|e| format!("Scrape failed: {}", e))?;
+    let count = items.len() as i64;
+
+    crate::db::repo_items::bulk_insert_items(&state.db, &items)
+        .await
+        .map_err(|e| format!("Bulk insert failed: {}", e))?;
+
+    {
+        let mut cache = state.items_cache.write();
+        *cache = items;
+    }
+    {
+        let mut status = state.task_status.write();
+        status.last_items_reload = Some(chrono::Utc::now().timestamp());
+    }
+
+    Ok(OkResponse::success(&format!("Items refreshed: {} items", count)))
 }
 
 #[tauri::command]
