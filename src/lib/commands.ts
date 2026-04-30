@@ -239,6 +239,7 @@ export const cmd = {
 
   refreshFirePrice: () => invoke<FirePriceUI>("refresh_fire_price"),
   refreshItems: () => invoke<OkResponse>("refresh_items"),
+  getItemTypes: () => invoke<string[]>("get_item_types"),
   searchItems: (keyword: string, page = 1, pageSize = 50) =>
     invoke<SearchResult>("search_items", { keyword, page, pageSize }),
 

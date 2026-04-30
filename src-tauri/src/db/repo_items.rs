@@ -84,3 +84,12 @@ pub async fn get_db_record_count(pool: &SqlitePool) -> Result<i64, crate::core::
     .await?;
     Ok(count)
 }
+
+pub async fn get_distinct_item_types(pool: &SqlitePool) -> Result<Vec<String>, crate::core::errors::AppError> {
+    let types: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT item_type FROM items WHERE item_type IS NOT NULL AND item_type != '' ORDER BY item_type"
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(types.into_iter().map(|(t,)| t).collect())
+}

@@ -104,3 +104,10 @@ pub async fn get_item_history(
     .await
     .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn get_item_types(state: State<'_, Arc<AppState>>) -> Result<Vec<String>, String> {
+    repo_items::get_distinct_item_types(&state.db)
+        .await
+        .map_err(|e| e.to_string())
+}

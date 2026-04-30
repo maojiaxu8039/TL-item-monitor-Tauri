@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { motion, AnimatePresence } from "framer-motion"
 import { Plus } from "lucide-react"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { SearchBar } from "@/components/dashboard/SearchBar"
@@ -86,12 +85,7 @@ export default function DashboardContent() {
   }, [refetch])
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-      className="flex flex-col gap-4 max-w-[1200px] mx-auto"
-    >
+    <div className="flex flex-col gap-4 max-w-[1200px] mx-auto">
       <SearchBar sections={sections} />
       <DndContext
         sensors={sensors}
@@ -102,16 +96,14 @@ export default function DashboardContent() {
           items={sections.map((s) => s.id)}
           strategy={verticalListSortingStrategy}
         >
-          <AnimatePresence>
-            {sections.map((section, index) => (
-              <SortableGroupCard
-                key={section.id}
-                section={section}
-                index={index}
-                onDelete={() => handleDeleteSection(section.id, section.name)}
-              />
-            ))}
-          </AnimatePresence>
+          {sections.map((section, index) => (
+            <SortableGroupCard
+              key={section.id}
+              section={section}
+              index={index}
+              onDelete={() => handleDeleteSection(section.id, section.name)}
+            />
+          ))}
         </SortableContext>
       </DndContext>
       <Button
@@ -129,6 +121,6 @@ export default function DashboardContent() {
         onConfirm={handleAddSection}
         loading={false}
       />
-    </motion.div>
+    </div>
   )
 }

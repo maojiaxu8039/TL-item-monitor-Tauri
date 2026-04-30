@@ -39,6 +39,11 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
     enabled: searchValue.length >= 1,
   })
 
+  const { data: itemTypes } = useQuery({
+    queryKey: ["item-types"],
+    queryFn: () => cmd.getItemTypes(),
+  })
+
   const addItemMutation = useMutation({
     mutationFn: ({ sectionId, item }: { sectionId: string; item: ItemData }) =>
       cmd.addSectionItem(sectionId, marketContext.seasonId, marketContext.marketMode, item.item_id, item.price, 1, 0),
@@ -103,9 +108,9 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       <div className="flex items-center gap-3 rounded-xl bg-white p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] border border-slate-100">
         <Select className="h-9 w-[110px] text-[13px] flex-shrink-0 bg-slate-50 border-slate-200 rounded-lg">
           <option>全部类型</option>
-          <option>武器</option>
-          <option>防具</option>
-          <option>饰品</option>
+          {itemTypes?.map((type) => (
+            <option key={type} value={type}>{type}</option>
+          ))}
         </Select>
 
         <div className="relative flex-1 min-w-0">
