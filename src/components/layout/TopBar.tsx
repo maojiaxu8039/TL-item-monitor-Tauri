@@ -71,14 +71,10 @@ export function TopBar() {
           className="h-8 w-[110px] text-[13px] bg-slate-50 border-slate-200 rounded-lg"
           value={marketMode}
           onChange={handleModeChange}
-          disabled={switchModeMutation.isPending}
         >
           <option value="season_normal">赛季普通</option>
           <option value="season_expert">赛季专家</option>
         </Select>
-        {switchModeMutation.isPending && (
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500" />
-        )}
       </div>
 
       <div className="flex items-center gap-2 text-[13px]">
