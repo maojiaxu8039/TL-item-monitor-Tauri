@@ -50,7 +50,12 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       refreshSections()
     },
     onError: (error) => {
-      toast.error(`添加失败: ${error}`)
+      const errorMsg = String(error)
+      if (errorMsg.includes("UNIQUE constraint failed")) {
+        toast.error("该物品已在分组中，无需重复添加")
+      } else {
+        toast.error(`添加失败: ${error}`)
+      }
     },
   })
 

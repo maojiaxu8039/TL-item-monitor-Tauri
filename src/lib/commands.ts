@@ -250,7 +250,7 @@ export const cmd = {
   reorderSections: (ids: string[]) => invoke<OkResponse>("reorder_sections", { ids }),
 
   getSectionItems: (sectionId: string) =>
-    invoke<SectionItem[]>("get_section_items", { section_id: sectionId }),
+    invoke<SectionItem[]>("get_section_items", { sectionId }),
   addSectionItem: (
     sectionId: string,
     seasonId: string,
@@ -261,21 +261,21 @@ export const cmd = {
     moreValue: number
   ) =>
     invoke<SectionItem>("add_section_item", {
-      section_id: sectionId,
-      season_id: seasonId,
-      market_mode: marketMode,
-      item_id: itemId,
-      purchase_fire_price: purchaseFirePrice,
+      sectionId,
+      seasonId,
+      marketMode,
+      itemId,
+      purchaseFirePrice,
       count,
-      more_value: moreValue,
+      moreValue,
     }),
   updateSectionItem: (
     sectionId: string,
     itemId: string,
-    patch: { count?: number; more_value?: number; purchase_fire_price?: number; last_time?: string }
-  ) => invoke<OkResponse>("update_section_item", { section_id: sectionId, item_id: itemId, patch }),
+    patch: { count?: number; moreValue?: number; purchaseFirePrice?: number; lastTime?: string }
+  ) => invoke<OkResponse>("update_section_item", { sectionId, itemId, patch }),
   removeSectionItem: (sectionId: string, itemId: string) =>
-    invoke<OkResponse>("remove_section_item", { section_id: sectionId, item_id: itemId }),
+    invoke<OkResponse>("remove_section_item", { sectionId, itemId }),
 
   getFireHistory: (hours: number) =>
     invoke<FireHistoryItem[]>("get_fire_history", { hours }),

@@ -162,7 +162,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                       </span>
                     </td>
                     <td className="py-3 px-1 text-center text-slate-400 text-[11px]">
-                      {item.last_time || "—"}
+                      {item.last_time ? new Date(Number(item.last_time) * 1000).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }) : "—"}
                     </td>
                     <td className="py-3 px-3 text-center">
                       <button

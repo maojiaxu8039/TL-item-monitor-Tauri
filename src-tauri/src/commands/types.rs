@@ -89,6 +89,7 @@ pub struct ItemsStats {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SectionItemPatch {
     pub count: Option<i32>,
     pub more_value: Option<f64>,

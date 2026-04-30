@@ -103,9 +103,20 @@ pub async fn add_section_item(
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().timestamp();
 
+    let last_time: Option<String> = sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT last_time FROM items WHERE item_id = ? AND season_id = ? AND market_mode = ?"
+    )
+    .bind(item_id)
+    .bind(season_id)
+    .bind(market_mode)
+    .fetch_optional(pool)
+    .await?
+    .flatten()
+    .map(|ts| ts.to_string());
+
     sqlx::query(
-        r#"INSERT INTO section_items (id, section_id, season_id, market_mode, item_id, purchase_fire_price, count, more_value, sort_order, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)"#
+        r#"INSERT INTO section_items (id, section_id, season_id, market_mode, item_id, purchase_fire_price, count, more_value, sort_order, last_time, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)"#
     )
     .bind(&id)
     .bind(section_id)
@@ -115,6 +126,7 @@ pub async fn add_section_item(
     .bind(purchase_fire_price)
     .bind(count)
     .bind(more_value)
+    .bind(last_time.as_ref())
     .bind(now)
     .bind(now)
     .execute(pool)
@@ -133,7 +145,7 @@ pub async fn add_section_item(
         count,
         more_value,
         sort_order: 0,
-        last_time: None,
+        last_time,
         created_at: now,
         updated_at: now,
     })

@@ -33,35 +33,37 @@ pub async fn reorder_sections(state: State<'_, Arc<AppState>>, ids: Vec<String>)
 }
 
 #[tauri::command]
-pub async fn get_section_items(state: State<'_, Arc<AppState>>, section_id: String) -> Result<Vec<crate::db::models::SectionItem>, String> {
-    repo_sections::get_section_items(&state.db, &section_id).await.map_err(|e| e.to_string())
+pub async fn get_section_items(state: State<'_, Arc<AppState>>, sectionId: String) -> Result<Vec<crate::db::models::SectionItem>, String> {
+    repo_sections::get_section_items(&state.db, &sectionId).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn add_section_item(
     state: State<'_, Arc<AppState>>,
-    section_id: String,
-    season_id: String,
-    market_mode: String,
-    item_id: String,
-    purchase_fire_price: f64,
+    sectionId: String,
+    seasonId: String,
+    marketMode: String,
+    itemId: String,
+    purchaseFirePrice: f64,
     count: i32,
-    more_value: f64,
+    moreValue: f64,
 ) -> Result<crate::db::models::SectionItem, String> {
-    repo_sections::add_section_item(&state.db, &section_id, &season_id, &market_mode, &item_id, purchase_fire_price, count, more_value).await.map_err(|e| e.to_string())
+    repo_sections::add_section_item(&state.db, &sectionId, &seasonId, &marketMode, &itemId, purchaseFirePrice, count, moreValue).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn update_section_item(
     state: State<'_, Arc<AppState>>,
-    section_id: String,
-    item_id: String,
+    sectionId: String,
+    itemId: String,
     patch: SectionItemPatch,
 ) -> Result<OkResponse, String> {
     repo_sections::update_section_item(
         &state.db,
-        &section_id,
-        &item_id,
+        &sectionId,
+        &itemId,
         patch.count,
         patch.more_value,
         patch.purchase_fire_price,
@@ -71,11 +73,12 @@ pub async fn update_section_item(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn remove_section_item(
     state: State<'_, Arc<AppState>>,
-    section_id: String,
-    item_id: String,
+    sectionId: String,
+    itemId: String,
 ) -> Result<OkResponse, String> {
-    repo_sections::remove_section_item(&state.db, &section_id, &item_id).await?;
+    repo_sections::remove_section_item(&state.db, &sectionId, &itemId).await?;
     Ok(OkResponse::success("Item removed"))
 }

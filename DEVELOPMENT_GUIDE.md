@@ -284,14 +284,26 @@ CREATE TABLE config (
 
 #### 2.3.1 罗四 API (主数据源)
 
+API 地址：`http://115.231.176.101:8080/get?season_id={id}`
+
+**赛季 ID 映射**：
+| 内部 season_id | API season_id | 说明 |
+|----------------|---------------|------|
+| ss12 + 赛季普通 | 1401 | S12 赛季普通服 |
+| ss12 + 赛季专家 | 1431 | S12 赛季专家服 |
+| ss11 + 赛季普通 | 1201 | S11 赛季普通服 |
+| ss11 + 赛季专家 | 1231 | S11 赛季专家服 |
+
+**转换公式**：`api_season_id = 200 * season_num - 1000 + mode_suffix`
+
+**物品过滤**：API 返回的物品全部保留，不做任何过滤（包括 price=0 的物品）。
+
 ```rust
 // src-tauri/src/scraper/luosi.rs
-const LUOSI_API: &str = "http://115.231.176.101:8080";
-
-pub async fn scrape_items(season_id: &str, market_mode: &str) -> Result<HashMap<String, Item>, AppError> {
-    let url = format!("{}/get?season_id={}", LUOSI_API, season_id);
-    let resp = client.get(&url).send().await?;
-    // HTTP/1.1 GET 请求，返回 JSON 物品数据
+pub async fn scrape_by_season_id(api_season_id: i32) -> Result<Vec<Item>, AppError> {
+    let url = format!("{}?season_id={}", LUOSI_BASE_URL, api_season_id);
+    // 不过滤任何物品，保留所有数据
+    let items: Vec<Item> = map.into_iter().map(|(item_id, item)| Item { ... }).collect();
 }
 ```
 
@@ -411,20 +423,56 @@ export const queryClient = new QueryClient({
 
 ### 3.3 Tauri Commands 调用
 
+**重要**：Tauri 2 会自动将前端参数从 camelCase 转换为 snake_case，但 Rust 函数参数必须与转换后的名称匹配。
+
+#### 参数命名规范
+
+所有 Tauri 命令的参数统一使用 **camelCase**（前端），Rust 函数使用 `#[allow(non_snake_case)]` 接受参数：
+
+| 前端 (TypeScript) | 后端 (Rust) | 说明 |
+|-------------------|-------------|------|
+| `seasonId` | `seasonId` | 赛季 ID |
+| `marketMode` | `marketMode` | 市场模式 |
+| `sectionId` | `sectionId` | 分组 ID |
+| `itemId` | `itemId` | 物品 ID |
+| `pageSize` | `pageSize` | 分页大小 |
+| `purchaseFirePrice` | `purchaseFirePrice` | 购买火价 |
+| `moreValue` | `moreValue` | 附加价值 |
+
 ```typescript
 // lib/commands.ts
 export const cmd = {
     getDashboardSummary: () => invoke<DashboardSummary>("get_dashboard_summary"),
-    setActiveMarketContext: (seasonId, marketMode) =>
-        invoke("set_active_market_context", { season_id: seasonId, market_mode: marketMode }),
+    setActiveMarketContext: (seasonId: string, marketMode: string) =>
+        invoke("set_active_market_context", { seasonId, marketMode }),
     refreshFirePrice: () => invoke<FirePriceUI>("refresh_fire_price"),
     refreshItems: () => invoke<OkResponse>("refresh_items"),
-    searchItems: (keyword, page, pageSize) =>
-        invoke<SearchResult>("search_items", { keyword, page, page_size: pageSize }),
+    searchItems: (keyword: string, page = 1, pageSize = 50) =>
+        invoke<SearchResult>("search_items", { keyword, page, pageSize }),
     getSections: () => invoke<Section[]>("get_sections"),
-    createSection: (name) => invoke<Section>("create_section", { name }),
-    // ... 其他 40 个命令
+    createSection: (name: string) => invoke<Section>("create_section", { name }),
+    addSectionItem: (sectionId, seasonId, marketMode, itemId, purchaseFirePrice, count, moreValue) =>
+        invoke("add_section_item", { sectionId, seasonId, marketMode, itemId, purchaseFirePrice, count, moreValue }),
+    removeSectionItem: (sectionId, itemId) =>
+        invoke("remove_section_item", { sectionId, itemId }),
+    // ... 其他命令
 };
+```
+
+```rust
+// commands/sections.rs
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn add_section_item(
+    state: State<'_, Arc<AppState>>,
+    sectionId: String,
+    seasonId: String,
+    marketMode: String,
+    itemId: String,
+    purchaseFirePrice: f64,
+    count: i32,
+    moreValue: f64,
+) -> Result<SectionItem, String> { ... }
 ```
 
 ### 3.4 前端事件监听
