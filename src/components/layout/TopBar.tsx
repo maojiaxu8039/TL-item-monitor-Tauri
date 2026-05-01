@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import { RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
@@ -11,6 +12,15 @@ import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 export function TopBar() {
   const { refreshData, marketContext, setMarketContext } = useSectionRefresh()
   const [marketMode, setMarketMode] = useState(marketContext.marketMode)
+  const [dataSource, setDataSource] = useState<"api" | "local">("api")
+  const [notificationEnabled, setNotificationEnabled] = useState(true)
+
+  useEffect(() => {
+    cmd.getConfig().then((cfg) => {
+      setDataSource(cfg.scrape.items_source === "local" ? "local" : "api")
+      setNotificationEnabled(cfg.notification.system_notifications)
+    }).catch(() => {})
+  }, [])
 
   const { data: summary } = useQuery({
     queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode],
@@ -101,6 +111,14 @@ export function TopBar() {
         <RefreshCw className={`h-3.5 w-3.5 text-slate-500 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
         获取最新数据
       </Button>
+      <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 rounded text-xs">
+        <span className={`w-2 h-2 rounded-full ${dataSource === "api" ? "bg-blue-500" : "bg-green-500"}`}></span>
+        <span className="text-slate-600">{dataSource === "api" ? "网络" : "本地"}</span>
+      </div>
+      <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 rounded text-xs">
+        <span className={`w-2 h-2 rounded-full ${notificationEnabled ? "bg-green-500" : "bg-red-500"}`}></span>
+        <span className="text-slate-600">通知</span>
+      </div>
     </motion.header>
   )
 }
