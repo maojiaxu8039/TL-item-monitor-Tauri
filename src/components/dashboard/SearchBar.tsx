@@ -1,4 +1,4 @@
-import { Search, Plus } from "lucide-react"
+import { Search, Plus, Upload, Download } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -124,6 +124,15 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
             className="pl-9 h-9 text-[13px] bg-slate-50 border-slate-200 rounded-lg focus-visible:ring-blue-500 focus-visible:ring-1"
           />
         </div>
+
+        <button className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50">
+          <Upload className="h-3.5 w-3.5" />
+          导入
+        </button>
+        <button className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50">
+          <Download className="h-3.5 w-3.5" />
+          导出
+        </button>
       </div>
 
       <AnimatePresence>
