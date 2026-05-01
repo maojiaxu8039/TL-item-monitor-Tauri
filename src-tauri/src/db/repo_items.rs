@@ -1,4 +1,4 @@
-use crate::db::models::Item;
+use crate::db::models::{Item, SectionItem};
 use sqlx::SqlitePool;
 
 pub async fn search_items(
@@ -139,4 +139,36 @@ pub async fn get_item_previous_price(
     .await?;
 
     Ok(result.map(|(p,)| p))
+}
+
+pub async fn get_all_section_items(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<Vec<SectionItem>, crate::core::errors::AppError> {
+    let items: Vec<SectionItem> = sqlx::query_as(
+        r#"
+        SELECT si.id, si.section_id, si.season_id, si.market_mode, si.item_id,
+               i.name as item_name, i.item_type as item_type, i.price as current_price,
+               si.purchase_fire_price, si.count, si.sort_order, si.last_time, si.created_at, si.updated_at
+        FROM section_items si
+        LEFT JOIN items i ON si.item_id = i.item_id AND si.season_id = i.season_id AND si.market_mode = i.market_mode
+        WHERE si.season_id = ? AND si.market_mode = ?
+        "#
+    )
+    .bind(season_id)
+    .bind(market_mode)
+    .fetch_all(pool)
+    .await?;
+    Ok(items)
+}
+
+pub async fn clear_all_items(pool: &SqlitePool) -> Result<(), crate::core::errors::AppError> {
+    sqlx::query("DELETE FROM items")
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM section_items")
+        .execute(pool)
+        .await?;
+    Ok(())
 }

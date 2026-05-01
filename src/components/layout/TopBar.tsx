@@ -41,7 +41,6 @@ export function TopBar() {
 
   const refreshMutation = useMutation({
     mutationFn: async () => {
-      toast.info("正在获取最新数据...")
       await cmd.refreshFirePrice()
       await cmd.refreshItems()
     },
@@ -100,7 +99,7 @@ export function TopBar() {
         className="gap-1.5 text-[13px] h-8 px-4 border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all rounded-lg"
       >
         <RefreshCw className={`h-3.5 w-3.5 text-slate-500 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
-        {refreshMutation.isPending ? "获取中..." : "获取最新数据"}
+        获取最新数据
       </Button>
     </motion.header>
   )

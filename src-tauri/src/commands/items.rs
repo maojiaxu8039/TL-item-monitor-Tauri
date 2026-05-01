@@ -42,16 +42,22 @@ pub async fn get_items_stats(state: State<'_, Arc<AppState>>) -> Result<ItemsSta
 
 #[tauri::command]
 pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats, String> {
-    let config = state.config.read().clone();
-    let season_id = config.app.season_id.clone();
-    drop(config);
+    let fresh_config = crate::core::config::load_config()
+        .map_err(|e| format!("Failed to load config: {}", e))?;
+    let season_id = fresh_config.app.season_id.clone();
 
+    tracing::info!("reload_items: loading items from JSON for season_id={}", season_id);
+    
     let items = crate::app::load_items_from_json(&season_id, "season_normal")
         .map_err(|e| format!("Failed to load JSON: {}", e))?;
+    
+    tracing::info!("reload_items: loaded {} items from JSON", items.len());
     let count = items.len() as i64;
 
     repo_items::bulk_insert_items(&state.db, &items).await
         .map_err(|e| format!("Failed to bulk-insert items: {}", e))?;
+    
+    tracing::info!("reload_items: inserted {} items into database", count);
 
     {
         let mut cache = state.items_cache.write();
@@ -103,6 +109,19 @@ pub async fn get_item_history(
     )
     .await
     .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn clear_items_database(state: State<'_, Arc<AppState>>) -> Result<String, String> {
+    repo_items::clear_all_items(&state.db).await
+        .map_err(|e| format!("Failed to clear items: {}", e))?;
+    
+    {
+        let mut cache = state.items_cache.write();
+        cache.clear();
+    }
+    
+    Ok("物品数据库已清空".to_string())
 }
 
 #[tauri::command]

@@ -181,8 +181,10 @@ function StatCard({
       <div className="flex items-baseline gap-1">
         <span className={`text-xl font-bold ${valueColor}`}>{prefix}{value}</span>
         <span className="text-xs text-slate-400">{unit}</span>
-        {subValue}
       </div>
+      {subValue && (
+        <div className="mt-1">{subValue}</div>
+      )}
     </div>
   )
 }

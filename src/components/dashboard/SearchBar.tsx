@@ -128,13 +128,18 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
 
       <AnimatePresence>
         {console.log("showResults:", showResults, "searchResult:", searchResult, "error:", error) || true}
-        {error && (
+        {showResults && !searchResult && !error && searchValue.length >= 1 && (
+          <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl border border-slate-200 shadow-lg z-50 p-4 text-sm text-slate-500 text-center">
+            加载中...
+          </div>
+        )}
+        {showResults && searchResult && searchResult.items.length === 0 && (
           <motion.div
             initial={{ opacity: 0, y: -5 }}
             animate={{ opacity: 1, y: 0 }}
-            className="absolute top-full left-0 right-0 mt-2 bg-red-50 border border-red-200 rounded-xl p-4 z-50 text-red-600 text-sm"
+            className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl border border-slate-200 shadow-lg z-50 p-4 text-sm text-slate-500 text-center"
           >
-            搜索失败: {String(error)}
+            未找到匹配的物品
           </motion.div>
         )}
         {showResults && searchResult && searchResult.items.length > 0 && (

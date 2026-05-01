@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { cmd, type AppConfig, type OkResponse } from "@/lib/commands";
 import { useMutation } from "@tanstack/react-query";
-import { RefreshCw, Save, Settings, Bell, Database, Globe, AlertTriangle } from "lucide-react";
+import { RefreshCw, Save, Settings, Bell, Database, Globe, AlertTriangle, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 const INTERVAL_OPTIONS = [
   { label: "5 分钟", value: 300 },
@@ -17,13 +19,6 @@ const COOLDOWN_OPTIONS = [
   { label: "30 分钟", value: 1800 },
   { label: "60 分钟", value: 3600 },
   { label: "2 小时", value: 7200 },
-];
-
-const ALERT_RULE_OPTIONS = [
-  { label: "价格低于阈值", value: "below_threshold" },
-  { label: "价格高于阈值", value: "above_threshold" },
-  { label: "价格下跌超过", value: "price_drop_percent" },
-  { label: "价格上涨超过", value: "price_rise_percent" },
 ];
 
 const SOURCE_OPTIONS = [
@@ -45,8 +40,8 @@ export default function SettingsPage() {
   const [itemCount, setItemCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [priceAlertEnabled, setPriceAlertEnabled] = useState(true);
-  const [priceAlertRuleType, setPriceAlertRuleType] = useState("below_threshold");
   const [priceAlertCooldown, setPriceAlertCooldown] = useState(600);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
   const saveMutation = useMutation<OkResponse, Error, AppConfig>({
     mutationFn: (config) => cmd.saveConfig(config),
@@ -54,6 +49,17 @@ export default function SettingsPage() {
 
   const refreshMutation = useMutation<OkResponse, Error, void>({
     mutationFn: () => cmd.refreshItems(),
+  });
+
+  const clearMutation = useMutation<string, Error, void>({
+    mutationFn: () => cmd.clearItemsDatabase(),
+    onSuccess: () => {
+      toast.success("物品数据库已清空");
+      setItemCount(0);
+    },
+    onError: (err) => {
+      toast.error(`清空失败: ${err}`);
+    },
   });
 
   useEffect(() => {
@@ -65,7 +71,6 @@ export default function SettingsPage() {
       setItemsSource(cfg.scrape.items_source);
       setSeasonId(cfg.app.season_id);
       setPriceAlertEnabled(cfg.notification.price_alert_enabled);
-      setPriceAlertRuleType(cfg.notification.price_alert_rule_type);
       setPriceAlertCooldown(cfg.notification.price_alert_cooldown_seconds);
       setLoaded(true);
     }).catch(() => {});
@@ -96,7 +101,6 @@ export default function SettingsPage() {
       notification: {
         system_notifications: true,
         price_alert_enabled: priceAlertEnabled,
-        price_alert_rule_type: priceAlertRuleType,
         price_alert_cooldown_seconds: priceAlertCooldown,
         quiet_start: null,
         quiet_end: null,
@@ -150,7 +154,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium text-slate-700">开启价格预警弹窗</div>
-              <div className="text-xs text-slate-400 mt-0.5">当物品价格触发预警条件时弹出通知</div>
+              <div className="text-xs text-slate-400 mt-0.5">当监控物品变得"值的"时弹出通知提醒</div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -164,43 +168,23 @@ export default function SettingsPage() {
           </div>
 
           {priceAlertEnabled && (
-            <>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium text-slate-700">预警规则类型</div>
-                  <div className="text-xs text-slate-400 mt-0.5">设置触发预警的条件类型</div>
-                </div>
-                <select
-                  value={priceAlertRuleType}
-                  onChange={(e) => setPriceAlertRuleType(e.target.value)}
-                  className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                >
-                  {ALERT_RULE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-slate-700">冷却时间</div>
+                <div className="text-xs text-slate-400 mt-0.5">预警触发后的等待时间</div>
               </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium text-slate-700">冷却时间</div>
-                  <div className="text-xs text-slate-400 mt-0.5">预警触发后的等待时间</div>
-                </div>
-                <select
-                  value={priceAlertCooldown}
-                  onChange={(e) => setPriceAlertCooldown(Number(e.target.value))}
-                  className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                >
-                  {COOLDOWN_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
+              <select
+                value={priceAlertCooldown}
+                onChange={(e) => setPriceAlertCooldown(Number(e.target.value))}
+                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              >
+                {COOLDOWN_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
         </div>
       </section>
@@ -316,14 +300,25 @@ export default function SettingsPage() {
             <div className="text-sm text-slate-500">
               已加载 <span className="font-semibold text-slate-700">{itemCount}</span> 个物品
             </div>
-            <button
-              onClick={handleRefreshItems}
-              disabled={refreshMutation.isPending}
-              className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
-              {refreshMutation.isPending ? "刷新中…" : "刷新物品"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setConfirmClearOpen(true)}
+                disabled={clearMutation.isPending}
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-red-200 rounded-lg text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="清空物品数据库，重新抓取"
+              >
+                <Trash2 className={`w-3.5 h-3.5 ${clearMutation.isPending ? "animate-spin" : ""}`} />
+                {clearMutation.isPending ? "清空中…" : "清空数据库"}
+              </button>
+              <button
+                onClick={handleRefreshItems}
+                disabled={refreshMutation.isPending}
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
+                {refreshMutation.isPending ? "刷新中…" : "刷新物品"}
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -365,6 +360,21 @@ export default function SettingsPage() {
           </button>
         </div>
       </section>
+
+      <ConfirmDialog
+        open={confirmClearOpen}
+        onOpenChange={setConfirmClearOpen}
+        title="清空数据库"
+        message="确定要清空物品数据库吗？此操作不可恢复，清空后需要重新抓取数据。"
+        confirmText="清空"
+        cancelText="取消"
+        variant="danger"
+        onConfirm={() => {
+          setConfirmClearOpen(false)
+          clearMutation.mutate()
+        }}
+        loading={clearMutation.isPending}
+      />
 
       {/* Save button */}
       <div className="flex justify-end">

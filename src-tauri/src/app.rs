@@ -37,18 +37,38 @@ struct JsonItemEntry {
 /// Load and parse full_table.json, returning items ready for bulk insert.
 pub fn load_items_from_json(season_id: &str, market_mode: &str) -> Result<Vec<Item>, String> {
     let path = full_table_json_path();
+    tracing::info!("load_items_from_json: reading from {:?}", path);
+    
     let content = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+    tracing::info!("load_items_from_json: JSON file size = {} bytes", content.len());
+    
     let map: std::collections::HashMap<String, JsonItemEntry> =
         serde_json::from_str(&content).map_err(|e| format!("JSON parse error: {}", e))?;
-
+    
+    tracing::info!("load_items_from_json: parsed {} entries from JSON", map.len());
+    
+    if map.is_empty() {
+        tracing::warn!("load_items_from_json: JSON file is empty or has no valid entries!");
+        return Ok(Vec::new());
+    }
+    
+    let sample_keys: Vec<String> = map.keys().take(3).cloned().collect();
+    tracing::info!("load_items_from_json: sample keys = {:?}", sample_keys);
+    
+    let sample_entry = map.values().next();
+    if let Some(entry) = sample_entry {
+        tracing::info!("load_items_from_json: first entry = id={}, name={}, price={}", 
+            entry.id, entry.name, entry.price);
+    }
+    
     let now = chrono::Utc::now().timestamp();
     let items: Vec<Item> = map
         .into_values()
         .map(|entry| Item {
-            item_id: entry.id,
+            item_id: entry.id.clone(),
             season_id: season_id.to_string(),
             market_mode: market_mode.to_string(),
-            name: entry.name,
+            name: entry.name.clone(),
             item_type: String::new(),
             source: "local_json".to_string(),
             price: entry.price,
@@ -56,7 +76,14 @@ pub fn load_items_from_json(season_id: &str, market_mode: &str) -> Result<Vec<It
             updated_at: now,
         })
         .collect();
-
+    
+    tracing::info!("load_items_from_json: converted {} entries to Item struct", items.len());
+    if !items.is_empty() {
+        tracing::info!("load_items_from_json: first item = {:?}, last item = {:?}", 
+            (&items[0].item_id, &items[0].name, &items[0].price),
+            (&items[items.len()-1].item_id, &items[items.len()-1].name, &items[items.len()-1].price));
+    }
+    
     Ok(items)
 }
 
@@ -171,11 +198,11 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
 
     let state = AppState {
         db: pool,
-        config: RwLock::new(config),
+        config: RwLock::new(config.clone()),
         fire_price: RwLock::new(fire_price),
         items_cache: RwLock::new(items_cache),
         active_context: RwLock::new(MarketContext {
-            season_id: "ss12".to_string(),
+            season_id: config.app.season_id.clone(),
             market_mode: MarketMode::SeasonNormal,
         }),
         task_status: RwLock::new(TaskStatus {

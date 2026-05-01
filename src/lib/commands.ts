@@ -137,7 +137,6 @@ export interface DesktopSettings {
 export interface NotificationSettings {
   system_notifications: boolean;
   price_alert_enabled: boolean;
-  price_alert_rule_type: string;
   price_alert_cooldown_seconds: number;
   quiet_start: string | null;
   quiet_end: string | null;
@@ -242,6 +241,7 @@ export const cmd = {
 
   refreshFirePrice: () => invoke<FirePriceUI>("refresh_fire_price"),
   refreshItems: () => invoke<OkResponse>("refresh_items"),
+  clearItemsDatabase: () => invoke<string>("clear_items_database"),
   getItemTypes: () => invoke<string[]>("get_item_types"),
   searchItems: (keyword: string, page = 1, pageSize = 50) =>
     invoke<SearchResult>("search_items", { keyword, page, pageSize }),

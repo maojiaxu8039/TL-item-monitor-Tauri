@@ -3,108 +3,17 @@ use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
 use crate::core::state::{AppState, NotificationSettings};
-use crate::db::models::{AlertRule, Item};
-use crate::db::repo_alerts;
+use crate::db::models::SectionItem;
 use crate::db::repo_items;
 use crate::services::send_notification;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AlertRuleType {
-    BelowThreshold,
-    AboveThreshold,
-    PriceDropPercent,
-    PriceRisePercent,
-}
-
-impl AlertRuleType {
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "below_threshold" => Some(Self::BelowThreshold),
-            "above_threshold" => Some(Self::AboveThreshold),
-            "price_drop_percent" => Some(Self::PriceDropPercent),
-            "price_rise_percent" => Some(Self::PriceRisePercent),
-            _ => None,
-        }
-    }
-}
-
-fn check_rule(
-    rule: &AlertRule,
-    current_price: f64,
-    previous_price: Option<f64>,
-) -> Option<String> {
-    let rule_type = AlertRuleType::from_str(&rule.rule_type)?;
-
-    match rule_type {
-        AlertRuleType::BelowThreshold => {
-            if current_price < rule.threshold {
-                Some(format!(
-                    "🔥 {} 价格跌破 {:.1}火 (当前: {:.1}火)",
-                    rule.item_id.as_deref().unwrap_or("物品"),
-                    rule.threshold,
-                    current_price
-                ))
-            } else {
-                None
-            }
-        }
-        AlertRuleType::AboveThreshold => {
-            if current_price > rule.threshold {
-                Some(format!(
-                    "📈 {} 价格突破 {:.1}火 (当前: {:.1}火)",
-                    rule.item_id.as_deref().unwrap_or("物品"),
-                    rule.threshold,
-                    current_price
-                ))
-            } else {
-                None
-            }
-        }
-        AlertRuleType::PriceDropPercent => {
-            if let Some(prev) = previous_price {
-                if prev > 0.0 {
-                    let drop_percent = ((prev - current_price) / prev) * 100.0;
-                    if drop_percent > rule.threshold {
-                        Some(format!(
-                            "⬇️ {} 价格下跌 {:.1}% (从 {:.1}火 降至 {:.1}火)",
-                            rule.item_id.as_deref().unwrap_or("物品"),
-                            drop_percent,
-                            prev,
-                            current_price
-                        ))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        }
-        AlertRuleType::PriceRisePercent => {
-            if let Some(prev) = previous_price {
-                if prev > 0.0 {
-                    let rise_percent = ((current_price - prev) / prev) * 100.0;
-                    if rise_percent > rule.threshold {
-                        Some(format!(
-                            "⬆️ {} 价格上涨 {:.1}% (从 {:.1}火 升至 {:.1}火)",
-                            rule.item_id.as_deref().unwrap_or("物品"),
-                            rise_percent,
-                            prev,
-                            current_price
-                        ))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        }
-    }
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorthItem {
+    pub item_id: String,
+    pub item_name: String,
+    pub purchase_fire_price: f64,
+    pub current_price: f64,
+    pub count: i32,
 }
 
 pub async fn run_price_alert_task(
@@ -112,7 +21,7 @@ pub async fn run_price_alert_task(
     state: Arc<AppState>,
     mut abort: broadcast::Receiver<()>,
 ) {
-    info!("Price alert task started");
+    info!("Price alert task started - checking for worth items");
     
     loop {
         tokio::select! {
@@ -121,13 +30,13 @@ pub async fn run_price_alert_task(
                 break;
             }
             _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
-                check_and_send_alerts(&app, &state).await;
+                check_worth_items(&app, &state).await;
             }
         }
     }
 }
 
-async fn check_and_send_alerts(app: &tauri::AppHandle, state: &Arc<AppState>) {
+async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
     let notification_config: NotificationSettings = {
         let config = state.config.read();
         config.notification.clone()
@@ -138,81 +47,76 @@ async fn check_and_send_alerts(app: &tauri::AppHandle, state: &Arc<AppState>) {
     }
 
     let ctx = state.active_context.read().clone();
-    let now = chrono::Utc::now().timestamp();
 
-    let rules = match repo_alerts::get_alert_rules(&state.db).await {
-        Ok(r) => r,
-        Err(e) => {
-            error!("Failed to get alert rules: {}", e);
-            return;
-        }
-    };
+    let all_section_items = repo_items::get_all_section_items(&state.db, &ctx.season_id, ctx.market_mode.as_str())
+        .await;
 
-    let enabled_rules: Vec<&AlertRule> = rules
-        .iter()
-        .filter(|r| r.enabled == 1)
-        .collect();
+    match all_section_items {
+        Ok(items) => {
+            let worth_items: Vec<WorthItem> = items
+                .into_iter()
+                .filter(|item| {
+                    let purchase_price = item.purchase_fire_price;
+                    let current_price = item.current_price.unwrap_or(0.0);
+                    
+                    purchase_price > 0.0 && current_price > 0.0 && current_price < purchase_price
+                })
+                .map(|item| WorthItem {
+                    item_id: item.item_id.clone(),
+                    item_name: item.item_name.unwrap_or_else(|| item.item_id.clone()),
+                    purchase_fire_price: item.purchase_fire_price,
+                    current_price: item.current_price.unwrap_or(0.0),
+                    count: item.count,
+                })
+                .collect();
 
-    if enabled_rules.is_empty() {
-        return;
-    }
-
-    let all_items = repo_items::get_items_by_season(&state.db, &ctx.season_id, ctx.market_mode.as_str())
-        .await
-        .unwrap_or_default();
-
-    let items_map: std::collections::HashMap<String, &Item> = all_items
-        .iter()
-        .map(|i| (i.item_id.clone(), i))
-        .collect();
-
-    let cooldown_seconds = notification_config.price_alert_cooldown_seconds;
-
-    for rule in enabled_rules {
-        let item_id = match &rule.item_id {
-            Some(id) => id,
-            None => continue,
-        };
-
-        let item = match items_map.get(item_id) {
-            Some(i) => *i,
-            None => continue,
-        };
-
-        if let Some(last_triggered) = rule.last_triggered_at {
-            let elapsed = now - last_triggered;
-            if elapsed < cooldown_seconds as i64 {
-                continue;
+            if worth_items.is_empty() {
+                info!("No worth items found currently");
+                return;
             }
-        }
 
-        let previous_price = repo_items::get_item_previous_price(
-            &state.db,
-            item_id,
-            &ctx.season_id,
-            ctx.market_mode.as_str(),
-            24 * 3600,
-        )
-        .await
-        .ok()
-        .flatten();
+            info!("Found {} worth items", worth_items.len());
 
-        if let Some(message) = check_rule(rule, item.price, previous_price) {
-            info!("Triggering alert for item {}: {}", item_id, message);
-
-            if let Err(e) = send_notification(app, "🔔 价格预警", &message) {
+            let message = format_worth_notification(&worth_items);
+            
+            if let Err(e) = send_notification(app, "🔥 发现值得购买的物品！", &message) {
                 warn!("Failed to send notification: {}", e);
             }
-
-            if let Err(e) = repo_alerts::update_rule_last_triggered(
-                &state.db,
-                &rule.id,
-                now,
-            )
-            .await
-            {
-                warn!("Failed to update rule last_triggered_at: {}", e);
-            }
+        }
+        Err(e) => {
+            error!("Failed to get section items: {}", e);
         }
     }
+}
+
+fn format_worth_notification(items: &[WorthItem]) -> String {
+    if items.len() == 1 {
+        let item = &items[0];
+        let savings = (item.purchase_fire_price - item.current_price) * item.count as f64;
+        return format!(
+            "{} 当前价格: {:.1}火\n购买价格: {:.1}火\n可节省约 {:.1}火",
+            item.item_name,
+            item.current_price,
+            item.purchase_fire_price,
+            savings
+        );
+    }
+
+    let mut message = format!("共发现 {} 件值得购买的物品:\n\n", items.len());
+    
+    for (i, item) in items.iter().take(5).enumerate() {
+        let savings = (item.purchase_fire_price - item.current_price) * item.count as f64;
+        message.push_str(&format!(
+            "{}. {} - 可节省 {:.1}火\n",
+            i + 1,
+            item.item_name,
+            savings
+        ));
+    }
+
+    if items.len() > 5 {
+        message.push_str(&format!("\n...还有 {} 件", items.len() - 5));
+    }
+
+    message
 }
