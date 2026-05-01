@@ -256,6 +256,31 @@ async fn handle_request(
                 }
             }
         }
+        ("GET", "/fire-history-all") => {
+            let season_id = get_query_param(&request, "season_id")
+                .unwrap_or_else(|| state.config.season_id.clone());
+            let market_mode = get_query_param(&request, "market_mode")
+                .unwrap_or_else(|| state.config.market_mode.clone());
+            
+            match db::get_fire_history_all(&state.db, &season_id, &market_mode).await {
+                Ok(records) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse {
+                        success: true,
+                        data: Some(records),
+                        error: None,
+                    }).unwrap_or_default();
+                    (200, body)
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(e),
+                    }).unwrap_or_default();
+                    (500, body)
+                }
+            }
+        }
         ("GET", "/items-history") => {
             let item_id = get_query_param(&request, "item_id");
             let limit: i32 = get_query_param(&request, "limit")

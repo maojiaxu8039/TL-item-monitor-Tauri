@@ -203,6 +203,46 @@ pub async fn get_fire_history(
     Ok(records)
 }
 
+/// 查询所有火价历史记录（不带 limit）
+pub async fn get_fire_history_all(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<Vec<FirePriceRecord>, String> {
+    let rows = sqlx::query(
+        r#"
+        SELECT id, season_id, market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, recorded_at, created_at
+        FROM fire_price_hourly
+        WHERE season_id = ? AND market_mode = ?
+        ORDER BY recorded_at DESC
+        "#,
+    )
+    .bind(season_id)
+    .bind(market_mode)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("查询火价历史失败: {}", e))?;
+
+    let records: Vec<FirePriceRecord> = rows
+        .into_iter()
+        .map(|row| FirePriceRecord {
+            id: row.get("id"),
+            season_id: row.get("season_id"),
+            market_mode: row.get("market_mode"),
+            rmb_per_10k_fire: row.get("rmb_per_10k_fire"),
+            fire_per_rmb: row.get("fire_per_rmb"),
+            increase_ratio: row.get("increase_ratio"),
+            trading_volume: row.get("trading_volume"),
+            source: row.get("source"),
+            source_time: row.get("source_time"),
+            recorded_at: row.get("recorded_at"),
+            created_at: row.get("created_at"),
+        })
+        .collect();
+
+    Ok(records)
+}
+
 /// 查询物品价格历史
 pub async fn get_items_history(
     pool: &SqlitePool,

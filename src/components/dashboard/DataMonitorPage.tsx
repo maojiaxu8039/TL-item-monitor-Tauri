@@ -45,6 +45,8 @@ export default function DataMonitorPage() {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
   const [syncHours, setSyncHours] = useState(24);
+  const [syncSeason, setSyncSeason] = useState("ss12");
+  const [syncMode, setSyncMode] = useState<"hours" | "season">("hours");
   const { marketContext } = useSectionRefresh();
 
   const checkServerStatus = async (): Promise<ServerStatus | null> => {
@@ -78,7 +80,14 @@ export default function DataMonitorPage() {
 
   const syncMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`${serverUrl}/fire-history?limit=${syncHours}`);
+      let url: string;
+      if (syncMode === "hours") {
+        url = `${serverUrl}/fire-history?limit=${syncHours}`;
+      } else {
+        url = `${serverUrl}/fire-history-all?season_id=${syncSeason}&market_mode=${marketContext.marketMode}`;
+      }
+      
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch data");
       const data = await response.json();
       if (!data.success) throw new Error(data.error || "Unknown error");
@@ -290,32 +299,73 @@ export default function DataMonitorPage() {
           <h2 className="text-sm font-semibold text-slate-700">数据同步</h2>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">同步最近</label>
-            <select
-              value={syncHours}
-              onChange={(e) => setSyncHours(Number(e.target.value))}
-              className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+        <div className="space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-500">同步方式</label>
+              <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                <button
+                  onClick={() => setSyncMode("hours")}
+                  className={`px-3 py-1.5 text-xs ${
+                    syncMode === "hours" 
+                      ? "bg-blue-500 text-white" 
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  按时间
+                </button>
+                <button
+                  onClick={() => setSyncMode("season")}
+                  className={`px-3 py-1.5 text-xs ${
+                    syncMode === "season" 
+                      ? "bg-blue-500 text-white" 
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  按赛季
+                </button>
+              </div>
+            </div>
+
+            {syncMode === "hours" ? (
+              <select
+                value={syncHours}
+                onChange={(e) => setSyncHours(Number(e.target.value))}
+                className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              >
+                <option value={24}>24小时</option>
+                <option value={168}>7天</option>
+                <option value={720}>30天</option>
+              </select>
+            ) : (
+              <select
+                value={syncSeason}
+                onChange={(e) => setSyncSeason(e.target.value)}
+                className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              >
+                <option value="ss12">SS12 赛季</option>
+                <option value="ss11">SS11 赛季</option>
+                <option value="ss10">SS10 赛季</option>
+                <option value="ss09">SS09 赛季</option>
+              </select>
+            )}
+
+            <button
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending || connectionStatus !== "connected"}
+              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <option value={24}>24小时</option>
-              <option value={168}>7天</option>
-              <option value={720}>30天</option>
-            </select>
+              <Download className={`w-4 h-4 ${syncMutation.isPending ? "animate-bounce" : ""}`} />
+              {syncMutation.isPending ? "同步中..." : "同步数据"}
+            </button>
           </div>
 
-          <button
-            onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending || connectionStatus !== "connected"}
-            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <Download className={`w-4 h-4 ${syncMutation.isPending ? "animate-bounce" : ""}`} />
-            {syncMutation.isPending ? "同步中..." : "同步数据"}
-          </button>
-        </div>
-
-        <div className="mt-4 text-xs text-slate-400">
-          将服务器上的历史数据同步到本地数据库，用于查看历史趋势
+          <div className="text-xs text-slate-400">
+            {syncMode === "hours" 
+              ? `将服务器最近 ${syncHours} 小时的数据同步到本地数据库`
+              : `将服务器 SS${syncSeason.slice(-2)} 整个赛季的数据同步到本地数据库`
+            }
+          </div>
         </div>
       </div>
 
