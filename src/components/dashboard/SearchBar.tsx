@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { motion, AnimatePresence } from "framer-motion"
-import { cmd, type ItemData, type Section } from "@/lib/commands"
+import { cmd, type ItemData, type Section, type SectionItem } from "@/lib/commands"
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
@@ -97,6 +97,87 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
     }
   }
 
+  const handleExportList = async () => {
+    try {
+      const allSections = await cmd.getSections()
+      const exportData = await Promise.all(
+        allSections.map(async (section) => {
+          const sectionItems = await cmd.getSectionItems(section.id)
+          return {
+            name: section.name,
+            items: sectionItems.map(item => ({
+              item_id: item.item_id,
+              item_name: item.item_name,
+              purchase_fire_price: item.purchase_fire_price,
+              count: item.count,
+              more_value: item.more_value,
+            })),
+          }
+        })
+      )
+      const json = JSON.stringify(exportData, null, 2)
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `TL_groups_${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success(`已导出 ${allSections.length} 个分组`)
+    } catch (err) {
+      toast.error(`导出失败: ${err}`)
+    }
+  }
+
+  const handleImportList = async () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+      try {
+        const text = await file.text()
+        const data = JSON.parse(text)
+        if (!Array.isArray(data)) {
+          toast.error('文件格式错误')
+          return
+        }
+        let imported = 0
+        for (const group of data) {
+          try {
+            await cmd.createSection(group.name)
+            const sections = await cmd.getSections()
+            const newSection = sections.find(s => s.name === group.name)
+            if (newSection && group.items) {
+              for (const item of group.items) {
+                try {
+                  await cmd.addSectionItem(
+                    newSection.id,
+                    marketContext.seasonId,
+                    marketContext.marketMode,
+                    item.item_id,
+                    item.purchase_fire_price || 0,
+                    item.count || 1,
+                    item.more_value || 0
+                  )
+                  imported++
+                } catch {
+                }
+              }
+            }
+          } catch {
+          }
+        }
+        refreshSections()
+        toast.success(`已导入 ${imported} 个物品`)
+      } catch (err) {
+        toast.error(`导入失败: ${err}`)
+      }
+    }
+    input.click()
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -125,11 +206,11 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
           />
         </div>
 
-        <button className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50">
+        <button onClick={handleImportList} className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50">
           <Upload className="h-3.5 w-3.5" />
           导入列表
         </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50">
+        <button onClick={handleExportList} className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50">
           <Download className="h-3.5 w-3.5" />
           导出列表
         </button>
