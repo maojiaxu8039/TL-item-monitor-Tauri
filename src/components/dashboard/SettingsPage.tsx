@@ -47,6 +47,12 @@ export default function SettingsPage() {
 
   const saveMutation = useMutation<OkResponse, Error, AppConfig>({
     mutationFn: (config) => cmd.saveConfig(config),
+    onSuccess: () => {
+      toast.success("设置已保存", { position: 'bottom-right' });
+    },
+    onError: (err) => {
+      toast.error(`保存失败: ${err.message || err}`, { position: 'bottom-right' });
+    },
   });
 
   const refreshMutation = useMutation<OkResponse, Error, void>({
@@ -177,6 +183,28 @@ export default function SettingsPage() {
         <Settings className="w-5 h-5 text-slate-600" />
         <h1 className="text-[15px] font-semibold text-slate-800">系统设置</h1>
       </div>
+
+      {/* Season settings */}
+      <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Globe className="w-4 h-4 text-purple-500" />
+          <h2 className="text-sm font-semibold text-slate-700">赛季设置</h2>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium text-slate-700">赛季 ID</div>
+            <div className="text-xs text-slate-400 mt-0.5">如 ss12、ss11 等</div>
+          </div>
+          <input
+            type="text"
+            value={seasonId}
+            onChange={(e) => setSeasonId(e.target.value)}
+            placeholder="ss12"
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 w-40 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          />
+        </div>
+      </section>
 
       {/* Price Alert settings */}
       <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
@@ -427,28 +455,6 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* Season settings */}
-      <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Globe className="w-4 h-4 text-purple-500" />
-          <h2 className="text-sm font-semibold text-slate-700">赛季设置</h2>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-medium text-slate-700">赛季 ID</div>
-            <div className="text-xs text-slate-400 mt-0.5">如 ss12、ss11 等</div>
-          </div>
-          <input
-            type="text"
-            value={seasonId}
-            onChange={(e) => setSeasonId(e.target.value)}
-            placeholder="ss12"
-            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 w-40 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-          />
         </div>
       </section>
 
