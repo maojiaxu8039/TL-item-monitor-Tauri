@@ -1,7 +1,7 @@
-# TL 物品火价监控桌面版 - 开发文档 v2.0
+# TL 物品火价监控桌面版 - 开发文档 v2.1
 
 > 本文档记录 TL 物品火价监控桌面版的技术实现细节。
-> 最后更新：2026-04-30
+> 最后更新：2026-05-02
 
 ---
 
@@ -23,6 +23,7 @@
 | 托盘 | tauri-plugin-shell | 2.x |
 | 通知 | tauri-plugin-notification | 2.x |
 | 日志 | tauri-plugin-log | 2.x |
+| 文件对话框 | @tauri-apps/plugin-dialog | 2.x |
 
 ### 1.2 项目结构
 
@@ -45,12 +46,18 @@ TL-item-monitor-Tauri/
 │   │   │   ├── HelpPage.tsx           # 帮助
 │   │   │   ├── GroupCard.tsx          # 分组卡片
 │   │   │   ├── AddSectionDialog.tsx   # 添加分组弹窗
-│   │   │   └── AddItemModal.tsx       # 添加物品弹窗
+│   │   │   ├── AddItemModal.tsx       # 添加物品弹窗
+│   │   │   ├── SearchBar.tsx          # 搜索栏（包含导入导出）
+│   │   │   ├── SeasonPage.tsx         # 赛季管理
+│   │   │   └── DashboardStats.tsx      # 仪表板统计
 │   │   ├── charts/                 # 图表组件
 │   │   ├── layout/                  # 布局组件
+│   │   │   ├── Sidebar.tsx            # 侧边栏
+│   │   │   ├── TopBar.tsx            # 顶部栏
+│   │   │   └── PageHeader.tsx        # 页面头部
 │   │   └── ui/                     # UI 基础组件
 │   ├── contexts/
-│   │   └── MarketContext.tsx        # 市场上下文
+│   │   └── SectionRefreshContext.tsx  # 分组刷新上下文
 │   ├── hooks/
 │   │   └── useTauriEvents.ts        # Tauri 事件监听
 │   └── lib/
@@ -61,7 +68,7 @@ TL-item-monitor-Tauri/
 │   ├── Cargo.toml                   # Rust 依赖配置
 │   ├── tauri.conf.json             # Tauri 配置
 │   ├── resources/
-│   │   └── qiandao_fire.mjs         # Node.js HTTP/2 火价脚本
+│   │   └── qiandao_fire.mjs       # Node.js HTTP/2 火价脚本
 │   └── src/
 │       ├── main.rs                  # 主函数入口
 │       ├── app.rs                   # 应用初始化、迁移、后台任务
@@ -76,7 +83,7 @@ TL-item-monitor-Tauri/
 │       │   ├── strategies.rs        # 策略相关命令
 │       │   ├── config.rs            # 配置相关命令
 │       │   ├── diagnostics.rs       # 诊断相关命令
-│       │   └── import_export.rs    # 导入导出命令
+│       │   └── import_export.rs     # 导入导出命令
 │       ├── core/                    # 核心模块
 │       │   ├── state.rs             # 应用状态
 │       │   ├── config.rs            # 配置管理
@@ -93,7 +100,8 @@ TL-item-monitor-Tauri/
 │       │   ├── mod.rs
 │       │   ├── fire_task.rs        # 火价抓取任务
 │       │   ├── items_task.rs       # 物品刷新任务
-│       │   └── history_task.rs      # 历史快照任务
+│       │   ├── history_task.rs      # 历史快照任务
+│       │   └── alert_task.rs       # 价格预警任务
 │       ├── scraper/               # 数据抓取
 │       │   ├── mod.rs
 │       │   ├── luosi.rs           # 罗四 API（主数据）
@@ -111,7 +119,7 @@ TL-item-monitor-Tauri/
 
 ### 2.1 Tauri Commands
 
-共 **40 个 IPC 命令**，前端通过 `invoke()` 调用。
+共 **43 个 IPC 命令**，前端通过 `invoke()` 调用。
 
 | Command | 功能 | 返回类型 |
 |---------|------|----------|
@@ -138,6 +146,9 @@ TL-item-monitor-Tauri/
 | `test_notification` | 测试通知 | `OkResponse` |
 | `open_log_dir` | 打开日志目录 | `OkResponse` |
 | `reload_items` | 重新加载物品数据 | `OkResponse` |
+| `validate_json_file` | 验证 JSON 文件 | `JsonFileValidationResult` |
+| `write_file` | 写入文件（Base64） | `OkResponse` |
+| `read_file` | 读取文件（Base64） | `string` |
 | `get_items_stats` | 获取物品统计 | `ItemsStats` |
 | `evaluate_worth_cmd` | 计算物品估值 | `WorthResult` |
 | `get_alert_rules` | 获取预警规则列表 | `AlertRule[]` |
@@ -146,6 +157,7 @@ TL-item-monitor-Tauri/
 | `toggle_alert_rule` | 启用/禁用预警规则 | `OkResponse` |
 | `delete_alert_rule` | 删除预警规则 | `OkResponse` |
 | `get_alert_events` | 获取预警事件 | `AlertEvent[]` |
+| `trigger_price_alert` | 触发价格预警 | `string` |
 | `get_backup_info` | 获取备份信息 | `BackupInfo` |
 | `backup_database` | 备份数据库 | `OkResponse` |
 | `restore_database` | 恢复数据库 | `OkResponse` |
@@ -157,6 +169,10 @@ TL-item-monitor-Tauri/
 | `get_source_diagnostics` | 获取数据源诊断 | `SourceDiagnostic[]` |
 | `test_source_connection` | 测试数据源连接 | `OkResponse` |
 | `get_item_history` | 获取物品价格历史 | `ItemHistoryRecord[]` |
+| `get_item_types` | 获取物品类型列表 | `string[]` |
+| `clear_items_database` | 清空物品数据库 | `string` |
+| `get_notification_permission_status` | 获取通知权限状态 | `NotificationPermissionStatus` |
+| `request_notification_permission` | 请求通知权限 | `boolean` |
 | `get_season_summary` | 获取赛季摘要 | `SeasonSummary` |
 | `get_season_trends` | 获取赛季趋势 | `SeasonTrendHour[]` |
 | `select_local_items_file` | 选择本地物品文件 | `string \| null` |
@@ -167,8 +183,7 @@ TL-item-monitor-Tauri/
 
 | 文件 | 作用 |
 |------|------|
-| `001_initial.sql` | 创建 11 张表、15 个索引、外键约束 |
-| `002_add_constraints.sql` | 添加额外约束和索引 |
+| `001_initial.sql` | 创建 11 张表、15 个索引，外键约束 |
 
 #### 核心表结构
 
@@ -243,9 +258,11 @@ CREATE TABLE strategies (
 CREATE TABLE alert_rules (
     id TEXT PRIMARY KEY,
     strategy_id TEXT,
+    section_id TEXT,
     name TEXT NOT NULL,
     threshold REAL DEFAULT 0,
     enabled INTEGER DEFAULT 1,
+    cooldown_seconds INTEGER DEFAULT 600,
     created_at INTEGER NOT NULL,
     updated_at INTEGER
 );
@@ -255,8 +272,8 @@ CREATE TABLE alert_events (
     id TEXT PRIMARY KEY,
     rule_id TEXT NOT NULL,
     section_item_id TEXT,
-    triggered_at INTEGER NOT NULL,
     message TEXT NOT NULL,
+    triggered_at INTEGER NOT NULL,
     seen INTEGER DEFAULT 0,
     created_at INTEGER NOT NULL
 );
@@ -278,6 +295,22 @@ CREATE TABLE config (
     value TEXT NOT NULL,
     updated_at INTEGER NOT NULL
 );
+
+-- 源诊断
+CREATE TABLE source_diagnostics (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    source_type TEXT,
+    enabled INTEGER DEFAULT 1,
+    market_mode TEXT,
+    local_path TEXT,
+    last_success_at INTEGER,
+    last_failure_at INTEGER,
+    last_duration_ms INTEGER,
+    last_item_count INTEGER,
+    last_error TEXT,
+    updated_at INTEGER NOT NULL
+);
 ```
 
 ### 2.3 数据抓取
@@ -296,23 +329,15 @@ API 地址：`http://115.231.176.101:8080/get?season_id={id}`
 
 **转换公式**：`api_season_id = 200 * season_num - 1000 + mode_suffix`
 
-**物品过滤**：API 返回的物品全部保留，不做任何过滤（包括 price=0 的物品）。
+**重要**：API 返回的数据使用传入的 `season_id` 参数，而非从 `api_season_id` 反推。例如：API 返回 1401，实际保存为配置中的 season_id（如 ss12）。
 
-```rust
-// src-tauri/src/scraper/luosi.rs
-pub async fn scrape_by_season_id(api_season_id: i32) -> Result<Vec<Item>, AppError> {
-    let url = format!("{}?season_id={}", LUOSI_BASE_URL, api_season_id);
-    // 不过滤任何物品，保留所有数据
-    let items: Vec<Item> = map.into_iter().map(|(item_id, item)| Item { ... }).collect();
-}
-```
+**物品过滤**：API 返回的物品全部保留，不做任何过滤。
 
 #### 2.3.2 千岛火价 API (火价数据)
 
 **架构**：Node.js HTTP/2 优先，Rust reqwest Fallback
 
 ```rust
-// src-tauri/src/scraper/qiandao.rs
 pub async fn scrape_by_mode(mode: &str) -> Result<FirePriceSnapshot, AppError> {
     // 1. 优先使用 Node.js HTTP/2
     match scrape_via_node_script(mode).await {
@@ -324,44 +349,16 @@ pub async fn scrape_by_mode(mode: &str) -> Result<FirePriceSnapshot, AppError> {
 }
 ```
 
-**Node.js 脚本** (`src-tauri/resources/qiandao_fire.mjs`):
-```javascript
-import http2 from 'http2';
-
-const client = http2.connect('https://api.qiandao.com', { rejectUnauthorized: false });
-
-client.on('connect', () => {
-    const req = client.request({
-        ':method': 'POST',
-        ':path': '/c2c-web/v1/common/currency-spu-price-list',
-        // ... headers
-    });
-    req.end(JSON.stringify({ tagId: '1560053', offset: 0, limit: 20, specIds: ['267416'] }));
-});
-```
-
-**返回格式**:
-```json
-{
-  "code": "0",
-  "data": {
-    "fire_per_rmb": 219.165,
-    "rmb_per_fire": 45.6277,
-    "ten_k": 45.6277,
-    "increase_ratio": 0.28,
-    "source": "千岛API-赛季普通",
-    "ts": "2026-04-30 02:19"
-  }
-}
-```
-
 ### 2.4 定时任务
 
-| 任务 | 间隔 | 作用 |
-|------|------|------|
-| `fire_task` | 按配置刷新火价 | 自动抓取火价并保存 |
-| `items_task` | 按配置刷新物品 | 自动抓取物品数据 |
-| `history_task` | 每小时整点 | 保存历史快照 |
+| 任务 | 启用条件 | 间隔 | 作用 |
+|------|---------|------|------|
+| `fire_task` | `fire_price_scrape_enabled` | `fire_price_scrape_interval`（默认5分钟） | 自动抓取火价并更新当前数据 |
+| `items_task` | `auto_reload` | `items_reload_interval`（默认5分钟） | 根据 `items_source` 抓取物品并更新 |
+| `history_task` | 始终运行 | 每小时整点 | 保存历史快照 |
+| `alert_task` | `price_alert_enabled` | 每分钟检查 | 检查值得购买的物品 |
+
+**定时检测**：每 10 秒检测一次配置，如果启用则按配置的间隔执行，如果关闭则继续等待。
 
 ### 2.5 事件系统
 
@@ -390,24 +387,33 @@ src/components/
 │   ├── DashboardContent.tsx      # 主页（拖拽分组）
 │   ├── DataRecordsPage.tsx       # 历史数据记录
 │   ├── ItemsPage.tsx             # 物品库（搜索、筛选）
-│   ├── StrategiesPage.tsx        # 策略管理
+│   ├── StrategiesPage.tsx         # 策略管理
 │   ├── AlertsPage.tsx           # 价格预警
 │   ├── ImportExportPage.tsx      # 导入导出
 │   ├── SettingsPage.tsx          # 设置页面
 │   ├── HelpPage.tsx              # 帮助页面
+│   ├── SeasonPage.tsx           # 赛季管理
+│   ├── DashboardStats.tsx        # 仪表板统计
 │   ├── GroupCard.tsx             # 分组卡片（Flex 布局）
+│   ├── SearchBar.tsx            # 搜索栏（包含导入导出按钮）
+│   ├── SortableGroupCard.tsx    # 可拖拽分组卡片
 │   ├── AddSectionDialog.tsx      # 添加分组弹窗
 │   └── AddItemModal.tsx          # 添加物品弹窗
+├── layout/
+│   ├── Sidebar.tsx              # 侧边栏
+│   ├── TopBar.tsx               # 顶部栏（包含数据源/通知指示灯）
+│   └── PageHeader.tsx           # 页面头部
 └── ui/                           # shadcn/ui 组件
 ```
 
 ### 3.2 状态管理
 
 ```typescript
-// contexts/MarketContext.tsx
-export function MarketProvider({ children }) {
+// contexts/SectionRefreshContext.tsx
+export function SectionRefreshProvider({ children }) {
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [marketContext, setMarketContext] = useState({
-        seasonId: '1401',
+        seasonId: 'ss12',
         marketMode: 'season_normal'
     });
     // ...
@@ -421,75 +427,30 @@ export const queryClient = new QueryClient({
 });
 ```
 
-### 3.3 Tauri Commands 调用
+### 3.3 前端指示灯
 
-**重要**：Tauri 2 会自动将前端参数从 camelCase 转换为 snake_case，但 Rust 函数参数必须与转换后的名称匹配。
+在 `TopBar.tsx` 中显示：
+- **数据源指示灯**：🔵 蓝色=网络（API）/ 🟢 绿色=本地（JSON）
+- **系统通知指示灯**：🟢 绿色=已开启 / 🔴 红色=已关闭
 
-#### 参数命名规范
+### 3.4 CSV 导入导出功能
 
-所有 Tauri 命令的参数统一使用 **camelCase**（前端），Rust 函数使用 `#[allow(non_snake_case)]` 接受参数：
+**位置**：`SearchBar.tsx`（监控首页搜索栏右侧）
 
-| 前端 (TypeScript) | 后端 (Rust) | 说明 |
-|-------------------|-------------|------|
-| `seasonId` | `seasonId` | 赛季 ID |
-| `marketMode` | `marketMode` | 市场模式 |
-| `sectionId` | `sectionId` | 分组 ID |
-| `itemId` | `itemId` | 物品 ID |
-| `pageSize` | `pageSize` | 分页大小 |
-| `purchaseFirePrice` | `purchaseFirePrice` | 购买火价 |
-| `moreValue` | `moreValue` | 附加价值 |
+**导出列表**：
+- 点击按钮，弹出系统文件保存对话框
+- 导出为 CSV 格式（UTF-8 编码）
+- 包含：分组名称、物品ID、物品名称、购买火价、数量、溢出价值
 
-```typescript
-// lib/commands.ts
-export const cmd = {
-    getDashboardSummary: () => invoke<DashboardSummary>("get_dashboard_summary"),
-    setActiveMarketContext: (seasonId: string, marketMode: string) =>
-        invoke("set_active_market_context", { seasonId, marketMode }),
-    refreshFirePrice: () => invoke<FirePriceUI>("refresh_fire_price"),
-    refreshItems: () => invoke<OkResponse>("refresh_items"),
-    searchItems: (keyword: string, page = 1, pageSize = 50) =>
-        invoke<SearchResult>("search_items", { keyword, page, pageSize }),
-    getSections: () => invoke<Section[]>("get_sections"),
-    createSection: (name: string) => invoke<Section>("create_section", { name }),
-    addSectionItem: (sectionId, seasonId, marketMode, itemId, purchaseFirePrice, count, moreValue) =>
-        invoke("add_section_item", { sectionId, seasonId, marketMode, itemId, purchaseFirePrice, count, moreValue }),
-    removeSectionItem: (sectionId, itemId) =>
-        invoke("remove_section_item", { sectionId, itemId }),
-    // ... 其他命令
-};
-```
+**导入列表**：
+- 点击按钮，弹出系统文件选择对话框
+- 选择 CSV 文件，自动创建分组并导入物品
+- 导入时使用当前赛季和模式
 
-```rust
-// commands/sections.rs
-#[tauri::command]
-#[allow(non_snake_case)]
-pub async fn add_section_item(
-    state: State<'_, Arc<AppState>>,
-    sectionId: String,
-    seasonId: String,
-    marketMode: String,
-    itemId: String,
-    purchaseFirePrice: f64,
-    count: i32,
-    moreValue: f64,
-) -> Result<SectionItem, String> { ... }
-```
-
-### 3.4 前端事件监听
-
-```typescript
-// hooks/useTauriEvents.ts
-export function useTauriEvents() {
-    useEffect(() => {
-        const unlisteners = [
-            listen("fire-price-updated", handleFirePriceUpdated),
-            listen("items-updated", handleItemsUpdated),
-            listen("market-context-changed", handleMarketContextChanged),
-            // ...
-        ];
-        return () => unlisteners.forEach(u => u());
-    }, []);
-}
+**CSV 格式**：
+```csv
+分组名称,物品ID,物品名称,购买火价,数量,溢出价值
+"我的分组","10001","罪孽之劫掠罗盘",100,1,0
 ```
 
 ---
@@ -500,19 +461,33 @@ export function useTauriEvents() {
 
 ```rust
 pub struct AppConfig {
-    pub app: AppSettings,
+    pub schema_version: i32,
     pub scrape: ScrapeSettings,
     pub notification: NotificationSettings,
     pub desktop: DesktopSettings,
     pub data: DataSettings,
+    pub app: AppSettings,
+}
+
+pub struct ScrapeSettings {
+    pub fire_price_mode: String,
+    pub fire_price_scrape_enabled: bool,    // 火价自动刷新开关
+    pub fire_price_scrape_interval: u64,    // 火价刷新间隔（秒）
+    pub items_source: String,                // 数据源：api / local
+    pub items_json_path: String,            // 本地JSON路径
+    pub items_reload_interval: u64,        // 物品刷新间隔（秒）
+    pub auto_reload: bool,                 // 物品自动刷新开关
+}
+
+pub struct AppSettings {
+    pub season_id: String,                 // 赛季ID：ss12 / ss11
 }
 ```
 
 ### 4.2 配置存储
 
-- 位置：`~/.config/tl-monitor/config.toml`
-- 自动创建默认配置
-- 支持热更新
+- 位置：`~/.config/tl-monitor/config.yaml`
+- 支持热更新（修改后下次刷新时生效）
 
 ---
 
@@ -534,7 +509,7 @@ pub struct AppConfig {
 
 Tauri 2 在前后端通信时会自动将参数名从 camelCase 转换为 snake_case。但 Rust 函数参数必须与转换后的名称匹配。
 
-**示例**：前端发送 `{ seasonId, marketMode }` → Rust 函数需要接收 `season_id, market_mode`
+**示例**：前端 send `{ seasonId, marketMode }` → Rust 函数需要接收 `season_id, market_mode`
 
 当前项目中已统一使用 camelCase（`seasonId`, `marketMode`, `pageSize`）作为前端参数名，Rust 函数使用 `#[allow(non_snake_case)]` 标注来接受这些参数。
 
@@ -567,9 +542,6 @@ npm run typecheck
 # 构建前端
 npm run vite:build
 
-# Tauri 开发模式
-npm run dev
-
 # Tauri 构建生产版本
 npm run build
 ```
@@ -581,10 +553,10 @@ npm run build
 ~/Library/Application\ Support/com.tlmonitor.app/data/tl_monitor.db
 
 # 查看数据库
-sqlite3 ~/.local/share/com.tlmonitor.app/data/tl_monitor.db ".tables"
+sqlite3 ~/.Library/Application\ Support/com.tlmonitor.app/data/tl_monitor.db ".tables"
 
 # 执行 SQL
-sqlite3 ~/.local/share/com.tlmonitor.app/data/tl_monitor.db "SELECT * FROM fire_price_records LIMIT 5;"
+sqlite3 ~/.Library/Application\ Support/com.tlmonitor.app/data/tl_monitor.db "SELECT * FROM items LIMIT 5;"
 ```
 
 ### 6.4 日志位置
@@ -597,7 +569,7 @@ sqlite3 ~/.local/share/com.tlmonitor.app/data/tl_monitor.db "SELECT * FROM fire_
 ### 6.5 添加新的 Tauri Command
 
 1. 在 `src-tauri/src/commands/` 中添加处理函数
-2. 在 `src-tauri/src/commands/mod.rs` 中注册
+2. 在 `src-tauri/src/main.rs` 中注册命令
 3. 在 `src/lib/commands.ts` 中添加前端调用
 4. 运行 `npm run typecheck` 验证类型
 
@@ -610,8 +582,8 @@ sqlite3 ~/.local/share/com.tlmonitor.app/data/tl_monitor.db "SELECT * FROM fire_
 | 项目 | 状态 |
 |------|------|
 | TypeScript | ✅ 通过 |
-| Rust (cargo check) | ✅ 通过，0 warnings |
-| Rust (cargo test) | ✅ 8/8 测试通过 |
+| Rust (cargo check) | ✅ 通过 |
+| Rust (cargo test) | ✅ 测试通过 |
 
 ### 7.2 功能测试
 
@@ -625,6 +597,10 @@ sqlite3 ~/.local/share/com.tlmonitor.app/data/tl_monitor.db "SELECT * FROM fire_
 | 分组管理 | ✅ 正常 |
 | 前端页面渲染 | ✅ 正常 |
 | IPC 命令调用 | ✅ 正常 |
+| CSV 导入导出 | ✅ 正常 |
+| JSON 文件验证 | ✅ 正常 |
+| 数据源切换 | ✅ 正常 |
+| 顶部栏指示灯 | ✅ 正常 |
 
 ---
 
