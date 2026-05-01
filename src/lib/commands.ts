@@ -136,10 +136,19 @@ export interface DesktopSettings {
 
 export interface NotificationSettings {
   system_notifications: boolean;
+  voice_alert_enabled: boolean;
+  voice_alert_path: string;
   price_alert_enabled: boolean;
   price_alert_cooldown_seconds: number;
   quiet_start: string | null;
   quiet_end: string | null;
+}
+
+export interface NotificationPermissionStatus {
+  granted: boolean;
+  denied: boolean;
+  prompt: boolean;
+  unknown: boolean;
 }
 
 export interface DataSettings {
@@ -243,6 +252,8 @@ export const cmd = {
   refreshItems: () => invoke<OkResponse>("refresh_items"),
   clearItemsDatabase: () => invoke<string>("clear_items_database"),
   triggerPriceAlert: () => invoke<string>("trigger_price_alert"),
+  getNotificationPermissionStatus: () => invoke<NotificationPermissionStatus>("get_notification_permission_status"),
+  requestNotificationPermission: () => invoke<boolean>("request_notification_permission"),
   getItemTypes: () => invoke<string[]>("get_item_types"),
   searchItems: (keyword: string, page = 1, pageSize = 50) =>
     invoke<SearchResult>("search_items", { keyword, page, pageSize }),

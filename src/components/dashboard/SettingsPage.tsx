@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { cmd, type AppConfig, type OkResponse } from "@/lib/commands";
+import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus } from "@/lib/commands";
 import { useMutation } from "@tanstack/react-query";
-import { RefreshCw, Save, Settings, Bell, Database, Globe, AlertTriangle, Trash2 } from "lucide-react";
+import { RefreshCw, Save, Settings, Bell, Database, Globe, AlertTriangle, Trash2, Volume2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -42,6 +42,8 @@ export default function SettingsPage() {
   const [priceAlertEnabled, setPriceAlertEnabled] = useState(true);
   const [priceAlertCooldown, setPriceAlertCooldown] = useState(600);
   const [systemNotifications, setSystemNotifications] = useState(true);
+  const [voiceAlertEnabled, setVoiceAlertEnabled] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionStatus | null>(null);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
   const saveMutation = useMutation<OkResponse, Error, AppConfig>({
@@ -73,6 +75,21 @@ export default function SettingsPage() {
     },
   });
 
+  const requestPermissionMutation = useMutation<boolean, Error, void>({
+    mutationFn: () => cmd.requestNotificationPermission(),
+    onSuccess: (granted) => {
+      if (granted) {
+        toast.success("通知权限已授权");
+        setNotificationPermission({ granted: true, denied: false, prompt: false, unknown: false });
+      } else {
+        toast.error("通知权限被拒绝，请在系统设置中开启");
+      }
+    },
+    onError: (err) => {
+      toast.error(`请求权限失败: ${err}`);
+    },
+  });
+
   useEffect(() => {
     cmd.getConfig().then((cfg) => {
       setFireEnabled(cfg.scrape.fire_price_scrape_enabled);
@@ -84,11 +101,16 @@ export default function SettingsPage() {
       setPriceAlertEnabled(cfg.notification.price_alert_enabled);
       setPriceAlertCooldown(cfg.notification.price_alert_cooldown_seconds);
       setSystemNotifications(cfg.notification.system_notifications);
+      setVoiceAlertEnabled(cfg.notification.voice_alert_enabled);
       setLoaded(true);
     }).catch(() => {});
 
     cmd.getDashboardSummary().then((summary) => {
       setItemCount(summary.item_count);
+    }).catch(() => {});
+
+    cmd.getNotificationPermissionStatus().then((status) => {
+      setNotificationPermission(status);
     }).catch(() => {});
   }, []);
 
@@ -112,6 +134,8 @@ export default function SettingsPage() {
       },
       notification: {
         system_notifications: systemNotifications,
+        voice_alert_enabled: voiceAlertEnabled,
+        voice_alert_path: "/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src-tauri/resources/萝莉音.mp3",
         price_alert_enabled: priceAlertEnabled,
         price_alert_cooldown_seconds: priceAlertCooldown,
         quiet_start: null,
@@ -164,15 +188,55 @@ export default function SettingsPage() {
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-medium text-slate-700">开启系统通知</div>
-              <div className="text-xs text-slate-400 mt-0.5">开启后将在发现值得购买的物品时发送桌面通知</div>
+            <div className="flex items-center gap-3">
+              <div>
+                <div className="text-sm font-medium text-slate-700">开启系统通知</div>
+                <div className="text-xs text-slate-400 mt-0.5">开启后将在发现值得购买的物品时发送桌面通知</div>
+              </div>
+              {notificationPermission && (
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${notificationPermission.granted ? 'bg-green-500' : notificationPermission.denied ? 'bg-red-500' : 'bg-yellow-500'}`}></div>
+                  <span className="text-xs text-slate-500">
+                    {notificationPermission.granted ? '已授权' : notificationPermission.denied ? '已拒绝' : '未授权'}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={systemNotifications}
+                  onChange={(e) => setSystemNotifications(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+              </label>
+              {!notificationPermission?.granted && (
+                <button
+                  onClick={() => requestPermissionMutation.mutate()}
+                  disabled={requestPermissionMutation.isPending}
+                  className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+                >
+                  {requestPermissionMutation.isPending ? '申请中...' : '申请权限'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Volume2 className="w-4 h-4 text-slate-500" />
+              <div>
+                <div className="text-sm font-medium text-slate-700">开启语音提醒</div>
+                <div className="text-xs text-slate-400 mt-0.5">预警触发时播放语音提示</div>
+              </div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
                 type="checkbox"
-                checked={systemNotifications}
-                onChange={(e) => setSystemNotifications(e.target.checked)}
+                checked={voiceAlertEnabled}
+                onChange={(e) => setVoiceAlertEnabled(e.target.checked)}
                 className="sr-only peer"
               />
               <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>

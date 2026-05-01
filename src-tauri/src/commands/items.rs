@@ -5,6 +5,7 @@ use crate::db::repo_history;
 use crate::services::send_notification;
 use std::sync::Arc;
 use tauri::{State, AppHandle};
+use tauri_plugin_notification::{PermissionState, NotificationExt};
 
 #[tauri::command]
 #[allow(non_snake_case)]
@@ -207,4 +208,39 @@ pub async fn get_item_types(state: State<'_, Arc<AppState>>) -> Result<Vec<Strin
     repo_items::get_distinct_item_types(&state.db)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct NotificationPermissionStatus {
+    pub granted: bool,
+    pub denied: bool,
+    pub prompt: bool,
+    pub unknown: bool,
+}
+
+#[tauri::command]
+pub async fn get_notification_permission_status(app: AppHandle) -> Result<NotificationPermissionStatus, String> {
+    let notification = app.notification();
+    match notification.permission_state() {
+        Ok(state) => {
+            Ok(NotificationPermissionStatus {
+                granted: state == PermissionState::Granted,
+                denied: state == PermissionState::Denied,
+                prompt: state == PermissionState::Prompt,
+                unknown: false,
+            })
+        }
+        Err(e) => Err(format!("获取权限状态失败: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn request_notification_permission(app: AppHandle) -> Result<bool, String> {
+    let notification = app.notification();
+    match notification.request_permission() {
+        Ok(state) => {
+            Ok(state == PermissionState::Granted)
+        }
+        Err(e) => Err(format!("请求权限失败: {}", e)),
+    }
 }
