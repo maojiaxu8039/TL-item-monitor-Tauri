@@ -10,14 +10,23 @@ interface ServerStatus {
   version: string;
   uptime_seconds: number;
   season_id: string;
-  market_mode: string;
   last_collection: {
-    timestamp: number;
-    fire_success: boolean;
-    fire_price: number | null;
-    items_count: number;
-    items_success: boolean;
-    error: string | null;
+    normal: {
+      timestamp: number;
+      fire_success: boolean;
+      fire_price: number | null;
+      items_count: number;
+      items_success: boolean;
+      error: string | null;
+    } | null;
+    expert: {
+      timestamp: number;
+      fire_success: boolean;
+      fire_price: number | null;
+      items_count: number;
+      items_success: boolean;
+      error: string | null;
+    } | null;
   } | null;
   next_collection: number | null;
 }
@@ -25,7 +34,6 @@ interface ServerStatus {
 interface FireHistoryRecord {
   id: string;
   season_id: string;
-  market_mode: string;
   rmb_per_10k_fire: number;
   fire_per_rmb: number;
   increase_ratio: number | null;
@@ -37,6 +45,9 @@ interface FireHistoryRecord {
 }
 
 type ConnectionStatus = "connected" | "disconnected" | "error";
+type DataType = "fire" | "items";
+type SyncMode = "normal" | "expert";
+type TimeRange = "24h" | "3d" | "7d" | "30d" | "season";
 
 export default function DataMonitorPage() {
   const [serverUrl, setServerUrl] = useState(() => {
@@ -44,9 +55,9 @@ export default function DataMonitorPage() {
   });
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
-  const [syncHours, setSyncHours] = useState(24);
-  const [syncSeason, setSyncSeason] = useState("ss12");
-  const [syncMode, setSyncMode] = useState<"hours" | "season">("hours");
+  const [dataType, setDataType] = useState<DataType>("fire");
+  const [syncMode, setSyncMode] = useState<SyncMode>("normal");
+  const [timeRange, setTimeRange] = useState<TimeRange>("24h");
   const { marketContext } = useSectionRefresh();
 
   const checkServerStatus = async (): Promise<ServerStatus | null> => {
@@ -78,33 +89,48 @@ export default function DataMonitorPage() {
     setServerStatus(statusData || null);
   }, [statusData]);
 
+  const getTimeRangeHours = (range: TimeRange): number => {
+    switch (range) {
+      case "24h": return 24;
+      case "3d": return 72;
+      case "7d": return 168;
+      case "30d": return 720;
+      case "season": return 99999;
+    }
+  };
+
   const syncMutation = useMutation({
     mutationFn: async () => {
+      const modeParam = syncMode === "expert" ? "expert" : "normal";
+      const hours = getTimeRangeHours(timeRange);
+      
       let url: string;
-      if (syncMode === "hours") {
-        url = `${serverUrl}/fire-history?limit=${syncHours}`;
+      if (dataType === "fire") {
+        url = hours === 99999 
+          ? `${serverUrl}/fire-history-all?season_id=${marketContext.seasonId}&market_mode=season_${syncMode}`
+          : `${serverUrl}/fire-history?mode=${modeParam}&limit=${hours}`;
       } else {
-        url = `${serverUrl}/fire-history-all?season_id=${syncSeason}&market_mode=${marketContext.marketMode}`;
+        toast.info("物品价格同步功能开发中");
+        return { synced: 0 };
       }
       
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch data");
       const data = await response.json();
       if (!data.success) throw new Error(data.error || "Unknown error");
-      return data.data as FireHistoryRecord[];
-    },
-    onSuccess: async (records) => {
+      
+      const records = data.data as FireHistoryRecord[];
       if (records.length === 0) {
-        toast.info("没有可同步的数据");
-        return;
+        return { synced: 0, message: "没有可同步的数据" };
       }
       
       let synced = 0;
       for (const record of records) {
         try {
+          const marketMode = syncMode === "expert" ? "season_expert" : "season_normal";
           await cmd.syncFireRecord({
             season_id: record.season_id,
-            market_mode: record.market_mode,
+            market_mode: marketMode,
             rmb_per_10k_fire: record.rmb_per_10k_fire,
             fire_per_rmb: record.fire_per_rmb,
             increase_ratio: record.increase_ratio ?? 0,
@@ -118,7 +144,14 @@ export default function DataMonitorPage() {
           console.error("Sync error:", err);
         }
       }
-      toast.success(`已同步 ${synced} 条火价记录到本地数据库`);
+      return { synced };
+    },
+    onSuccess: (result) => {
+      if (result.message) {
+        toast.info(result.message);
+      } else {
+        toast.success(`已同步 ${result.synced} 条数据到本地数据库`);
+      }
       refetchStatus();
     },
     onError: (err: Error) => {
@@ -163,6 +196,9 @@ export default function DataMonitorPage() {
         return <span className="text-slate-400">未连接</span>;
     }
   };
+
+  const normalStatus = serverStatus?.last_collection?.normal;
+  const expertStatus = serverStatus?.last_collection?.expert;
 
   return (
     <div className="p-6 space-y-6">
@@ -225,9 +261,9 @@ export default function DataMonitorPage() {
                 <div className="text-sm font-medium text-slate-700">{serverStatus.season_id}</div>
               </div>
               <div className="text-center">
-                <div className="text-xs text-slate-400">模式</div>
+                <div className="text-xs text-slate-400">下次采集</div>
                 <div className="text-sm font-medium text-slate-700">
-                  {serverStatus.market_mode === "season_normal" ? "普通" : "专家"}
+                  {serverStatus.next_collection ? formatTimestamp(serverStatus.next_collection) : "-"}
                 </div>
               </div>
             </div>
@@ -236,61 +272,85 @@ export default function DataMonitorPage() {
       </div>
 
       {/* Collection Status */}
-      {serverStatus && serverStatus.last_collection && (
+      <div className="grid grid-cols-2 gap-4">
+        {/* Normal Mode */}
         <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Clock className="w-4 h-4 text-purple-500" />
-            <h2 className="text-sm font-semibold text-slate-700">最近采集</h2>
-            <span className="ml-auto text-xs text-slate-400">
-              {formatTimestamp(serverStatus.last_collection.timestamp)}
-            </span>
+            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">普通服</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className={`p-4 rounded-lg border ${serverStatus.last_collection.fire_success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-              <div className="flex items-center gap-2 mb-2">
-                {serverStatus.last_collection.fire_success ? (
+          {normalStatus ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                {normalStatus.fire_success ? (
                   <CheckCircle className="w-4 h-4 text-green-500" />
                 ) : (
                   <XCircle className="w-4 h-4 text-red-500" />
                 )}
-                <span className="text-sm font-medium">火价采集</span>
+                <span className="text-sm">火价</span>
+                <span className="ml-auto font-medium">
+                  {normalStatus.fire_success ? `${normalStatus.fire_price?.toFixed(2)} RMB/10K` : "失败"}
+                </span>
               </div>
-              {serverStatus.last_collection.fire_success ? (
-                <div className="text-lg font-semibold text-green-700">
-                  {serverStatus.last_collection.fire_price?.toFixed(2)} RMB/10K
-                </div>
-              ) : (
-                <div className="text-sm text-red-600">{serverStatus.last_collection.error}</div>
-              )}
-            </div>
-
-            <div className={`p-4 rounded-lg border ${serverStatus.last_collection.items_success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-              <div className="flex items-center gap-2 mb-2">
-                {serverStatus.last_collection.items_success ? (
+              <div className="flex items-center gap-2">
+                {normalStatus.items_success ? (
                   <CheckCircle className="w-4 h-4 text-green-500" />
                 ) : (
                   <XCircle className="w-4 h-4 text-red-500" />
                 )}
-                <span className="text-sm font-medium">物品采集</span>
+                <span className="text-sm">物品</span>
+                <span className="ml-auto font-medium">
+                  {normalStatus.items_success ? `${normalStatus.items_count} 个` : "失败"}
+                </span>
               </div>
-              {serverStatus.last_collection.items_success ? (
-                <div className="text-lg font-semibold text-green-700">
-                  {serverStatus.last_collection.items_count} 个物品
-                </div>
-              ) : (
-                <div className="text-sm text-red-600">{serverStatus.last_collection.error}</div>
-              )}
+              <div className="text-xs text-slate-400 text-right">
+                {formatTimestamp(normalStatus.timestamp)}
+              </div>
             </div>
-          </div>
-
-          {serverStatus.next_collection && (
-            <div className="mt-4 pt-4 border-t border-slate-100 text-center text-sm text-slate-500">
-              下次采集时间：{formatTimestamp(serverStatus.next_collection)}
-            </div>
+          ) : (
+            <div className="text-sm text-slate-400 text-center py-4">暂无数据</div>
           )}
         </div>
-      )}
+
+        {/* Expert Mode */}
+        <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded">专家服</span>
+          </div>
+
+          {expertStatus ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                {expertStatus.fire_success ? (
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-red-500" />
+                )}
+                <span className="text-sm">火价</span>
+                <span className="ml-auto font-medium">
+                  {expertStatus.fire_success ? `${expertStatus.fire_price?.toFixed(2)} RMB/10K` : "失败"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {expertStatus.items_success ? (
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-red-500" />
+                )}
+                <span className="text-sm">物品</span>
+                <span className="ml-auto font-medium">
+                  {expertStatus.items_success ? `${expertStatus.items_count} 个` : "失败"}
+                </span>
+              </div>
+              <div className="text-xs text-slate-400 text-right">
+                {formatTimestamp(expertStatus.timestamp)}
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-slate-400 text-center py-4">暂无数据</div>
+          )}
+        </div>
+      </div>
 
       {/* Data Sync */}
       <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
@@ -300,56 +360,78 @@ export default function DataMonitorPage() {
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-slate-500">同步方式</label>
-              <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-                <button
-                  onClick={() => setSyncMode("hours")}
-                  className={`px-3 py-1.5 text-xs ${
-                    syncMode === "hours" 
-                      ? "bg-blue-500 text-white" 
-                      : "bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  按时间
-                </button>
-                <button
-                  onClick={() => setSyncMode("season")}
-                  className={`px-3 py-1.5 text-xs ${
-                    syncMode === "season" 
-                      ? "bg-blue-500 text-white" 
-                      : "bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  按赛季
-                </button>
-              </div>
+          {/* Data Type */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500">数据类型</label>
+            <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+              <button
+                onClick={() => setDataType("fire")}
+                className={`px-3 py-1.5 text-xs ${
+                  dataType === "fire" 
+                    ? "bg-green-500 text-white" 
+                    : "bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                火价
+              </button>
+              <button
+                onClick={() => setDataType("items")}
+                className={`px-3 py-1.5 text-xs ${
+                  dataType === "items" 
+                    ? "bg-green-500 text-white" 
+                    : "bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                物品价格
+              </button>
             </div>
+          </div>
 
-            {syncMode === "hours" ? (
-              <select
-                value={syncHours}
-                onChange={(e) => setSyncHours(Number(e.target.value))}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          {/* Mode */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500">服务器模式</label>
+            <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+              <button
+                onClick={() => setSyncMode("normal")}
+                className={`px-3 py-1.5 text-xs ${
+                  syncMode === "normal" 
+                    ? "bg-blue-500 text-white" 
+                    : "bg-white text-slate-600 hover:bg-slate-50"
+                }`}
               >
-                <option value={24}>24小时</option>
-                <option value={168}>7天</option>
-                <option value={720}>30天</option>
-              </select>
-            ) : (
-              <select
-                value={syncSeason}
-                onChange={(e) => setSyncSeason(e.target.value)}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                普通服
+              </button>
+              <button
+                onClick={() => setSyncMode("expert")}
+                className={`px-3 py-1.5 text-xs ${
+                  syncMode === "expert" 
+                    ? "bg-purple-500 text-white" 
+                    : "bg-white text-slate-600 hover:bg-slate-50"
+                }`}
               >
-                <option value="ss12">SS12 赛季</option>
-                <option value="ss11">SS11 赛季</option>
-                <option value="ss10">SS10 赛季</option>
-                <option value="ss09">SS09 赛季</option>
-              </select>
-            )}
+                专家服
+              </button>
+            </div>
+          </div>
 
+          {/* Time Range */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500">时间范围</label>
+            <select
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value as TimeRange)}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            >
+              <option value="24h">24小时</option>
+              <option value="3d">3天</option>
+              <option value="7d">7天</option>
+              <option value="30d">30天</option>
+              <option value="season">整赛季</option>
+            </select>
+          </div>
+
+          {/* Sync Button */}
+          <div className="flex items-center gap-4 pt-2">
             <button
               onClick={() => syncMutation.mutate()}
               disabled={syncMutation.isPending || connectionStatus !== "connected"}
@@ -358,13 +440,10 @@ export default function DataMonitorPage() {
               <Download className={`w-4 h-4 ${syncMutation.isPending ? "animate-bounce" : ""}`} />
               {syncMutation.isPending ? "同步中..." : "同步数据"}
             </button>
-          </div>
-
-          <div className="text-xs text-slate-400">
-            {syncMode === "hours" 
-              ? `将服务器最近 ${syncHours} 小时的数据同步到本地数据库`
-              : `将服务器 SS${syncSeason.slice(-2)} 整个赛季的数据同步到本地数据库`
-            }
+            
+            <span className="text-xs text-slate-400">
+              同步 {dataType === "fire" ? "火价" : "物品价格"} / {syncMode === "normal" ? "普通服" : "专家服"} / {timeRange === "season" ? "整赛季" : timeRange}
+            </span>
           </div>
         </div>
       </div>
