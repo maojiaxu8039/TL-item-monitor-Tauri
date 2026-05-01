@@ -7,6 +7,7 @@ import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { SearchBar } from "@/components/dashboard/SearchBar"
 import { SortableGroupCard } from "@/components/dashboard/SortableGroupCard"
 import { AddSectionDialog } from "@/components/dashboard/AddSectionDialog"
+import { DashboardStats } from "@/components/dashboard/DashboardStats"
 import { Button } from "@/components/ui/button"
 import { cmd, type Section } from "@/lib/commands"
 import {
@@ -102,6 +103,7 @@ export default function DashboardContent() {
   return (
     <>
       <div className="flex flex-col gap-4 max-w-[1200px] mx-auto">
+        <DashboardStats />
         <SearchBar sections={sections} />
         <DndContext
           sensors={sensors}
