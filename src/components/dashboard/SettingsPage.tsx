@@ -460,10 +460,7 @@ export default function SettingsPage() {
               {itemsSource === 'local' && jsonPathValidation && (
                 <div className={`flex items-center gap-1 text-xs ${jsonPathValidation.valid ? 'text-green-600' : 'text-red-500'}`}>
                   {jsonPathValidation.valid ? (
-                    <>
-                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                      <span>{jsonPathValidation.item_count} 个物品</span>
-                    </>
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
                   ) : (
                     <>
                       <span className="w-2 h-2 rounded-full bg-red-500"></span>
