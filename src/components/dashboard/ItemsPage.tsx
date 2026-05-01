@@ -20,6 +20,8 @@ import {
   X,
   Check,
   Loader2,
+  Upload,
+  Download,
 } from "lucide-react";
 
 const COLUMN_HELPER = createColumnHelper<ItemData>();
@@ -369,6 +371,16 @@ export default function ItemsPage() {
             className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded text-sm bg-white outline-none focus:border-blue-400"
           />
         </div>
+
+        {/* Import/Export buttons */}
+        <button className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded text-sm text-slate-600 hover:bg-slate-50">
+          <Upload className="w-4 h-4" />
+          导入列表
+        </button>
+        <button className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded text-sm text-slate-600 hover:bg-slate-50">
+          <Download className="w-4 h-4" />
+          导出列表
+        </button>
 
         {/* Type filter */}
         <select
