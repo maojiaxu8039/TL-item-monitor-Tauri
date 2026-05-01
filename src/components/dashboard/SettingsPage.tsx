@@ -262,7 +262,7 @@ export default function SettingsPage() {
           {priceAlertEnabled && (
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium text-slate-700">冷却时间</div>
+                <div className="text-sm font-medium text-slate-700">预警间隔时间</div>
                 <div className="text-xs text-slate-400 mt-0.5">预警触发后的等待时间</div>
               </div>
               <select
