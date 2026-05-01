@@ -6,16 +6,25 @@ use std::path::Path;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub season_id: String,
-    pub market_mode: String,
     pub http_port: u16,
+    pub scrape_modes: Vec<ScrapeMode>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScrapeMode {
+    pub mode: String,
+    pub enabled: bool,
 }
 
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             season_id: "ss12".to_string(),
-            market_mode: "season_normal".to_string(),
             http_port: 8080,
+            scrape_modes: vec![
+                ScrapeMode { mode: "normal".to_string(), enabled: true },
+                ScrapeMode { mode: "expert".to_string(), enabled: true },
+            ],
         }
     }
 }
