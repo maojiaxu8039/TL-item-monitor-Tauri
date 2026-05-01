@@ -5,7 +5,8 @@
   "version": "1.0.0",
   "build": {
     "frontendDist": "../dist-react",
-    "devUrl": "http://localhost:5173"
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run vite:dev"
   },
   "app": {
     "withGlobalTauri": true,

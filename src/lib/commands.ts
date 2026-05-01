@@ -136,6 +136,9 @@ export interface DesktopSettings {
 
 export interface NotificationSettings {
   system_notifications: boolean;
+  price_alert_enabled: boolean;
+  price_alert_rule_type: string;
+  price_alert_cooldown_seconds: number;
   quiet_start: string | null;
   quiet_end: string | null;
 }

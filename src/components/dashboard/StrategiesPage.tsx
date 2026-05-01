@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { cmd, type Section, type SectionItem } from "../../lib/commands";
+import { cmd, type Section, type SectionItem, type DashboardSummary } from "../../lib/commands";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DangerButton } from "@/components/ui/danger-button";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { toast } from "sonner";
 import {
@@ -27,10 +29,21 @@ export default function StrategiesPage() {
   const [newSectionName, setNewSectionName] = useState("");
   const [addItemOpen, setAddItemOpen] = useState(false);
 
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [sectionToDelete, setSectionToDelete] = useState<{ id: string; name: string } | null>(null);
+
   const { data: sections = [], isLoading } = useQuery({
     queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
     queryFn: cmd.getSections,
   });
+
+  const { data: dashboardSummary } = useQuery<DashboardSummary>({
+    queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode],
+    queryFn: () => cmd.getDashboardSummary(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const rmbPer10kFire = dashboardSummary?.fire?.rmb_per_10k_fire ?? 61.87;
 
   const createMutation = useMutation({
     mutationFn: cmd.createSection,
@@ -80,124 +93,148 @@ export default function StrategiesPage() {
     },
   });
 
+  const handleDeleteSection = (id: string, name: string) => {
+    setSectionToDelete({ id, name });
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (sectionToDelete) {
+      deleteMutation.mutate(sectionToDelete.id);
+    }
+    setDeleteDialogOpen(false);
+    setSectionToDelete(null);
+  };
+
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-            <Shield className="w-5 h-5 text-blue-500" />
-            策略管理
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">管理监控分组，编辑物品估值参数</p>
+    <>
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
+              <Shield className="w-5 h-5 text-blue-500" />
+              策略管理
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">管理监控分组，编辑物品估值参数</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setAddItemOpen(true)}
+              disabled={sections.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2 border border-blue-200 rounded text-sm text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title={sections.length === 0 ? "请先创建分组" : "添加物品到分组"}
+            >
+              <PackageSearch className="w-3.5 h-3.5" />
+              添加物品
+            </button>
+            <button
+              onClick={() => setCreatingSection(true)}
+              className="flex items-center gap-1.5 px-3 py-2 border border-blue-200 rounded text-sm text-blue-600 hover:bg-blue-50 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              新建分组
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setAddItemOpen(true)}
-            disabled={sections.length === 0}
-            className="flex items-center gap-1.5 px-3 py-2 border border-blue-200 rounded text-sm text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            title={sections.length === 0 ? "请先创建分组" : "添加物品到分组"}
-          >
-            <PackageSearch className="w-3.5 h-3.5" />
-            添加物品
-          </button>
-          <button
-            onClick={() => setCreatingSection(true)}
-            className="flex items-center gap-1.5 px-3 py-2 border border-blue-200 rounded text-sm text-blue-600 hover:bg-blue-50 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            新建分组
-          </button>
-        </div>
+
+        {/* Create section */}
+        {creatingSection && (
+          <div className="bg-white rounded-lg border-2 border-blue-300 overflow-hidden">
+            <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
+              <input
+                autoFocus
+                value={newSectionName}
+                onChange={(e) => setNewSectionName(e.target.value)}
+                placeholder="输入分组名称"
+                className="w-full text-sm outline-none bg-transparent"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") createMutation.mutate(newSectionName);
+                  if (e.key === "Escape") setCreatingSection(false);
+                }}
+              />
+            </div>
+            <div className="px-4 py-3 flex gap-2">
+              <button
+                onClick={() => createMutation.mutate(newSectionName)}
+                disabled={!newSectionName.trim() || createMutation.isPending}
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-xs rounded disabled:opacity-50"
+              >
+                <Check className="w-3 h-3" />
+                确认
+              </button>
+              <button
+                onClick={() => setCreatingSection(false)}
+                className="flex items-center gap-1 px-3 py-1.5 text-slate-500 text-xs rounded hover:bg-slate-100"
+              >
+                <X className="w-3 h-3" />
+                取消
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Sections list */}
+        {isLoading ? (
+          <div className="text-center py-16 text-sm text-slate-400">加载中...</div>
+        ) : sections.length === 0 && !creatingSection ? (
+          <EmptyStrategies />
+        ) : (
+          <>
+            {addItemOpen && (
+              <AddItemModal
+                sections={sections}
+                onClose={() => setAddItemOpen(false)}
+                onAdded={() => {
+                  qc.invalidateQueries({ queryKey: ["sections", marketContext.seasonId, marketContext.marketMode] });
+                }}
+              />
+            )}
+            <div className="space-y-3">
+              {sections.map((section) => (
+                <StrategyCard
+                  key={section.id}
+                  section={section}
+                  expanded={expandedSections.has(section.id)}
+                  onToggle={() => {
+                    const next = new Set(expandedSections);
+                    if (next.has(section.id)) next.delete(section.id);
+                    else next.add(section.id);
+                    setExpandedSections(next);
+                  }}
+                  editing={editingSection === section.id}
+                  editName={editName}
+                  onStartEdit={(name) => {
+                    setEditingSection(section.id);
+                    setEditName(name);
+                  }}
+                  onEditChange={setEditName}
+                  onSaveEdit={() => updateMutation.mutate({ id: section.id, name: editName })}
+                  onCancelEdit={() => setEditingSection(null)}
+                  onDelete={() => handleDeleteSection(section.id, section.name)}
+                  onRemoveItem={(itemId) => removeItemMutation.mutate({ sectionId: section.id, itemId })}
+                  saving={updateMutation.isPending}
+                  onOpenAddItem={() => setAddItemOpen(true)}
+                  rmbPer10kFire={rmbPer10kFire}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Create section */}
-      {creatingSection && (
-        <div className="bg-white rounded-lg border-2 border-blue-300 overflow-hidden">
-          <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
-            <input
-              autoFocus
-              value={newSectionName}
-              onChange={(e) => setNewSectionName(e.target.value)}
-              placeholder="输入分组名称"
-              className="w-full text-sm outline-none bg-transparent"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") createMutation.mutate(newSectionName);
-                if (e.key === "Escape") setCreatingSection(false);
-              }}
-            />
-          </div>
-          <div className="px-4 py-3 flex gap-2">
-            <button
-              onClick={() => createMutation.mutate(newSectionName)}
-              disabled={!newSectionName.trim() || createMutation.isPending}
-              className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-xs rounded disabled:opacity-50"
-            >
-              <Check className="w-3 h-3" />
-              确认
-            </button>
-            <button
-              onClick={() => setCreatingSection(false)}
-              className="flex items-center gap-1 px-3 py-1.5 text-slate-500 text-xs rounded hover:bg-slate-100"
-            >
-              <X className="w-3 h-3" />
-              取消
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Sections list */}
-      {isLoading ? (
-        <div className="text-center py-16 text-sm text-slate-400">加载中...</div>
-      ) : sections.length === 0 && !creatingSection ? (
-        <EmptyStrategies />
-      ) : (
-        <>
-          {addItemOpen && (
-            <AddItemModal
-              sections={sections}
-              onClose={() => setAddItemOpen(false)}
-              onAdded={() => {
-                qc.invalidateQueries({ queryKey: ["sections", marketContext.seasonId, marketContext.marketMode] });
-              }}
-            />
-          )}
-          <div className="space-y-3">
-            {sections.map((section) => (
-              <StrategyCard
-                key={section.id}
-                section={section}
-                expanded={expandedSections.has(section.id)}
-                onToggle={() => {
-                  const next = new Set(expandedSections);
-                  if (next.has(section.id)) next.delete(section.id);
-                  else next.add(section.id);
-                  setExpandedSections(next);
-                }}
-                editing={editingSection === section.id}
-                editName={editName}
-                onStartEdit={(name) => {
-                  setEditingSection(section.id);
-                  setEditName(name);
-                }}
-                onEditChange={setEditName}
-                onSaveEdit={() => updateMutation.mutate({ id: section.id, name: editName })}
-                onCancelEdit={() => setEditingSection(null)}
-                onDelete={() => {
-                  if (confirm(`确认删除分组「${section.name}」？`)) {
-                    deleteMutation.mutate(section.id);
-                  }
-                }}
-                onRemoveItem={(itemId) => removeItemMutation.mutate({ sectionId: section.id, itemId })}
-                saving={updateMutation.isPending}
-                onOpenAddItem={() => setAddItemOpen(true)}
-              />
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="删除分组"
+        message={`确定要删除分组 "${sectionToDelete?.name}" 吗？此操作不可恢复。`}
+        confirmText="删除"
+        cancelText="取消"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        loading={deleteMutation.isPending}
+      />
+    </>
   );
 }
 
@@ -215,6 +252,7 @@ function StrategyCard({
   onRemoveItem,
   saving,
   onOpenAddItem,
+  rmbPer10kFire,
 }: {
   section: Section;
   expanded: boolean;
@@ -229,21 +267,21 @@ function StrategyCard({
   onRemoveItem: (itemId: string) => void;
   saving: boolean;
   onOpenAddItem: () => void;
+  rmbPer10kFire: number;
 }) {
   const { marketContext } = useSectionRefresh();
   const { data: items = [], isLoading } = useQuery({
     queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode, section.id],
     queryFn: () => cmd.getSectionItems(section.id),
     enabled: expanded,
-    staleTime: 300_000, // 5min — section items change infrequently
-    gcTime: 600_000,    // 10min
+    staleTime: 300_000,
+    gcTime: 600_000,
   });
 
-  const totalFire = items.reduce((s, i) => s + i.purchase_fire_price * i.count, 0);
+  const totalFire = items.reduce((s, i) => s + (i.current_price ?? 0) * i.count, 0);
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-      {/* Card header */}
       <div className="flex items-center px-4 py-3 border-b border-slate-100">
         <button onClick={onToggle} className="p-1 text-slate-400 hover:text-slate-600 mr-2">
           {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -276,23 +314,21 @@ function StrategyCard({
             <span className="text-xs text-slate-400 mr-3">{items.length} 件物品</span>
             <button
               onClick={() => onStartEdit(section.name)}
-              className="p-1.5 text-slate-400 hover:text-slate-600 rounded mr-1"
+              className="p-1.5 text-slate-400 hover:text-slate-600 rounded transition-colors"
               title="编辑名称"
             >
               <Edit2 className="w-3.5 h-3.5" />
             </button>
-            <button
+            <DangerButton
               onClick={onDelete}
-              className="p-1.5 text-slate-400 hover:text-red-500 rounded"
               title="删除分组"
             >
               <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            </DangerButton>
           </>
         )}
       </div>
 
-      {/* Table */}
       {expanded && (
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -326,7 +362,7 @@ function StrategyCard({
                       </div>
                     </td>
                     <td className="px-3 py-2.5 text-sm text-green-600 font-medium">
-                      ¥{(item.purchase_fire_price * item.count * 0.006187).toFixed(2)}
+                      ¥{((item.current_price ?? 0) * item.count * rmbPer10kFire / 10000).toFixed(2)}
                     </td>
                     <td className="px-3 py-2.5 text-sm text-slate-500">—</td>
                     <td className="px-3 py-2.5 text-sm text-slate-500">—</td>
@@ -334,12 +370,12 @@ function StrategyCard({
                       <span className="text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded">不值</span>
                     </td>
                     <td className="px-3 py-2.5 pr-4">
-                      <button
+                      <DangerButton
                         onClick={() => onRemoveItem(item.item_id)}
-                        className="p-1.5 text-slate-400 hover:text-red-500 rounded"
+                        size="sm"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      </DangerButton>
                     </td>
                   </tr>
                 ))
@@ -358,7 +394,7 @@ function StrategyCard({
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-sm font-semibold text-green-600">
-                    ¥{(totalFire * 0.006187).toFixed(2)}
+                    ¥{(totalFire * rmbPer10kFire / 10000).toFixed(2)}
                   </td>
                   {[3, 4, 5, 6].map((i) => <td key={i} className="px-3 py-2.5" />)}
                   <td className="px-3 py-2.5 pr-4" />
@@ -366,7 +402,6 @@ function StrategyCard({
               </tfoot>
             )}
           </table>
-          {/* Add item button */}
           <div className="px-4 py-3 border-t border-slate-100">
             <button
               onClick={onOpenAddItem}

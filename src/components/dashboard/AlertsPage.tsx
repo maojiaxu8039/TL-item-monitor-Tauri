@@ -3,6 +3,7 @@ import { cmd, type AlertRule, type AlertEvent } from "../../lib/commands";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { Bell, Plus, Pencil, Trash2, X, AlertCircle, CheckCircle2 } from "lucide-react";
+import { DangerButton } from "@/components/ui/danger-button";
 
 const RULE_TYPE_OPTIONS = [
   { label: "火价低于阈值", value: "fire_price_below" },
@@ -202,13 +203,12 @@ export default function AlertsPage() {
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
-                        <button
+                        <DangerButton
                           onClick={() => setDeleteId(rule.id)}
-                          className="p-1.5 text-text-muted hover:text-red-500 hover:bg-red-50 rounded transition-colors"
                           title="删除"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        </DangerButton>
                       </div>
                     </td>
                   </tr>

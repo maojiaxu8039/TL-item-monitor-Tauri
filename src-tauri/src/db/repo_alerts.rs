@@ -165,3 +165,16 @@ pub async fn get_alert_events(
     .await?;
     Ok(rows)
 }
+
+pub async fn update_rule_last_triggered(
+    pool: &SqlitePool,
+    id: &str,
+    timestamp: i64,
+) -> Result<(), AppError> {
+    sqlx::query("UPDATE alert_rules SET last_triggered_at = ? WHERE id = ?")
+        .bind(timestamp)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}

@@ -1,6 +1,7 @@
 pub mod fire_task;
 pub mod items_task;
 pub mod history_task;
+pub mod alert_task;
 
 use tokio::sync::broadcast;
 
@@ -11,4 +12,6 @@ pub struct SchedulerHandle {
     pub items_reload_abort: broadcast::Sender<()>,
     #[allow(unused)]
     pub hourly_snapshot_abort: broadcast::Sender<()>,
+    #[allow(unused)]
+    pub alert_task_abort: broadcast::Sender<()>,
 }

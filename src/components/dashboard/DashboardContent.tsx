@@ -2,6 +2,7 @@ import { useState, useCallback } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Plus } from "lucide-react"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { SearchBar } from "@/components/dashboard/SearchBar"
 import { SortableGroupCard } from "@/components/dashboard/SortableGroupCard"
@@ -26,6 +27,10 @@ import {
 
 export default function DashboardContent() {
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [sectionToDelete, setSectionToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  
   const { marketContext } = useSectionRefresh()
 
   const { data: sections = [], refetch } = useQuery({
@@ -72,55 +77,79 @@ export default function DashboardContent() {
     }
   }, [refetch])
 
-  const handleDeleteSection = useCallback(async (id: string, name: string) => {
-    if (confirm(`确定要删除分组 "${name}" 吗？`)) {
-      try {
-        await cmd.deleteSection(id)
-        toast.success("分组已删除")
-        refetch()
-      } catch (err) {
-        toast.error(`删除失败: ${err}`)
-      }
+  const handleDeleteSection = useCallback((id: string, name: string) => {
+    setSectionToDelete({ id, name })
+    setDeleteDialogOpen(true)
+  }, [])
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!sectionToDelete) return
+    
+    setIsDeleting(true)
+    try {
+      await cmd.deleteSection(sectionToDelete.id)
+      toast.success("分组已删除")
+      refetch()
+    } catch (err) {
+      toast.error(`删除失败: ${err}`)
+    } finally {
+      setIsDeleting(false)
+      setDeleteDialogOpen(false)
+      setSectionToDelete(null)
     }
-  }, [refetch])
+  }, [sectionToDelete, refetch])
 
   return (
-    <div className="flex flex-col gap-4 max-w-[1200px] mx-auto">
-      <SearchBar sections={sections} />
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={sections.map((s) => s.id)}
-          strategy={verticalListSortingStrategy}
+    <>
+      <div className="flex flex-col gap-4 max-w-[1200px] mx-auto">
+        <SearchBar sections={sections} />
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
         >
-          {sections.map((section, index) => (
-            <SortableGroupCard
-              key={section.id}
-              section={section}
-              index={index}
-              onDelete={() => handleDeleteSection(section.id, section.name)}
-            />
-          ))}
-        </SortableContext>
-      </DndContext>
-      <Button
-        variant="outline"
-        onClick={() => setDialogOpen(true)}
-        className="mx-auto mt-1 w-full max-w-md rounded-xl border-2 border-dashed border-blue-300/70 py-3 text-blue-500 hover:bg-blue-50/50 hover:border-blue-400 transition-all h-auto text-[13px] font-medium"
-      >
-        <Plus className="h-4 w-4 mr-1.5" />
-        添加分组
-      </Button>
+          <SortableContext
+            items={sections.map((s) => s.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {sections.map((section, index) => (
+              <SortableGroupCard
+                key={section.id}
+                section={section}
+                index={index}
+                onDelete={() => handleDeleteSection(section.id, section.name)}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+        <Button
+          variant="outline"
+          onClick={() => setDialogOpen(true)}
+          className="mx-auto mt-1 w-full max-w-md rounded-xl border-2 border-dashed border-blue-300/70 py-3 text-blue-500 hover:bg-blue-50/50 hover:border-blue-400 transition-all h-auto text-[13px] font-medium"
+        >
+          <Plus className="h-4 w-4 mr-1.5" />
+          添加分组
+        </Button>
 
-      <AddSectionDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onConfirm={handleAddSection}
-        loading={false}
+        <AddSectionDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          onConfirm={handleAddSection}
+          loading={false}
+        />
+      </div>
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="删除分组"
+        message={`确定要删除分组 "${sectionToDelete?.name}" 吗？此操作不可恢复。`}
+        confirmText="删除"
+        cancelText="取消"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        loading={isDeleting}
       />
-    </div>
+    </>
   )
 }

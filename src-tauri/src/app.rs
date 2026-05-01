@@ -8,6 +8,7 @@ use crate::scheduler::SchedulerHandle;
 use crate::scheduler::fire_task::run_fire_scrape_task;
 use crate::scheduler::history_task::run_hourly_snapshot_task;
 use crate::scheduler::items_task::run_items_reload_task;
+use crate::scheduler::alert_task::run_price_alert_task;
 use parking_lot::RwLock;
 use serde::Deserialize;
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
@@ -102,7 +103,7 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
             Some(snapshot)
         }
         _ => {
-            // No DB record — try scraping immediately
+            // No DB record — try scraping immediately (Node.js HTTP/2 fallback)
             match crate::scraper::scrape_fire_price().await {
                 Ok(snapshot) => {
                     let ctx = MarketContext {
@@ -251,6 +252,7 @@ pub fn start_background_tasks(rt: tokio::runtime::Handle, app: tauri::AppHandle,
     let (fire_abort_tx, fire_abort_rx) = broadcast::channel::<()>(1);
     let (items_abort_tx, items_abort_rx) = broadcast::channel::<()>(1);
     let (snapshot_abort_tx, snapshot_abort_rx) = broadcast::channel::<()>(1);
+    let (alert_abort_tx, alert_abort_rx) = broadcast::channel::<()>(1);
 
     {
         let app = app.clone();
@@ -278,9 +280,18 @@ pub fn start_background_tasks(rt: tokio::runtime::Handle, app: tauri::AppHandle,
         });
     }
 
+    {
+        let app = app.clone();
+        let state = state.clone();
+        rt.spawn(async move {
+            run_price_alert_task(app, state, alert_abort_rx).await;
+        });
+    }
+
     SchedulerHandle {
         fire_scrape_abort: fire_abort_tx,
         items_reload_abort: items_abort_tx,
         hourly_snapshot_abort: snapshot_abort_tx,
+        alert_task_abort: alert_abort_tx,
     }
 }

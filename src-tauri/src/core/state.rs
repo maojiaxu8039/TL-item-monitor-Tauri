@@ -65,6 +65,9 @@ pub struct DesktopSettings {
 #[serde(default)]
 pub struct NotificationSettings {
     pub system_notifications: bool,
+    pub price_alert_enabled: bool,
+    pub price_alert_rule_type: String,
+    pub price_alert_cooldown_seconds: i32,
     pub quiet_start: Option<String>,
     pub quiet_end: Option<String>,
 }
@@ -113,6 +116,9 @@ impl Default for NotificationSettings {
     fn default() -> Self {
         Self {
             system_notifications: true,
+            price_alert_enabled: true,
+            price_alert_rule_type: "below_threshold".to_string(),
+            price_alert_cooldown_seconds: 600,
             quiet_start: None,
             quiet_end: None,
         }

@@ -93,3 +93,50 @@ pub async fn get_distinct_item_types(pool: &SqlitePool) -> Result<Vec<String>, c
     .await?;
     Ok(types.into_iter().map(|(t,)| t).collect())
 }
+
+pub async fn get_items_by_season(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<Vec<Item>, crate::core::errors::AppError> {
+    let items: Vec<Item> = sqlx::query_as(
+        r#"
+        SELECT item_id, season_id, market_mode, name, item_type, source, price, last_time, updated_at
+        FROM items
+        WHERE season_id = ? AND market_mode = ?
+        "#
+    )
+    .bind(season_id)
+    .bind(market_mode)
+    .fetch_all(pool)
+    .await?;
+    Ok(items)
+}
+
+pub async fn get_item_previous_price(
+    pool: &SqlitePool,
+    item_id: &str,
+    season_id: &str,
+    market_mode: &str,
+    seconds_ago: i64,
+) -> Result<Option<f64>, crate::core::errors::AppError> {
+    let now = chrono::Utc::now().timestamp();
+    let cutoff = now - seconds_ago;
+
+    let result: Option<(f64,)> = sqlx::query_as(
+        r#"
+        SELECT price FROM items
+        WHERE item_id = ? AND season_id = ? AND market_mode = ? AND updated_at <= ?
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#
+    )
+    .bind(item_id)
+    .bind(season_id)
+    .bind(market_mode)
+    .bind(cutoff)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(result.map(|(p,)| p))
+}

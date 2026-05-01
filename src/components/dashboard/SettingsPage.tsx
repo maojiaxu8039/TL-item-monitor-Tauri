@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { cmd, type AppConfig, type OkResponse } from "@/lib/commands";
 import { useMutation } from "@tanstack/react-query";
-import { RefreshCw, Save, Settings, Bell, Database, Globe } from "lucide-react";
+import { RefreshCw, Save, Settings, Bell, Database, Globe, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 
 const INTERVAL_OPTIONS = [
@@ -9,6 +9,21 @@ const INTERVAL_OPTIONS = [
   { label: "10 分钟", value: 600 },
   { label: "30 分钟", value: 1800 },
   { label: "60 分钟", value: 3600 },
+];
+
+const COOLDOWN_OPTIONS = [
+  { label: "5 分钟", value: 300 },
+  { label: "10 分钟", value: 600 },
+  { label: "30 分钟", value: 1800 },
+  { label: "60 分钟", value: 3600 },
+  { label: "2 小时", value: 7200 },
+];
+
+const ALERT_RULE_OPTIONS = [
+  { label: "价格低于阈值", value: "below_threshold" },
+  { label: "价格高于阈值", value: "above_threshold" },
+  { label: "价格下跌超过", value: "price_drop_percent" },
+  { label: "价格上涨超过", value: "price_rise_percent" },
 ];
 
 const SOURCE_OPTIONS = [
@@ -29,6 +44,9 @@ export default function SettingsPage() {
   const [seasonId, setSeasonId] = useState("ss12");
   const [itemCount, setItemCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [priceAlertEnabled, setPriceAlertEnabled] = useState(true);
+  const [priceAlertRuleType, setPriceAlertRuleType] = useState("below_threshold");
+  const [priceAlertCooldown, setPriceAlertCooldown] = useState(600);
 
   const saveMutation = useMutation<OkResponse, Error, AppConfig>({
     mutationFn: (config) => cmd.saveConfig(config),
@@ -46,6 +64,9 @@ export default function SettingsPage() {
       setItemsInterval(cfg.scrape.items_reload_interval);
       setItemsSource(cfg.scrape.items_source);
       setSeasonId(cfg.app.season_id);
+      setPriceAlertEnabled(cfg.notification.price_alert_enabled);
+      setPriceAlertRuleType(cfg.notification.price_alert_rule_type);
+      setPriceAlertCooldown(cfg.notification.price_alert_cooldown_seconds);
       setLoaded(true);
     }).catch(() => {});
 
@@ -74,6 +95,9 @@ export default function SettingsPage() {
       },
       notification: {
         system_notifications: true,
+        price_alert_enabled: priceAlertEnabled,
+        price_alert_rule_type: priceAlertRuleType,
+        price_alert_cooldown_seconds: priceAlertCooldown,
         quiet_start: null,
         quiet_end: null,
       },
@@ -114,6 +138,72 @@ export default function SettingsPage() {
         <Settings className="w-5 h-5 text-slate-600" />
         <h1 className="text-[15px] font-semibold text-slate-800">系统设置</h1>
       </div>
+
+      {/* Price Alert settings */}
+      <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <AlertTriangle className="w-4 h-4 text-amber-500" />
+          <h2 className="text-sm font-semibold text-slate-700">价格预警设置</h2>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-slate-700">开启价格预警弹窗</div>
+              <div className="text-xs text-slate-400 mt-0.5">当物品价格触发预警条件时弹出通知</div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={priceAlertEnabled}
+                onChange={(e) => setPriceAlertEnabled(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+            </label>
+          </div>
+
+          {priceAlertEnabled && (
+            <>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-slate-700">预警规则类型</div>
+                  <div className="text-xs text-slate-400 mt-0.5">设置触发预警的条件类型</div>
+                </div>
+                <select
+                  value={priceAlertRuleType}
+                  onChange={(e) => setPriceAlertRuleType(e.target.value)}
+                  className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                >
+                  {ALERT_RULE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-slate-700">冷却时间</div>
+                  <div className="text-xs text-slate-400 mt-0.5">预警触发后的等待时间</div>
+                </div>
+                <select
+                  value={priceAlertCooldown}
+                  onChange={(e) => setPriceAlertCooldown(Number(e.target.value))}
+                  className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                >
+                  {COOLDOWN_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+        </div>
+      </section>
 
       {/* Fire price settings */}
       <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
