@@ -77,7 +77,7 @@ pub async fn get_section_items(pool: &SqlitePool, section_id: &str) -> Result<Ve
             si.id, si.section_id, si.season_id, si.market_mode, si.item_id,
             i.name as item_name, i.item_type as item_type, i.price as current_price,
             si.purchase_fire_price, si.count, si.more_value, si.sort_order,
-            si.last_time, si.created_at, si.updated_at
+            i.last_time as last_time, si.created_at, si.updated_at
         FROM section_items si
         LEFT JOIN items i ON si.item_id = i.item_id AND si.season_id = i.season_id AND si.market_mode = i.market_mode
         WHERE si.section_id = ?
