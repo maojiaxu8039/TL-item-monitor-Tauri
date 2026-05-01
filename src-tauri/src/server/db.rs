@@ -5,7 +5,7 @@ use serde::Serialize;
 use tracing::{info, error};
 use uuid::Uuid;
 
-use crate::scraper::{FirePriceSnapshot, Item};
+use super::scraper::{FirePriceSnapshot, Item};
 
 pub enum MarketMode {
     Normal,

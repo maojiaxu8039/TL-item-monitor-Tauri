@@ -13,13 +13,9 @@ use tracing::{info, error, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 use serde::Serialize;
 
-mod scraper;
-mod db;
-mod config;
-
-use config::ServerConfig;
-use scraper::{Scraper, FirePriceSnapshot, Item};
-use db::MarketMode;
+use tl_monitor::server::config::ServerConfig;
+use tl_monitor::server::scraper::{Scraper, FirePriceSnapshot, Item};
+use tl_monitor::server::db;
 
 const DB_PATH: &str = "/data/tl_monitor.db";
 const CONFIG_PATH: &str = "/config/server_config.yaml";
@@ -80,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("TL Monitor Server v3.0 - 支持普通服+专家服");
     info!("==============================================");
 
-    let config = match config::load_config(CONFIG_PATH) {
+    let config = match tl_monitor::server::config::load_config(CONFIG_PATH) {
         Ok(cfg) => {
             info!("配置加载成功: season={}, http_port={}, modes={:?}", 
                 cfg.season_id, cfg.http_port, 

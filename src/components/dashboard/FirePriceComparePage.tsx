@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { TrendingUp, TrendingDown, Minus, AlertTriangle, CheckCircle, XCircle, Info, Flame, BarChart2 } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { TrendingUp, TrendingDown, Minus, AlertTriangle, CheckCircle, XCircle, Info, BarChart2 } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { cmd } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 
@@ -48,15 +48,12 @@ export default function FirePriceComparePage() {
   const historyData = historyQuery.data || [];
   const compareData = compareQuery.data;
 
-  const getTrendIcon = () => {
-    if (!compareData) return <Minus className="w-5 h-5 text-slate-400" />;
-    switch (compareData.price_trend) {
-      case "上涨":
-        return <TrendingUp className="w-5 h-5 text-red-500" />;
-      case "下跌":
-        return <TrendingDown className="w-5 h-5 text-green-500" />;
-      default:
-        return <Minus className="w-5 h-5 text-slate-400" />;
+  const getLevelIcon = () => {
+    if (!compareData) return <Info className="w-5 h-5 text-slate-400" />;
+    switch (compareData.price_level) {
+      case "偏高": return <XCircle className="w-5 h-5 text-red-500" />;
+      case "偏低": return <CheckCircle className="w-5 h-5 text-green-500" />;
+      default: return <Info className="w-5 h-5 text-blue-500" />;
     }
   };
 
@@ -78,11 +75,6 @@ export default function FirePriceComparePage() {
     }
   };
 
-  const latestCurrent = currentData[currentData.length - 1];
-  const latestHistory = historyData[historyData.length - 1];
-  const maxCurrent = currentData.length > 0 ? Math.max(...currentData.map((r: any) => r.rmb_per_10k_fire)) : 0;
-  const minHistory = historyData.length > 0 ? Math.min(...historyData.map((r: any) => r.rmb_per_10k_fire)) : 0;
-
   const formatTime = (ts: number) => {
     const d = new Date(ts * 1000);
     if (timeRange === "1h" || timeRange === "6h" || timeRange === "24h") {
@@ -91,28 +83,42 @@ export default function FirePriceComparePage() {
     return d.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit" });
   };
 
-  const currentChartData = currentData.map((r: any) => ({
+  const chartData = currentData.map((r: any) => ({
     time: formatTime(r.scraped_at),
-    price: r.rmb_per_10k_fire,
+    current: r.rmb_per_10k_fire,
+    history: null as number | null,
   }));
 
-  const historyChartData = historyData.map((r: any) => ({
-    time: formatTime(r.scraped_at),
-    price: r.rmb_per_10k_fire,
-  }));
+  historyData.forEach((r: any) => {
+    chartData.push({
+      time: formatTime(r.scraped_at),
+      current: null as number | null,
+      history: r.rmb_per_10k_fire,
+    });
+  });
+
+  chartData.sort((a: any, b: any) => a.time.localeCompare(b.time));
+
+  const timeRanges: { label: string; value: TimeRange }[] = [
+    { label: "1小时", value: "1h" },
+    { label: "6小时", value: "6h" },
+    { label: "24小时", value: "24h" },
+    { label: "3天", value: "3d" },
+    { label: "7天", value: "7d" },
+  ];
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-2">
         <BarChart2 className="w-5 h-5 text-orange-500" />
-        <h1 className="text-lg font-semibold text-slate-800">火价对比分析</h1>
+        <h1 className="text-lg font-semibold text-slate-800">火价分析</h1>
       </div>
 
-      {/* Season Selector */}
+      {/* Season & Range Selector */}
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
         <div className="flex items-center gap-4 flex-wrap">
-          <span className="text-sm text-slate-600">对比赛季：</span>
+          <span className="text-sm text-slate-500">对比赛季：</span>
           <select
             value={historySeason}
             onChange={(e) => setHistorySeason(e.target.value)}
@@ -129,17 +135,17 @@ export default function FirePriceComparePage() {
           </span>
           
           <div className="ml-auto flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-            {(["1h", "6h", "24h", "3d", "7d"] as TimeRange[]).map((range) => (
+            {timeRanges.map(({ label, value }) => (
               <button
-                key={range}
-                onClick={() => setTimeRange(range)}
+                key={value}
+                onClick={() => setTimeRange(value)}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  timeRange === range
+                  timeRange === value
                     ? "bg-white text-blue-600 shadow-sm"
                     : "text-slate-500 hover:text-slate-700"
                 }`}
               >
-                {range === "1h" ? "1小时" : range === "6h" ? "6小时" : range === "24h" ? "24小时" : range === "3d" ? "3天" : "7天"}
+                {label}
               </button>
             ))}
           </div>
@@ -158,14 +164,12 @@ export default function FirePriceComparePage() {
 
         <div className="flex items-end gap-6">
           <div className="text-4xl font-bold text-slate-800">
-            {compareData?.current_price.toFixed(2) || latestCurrent?.rmb_per_10k_fire.toFixed(2) || "--"} <span className="text-lg font-normal text-slate-400">元/10K</span>
+            {compareData?.current_price.toFixed(2) || currentData[currentData.length - 1]?.rmb_per_10k_fire.toFixed(2) || "--"} <span className="text-lg font-normal text-slate-400">元/万火</span>
           </div>
           
           <div className={`flex-1 p-3 rounded-lg ${getLevelBg()}`}>
             <div className="flex items-center gap-2">
-              {compareData?.price_level === "偏高" && <XCircle className="w-5 h-5 text-red-500" />}
-              {compareData?.price_level === "偏低" && <CheckCircle className="w-5 h-5 text-green-500" />}
-              {(!compareData || compareData.price_level === "正常") && <Info className="w-5 h-5 text-blue-500" />}
+              {getLevelIcon()}
               <span className={`font-semibold ${getLevelColor()}`}>
                 {compareData?.price_level || "加载中..."}
               </span>
@@ -174,11 +178,17 @@ export default function FirePriceComparePage() {
         </div>
       </div>
 
-      {/* Trend & Compare */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
           <div className="flex items-center gap-2 mb-3">
-            {getTrendIcon()}
+            {compareData?.price_trend === "上涨" ? (
+              <TrendingUp className="w-4 h-4 text-red-500" />
+            ) : compareData?.price_trend === "下跌" ? (
+              <TrendingDown className="w-4 h-4 text-green-500" />
+            ) : (
+              <Minus className="w-4 h-4 text-slate-400" />
+            )}
             <h3 className="text-sm font-semibold text-slate-700">火价趋势</h3>
           </div>
           <div className={`text-2xl font-bold ${
@@ -192,10 +202,10 @@ export default function FirePriceComparePage() {
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
           <div className="flex items-center gap-2 mb-3">
             <Info className="w-4 h-4 text-blue-500" />
-            <h3 className="text-sm font-semibold text-slate-700">{historySeason.toUpperCase()} 同时间段均价</h3>
+            <h3 className="text-sm font-semibold text-slate-700">{historySeason.toUpperCase()} 均价</h3>
           </div>
           <div className="text-2xl font-bold text-slate-600">
-            {compareData?.reference_price.toFixed(2) || "--"} <span className="text-sm font-normal">元/10K</span>
+            {compareData?.reference_price.toFixed(2) || "--"} <span className="text-sm font-normal text-slate-400">元/万火</span>
           </div>
         </div>
 
@@ -205,7 +215,7 @@ export default function FirePriceComparePage() {
             <h3 className="text-sm font-semibold text-slate-700">建议入手价</h3>
           </div>
           <div className="text-2xl font-bold text-green-600">
-            {compareData?.suggested_price.toFixed(2) || "--"} <span className="text-sm font-normal">元/10K</span>
+            {compareData?.suggested_price.toFixed(2) || "--"} <span className="text-sm font-normal text-slate-400">元/万火</span>
           </div>
         </div>
       </div>
@@ -223,18 +233,18 @@ export default function FirePriceComparePage() {
         </div>
       )}
 
-      {/* Charts */}
+      {/* Dual Line Chart */}
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-slate-700">火价走势对比</h3>
+          <h3 className="text-sm font-semibold text-slate-700">火价走势</h3>
           <div className="flex items-center gap-4 text-xs">
             <span className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-full bg-red-500" />
-              <span className="text-slate-500">{currentSeason.toUpperCase()} 当前赛季</span>
+              <span className="w-3 h-0.5 bg-red-500 rounded" />
+              <span className="text-slate-500">{currentSeason.toUpperCase()}</span>
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-full bg-blue-500" />
-              <span className="text-slate-500">{historySeason.toUpperCase()} 历史赛季</span>
+              <span className="w-3 h-0.5 bg-blue-500 rounded" />
+              <span className="text-slate-500">{historySeason.toUpperCase()}</span>
             </span>
           </div>
         </div>
@@ -244,37 +254,49 @@ export default function FirePriceComparePage() {
             加载中...
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-6">
-            {/* Current Season Chart */}
-            <div>
-              <div className="text-xs text-red-500 font-medium mb-2">{currentSeason.toUpperCase()} 当前赛季</div>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={currentChartData}>
-                  <XAxis dataKey="time" tick={{ fontSize: 10, fill: "#9CA3AF" }} tickLine={false} axisLine={{ stroke: "#E5E7EB" }} interval="preserveStartEnd" />
-                  <YAxis tickFormatter={(v) => `¥${v.toFixed(1)}`} tick={{ fontSize: 10, fill: "#9CA3AF" }} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(value: any) => [`¥${Number(value).toFixed(2)} /万火`, "火价"]} />
-                  <Line type="monotone" dataKey="price" stroke="#EF4444" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#EF4444" }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* History Season Chart */}
-            <div>
-              <div className="text-xs text-blue-500 font-medium mb-2">{historySeason.toUpperCase()} 历史赛季</div>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={historyChartData}>
-                  <XAxis dataKey="time" tick={{ fontSize: 10, fill: "#9CA3AF" }} tickLine={false} axisLine={{ stroke: "#E5E7EB" }} interval="preserveStartEnd" />
-                  <YAxis tickFormatter={(v) => `¥${v.toFixed(1)}`} tick={{ fontSize: 10, fill: "#9CA3AF" }} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(value: any) => [`¥${Number(value).toFixed(2)} /万火`, "火价"]} />
-                  <Line type="monotone" dataKey="price" stroke="#3B82F6" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#3B82F6" }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={chartData}>
+              <XAxis 
+                dataKey="time" 
+                tick={{ fontSize: 11, fill: "#9CA3AF" }} 
+                tickLine={false}
+                axisLine={{ stroke: "#E5E7EB" }}
+                interval="preserveStartEnd"
+              />
+              <YAxis 
+                tickFormatter={(v: number) => `¥${v.toFixed(1)}`}
+                tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip 
+                formatter={(value: any) => [`¥${Number(value).toFixed(2)}/万火`]}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="current" 
+                stroke="#EF4444" 
+                strokeWidth={2} 
+                dot={false}
+                connectNulls
+                activeDot={{ r: 4, fill: "#EF4444" }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="history" 
+                stroke="#3B82F6" 
+                strokeWidth={2} 
+                strokeDasharray="5 5"
+                dot={false}
+                connectNulls
+                activeDot={{ r: 4, fill: "#3B82F6" }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         )}
       </div>
 
-      {/* Stats */}
+      {/* Stats Bottom */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
           <div className="flex items-center gap-2 mb-2">
@@ -282,7 +304,7 @@ export default function FirePriceComparePage() {
             <h3 className="text-sm font-semibold text-slate-700">{currentSeason.toUpperCase()} 最高</h3>
           </div>
           <div className="text-2xl font-bold text-red-500">
-            {maxCurrent > 0 ? maxCurrent.toFixed(2) : "--"} <span className="text-sm font-normal text-slate-400">元/10K</span>
+            {currentData.length > 0 ? Math.max(...currentData.map((r: any) => r.rmb_per_10k_fire)).toFixed(2) : "--"} <span className="text-sm font-normal text-slate-400">元/万火</span>
           </div>
         </div>
 
@@ -292,7 +314,7 @@ export default function FirePriceComparePage() {
             <h3 className="text-sm font-semibold text-slate-700">历史均价</h3>
           </div>
           <div className="text-2xl font-bold text-slate-600">
-            {compareData?.history_avg.toFixed(2) || "--"} <span className="text-sm font-normal text-slate-400">元/10K</span>
+            {currentData.length > 0 ? (currentData.reduce((sum: number, r: any) => sum + r.rmb_per_10k_fire, 0) / currentData.length).toFixed(2) : "--"} <span className="text-sm font-normal text-slate-400">元/万火</span>
           </div>
         </div>
 
@@ -302,7 +324,7 @@ export default function FirePriceComparePage() {
             <h3 className="text-sm font-semibold text-slate-700">{historySeason.toUpperCase()} 最低</h3>
           </div>
           <div className="text-2xl font-bold text-green-600">
-            {minHistory > 0 ? minHistory.toFixed(2) : "--"} <span className="text-sm font-normal text-slate-400">元/10K</span>
+            {historyData.length > 0 ? Math.min(...historyData.map((r: any) => r.rmb_per_10k_fire)).toFixed(2) : "--"} <span className="text-sm font-normal text-slate-400">元/万火</span>
           </div>
         </div>
       </div>
