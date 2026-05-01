@@ -65,6 +65,8 @@ pub struct DesktopSettings {
 #[serde(default)]
 pub struct NotificationSettings {
     pub system_notifications: bool,
+    pub mac_desktop_notifications: bool,
+    pub win_desktop_notifications: bool,
     pub price_alert_enabled: bool,
     pub price_alert_cooldown_seconds: i32,
     pub quiet_start: Option<String>,
@@ -115,6 +117,8 @@ impl Default for NotificationSettings {
     fn default() -> Self {
         Self {
             system_notifications: true,
+            mac_desktop_notifications: true,
+            win_desktop_notifications: true,
             price_alert_enabled: true,
             price_alert_cooldown_seconds: 600,
             quiet_start: None,

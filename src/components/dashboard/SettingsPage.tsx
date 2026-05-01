@@ -41,6 +41,7 @@ export default function SettingsPage() {
   const [loaded, setLoaded] = useState(false);
   const [priceAlertEnabled, setPriceAlertEnabled] = useState(true);
   const [priceAlertCooldown, setPriceAlertCooldown] = useState(600);
+  const [systemNotifications, setSystemNotifications] = useState(true);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
   const saveMutation = useMutation<OkResponse, Error, AppConfig>({
@@ -82,6 +83,7 @@ export default function SettingsPage() {
       setSeasonId(cfg.app.season_id);
       setPriceAlertEnabled(cfg.notification.price_alert_enabled);
       setPriceAlertCooldown(cfg.notification.price_alert_cooldown_seconds);
+      setSystemNotifications(cfg.notification.system_notifications);
       setLoaded(true);
     }).catch(() => {});
 
@@ -109,7 +111,7 @@ export default function SettingsPage() {
         free_layout: false,
       },
       notification: {
-        system_notifications: true,
+        system_notifications: systemNotifications,
         price_alert_enabled: priceAlertEnabled,
         price_alert_cooldown_seconds: priceAlertCooldown,
         quiet_start: null,
@@ -161,6 +163,22 @@ export default function SettingsPage() {
         </div>
 
         <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-slate-700">开启系统通知</div>
+              <div className="text-xs text-slate-400 mt-0.5">开启后将在发现值得购买的物品时发送桌面通知</div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={systemNotifications}
+                onChange={(e) => setSystemNotifications(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+            </label>
+          </div>
+
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium text-slate-700">开启价格预警弹窗</div>

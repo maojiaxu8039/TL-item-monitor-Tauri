@@ -128,6 +128,7 @@ pub async fn clear_items_database(state: State<'_, Arc<AppState>>) -> Result<Str
 #[tauri::command]
 pub async fn trigger_price_alert(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<String, String> {
     let ctx = state.active_context.read().clone();
+    let config = state.config.read().clone();
     
     let all_section_items = repo_items::get_all_section_items(&state.db, &ctx.season_id, ctx.market_mode.as_str())
         .await
@@ -140,12 +141,22 @@ pub async fn trigger_price_alert(app: AppHandle, state: State<'_, Arc<AppState>>
             let current_price = item.current_price.unwrap_or(0.0);
             purchase_price > 0.0 && current_price > 0.0 && current_price < purchase_price
         })
-        .map(|item| serde_json::json!({
-            "item_id": item.item_id,
-            "item_name": item.item_name.unwrap_or_else(|| item.item_id.clone()),
-            "purchase_fire_price": item.purchase_fire_price,
-            "current_price": item.current_price.unwrap_or(0.0),
-        }))
+        .map(|item| {
+             let purchase_price = item.purchase_fire_price;
+             let current_price = item.current_price.unwrap_or(0.0);
+             let savings = purchase_price - current_price;
+             let savings_pct = if purchase_price > 0.0 {
+                 (savings / purchase_price * 100.0).round() as i32
+             } else {
+                 0
+             };
+             serde_json::json!({
+                 "item_name": item.item_name.unwrap_or_else(|| item.item_id.clone()),
+                 "current_price": format!("{:.2}", current_price),
+                 "purchase_price": format!("{:.2}", purchase_price),
+                 "savings": format!("-{:.0} ({:.0}%)", savings, savings_pct),
+             })
+         })
         .collect();
 
     if worth_items.is_empty() {
@@ -153,12 +164,42 @@ pub async fn trigger_price_alert(app: AppHandle, state: State<'_, Arc<AppState>>
     }
 
     let count = worth_items.len();
-    let message = serde_json::to_string_pretty(&worth_items).unwrap_or_default();
     
-    send_notification(&app, "🔥 发现值得购买的物品！", &format!("共 {} 件\n{}", count, message))
-        .map_err(|e| e.to_string())?;
+    let message = if count <= 3 {
+        worth_items.iter()
+            .map(|item| {
+                let name = item.get("item_name").and_then(|v| v.as_str()).unwrap_or("未知");
+                let current = item.get("current_price").and_then(|v| v.as_str()).unwrap_or("-");
+                let savings = item.get("savings").and_then(|v| v.as_str()).unwrap_or("-");
+                format!("• {} | 当前: {} | 节省: {}\n", name, current, savings)
+            })
+            .collect::<Vec<_>>()
+            .join("")
+    } else {
+        let top_items: Vec<String> = worth_items.iter()
+            .take(3)
+            .map(|item| {
+                let name = item.get("item_name").and_then(|v| v.as_str()).unwrap_or("未知");
+                let savings = item.get("savings").and_then(|v| v.as_str()).unwrap_or("-");
+                format!("• {} ({})", name, savings)
+            })
+            .collect();
+        format!(
+            "🔥 共 {} 件值得购买\n\n{}\n📍 查看全部物品详情",
+            count,
+            top_items.join("\n")
+        )
+    };
     
-    Ok(format!("发现 {} 件值得购买的物品，已发送通知", count))
+    let title = format!("🔥 发现 {} 件值得购买的物品！", count);
+    
+    if config.notification.system_notifications {
+        send_notification(&app, &title, &message)
+            .map_err(|e| e.to_string())?;
+        Ok(format!("发现 {} 件值得购买的物品，已发送通知", count))
+    } else {
+        Ok(format!("发现 {} 件值得购买的物品（通知已关闭）", count))
+    }
 }
 
 #[tauri::command]
