@@ -150,6 +150,9 @@ export default function ItemsPage() {
       refetch();
       addToast("success", "物品库已刷新");
     },
+    onError: (error: Error) => {
+      addToast("error", `刷新失败: ${error.message || error}`);
+    },
   });
 
   // ─── Toast helpers ───────────────────────────────────────────────────────
