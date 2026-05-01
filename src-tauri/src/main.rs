@@ -76,6 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::set_active_market_context,
             commands::refresh_fire_price,
             commands::sync_fire_record,
+            commands::sync_items_record,
             commands::refresh_items,
             commands::search_items,
             commands::get_sections,

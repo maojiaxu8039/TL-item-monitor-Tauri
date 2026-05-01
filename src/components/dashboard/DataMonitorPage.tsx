@@ -44,6 +44,18 @@ interface FireHistoryRecord {
   created_at: number;
 }
 
+interface ItemsHistoryRecord {
+  id: string;
+  item_id: string;
+  season_id: string;
+  name: string;
+  item_type: string | null;
+  price: number;
+  last_time: number | null;
+  recorded_at: number;
+  created_at: number;
+}
+
 type ConnectionStatus = "connected" | "disconnected" | "error";
 type DataType = "fire" | "items";
 type SyncMode = "normal" | "expert";
@@ -103,54 +115,85 @@ export default function DataMonitorPage() {
     mutationFn: async () => {
       const modeParam = syncMode === "expert" ? "expert" : "normal";
       const hours = getTimeRangeHours(timeRange);
+      const marketMode = syncMode === "expert" ? "season_expert" : "season_normal";
       
-      let url: string;
       if (dataType === "fire") {
-        url = hours === 99999 
+        const url = hours === 99999 
           ? `${serverUrl}/fire-history-all?season_id=${marketContext.seasonId}&market_mode=season_${syncMode}`
           : `${serverUrl}/fire-history?mode=${modeParam}&limit=${hours}`;
-      } else {
-        toast.info("物品价格同步功能开发中");
-        return { synced: 0 };
-      }
-      
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("Failed to fetch data");
-      const data = await response.json();
-      if (!data.success) throw new Error(data.error || "Unknown error");
-      
-      const records = data.data as FireHistoryRecord[];
-      if (records.length === 0) {
-        return { synced: 0, message: "没有可同步的数据" };
-      }
-      
-      let synced = 0;
-      for (const record of records) {
-        try {
-          const marketMode = syncMode === "expert" ? "season_expert" : "season_normal";
-          await cmd.syncFireRecord({
-            season_id: record.season_id,
-            market_mode: marketMode,
-            rmb_per_10k_fire: record.rmb_per_10k_fire,
-            fire_per_rmb: record.fire_per_rmb,
-            increase_ratio: record.increase_ratio ?? 0,
-            trading_volume: record.trading_volume,
-            source: record.source,
-            source_time: record.source_time,
-            recorded_at: record.recorded_at,
-          });
-          synced++;
-        } catch (err) {
-          console.error("Sync error:", err);
+        
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Failed to fetch fire data");
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || "Unknown error");
+        
+        const records = data.data as FireHistoryRecord[];
+        if (records.length === 0) {
+          return { synced: 0, message: "没有可同步的火价数据" };
         }
+        
+        let synced = 0;
+        for (const record of records) {
+          try {
+            await cmd.syncFireRecord({
+              season_id: record.season_id,
+              market_mode: marketMode,
+              rmb_per_10k_fire: record.rmb_per_10k_fire,
+              fire_per_rmb: record.fire_per_rmb,
+              increase_ratio: record.increase_ratio ?? 0,
+              trading_volume: record.trading_volume,
+              source: record.source,
+              source_time: record.source_time,
+              recorded_at: record.recorded_at,
+            });
+            synced++;
+          } catch (err) {
+            console.error("Fire sync error:", err);
+          }
+        }
+        return { synced, type: "fire" };
+      } else {
+        const url = hours === 99999 
+          ? `${serverUrl}/items-history-all?season_id=${marketContext.seasonId}&market_mode=season_${syncMode}`
+          : `${serverUrl}/items-history?mode=${modeParam}&limit=${hours}`;
+        
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Failed to fetch items data");
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || "Unknown error");
+        
+        const records = data.data as ItemsHistoryRecord[];
+        if (records.length === 0) {
+          return { synced: 0, message: "没有可同步的物品数据" };
+        }
+        
+        let synced = 0;
+        for (const record of records) {
+          try {
+            await cmd.syncItemsRecord({
+              season_id: record.season_id,
+              market_mode: marketMode,
+              item_id: record.item_id,
+              name: record.name,
+              item_type: record.item_type,
+              price: record.price,
+              last_time: record.last_time,
+              recorded_at: record.recorded_at,
+            });
+            synced++;
+          } catch (err) {
+            console.error("Items sync error:", err);
+          }
+        }
+        return { synced, type: "items" };
       }
-      return { synced };
     },
     onSuccess: (result) => {
       if (result.message) {
         toast.info(result.message);
       } else {
-        toast.success(`已同步 ${result.synced} 条数据到本地数据库`);
+        const typeName = result.type === "fire" ? "火价" : "物品价格";
+        toast.success(`已同步 ${result.synced} 条${typeName}到本地数据库`);
       }
       refetchStatus();
     },

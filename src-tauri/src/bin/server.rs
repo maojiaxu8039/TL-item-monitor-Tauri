@@ -286,6 +286,33 @@ async fn handle_request(
                 (400, body)
             }
         }
+        ("GET", "/items-history-all") => {
+            let mode = get_query_param(&request, "mode").unwrap_or_else(|| "normal".to_string());
+            let limit: i32 = get_query_param(&request, "limit")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(99999);
+            
+            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
+            
+            match db::get_items_history_all(&state.db, &state.config.season_id, market_mode, limit).await {
+                Ok(records) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse {
+                        success: true,
+                        data: Some(records),
+                        error: None,
+                    }).unwrap_or_default();
+                    (200, body)
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(e),
+                    }).unwrap_or_default();
+                    (500, body)
+                }
+            }
+        }
         ("GET", "/health") => {
             (200, "OK".to_string())
         }

@@ -400,6 +400,17 @@ export const cmd = {
     recorded_at: number;
   }) => invoke<{ success: boolean; message?: string }>("sync_fire_record", { params }),
 
+  syncItemsRecord: (params: {
+    season_id: string;
+    market_mode: string;
+    item_id: string;
+    name: string;
+    item_type: string | null;
+    price: number;
+    last_time: number | null;
+    recorded_at: number;
+  }) => invoke<{ success: boolean; message?: string }>("sync_items_record", { params }),
+
   getStrategies: () => invoke<Strategy[]>("get_strategies"),
   createStrategy: (name: string) =>
     invoke<Strategy>("create_strategy", { name }),

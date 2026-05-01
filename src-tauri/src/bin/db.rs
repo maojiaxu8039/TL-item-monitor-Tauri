@@ -304,6 +304,71 @@ pub async fn get_fire_history(
     Ok(records)
 }
 
+/// 查询所有物品价格历史（不带 item_id 过滤）
+pub async fn get_items_history_all(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    limit: i32,
+) -> Result<Vec<ItemPriceRecord>, String> {
+    let mode = MarketMode::from_str(market_mode);
+    let table = mode.items_table();
+    
+    let query = if limit > 1000 {
+        format!(
+            r#"
+            SELECT id, item_id, season_id, name, item_type, price, last_time, recorded_at, created_at
+            FROM {}
+            WHERE season_id = ?
+            ORDER BY recorded_at DESC
+            LIMIT 1000
+            "#,
+            table
+        )
+    } else {
+        format!(
+            r#"
+            SELECT id, item_id, season_id, name, item_type, price, last_time, recorded_at, created_at
+            FROM {}
+            WHERE season_id = ?
+            ORDER BY recorded_at DESC
+            LIMIT ?
+            "#,
+            table
+        )
+    };
+    
+    let rows = if limit > 1000 {
+        sqlx::query(&query)
+            .bind(season_id)
+            .fetch_all(pool)
+            .await
+    } else {
+        sqlx::query(&query)
+            .bind(season_id)
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+    }.map_err(|e| format!("查询物品历史失败: {}", e))?;
+    
+    let records: Vec<ItemPriceRecord> = rows
+        .into_iter()
+        .map(|row| ItemPriceRecord {
+            id: row.get("id"),
+            item_id: row.get("item_id"),
+            season_id: row.get("season_id"),
+            name: row.get("name"),
+            item_type: row.get::<Option<String>, _>("item_type").unwrap_or_default(),
+            price: row.get("price"),
+            last_time: row.get("last_time"),
+            recorded_at: row.get("recorded_at"),
+            created_at: row.get("created_at"),
+        })
+        .collect();
+    
+    Ok(records)
+}
+
 /// 查询物品价格历史（按模式）
 pub async fn get_items_history(
     pool: &SqlitePool,

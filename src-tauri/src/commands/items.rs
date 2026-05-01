@@ -1,5 +1,6 @@
-use crate::commands::types::{DbStats, ItemsStats, SearchResult};
+use crate::commands::types::{DbStats, ItemsStats, SearchResult, OkResponse};
 use crate::core::state::AppState;
+use crate::core::errors::AppError;
 use crate::db::repo_items;
 use crate::db::repo_history;
 use crate::scraper;
@@ -359,4 +360,38 @@ pub async fn request_notification_permission(app: AppHandle) -> Result<bool, Str
         }
         Err(e) => Err(format!("请求权限失败: {}", e)),
     }
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct SyncItemsRecordParams {
+    pub season_id: String,
+    pub market_mode: String,
+    pub item_id: String,
+    pub name: String,
+    pub item_type: Option<String>,
+    pub price: f64,
+    pub last_time: Option<i64>,
+    pub recorded_at: i64,
+}
+
+#[tauri::command]
+pub async fn sync_items_record(
+    state: State<'_, Arc<AppState>>,
+    params: SyncItemsRecordParams,
+) -> Result<OkResponse, String> {
+    repo_history::insert_item_snapshot(
+        &state.db,
+        &params.season_id,
+        &params.market_mode,
+        &params.item_id,
+        &params.name,
+        params.item_type.as_deref(),
+        params.price,
+        params.last_time,
+        params.recorded_at,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    
+    Ok(OkResponse::success("Item record synced"))
 }

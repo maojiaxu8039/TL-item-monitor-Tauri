@@ -1,6 +1,7 @@
 use crate::db::models::Item;
 use crate::core::state::FirePriceSnapshot;
-use sqlx::SqlitePool;
+use crate::core::errors::AppError;
+use sqlx::{SqlitePool, Row};
 use chrono::Utc;
 use serde::Serialize;
 
@@ -114,6 +115,38 @@ pub async fn get_item_history(
     .fetch_all(pool)
     .await?;
     Ok(records)
+}
+
+pub async fn insert_item_snapshot(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    item_id: &str,
+    name: &str,
+    item_type: Option<&str>,
+    price: f64,
+    last_time: Option<i64>,
+    recorded_at: i64,
+) -> Result<(), AppError> {
+    let now = Utc::now().timestamp();
+    
+    let result = sqlx::query(
+        r#"INSERT INTO item_history (season_id, market_mode, item_id, name, item_type, price, last_time, recorded_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#
+    )
+    .bind(season_id)
+    .bind(market_mode)
+    .bind(item_id)
+    .bind(name)
+    .bind(item_type)
+    .bind(price)
+    .bind(last_time)
+    .bind(recorded_at)
+    .bind(now)
+    .execute(pool)
+    .await?;
+    
+    Ok(())
 }
 
 /// Get season summary: current fire price, item count, 24h stats.

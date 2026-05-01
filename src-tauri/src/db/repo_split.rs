@@ -7,7 +7,7 @@
 //! - items_history_normal, items_history_expert
 //! - section_items_normal, section_items_expert
 
-use sqlx::SqlitePool;
+use sqlx::{SqlitePool, Row};
 use chrono::Utc;
 use uuid::Uuid;
 
