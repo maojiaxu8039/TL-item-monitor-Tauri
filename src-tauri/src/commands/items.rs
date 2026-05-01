@@ -4,6 +4,7 @@ use crate::db::repo_items;
 use crate::db::repo_history;
 use crate::services::send_notification;
 use std::sync::Arc;
+use std::process::Command;
 use tauri::{State, AppHandle};
 use tauri_plugin_notification::{PermissionState, NotificationExt};
 
@@ -197,6 +198,32 @@ pub async fn trigger_price_alert(app: AppHandle, state: State<'_, Arc<AppState>>
     if config.notification.system_notifications {
         send_notification(&app, &title, &message)
             .map_err(|e| e.to_string())?;
+    }
+    
+    if config.notification.voice_alert_enabled && !config.notification.voice_alert_path.is_empty() {
+        let voice_path = config.notification.voice_alert_path.clone();
+        if std::path::Path::new(&voice_path).exists() {
+            std::thread::spawn(move || {
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = Command::new("afplay")
+                        .arg(&voice_path)
+                        .spawn();
+                }
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = Command::new("powershell")
+                        .args(["-c", "[System.Media.SystemSounds]::Hand.Play()"])
+                        .spawn();
+                }
+            });
+            tracing::info!("Voice alert played for {} items", count);
+        } else {
+            tracing::warn!("Voice file not found: {}", voice_path);
+        }
+    }
+    
+    if config.notification.system_notifications {
         Ok(format!("发现 {} 件值得购买的物品，已发送通知", count))
     } else {
         Ok(format!("发现 {} 件值得购买的物品（通知已关闭）", count))
