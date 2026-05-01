@@ -17,6 +17,7 @@ const ImportExportPage = lazy(() => import("@/components/dashboard/ImportExportP
 const ItemsPage = lazy(() => import("@/components/dashboard/ItemsPage"))
 const AlertsPage = lazy(() => import("@/components/dashboard/AlertsPage"))
 const DataMonitorPage = lazy(() => import("@/components/dashboard/DataMonitorPage"))
+const FirePriceComparePage = lazy(() => import("@/components/dashboard/FirePriceComparePage"))
 const HelpPage = lazy(() => import("@/components/dashboard/HelpPage"))
 
 function PageLoading() {
@@ -54,11 +55,7 @@ export default function App() {
                   <DashboardContent />
                 </LazyPage>
               )}
-              {page === "season" && (
-                <LazyPage>
-                  <SeasonPage />
-                </LazyPage>
-              )}
+              {/* season 路由已移除，改用 firecompare 火价分析页面 */}
               {page === "strategies" && (
                 <LazyPage>
                   <StrategiesPage />
@@ -87,6 +84,11 @@ export default function App() {
               {page === "records" && (
                 <LazyPage>
                   <DataMonitorPage />
+                </LazyPage>
+              )}
+              {page === "firecompare" && (
+                <LazyPage>
+                  <FirePriceComparePage />
                 </LazyPage>
               )}
               {page === "help" && (

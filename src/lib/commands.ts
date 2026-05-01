@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 // Types (mirror Rust structs)
 // ============================================================================
 
-export type PageId = "dashboard" | "season" | "items" | "records" | "strategies" | "alerts" | "import_export" | "settings" | "help";
+export type PageId = "dashboard" | "firecompare" | "items" | "records" | "strategies" | "alerts" | "import_export" | "settings" | "help";
 
 export interface FirePriceUI {
   price_per_wan: number;

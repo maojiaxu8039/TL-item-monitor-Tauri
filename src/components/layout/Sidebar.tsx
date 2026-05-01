@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils"
-import { Flame, LayoutDashboard, BarChart3, Shield, Settings, Download, Box, Bell, Database, CircleHelp } from "lucide-react"
+import { Flame, LayoutDashboard, BarChart3, Shield, Settings, Download, Box, Bell, Database, CircleHelp, TrendingUp } from "lucide-react"
 import { motion } from "framer-motion"
 import type { PageId } from "@/types"
 
 const NAV_ITEMS: { id: PageId; label: string; icon: typeof Flame }[] = [
   { id: "dashboard", label: "监控首页", icon: LayoutDashboard },
-  { id: "season", label: "历史数据", icon: BarChart3 },
+  { id: "firecompare", label: "火价分析", icon: TrendingUp },
   { id: "items", label: "物品库", icon: Box },
   { id: "strategies", label: "策略管理", icon: Shield },
   { id: "alerts", label: "价格预警", icon: Bell },

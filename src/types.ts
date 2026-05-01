@@ -1,4 +1,4 @@
-export type PageId = "dashboard" | "season" | "items" | "strategies" | "alerts" | "records" | "import_export" | "settings" | "help"
+export type PageId = "dashboard" | "firecompare" | "items" | "strategies" | "alerts" | "records" | "import_export" | "settings" | "help"
 
 export interface ItemData {
   name: string
