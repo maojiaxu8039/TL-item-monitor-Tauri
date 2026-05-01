@@ -1,5 +1,5 @@
 use crate::commands::types::{FirePriceUI, OkResponse, DashboardSummary};
-use crate::core::state::{AppState, MarketMode};
+use crate::core::state::{AppState, MarketMode, FirePriceSnapshot};
 use crate::db::repo_fire;
 use crate::db::repo_items;
 use crate::db::repo_sections;
@@ -161,4 +161,44 @@ pub async fn get_season_trends(
     repo_history::get_season_trends(&state.db, &ctx.season_id, ctx.market_mode.as_str(), hours.unwrap_or(24))
         .await
         .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct SyncFireRecordParams {
+    pub season_id: String,
+    pub market_mode: String,
+    pub rmb_per_10k_fire: f64,
+    pub fire_per_rmb: f64,
+    pub increase_ratio: f64,
+    pub trading_volume: String,
+    pub source: String,
+    pub source_time: String,
+    pub recorded_at: i64,
+}
+
+#[tauri::command]
+pub async fn sync_fire_record(
+    state: State<'_, Arc<AppState>>,
+    params: SyncFireRecordParams,
+) -> Result<OkResponse, String> {
+    repo_history::insert_fire_snapshot(
+        &state.db,
+        &params.season_id,
+        &params.market_mode,
+        &FirePriceSnapshot {
+            price_per_wan: params.rmb_per_10k_fire,
+            rmb_per_10k_fire: params.rmb_per_10k_fire,
+            fire_per_rmb: params.fire_per_rmb,
+            increase_ratio: Some(params.increase_ratio),
+            trading_volume: Some(params.trading_volume),
+            source: params.source,
+            source_time: Some(params.source_time),
+            scraped_at: params.recorded_at,
+        },
+        params.recorded_at,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    
+    Ok(OkResponse::success("Fire record synced"))
 }

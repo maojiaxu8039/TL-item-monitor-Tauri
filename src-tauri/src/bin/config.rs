@@ -7,6 +7,7 @@ use std::path::Path;
 pub struct ServerConfig {
     pub season_id: String,
     pub market_mode: String,
+    pub http_port: u16,
 }
 
 impl Default for ServerConfig {
@@ -14,6 +15,7 @@ impl Default for ServerConfig {
         Self {
             season_id: "ss12".to_string(),
             market_mode: "season_normal".to_string(),
+            http_port: 8080,
         }
     }
 }
@@ -22,7 +24,6 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig, String> {
     let path = path.as_ref();
     
     if !path.exists() {
-        // 创建默认配置文件
         let default_config = ServerConfig::default();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| format!("创建配置目录失败: {}", e))?;

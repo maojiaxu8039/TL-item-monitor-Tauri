@@ -388,6 +388,18 @@ export const cmd = {
   exportFireHistoryCsv: (hours: number) =>
     invoke<string>("export_fire_history_csv", { hours }),
 
+  syncFireRecord: (params: {
+    season_id: string;
+    market_mode: string;
+    rmb_per_10k_fire: number;
+    fire_per_rmb: number;
+    increase_ratio: number;
+    trading_volume: string;
+    source: string;
+    source_time: string;
+    recorded_at: number;
+  }) => invoke<{ success: boolean; message?: string }>("sync_fire_record", { params }),
+
   getStrategies: () => invoke<Strategy[]>("get_strategies"),
   createStrategy: (name: string) =>
     invoke<Strategy>("create_strategy", { name }),

@@ -9,7 +9,7 @@ const NAV_ITEMS: { id: PageId; label: string; icon: typeof Flame }[] = [
   { id: "items", label: "物品库", icon: Box },
   { id: "strategies", label: "策略管理", icon: Shield },
   { id: "alerts", label: "价格预警", icon: Bell },
-  { id: "records", label: "数据记录", icon: Database },
+  { id: "records", label: "数据监控", icon: Database },
   { id: "import_export", label: "导入导出", icon: Download },
   { id: "settings", label: "设置", icon: Settings },
   { id: "help", label: "帮助", icon: CircleHelp },

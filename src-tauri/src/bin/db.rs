@@ -1,6 +1,7 @@
 //! 数据库操作模块
 
 use sqlx::{SqlitePool, Row};
+use serde::Serialize;
 use tracing::{info, error};
 use uuid::Uuid;
 
@@ -246,7 +247,7 @@ pub async fn get_items_history(
     Ok(records)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct FirePriceRecord {
     pub id: String,
     pub season_id: String,
@@ -261,7 +262,7 @@ pub struct FirePriceRecord {
     pub created_at: i64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ItemPriceRecord {
     pub id: String,
     pub item_id: String,

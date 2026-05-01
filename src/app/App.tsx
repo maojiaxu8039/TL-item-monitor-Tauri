@@ -16,7 +16,7 @@ const SettingsPage = lazy(() => import("@/components/dashboard/SettingsPage"))
 const ImportExportPage = lazy(() => import("@/components/dashboard/ImportExportPage"))
 const ItemsPage = lazy(() => import("@/components/dashboard/ItemsPage"))
 const AlertsPage = lazy(() => import("@/components/dashboard/AlertsPage"))
-const DataRecordsPage = lazy(() => import("@/components/dashboard/DataRecordsPage"))
+const DataMonitorPage = lazy(() => import("@/components/dashboard/DataMonitorPage"))
 const HelpPage = lazy(() => import("@/components/dashboard/HelpPage"))
 
 function PageLoading() {
@@ -86,7 +86,7 @@ export default function App() {
               )}
               {page === "records" && (
                 <LazyPage>
-                  <DataRecordsPage />
+                  <DataMonitorPage />
                 </LazyPage>
               )}
               {page === "help" && (
