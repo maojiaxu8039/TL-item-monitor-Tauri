@@ -22,9 +22,8 @@ const COOLDOWN_OPTIONS = [
 ];
 
 const SOURCE_OPTIONS = [
-  { label: "千岛 API", value: "api" },
-  { label: "本地 JSON", value: "local" },
-  { label: "其他", value: "other" },
+  { label: "API接口", value: "api" },
+  { label: "本地JSON", value: "local" },
 ];
 
 const DEFAULT_JSON_PATH = "/Users/mc/Library/Application Support/com.tlmonitor.app/data/full_table.json";
