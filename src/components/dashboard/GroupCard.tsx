@@ -241,7 +241,10 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
           </div>
           <div className="flex items-center gap-1">
             <button
-              onClick={() => refetch()}
+              onClick={async () => {
+                await refetch()
+                toast.success(`${section.name} 已刷新`, { position: 'bottom-right' })
+              }}
               className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors"
               title="刷新分组"
             >
