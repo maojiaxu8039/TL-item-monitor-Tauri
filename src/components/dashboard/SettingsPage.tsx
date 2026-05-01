@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus } from "@/lib/commands";
+import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus, type JsonFileValidationResult } from "@/lib/commands";
 import { useMutation } from "@tanstack/react-query";
 import { RefreshCw, Save, Settings, Bell, Database, Globe, AlertTriangle, Trash2, Volume2 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -35,6 +35,7 @@ export default function SettingsPage() {
   const [itemsInterval, setItemsInterval] = useState(300);
   const [itemsSource, setItemsSource] = useState("api");
   const [jsonPath, setJsonPath] = useState(DEFAULT_JSON_PATH);
+  const [jsonPathValidation, setJsonPathValidation] = useState<JsonFileValidationResult | null>(null);
   const [seasonId, setSeasonId] = useState("ss12");
   const [itemCount, setItemCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -102,12 +103,16 @@ export default function SettingsPage() {
       setItemsEnabled(cfg.scrape.auto_reload);
       setItemsInterval(cfg.scrape.items_reload_interval);
       setItemsSource(cfg.scrape.items_source);
+      setJsonPath(cfg.scrape.items_json_path || DEFAULT_JSON_PATH);
       setSeasonId(cfg.app.season_id);
       setPriceAlertEnabled(cfg.notification.price_alert_enabled);
       setPriceAlertCooldown(cfg.notification.price_alert_cooldown_seconds);
       setSystemNotifications(cfg.notification.system_notifications);
       setVoiceAlertEnabled(cfg.notification.voice_alert_enabled);
       setLoaded(true);
+      if (cfg.scrape.items_source === 'local') {
+        cmd.validateJsonFile(cfg.scrape.items_json_path || DEFAULT_JSON_PATH).then(setJsonPathValidation).catch(() => {});
+      }
     }).catch(() => {});
 
     cmd.getDashboardSummary().then((summary) => {
@@ -118,6 +123,28 @@ export default function SettingsPage() {
       setNotificationPermission(status);
     }).catch(() => {});
   }, []);
+
+  const validateJsonPath = async (path: string) => {
+    const result = await cmd.validateJsonFile(path);
+    setJsonPathValidation(result);
+    return result;
+  };
+
+  const handleItemsSourceChange = async (source: string) => {
+    setItemsSource(source);
+    if (source === 'local') {
+      await validateJsonPath(jsonPath);
+    } else {
+      setJsonPathValidation(null);
+    }
+  };
+
+  const handleJsonPathChange = async (path: string) => {
+    setJsonPath(path);
+    if (itemsSource === 'local') {
+      await validateJsonPath(path);
+    }
+  };
 
   const handleSave = () => {
     const config: AppConfig = {
@@ -405,7 +432,7 @@ export default function SettingsPage() {
             <div className="text-sm font-medium text-slate-700">数据源</div>
             <select
               value={itemsSource}
-              onChange={(e) => setItemsSource(e.target.value)}
+              onChange={(e) => handleItemsSourceChange(e.target.value)}
               className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             >
               {SOURCE_OPTIONS.map((opt) => (
@@ -418,17 +445,36 @@ export default function SettingsPage() {
 
           <div className={`flex items-center justify-between ${itemsSource === 'local' ? 'opacity-100' : 'opacity-50'}`}>
             <div className="text-sm font-medium text-slate-700">本地JSON路径</div>
-            <input
-              type="text"
-              value={jsonPath}
-              onChange={(e) => setJsonPath(e.target.value)}
-              readOnly={itemsSource !== 'local'}
-              className={`text-xs border rounded-lg px-3 py-1.5 w-72 overflow-hidden text-ellipsis ${
-                itemsSource === 'local' 
-                  ? 'border-slate-300 text-slate-700 bg-white focus:ring-2 focus:ring-blue-500/30' 
-                  : 'border-slate-200 text-slate-400 bg-slate-50'
-              }`}
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={jsonPath}
+                onChange={(e) => handleJsonPathChange(e.target.value)}
+                readOnly={itemsSource !== 'local'}
+                className={`text-xs border rounded-lg px-3 py-1.5 w-72 overflow-hidden text-ellipsis ${
+                  itemsSource === 'local' 
+                    ? 'border-slate-300 text-slate-700 bg-white focus:ring-2 focus:ring-blue-500/30' 
+                    : 'border-slate-200 text-slate-400 bg-slate-50'
+                }`}
+              />
+              {itemsSource === 'local' && jsonPathValidation && (
+                <div className={`flex items-center gap-1 text-xs ${jsonPathValidation.valid ? 'text-green-600' : 'text-red-500'}`}>
+                  {jsonPathValidation.valid ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      <span>{jsonPathValidation.item_count} 个物品</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                      <span className="max-w-[150px] truncate" title={jsonPathValidation.error_message || ''}>
+                        {jsonPathValidation.error_message}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center justify-between pt-1">

@@ -97,6 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_db_stats,
             commands::get_items_stats,
             commands::reload_items,
+            commands::validate_json_file,
             commands::get_alert_rules,
             commands::create_alert_rule,
             commands::update_alert_rule,

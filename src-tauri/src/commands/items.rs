@@ -44,6 +44,86 @@ pub async fn get_items_stats(state: State<'_, Arc<AppState>>) -> Result<ItemsSta
     })
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct JsonFileValidationResult {
+    pub valid: bool,
+    pub file_exists: bool,
+    pub is_readable: bool,
+    pub is_valid_json: bool,
+    pub item_count: Option<i32>,
+    pub error_message: Option<String>,
+}
+
+#[tauri::command]
+pub async fn validate_json_file(json_path: String) -> Result<JsonFileValidationResult, String> {
+    let path = std::path::Path::new(&json_path);
+    
+    if !path.exists() {
+        return Ok(JsonFileValidationResult {
+            valid: false,
+            file_exists: false,
+            is_readable: false,
+            is_valid_json: false,
+            item_count: None,
+            error_message: Some("文件不存在".to_string()),
+        });
+    }
+    
+    if !path.is_file() {
+        return Ok(JsonFileValidationResult {
+            valid: false,
+            file_exists: true,
+            is_readable: false,
+            is_valid_json: false,
+            item_count: None,
+            error_message: Some("路径不是文件".to_string()),
+        });
+    }
+    
+    let content = match std::fs::read_to_string(&json_path) {
+        Ok(c) => c,
+        Err(e) => {
+            return Ok(JsonFileValidationResult {
+                valid: false,
+                file_exists: true,
+                is_readable: false,
+                is_valid_json: false,
+                item_count: None,
+                error_message: Some(format!("无法读取文件: {}", e)),
+            });
+        }
+    };
+    
+    let data: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(e) => {
+            return Ok(JsonFileValidationResult {
+                valid: false,
+                file_exists: true,
+                is_readable: true,
+                is_valid_json: false,
+                item_count: None,
+                error_message: Some(format!("JSON 格式错误: {}", e)),
+            });
+        }
+    };
+    
+    let item_count = match &data {
+        serde_json::Value::Object(map) => Some(map.len() as i32),
+        serde_json::Value::Array(arr) => Some(arr.len() as i32),
+        _ => None,
+    };
+    
+    Ok(JsonFileValidationResult {
+        valid: true,
+        file_exists: true,
+        is_readable: true,
+        is_valid_json: true,
+        item_count,
+        error_message: None,
+    })
+}
+
 #[tauri::command]
 pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats, String> {
     let fresh_config = crate::core::config::load_config()

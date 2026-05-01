@@ -117,6 +117,15 @@ export interface DbStats {
   db_size_kb: number;
 }
 
+export interface JsonFileValidationResult {
+  valid: boolean;
+  file_exists: boolean;
+  is_readable: boolean;
+  is_valid_json: boolean;
+  item_count: number | null;
+  error_message: string | null;
+}
+
 export interface ScrapeSettings {
   fire_price_mode: string;
   fire_price_scrape_interval: number;
@@ -251,6 +260,7 @@ export const cmd = {
   refreshFirePrice: () => invoke<FirePriceUI>("refresh_fire_price"),
   refreshItems: () => invoke<OkResponse>("refresh_items"),
   clearItemsDatabase: () => invoke<string>("clear_items_database"),
+  validateJsonFile: (jsonPath: string) => invoke<JsonFileValidationResult>("validate_json_file", { jsonPath }),
   triggerPriceAlert: () => invoke<string>("trigger_price_alert"),
   getNotificationPermissionStatus: () => invoke<NotificationPermissionStatus>("get_notification_permission_status"),
   requestNotificationPermission: () => invoke<boolean>("request_notification_permission"),
