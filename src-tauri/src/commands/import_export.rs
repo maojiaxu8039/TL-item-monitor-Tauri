@@ -125,3 +125,17 @@ pub async fn restore_database(_state: State<'_, Arc<AppState>>, src_path: String
     std::fs::copy(&src_path, &db_path).map_err(|e| format!("Restore failed: {}", e))?;
     Ok(OkResponse::success("Database restored — please restart the app"))
 }
+
+#[tauri::command]
+pub async fn write_file(path: String, base64_content: String) -> Result<OkResponse, String> {
+    let bytes = base64::decode(&base64_content)
+        .map_err(|e| format!("Base64 decode error: {}", e))?;
+    std::fs::write(&path, bytes).map_err(|e| format!("Write file error: {}", e))?;
+    Ok(OkResponse::success("File written"))
+}
+
+#[tauri::command]
+pub async fn read_file(path: String) -> Result<String, String> {
+    let bytes = std::fs::read(&path).map_err(|e| format!("Read file error: {}", e))?;
+    Ok(base64::encode(&bytes))
+}

@@ -123,6 +123,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_season_summary,
             commands::get_season_trends,
             commands::select_local_items_file,
+            commands::write_file,
+            commands::read_file,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri app failed to run");

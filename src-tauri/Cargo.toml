@@ -40,6 +40,7 @@ thiserror = "2"
 anyhow = "1"
 dashmap = "6"
 csv = "1"
+base64 = "0.4"
 
 # Tracing / logging
 tracing = "0.1"

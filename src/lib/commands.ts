@@ -309,6 +309,9 @@ export const cmd = {
   importWatchlistCsv: (content: string) =>
     invoke<{ imported: number; errors: string[] }>("import_watchlist_csv", { content }),
   exportWatchlistCsv: () => invoke<string>("export_watchlist_csv"),
+  writeFile: (path: string, base64Content: string) =>
+    invoke<{ success: boolean; message?: string }>("write_file", { path, base64Content }),
+  readFile: (path: string) => invoke<string>("read_file", { path }),
 
   getConfig: () => invoke<AppConfig>("get_config"),
   saveConfig: (config: AppConfig) =>

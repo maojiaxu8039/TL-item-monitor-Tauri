@@ -8,6 +8,7 @@ import { cmd, type ItemData, type Section, type SectionItem } from "@/lib/comman
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
+import { save, open } from "@tauri-apps/plugin-dialog"
 
 interface SearchBarProps {
   sections?: Section[]
@@ -100,82 +101,103 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
   const handleExportList = async () => {
     try {
       const allSections = await cmd.getSections()
-      const exportData = await Promise.all(
-        allSections.map(async (section) => {
-          const sectionItems = await cmd.getSectionItems(section.id)
-          return {
-            name: section.name,
-            items: sectionItems.map(item => ({
-              item_id: item.item_id,
-              item_name: item.item_name,
-              purchase_fire_price: item.purchase_fire_price,
-              count: item.count,
-              more_value: item.more_value,
-            })),
-          }
-        })
-      )
-      const json = JSON.stringify(exportData, null, 2)
-      const blob = new Blob([json], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `TL_groups_${new Date().toISOString().slice(0, 10)}.json`
-      a.click()
-      URL.revokeObjectURL(url)
-      toast.success(`已导出 ${allSections.length} 个分组`)
+      let csvContent = "分组名称,物品ID,物品名称,购买火价,数量,溢出价值\n"
+      
+      for (const section of allSections) {
+        const sectionItems = await cmd.getSectionItems(section.id)
+        for (const item of sectionItems) {
+          csvContent += `"${section.name}","${item.item_id}","${item.item_name || ''}",${item.purchase_fire_price},${item.count},${item.more_value}\n`
+        }
+      }
+      
+      const date = new Date().toISOString().slice(0, 10)
+      const filePath = await save({
+        filters: [{ name: 'CSV', extensions: ['csv'] }],
+        defaultPath: `TL_groups_${date}.csv`,
+      })
+      
+      if (filePath) {
+        const encoder = new TextEncoder()
+        const bytes = encoder.encode(csvContent)
+        const base64 = btoa(String.fromCharCode(...bytes))
+        await cmd.writeFile(filePath, base64)
+        toast.success(`已导出 ${allSections.length} 个分组`)
+      }
     } catch (err) {
       toast.error(`导出失败: ${err}`)
     }
   }
 
   const handleImportList = async () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.json'
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) return
-      try {
-        const text = await file.text()
-        const data = JSON.parse(text)
-        if (!Array.isArray(data)) {
-          toast.error('文件格式错误')
+    try {
+      const filePath = await open({
+        filters: [{ name: 'CSV', extensions: ['csv'] }],
+        multiple: false,
+      })
+      
+      if (filePath) {
+        const base64Content = await cmd.readFile(filePath as string)
+        const binaryString = atob(base64Content)
+        const bytes = new Uint8Array(binaryString.length)
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i)
+        }
+        const decoder = new TextDecoder('utf-8')
+        const csvContent = decoder.decode(bytes)
+        const lines = csvContent.trim().split('\n')
+        
+        if (lines.length < 2) {
+          toast.error('CSV 文件为空或格式错误')
           return
         }
+        
+        const header = lines[0].toLowerCase()
+        if (!header.includes('分组名称') && !header.includes('section')) {
+          toast.error('CSV 文件格式不正确')
+          return
+        }
+        
         let imported = 0
-        for (const group of data) {
-          try {
-            await cmd.createSection(group.name)
-            const sections = await cmd.getSections()
-            const newSection = sections.find(s => s.name === group.name)
-            if (newSection && group.items) {
-              for (const item of group.items) {
-                try {
-                  await cmd.addSectionItem(
-                    newSection.id,
-                    marketContext.seasonId,
-                    marketContext.marketMode,
-                    item.item_id,
-                    item.purchase_fire_price || 0,
-                    item.count || 1,
-                    item.more_value || 0
-                  )
-                  imported++
-                } catch {
-                }
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim()
+          if (!line) continue
+          
+          const match = line.match(/^"([^"]+)","([^"]+)","([^"]*)",([^,]+),([^,]+),(.+)$/)
+          if (match) {
+            const [, sectionName, itemId, , purchaseFirePrice, count, moreValue] = match
+            try {
+              const sections = await cmd.getSections()
+              let section = sections.find(s => s.name === sectionName)
+              
+              if (!section) {
+                await cmd.createSection(sectionName)
+                const newSections = await cmd.getSections()
+                section = newSections.find(s => s.name === sectionName)
               }
+              
+              if (section) {
+                await cmd.addSectionItem(
+                  section.id,
+                  marketContext.seasonId,
+                  marketContext.marketMode,
+                  itemId,
+                  parseFloat(purchaseFirePrice) || 0,
+                  parseInt(count) || 1,
+                  parseFloat(moreValue) || 0
+                )
+                imported++
+              }
+            } catch {
             }
-          } catch {
           }
         }
+        
         refreshSections()
         toast.success(`已导入 ${imported} 个物品`)
-      } catch (err) {
-        toast.error(`导入失败: ${err}`)
       }
+    } catch (err) {
+      toast.error(`导入失败: ${err}`)
     }
-    input.click()
   }
 
   return (
