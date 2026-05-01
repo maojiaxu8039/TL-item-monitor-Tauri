@@ -34,7 +34,7 @@ export default function SettingsPage() {
   const [itemsEnabled, setItemsEnabled] = useState(false);
   const [itemsInterval, setItemsInterval] = useState(300);
   const [itemsSource, setItemsSource] = useState("api");
-  const [jsonPath] = useState(DEFAULT_JSON_PATH);
+  const [jsonPath, setJsonPath] = useState(DEFAULT_JSON_PATH);
   const [seasonId, setSeasonId] = useState("ss12");
   const [itemCount, setItemCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -388,13 +388,18 @@ export default function SettingsPage() {
             </select>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-medium text-slate-700">JSON 路径</div>
+          <div className={`flex items-center justify-between ${itemsSource === 'local' ? 'opacity-100' : 'opacity-50'}`}>
+            <div className="text-sm font-medium text-slate-700">本地JSON路径</div>
             <input
               type="text"
               value={jsonPath}
-              readOnly
-              className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 text-slate-400 bg-slate-50 w-72 overflow-hidden text-ellipsis"
+              onChange={(e) => setJsonPath(e.target.value)}
+              readOnly={itemsSource !== 'local'}
+              className={`text-xs border rounded-lg px-3 py-1.5 w-72 overflow-hidden text-ellipsis ${
+                itemsSource === 'local' 
+                  ? 'border-slate-300 text-slate-700 bg-white focus:ring-2 focus:ring-blue-500/30' 
+                  : 'border-slate-200 text-slate-400 bg-slate-50'
+              }`}
             />
           </div>
 
