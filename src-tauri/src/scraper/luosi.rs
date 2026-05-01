@@ -18,13 +18,13 @@ struct LuosiItem {
 /// Scrape items from Luosi API for SS12 普通服 (season_id=1401).
 #[allow(dead_code)]
 pub async fn scrape_normal_items() -> Result<Vec<Item>, AppError> {
-    scrape_by_season_id(1401).await
+    scrape_by_season_id(1401, "ss12", "season_normal").await
 }
 
 /// Scrape items from Luosi API for SS12 专家服 (season_id=1431).
 #[allow(dead_code)]
 pub async fn scrape_expert_items() -> Result<Vec<Item>, AppError> {
-    scrape_by_season_id(1431).await
+    scrape_by_season_id(1431, "ss12", "season_expert").await
 }
 
 /// Scrape items from Luosi API, selecting the correct season_id
@@ -57,10 +57,12 @@ pub async fn scrape_items(season_id: &str, market_mode: &str) -> Result<Vec<Item
     };
 
     let api_season_id = 200 * season_num - 1000 + mode_suffix;
-    scrape_by_season_id(api_season_id).await
+    let target_season_id = season_id.to_string();
+    let target_market_mode = market_mode.to_string();
+    scrape_by_season_id(api_season_id, &target_season_id, &target_market_mode).await
 }
 
-async fn scrape_by_season_id(api_season_id: i32) -> Result<Vec<Item>, AppError> {
+async fn scrape_by_season_id(api_season_id: i32, season_id: &str, market_mode: &str) -> Result<Vec<Item>, AppError> {
     let url = format!("{}?season_id={}", LUOSI_BASE_URL, api_season_id);
 
     let client = reqwest::Client::builder()
@@ -83,15 +85,12 @@ async fn scrape_by_season_id(api_season_id: i32) -> Result<Vec<Item>, AppError> 
         .await
         .map_err(|e| AppError::Scrape(format!("failed to parse JSON: {}", e)))?;
 
-    let is_expert = api_season_id % 100 == 31;
-    let market_mode = if is_expert { "season_expert" } else { "season_normal" };
-
     let now = chrono::Utc::now().timestamp();
     let items: Vec<Item> = map
         .into_iter()
         .map(|(item_id, item)| Item {
             item_id,
-            season_id: format!("ss{}", api_season_id / 100),
+            season_id: season_id.to_string(),
             market_mode: market_mode.to_string(),
             name: item.name,
             item_type: item.item_type.unwrap_or_default(),
@@ -102,6 +101,6 @@ async fn scrape_by_season_id(api_season_id: i32) -> Result<Vec<Item>, AppError> 
         })
         .collect();
 
-    tracing::info!("Scraped {} items from Luosi API (no filtering)", items.len());
+    tracing::info!("Scraped {} items from Luosi API for {}/{}", items.len(), season_id, market_mode);
     Ok(items)
 }
