@@ -22,17 +22,45 @@ pub async fn run_items_reload_task(
             _ = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
                 let ctx = state.active_context.read().clone();
                 let start = std::time::Instant::now();
-                match scraper::scrape_items(&ctx.season_id, ctx.market_mode.as_str()).await {
+
+                let fresh_config = match crate::core::config::load_config() {
+                    Ok(cfg) => cfg,
+                    Err(e) => {
+                        error!("Failed to load config: {}", e);
+                        continue;
+                    }
+                };
+
+                let items_source = fresh_config.scrape.items_source.clone();
+                let json_path = fresh_config.scrape.items_json_path.clone();
+                let source_name = if items_source == "api" { "luosi" } else { "local_json" };
+
+                let (items_result, source_type) = if items_source == "api" {
+                    info!("Auto reload: fetching from API for {}/{:?}", ctx.season_id, ctx.market_mode);
+                    match scraper::scrape_items(&ctx.season_id, ctx.market_mode.as_str()).await {
+                        Ok(items) => (Ok(items), "api"),
+                        Err(e) => (Err(format!("API scrape failed: {}", e)), "api"),
+                    }
+                } else {
+                    info!("Auto reload: loading from JSON: {}", json_path);
+                    match crate::app::load_items_from_json(&ctx.season_id, ctx.market_mode.as_str(), &json_path) {
+                        Ok(items) => (Ok(items), "local"),
+                        Err(e) => (Err(format!("JSON load failed: {}", e)), "local"),
+                    }
+                };
+
+                let duration_ms = start.elapsed().as_millis() as i64;
+
+                match items_result {
                     Ok(items) => {
-                        let duration_ms = start.elapsed().as_millis() as i64;
                         let count = items.len() as i64;
 
                         if let Err(e) = repo_items::bulk_insert_items(&state.db, &items).await {
                             error!("Failed to bulk-insert items: {}", e);
                             let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
                                 &state.db,
-                                "luosi",
-                                "api",
+                                source_name,
+                                &source_type,
                                 true,
                                 Some(ctx.market_mode.as_str()),
                                 None,
@@ -46,8 +74,8 @@ pub async fn run_items_reload_task(
 
                             let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
                                 &state.db,
-                                "luosi",
-                                "api",
+                                source_name,
+                                &source_type,
                                 true,
                                 Some(ctx.market_mode.as_str()),
                                 None,
@@ -57,42 +85,38 @@ pub async fn run_items_reload_task(
                                 None,
                             ).await;
 
-                            // Update cache
                             {
                                 let mut cache = state.items_cache.write();
                                 *cache = items;
                             }
 
-                            // Update task status
                             {
                                 let mut status = state.task_status.write();
                                 status.last_items_reload = Some(now);
                             }
 
-                            // Emit items-updated event
                             let _ = app.emit("items-updated", serde_json::json!({
                                 "count": count,
                                 "updated_at": now
                             }));
 
-                            info!("Items reload complete: {} items", count);
+                            info!("Items reload complete: {} items from {}", count, items_source);
                         }
                     }
                     Err(e) => {
-                        let duration_ms = start.elapsed().as_millis() as i64;
+                        error!("Items reload failed: {}", e);
                         let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
                             &state.db,
-                            "luosi",
-                            "api",
+                            source_name,
+                            &source_type,
                             true,
                             Some(ctx.market_mode.as_str()),
                             None,
                             false,
                             duration_ms,
                             None,
-                            Some(&e.to_string()),
+                            Some(&e),
                         ).await;
-                        error!("Items reload failed: {}", e);
                         {
                             let mut status = state.task_status.write();
                             status.last_items_reload = Some(chrono::Utc::now().timestamp());

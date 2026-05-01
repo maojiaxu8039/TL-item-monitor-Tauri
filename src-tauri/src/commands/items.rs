@@ -2,6 +2,7 @@ use crate::commands::types::{DbStats, ItemsStats, SearchResult};
 use crate::core::state::AppState;
 use crate::db::repo_items;
 use crate::db::repo_history;
+use crate::scraper;
 use crate::services::send_notification;
 use std::sync::Arc;
 use std::process::Command;
@@ -48,13 +49,21 @@ pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats,
     let fresh_config = crate::core::config::load_config()
         .map_err(|e| format!("Failed to load config: {}", e))?;
     let season_id = fresh_config.app.season_id.clone();
+    let items_source = fresh_config.scrape.items_source.clone();
+    let json_path = fresh_config.scrape.items_json_path.clone();
 
-    tracing::info!("reload_items: loading items from JSON for season_id={}", season_id);
+    let items = if items_source == "api" {
+        tracing::info!("reload_items: fetching from API for season_id={}", season_id);
+        scraper::scrape_items(&season_id, "season_normal")
+            .await
+            .map_err(|e| format!("Failed to scrape from API: {}", e))?
+    } else {
+        tracing::info!("reload_items: loading from JSON file: {}", json_path);
+        crate::app::load_items_from_json(&season_id, "season_normal", &json_path)
+            .map_err(|e| format!("Failed to load JSON: {}", e))?
+    };
     
-    let items = crate::app::load_items_from_json(&season_id, "season_normal")
-        .map_err(|e| format!("Failed to load JSON: {}", e))?;
-    
-    tracing::info!("reload_items: loaded {} items from JSON", items.len());
+    tracing::info!("reload_items: loaded {} items", items.len());
     let count = items.len() as i64;
 
     repo_items::bulk_insert_items(&state.db, &items).await

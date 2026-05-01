@@ -34,9 +34,9 @@ struct JsonItemEntry {
     source: String,
 }
 
-/// Load and parse full_table.json, returning items ready for bulk insert.
-pub fn load_items_from_json(season_id: &str, market_mode: &str) -> Result<Vec<Item>, String> {
-    let path = full_table_json_path();
+/// Load and parse JSON file, returning items ready for bulk insert.
+pub fn load_items_from_json(season_id: &str, market_mode: &str, json_path: &str) -> Result<Vec<Item>, String> {
+    let path = std::path::PathBuf::from(json_path);
     tracing::info!("load_items_from_json: reading from {:?}", path);
     
     let content = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
@@ -155,8 +155,8 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
 
     // Auto-import items: prefer API scrape, fall back to JSON file
     let items_count = repo_items::get_items_count(&pool).await.unwrap_or(0);
-    let json_path = full_table_json_path();
-    let json_exists = json_path.exists();
+    let json_path = config.scrape.items_json_path.clone();
+    let json_exists = std::path::Path::new(&json_path).exists();
 
     let items_cache: Vec<Item> = if items_count == 0 {
         if json_exists {
@@ -168,12 +168,12 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
                         items
                     } else {
                         tracing::warn!("API items bulk-insert failed, falling back to JSON");
-                        load_items_from_json(&config.app.season_id, "season_normal").unwrap_or_default()
+                        load_items_from_json(&config.app.season_id, "season_normal", &json_path).unwrap_or_default()
                     }
                 }
                 Err(e) => {
                     tracing::warn!("API scrape failed, falling back to JSON: {}", e);
-                    load_items_from_json(&config.app.season_id, "season_normal").unwrap_or_default()
+                    load_items_from_json(&config.app.season_id, "season_normal", &json_path).unwrap_or_default()
                 }
             }
         } else {
