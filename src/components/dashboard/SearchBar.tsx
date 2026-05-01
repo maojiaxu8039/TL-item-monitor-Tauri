@@ -127,11 +127,11 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
 
         <button className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50">
           <Upload className="h-3.5 w-3.5" />
-          导入
+          导入列表
         </button>
         <button className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50">
           <Download className="h-3.5 w-3.5" />
-          导出
+          导出列表
         </button>
       </div>
 
