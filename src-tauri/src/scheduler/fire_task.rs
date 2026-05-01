@@ -12,25 +12,33 @@ pub async fn run_fire_scrape_task(
     mut abort: broadcast::Receiver<()>,
 ) {
     info!("Fire price scraper task started");
+
     loop {
         tokio::select! {
             _ = abort.recv() => {
                 info!("Fire scrape task received abort");
                 break;
             }
-            _ = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                let config = match crate::core::config::load_config() {
+                    Ok(cfg) => cfg,
+                    Err(e) => {
+                        error!("Failed to load config: {}", e);
+                        continue;
+                    }
+                };
+
+                if !config.scrape.fire_price_scrape_enabled {
+                    continue;
+                }
+
+                let interval_secs = config.scrape.fire_price_scrape_interval.max(60);
+
                 let start = std::time::Instant::now();
                 match scraper::scrape_fire_price().await {
                     Ok(snapshot) => {
                         let ctx = state.active_context.read().clone();
                         let duration_ms = start.elapsed().as_millis() as i64;
-
-                        let _ = crate::db::repo_fire::insert_fire_record(
-                            &state.db,
-                            &ctx.season_id,
-                            ctx.market_mode.as_str(),
-                            &snapshot,
-                        ).await;
 
                         let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
                             &state.db,
@@ -65,6 +73,8 @@ pub async fn run_fire_scrape_task(
                         });
 
                         info!("Fire price scraped: {} RMB/10K", snapshot.rmb_per_10k_fire);
+
+                        tokio::time::sleep(std::time::Duration::from_secs(interval_secs as u64)).await;
                     }
                     Err(e) => {
                         let duration_ms = start.elapsed().as_millis() as i64;
@@ -82,6 +92,9 @@ pub async fn run_fire_scrape_task(
                             Some(&e.to_string()),
                         ).await;
                         error!("Fire scrape failed: {}", e);
+
+                        let interval_secs = config.scrape.fire_price_scrape_interval.max(60);
+                        tokio::time::sleep(std::time::Duration::from_secs(interval_secs as u64)).await;
                     }
                 }
             }

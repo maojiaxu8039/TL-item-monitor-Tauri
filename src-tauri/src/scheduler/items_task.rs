@@ -19,10 +19,7 @@ pub async fn run_items_reload_task(
                 info!("Items reload task received abort");
                 break;
             }
-            _ = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
-                let ctx = state.active_context.read().clone();
-                let start = std::time::Instant::now();
-
+            _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                 let fresh_config = match crate::core::config::load_config() {
                     Ok(cfg) => cfg,
                     Err(e) => {
@@ -31,9 +28,17 @@ pub async fn run_items_reload_task(
                     }
                 };
 
+                if !fresh_config.scrape.auto_reload {
+                    continue;
+                }
+
+                let interval_secs = fresh_config.scrape.items_reload_interval.max(60);
                 let items_source = fresh_config.scrape.items_source.clone();
                 let json_path = fresh_config.scrape.items_json_path.clone();
                 let source_name = if items_source == "api" { "luosi" } else { "local_json" };
+
+                let ctx = state.active_context.read().clone();
+                let start = std::time::Instant::now();
 
                 let (items_result, source_type) = if items_source == "api" {
                     info!("Auto reload: fetching from API for {}/{:?}", ctx.season_id, ctx.market_mode);
@@ -102,6 +107,8 @@ pub async fn run_items_reload_task(
 
                             info!("Items reload complete: {} items from {}", count, items_source);
                         }
+
+                        tokio::time::sleep(std::time::Duration::from_secs(interval_secs as u64)).await;
                     }
                     Err(e) => {
                         error!("Items reload failed: {}", e);
@@ -121,6 +128,8 @@ pub async fn run_items_reload_task(
                             let mut status = state.task_status.write();
                             status.last_items_reload = Some(chrono::Utc::now().timestamp());
                         }
+
+                        tokio::time::sleep(std::time::Duration::from_secs(interval_secs as u64)).await;
                     }
                 }
             }
