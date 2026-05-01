@@ -114,6 +114,8 @@ export default function ItemsPage() {
   const [page, setPage] = useState(1);
   const [selectedItem, setSelectedItem] = useState<ItemData | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [dataSource, setDataSource] = useState<"api" | "local">("api");
+  const [notificationEnabled, setNotificationEnabled] = useState(true);
 
   const PAGE_SIZE = 50;
 
@@ -125,6 +127,14 @@ export default function ItemsPage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchKeyword]);
+
+  // Load data source from config
+  useEffect(() => {
+    cmd.getConfig().then((cfg) => {
+      setDataSource(cfg.scrape.items_source === "local" ? "local" : "api");
+      setNotificationEnabled(cfg.notification.system_notifications);
+    }).catch(() => {});
+  }, []);
 
   // ─── Data queries ───────────────────────────────────────────────────────
   const { marketContext } = useSectionRefresh();
@@ -151,7 +161,12 @@ export default function ItemsPage() {
       addToast("success", "物品库已刷新");
     },
     onError: (error: Error) => {
-      addToast("error", `刷新失败: ${error.message || error}`);
+      const errorMsg = error.message || String(error);
+      if (dataSource === "api") {
+        addToast("error", `网络抓取失败: ${errorMsg}，请尝试手动刷新`);
+      } else {
+        addToast("error", `本地文件读取失败: ${errorMsg}，建议切换到网络数据源`);
+      }
     },
   });
 
@@ -333,15 +348,27 @@ export default function ItemsPage() {
           {total > 0 && (
             <span className="text-sm text-slate-400">共 {total} 件物品</span>
           )}
+          {/* Data source indicator */}
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 rounded text-xs">
+            <span className={`w-2 h-2 rounded-full ${dataSource === "api" ? "bg-blue-500" : "bg-green-500"}`}></span>
+            <span className="text-slate-600">{dataSource === "api" ? "网络" : "本地"}</span>
+          </div>
+          {/* Notification indicator */}
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 rounded text-xs">
+            <span className={`w-2 h-2 rounded-full ${notificationEnabled ? "bg-green-500" : "bg-red-500"}`}></span>
+            <span className="text-slate-600">通知</span>
+          </div>
         </div>
-        <button
-          onClick={() => refreshMutation.mutate()}
-          disabled={refreshMutation.isPending}
-          className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
-          刷新物品
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => refreshMutation.mutate()}
+            disabled={refreshMutation.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
+            刷新物品
+          </button>
+        </div>
       </div>
 
       {/* ── Filter bar ── */}
