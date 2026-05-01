@@ -2,8 +2,9 @@ use crate::commands::types::{DbStats, ItemsStats, SearchResult};
 use crate::core::state::AppState;
 use crate::db::repo_items;
 use crate::db::repo_history;
+use crate::services::send_notification;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{State, AppHandle};
 
 #[tauri::command]
 #[allow(non_snake_case)]
@@ -122,6 +123,42 @@ pub async fn clear_items_database(state: State<'_, Arc<AppState>>) -> Result<Str
     }
     
     Ok("物品数据库已清空".to_string())
+}
+
+#[tauri::command]
+pub async fn trigger_price_alert(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<String, String> {
+    let ctx = state.active_context.read().clone();
+    
+    let all_section_items = repo_items::get_all_section_items(&state.db, &ctx.season_id, ctx.market_mode.as_str())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let worth_items: Vec<serde_json::Value> = all_section_items
+        .into_iter()
+        .filter(|item| {
+            let purchase_price = item.purchase_fire_price;
+            let current_price = item.current_price.unwrap_or(0.0);
+            purchase_price > 0.0 && current_price > 0.0 && current_price < purchase_price
+        })
+        .map(|item| serde_json::json!({
+            "item_id": item.item_id,
+            "item_name": item.item_name.unwrap_or_else(|| item.item_id.clone()),
+            "purchase_fire_price": item.purchase_fire_price,
+            "current_price": item.current_price.unwrap_or(0.0),
+        }))
+        .collect();
+
+    if worth_items.is_empty() {
+        return Ok("没有值得购买的物品".to_string());
+    }
+
+    let count = worth_items.len();
+    let message = serde_json::to_string_pretty(&worth_items).unwrap_or_default();
+    
+    send_notification(&app, "🔥 发现值得购买的物品！", &format!("共 {} 件\n{}", count, message))
+        .map_err(|e| e.to_string())?;
+    
+    Ok(format!("发现 {} 件值得购买的物品，已发送通知", count))
 }
 
 #[tauri::command]

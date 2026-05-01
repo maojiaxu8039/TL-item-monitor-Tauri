@@ -116,6 +116,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::get_item_history,
             commands::get_item_types,
             commands::clear_items_database,
+            commands::trigger_price_alert,
             commands::get_season_summary,
             commands::get_season_trends,
             commands::select_local_items_file,

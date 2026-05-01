@@ -62,6 +62,16 @@ export default function SettingsPage() {
     },
   });
 
+  const testAlertMutation = useMutation<string, Error, void>({
+    mutationFn: () => cmd.triggerPriceAlert(),
+    onSuccess: (result) => {
+      toast.success(result);
+    },
+    onError: (err) => {
+      toast.error(`测试失败: ${err}`);
+    },
+  });
+
   useEffect(() => {
     cmd.getConfig().then((cfg) => {
       setFireEnabled(cfg.scrape.fire_price_scrape_enabled);
@@ -186,6 +196,17 @@ export default function SettingsPage() {
               </select>
             </div>
           )}
+
+          <div className="flex items-center justify-end pt-2">
+            <button
+              onClick={() => testAlertMutation.mutate()}
+              disabled={testAlertMutation.isPending}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-amber-200 rounded-lg text-amber-600 hover:bg-amber-50 transition-colors disabled:opacity-50"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {testAlertMutation.isPending ? "检测中..." : "测试价格预警"}
+            </button>
+          </div>
         </div>
       </section>
 

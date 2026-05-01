@@ -127,7 +127,6 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       </div>
 
       <AnimatePresence>
-        {console.log("showResults:", showResults, "searchResult:", searchResult, "error:", error) || true}
         {showResults && !searchResult && !error && searchValue.length >= 1 && (
           <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl border border-slate-200 shadow-lg z-50 p-4 text-sm text-slate-500 text-center">
             加载中...
