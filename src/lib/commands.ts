@@ -111,6 +111,28 @@ export interface OkResponse {
   message: string;
 }
 
+export interface FirePriceCompareResult {
+  current_price: number;
+  current_day: number;
+  current_hour: number;
+  history_avg: number;
+  history_high: number;
+  history_low: number;
+  price_level: string;
+  price_trend: string;
+  reference_price: number;
+  suggested_price: number;
+  risk_tip: string;
+  compare_data: ComparePoint[];
+}
+
+export interface ComparePoint {
+  day: number;
+  hour: number;
+  history_price: number;
+  current_price: number | null;
+}
+
 export interface DbStats {
   item_count: number;
   db_record_count: number;
@@ -410,6 +432,9 @@ export const cmd = {
     last_time: number | null;
     recorded_at: number;
   }) => invoke<{ success: boolean; message?: string }>("sync_items_record", { params }),
+
+  getFirePriceCompare: (historySeason: string) =>
+    invoke<FirePriceCompareResult>("get_fire_price_compare", { historySeason }),
 
   getStrategies: () => invoke<Strategy[]>("get_strategies"),
   createStrategy: (name: string) =>

@@ -202,3 +202,19 @@ pub async fn sync_fire_record(
     
     Ok(OkResponse::success("Fire record synced"))
 }
+
+#[tauri::command]
+pub async fn get_fire_price_compare(
+    state: State<'_, Arc<AppState>>,
+    history_season: String,
+) -> Result<repo_history::FirePriceCompareResult, String> {
+    let ctx = state.active_context.read().clone();
+    repo_history::get_fire_price_compare(
+        &state.db,
+        &ctx.season_id,
+        &history_season,
+        ctx.market_mode.as_str(),
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
