@@ -119,7 +119,8 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       if (filePath) {
         const encoder = new TextEncoder()
         const bytes = encoder.encode(csvContent)
-        const base64 = btoa(String.fromCharCode(...bytes))
+        const binary = Array.from(bytes).map(b => String.fromCharCode(b)).join('')
+        const base64 = btoa(binary)
         await cmd.writeFile(filePath, base64)
         toast.success(`已导出 ${allSections.length} 个分组`)
       }
@@ -137,10 +138,10 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       
       if (filePath) {
         const base64Content = await cmd.readFile(filePath as string)
-        const binaryString = atob(base64Content)
-        const bytes = new Uint8Array(binaryString.length)
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i)
+        const binary = atob(base64Content)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i)
         }
         const decoder = new TextDecoder('utf-8')
         const csvContent = decoder.decode(bytes)
