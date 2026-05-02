@@ -31,11 +31,12 @@ export function TopBar() {
     mutationFn: async (newMode: string) => {
       const seasonId = summary?.season_name || "ss12"
       await cmd.setActiveMarketContext(seasonId, newMode)
+      return newMode
     },
-    onSuccess: () => {
+    onSuccess: (newMode) => {
       const season_id = summary?.season_name || "ss12"
-      setMarketContext({ seasonId: season_id, marketMode })
-      toast.success("已切换到" + (marketMode === "season_normal" ? "赛季普通" : "赛季专家"))
+      setMarketContext({ seasonId: season_id, marketMode: newMode })
+      toast.success("已切换到" + (newMode === "season_normal" ? "赛季普通" : "赛季专家"))
       refreshData()
     },
     onError: (error) => {

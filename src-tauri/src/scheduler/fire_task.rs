@@ -3,7 +3,7 @@ use tokio::sync::broadcast;
 use tracing::{error, info};
 
 use crate::core::events::{emit_fire_price_updated, FirePricePayload};
-use crate::core::state::AppState;
+use crate::core::state::{AppState, MarketMode};
 use crate::scraper;
 
 pub async fn run_fire_scrape_task(
@@ -33,12 +33,24 @@ pub async fn run_fire_scrape_task(
                 }
 
                 let interval_secs = config.scrape.fire_price_scrape_interval.max(60);
+                let ctx = state.active_context.read().clone();
+                let mode_str = match ctx.market_mode {
+                    MarketMode::SeasonExpert => "专家",
+                    _ => "普通",
+                };
 
                 let start = std::time::Instant::now();
-                match scraper::scrape_fire_price().await {
+                match scraper::qiandao::scrape_by_mode(mode_str).await {
                     Ok(snapshot) => {
-                        let ctx = state.active_context.read().clone();
                         let duration_ms = start.elapsed().as_millis() as i64;
+
+                        // Immediately persist to DB with current context
+                        let _ = crate::db::repo_fire::insert_fire_record(
+                            &state.db,
+                            &ctx.season_id,
+                            ctx.market_mode.as_str(),
+                            &snapshot,
+                        ).await;
 
                         let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
                             &state.db,
@@ -72,13 +84,12 @@ pub async fn run_fire_scrape_task(
                             scraped_at: snapshot.scraped_at,
                         });
 
-                        info!("Fire price scraped: {} RMB/10K", snapshot.rmb_per_10k_fire);
+                        info!("Fire price scraped [{}]: {} RMB/10K", mode_str, snapshot.rmb_per_10k_fire);
 
                         tokio::time::sleep(std::time::Duration::from_secs(interval_secs as u64)).await;
                     }
                     Err(e) => {
                         let duration_ms = start.elapsed().as_millis() as i64;
-                        let ctx = state.active_context.read().clone();
                         let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
                             &state.db,
                             "qiandao",
@@ -91,9 +102,8 @@ pub async fn run_fire_scrape_task(
                             None,
                             Some(&e.to_string()),
                         ).await;
-                        error!("Fire scrape failed: {}", e);
+                        error!("Fire scrape failed [{}]: {}", mode_str, e);
 
-                        let interval_secs = config.scrape.fire_price_scrape_interval.max(60);
                         tokio::time::sleep(std::time::Duration::from_secs(interval_secs as u64)).await;
                     }
                 }

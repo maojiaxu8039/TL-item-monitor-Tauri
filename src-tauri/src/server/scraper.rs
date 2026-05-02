@@ -3,7 +3,7 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{info, warn};
+use tracing::info;
 
 const LUOSI_API: &str = "http://115.231.176.101:8080/get";
 const QIANDAL_URL: &str = "https://www.palworld.com.cn/api/fire-price";

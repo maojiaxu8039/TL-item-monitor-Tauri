@@ -14,7 +14,7 @@ use tracing_subscriber::FmtSubscriber;
 use serde::Serialize;
 
 use tl_monitor::server::config::ServerConfig;
-use tl_monitor::server::scraper::{Scraper, FirePriceSnapshot, Item};
+use tl_monitor::server::scraper::Scraper;
 use tl_monitor::server::db;
 
 const DB_PATH: &str = "/data/tl_monitor.db";
@@ -115,7 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         start_http_server(http_state, http_port, start_time).await;
     });
 
-    let (abort_tx, mut abort_rx) = broadcast::channel::<()>(1);
+    let (abort_tx, abort_rx) = broadcast::channel::<()>(1);
 
     let abort_tx_clone = abort_tx.clone();
     tokio::spawn(async move {
@@ -359,10 +359,16 @@ fn get_query_param(request: &str, param: &str) -> Option<String> {
 
 fn get_next_collection_time() -> Option<i64> {
     let now = Utc::now();
-    let next_hour = (now + chrono::Duration::hours(1))
-        .with_minute(0).unwrap()
-        .with_second(0).unwrap()
-        .with_nanosecond(0).unwrap();
+    let next_hour = match (now + chrono::Duration::hours(1))
+        .with_minute(0)
+        .and_then(|t| t.with_second(0))
+        .and_then(|t| t.with_nanosecond(0)) {
+        Some(t) => t,
+        None => {
+            error!("Failed to calculate next collection time");
+            return None;
+        }
+    };
     Some(next_hour.timestamp())
 }
 
@@ -370,10 +376,16 @@ async fn run_collector(state: Arc<ServerState>, mut abort_rx: broadcast::Receive
     info!("数据采集任务启动中...");
     
     let now = Utc::now();
-    let next_hour = (now + chrono::Duration::hours(1))
-        .with_minute(0).unwrap()
-        .with_second(0).unwrap()
-        .with_nanosecond(0).unwrap();
+    let next_hour = match (now + chrono::Duration::hours(1))
+        .with_minute(0)
+        .and_then(|t| t.with_second(0))
+        .and_then(|t| t.with_nanosecond(0)) {
+        Some(t) => t,
+        None => {
+            error!("Failed to calculate next hour timestamp");
+            return;
+        }
+    };
     let wait_secs = (next_hour - now).num_seconds();
     
     info!("下次采集时间: {} ({} 秒后)", next_hour.format("%Y-%m-%d %H:%M:%S UTC"), wait_secs);
@@ -395,11 +407,16 @@ async fn run_collector(state: Arc<ServerState>, mut abort_rx: broadcast::Receive
 }
 
 async fn collect_all_modes(state: &Arc<ServerState>) {
-    let timestamp = Utc::now()
-        .with_minute(0).unwrap()
-        .with_second(0).unwrap()
-        .with_nanosecond(0).unwrap()
-        .timestamp();
+    let timestamp = match Utc::now()
+        .with_minute(0)
+        .and_then(|t| t.with_second(0))
+        .and_then(|t| t.with_nanosecond(0)) {
+        Some(t) => t.timestamp(),
+        None => {
+            error!("Failed to calculate collection timestamp");
+            return;
+        }
+    };
 
     let mut new_status = CollectionStatus::default();
 

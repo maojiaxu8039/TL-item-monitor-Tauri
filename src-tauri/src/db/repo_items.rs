@@ -165,6 +165,19 @@ pub async fn get_all_section_items(
     Ok(items)
 }
 
+pub async fn get_all_items(pool: &SqlitePool) -> Result<Vec<Item>, crate::core::errors::AppError> {
+    let items: Vec<Item> = sqlx::query_as(
+        r#"
+        SELECT item_id, season_id, market_mode, name, item_type, source, price, last_time, updated_at
+        FROM items
+        ORDER BY name
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(items)
+}
+
 pub async fn clear_all_items(pool: &SqlitePool) -> Result<(), crate::core::errors::AppError> {
     sqlx::query("DELETE FROM items")
         .execute(pool)

@@ -33,8 +33,8 @@ pub async fn reorder_sections(state: State<'_, Arc<AppState>>, ids: Vec<String>)
 }
 
 #[tauri::command]
-pub async fn get_section_items(state: State<'_, Arc<AppState>>, sectionId: String) -> Result<Vec<crate::db::models::SectionItem>, String> {
-    repo_sections::get_section_items(&state.db, &sectionId).await.map_err(|e| e.to_string())
+pub async fn get_section_items(state: State<'_, Arc<AppState>>, section_id: String) -> Result<Vec<crate::db::models::SectionItem>, String> {
+    repo_sections::get_section_items(&state.db, &section_id).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]

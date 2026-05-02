@@ -16,10 +16,16 @@ pub async fn run_hourly_snapshot_task(
 
     // Sleep until the next top of hour
     let now = chrono::Utc::now();
-    let next_hour = (now + chrono::Duration::hours(1))
-        .with_minute(0).unwrap()
-        .with_second(0).unwrap()
-        .with_nanosecond(0).unwrap();
+    let next_hour = match (now + chrono::Duration::hours(1))
+        .with_minute(0)
+        .and_then(|t| t.with_second(0))
+        .and_then(|t| t.with_nanosecond(0)) {
+        Some(t) => t,
+        None => {
+            error!("Failed to calculate next hour timestamp");
+            return;
+        }
+    };
     let initial_sleep = (next_hour - now).to_std().unwrap_or(std::time::Duration::from_secs(0));
 
     info!("Hourly snapshot waiting until: {}", next_hour.format("%Y-%m-%d %H:%M:%S UTC"));
@@ -39,11 +45,16 @@ pub async fn run_hourly_snapshot_task(
                 break;
             }
             _ = tokio::time::sleep(std::time::Duration::from_secs(3600)) => {
-                let snapshot_at = chrono::Utc::now()
-                    .with_minute(0).unwrap()
-                    .with_second(0).unwrap()
-                    .with_nanosecond(0).unwrap()
-                    .timestamp();
+                let snapshot_at = match chrono::Utc::now()
+                    .with_minute(0)
+                    .and_then(|t| t.with_second(0))
+                    .and_then(|t| t.with_nanosecond(0)) {
+                    Some(t) => t.timestamp(),
+                    None => {
+                        error!("Failed to calculate snapshot timestamp");
+                        continue;
+                    }
+                };
 
                 // Read consistent snapshot from state
                 let ctx = state.active_context.read().clone();

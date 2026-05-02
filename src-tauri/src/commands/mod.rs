@@ -8,6 +8,7 @@ pub mod strategies;
 pub mod config;
 pub mod import_export;
 pub mod diagnostics;
+pub mod deals;
 
 pub use fire::*;
 pub use items::*;
@@ -17,3 +18,4 @@ pub use strategies::*;
 pub use config::*;
 pub use import_export::*;
 pub use diagnostics::*;
+pub use deals::*;

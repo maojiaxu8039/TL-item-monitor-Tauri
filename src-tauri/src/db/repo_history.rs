@@ -1,7 +1,7 @@
 use crate::db::models::Item;
 use crate::core::state::FirePriceSnapshot;
 use crate::core::errors::AppError;
-use sqlx::{SqlitePool, Row};
+use sqlx::SqlitePool;
 use chrono::Utc;
 use serde::Serialize;
 
@@ -223,13 +223,13 @@ pub async fn get_items_price_compare(
     let mut result = Vec::new();
     for (item_id, name, current_price) in current_items {
         let history_price = history_map.get(&item_id).copied();
-        let premium_rate = history_price.map(|hp| ((current_price - hp) / hp * 100.0));
+        let premium_rate = history_price.map(|hp| (current_price - hp) / hp * 100.0 );
         let price_diff = history_price.map(|hp| current_price - hp);
         
         // Calculate percentile
         let percentile = if let Some(prices) = history_prices_by_item.get(&item_id) {
             let mut sorted = prices.clone();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let pos = sorted.iter().position(|&p| p >= current_price).unwrap_or(sorted.len());
             Some((pos as f64 / sorted.len() as f64 * 100.0).min(100.0))
         } else {
@@ -281,7 +281,25 @@ pub async fn get_fire_price_compare(
     market_mode: &str,
 ) -> Result<FirePriceCompareResult, AppError> {
     let now = Utc::now().timestamp();
-    let now_chrono = chrono::DateTime::from_timestamp(now, 0).unwrap();
+    let _now_chrono = match chrono::DateTime::from_timestamp(now, 0) {
+        Some(dt) => dt,
+        None => {
+            return Ok(FirePriceCompareResult {
+                current_price: 0.0,
+                current_day: 0,
+                current_hour: 0,
+                history_avg: 0.0,
+                history_high: 0.0,
+                history_low: 0.0,
+                price_level: "无数据".to_string(),
+                price_trend: "未知".to_string(),
+                reference_price: 0.0,
+                suggested_price: 0.0,
+                risk_tip: "时间戳解析失败".to_string(),
+                compare_data: vec![],
+            });
+        }
+    };
     
     let current_record: Option<(f64, i64)> = sqlx::query_as(
         "SELECT rmb_per_10k_fire, scraped_at FROM fire_price_records \
@@ -386,7 +404,7 @@ pub async fn get_fire_price_compare(
         "正常".to_string()
     };
     
-    let (price_trend, trend_change) = if all_prices.len() >= 3 {
+    let (price_trend, _trend_change) = if all_prices.len() >= 3 {
         let recent: Vec<f64> = all_prices.iter().rev().take(3).cloned().collect();
         let trend_diff = recent[0] - recent[2];
         if trend_diff > 0.5 {
@@ -439,27 +457,21 @@ pub async fn insert_item_snapshot(
     season_id: &str,
     market_mode: &str,
     item_id: &str,
-    name: &str,
-    item_type: Option<&str>,
+    _name: &str,
+    _item_type: Option<&str>,
     price: f64,
-    last_time: Option<i64>,
+    _last_time: Option<i64>,
     recorded_at: i64,
 ) -> Result<(), AppError> {
-    let now = Utc::now().timestamp();
-    
-    let result = sqlx::query(
-        r#"INSERT INTO item_history (season_id, market_mode, item_id, name, item_type, price, last_time, recorded_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#
+    sqlx::query(
+        r#"INSERT INTO item_price_snapshots (item_id, season_id, market_mode, fire_price, scraped_at)
+           VALUES (?, ?, ?, ?, ?)"#
     )
+    .bind(item_id)
     .bind(season_id)
     .bind(market_mode)
-    .bind(item_id)
-    .bind(name)
-    .bind(item_type)
     .bind(price)
-    .bind(last_time)
     .bind(recorded_at)
-    .bind(now)
     .execute(pool)
     .await?;
     

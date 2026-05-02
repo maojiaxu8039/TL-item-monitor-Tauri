@@ -9,6 +9,7 @@ import { useQuery, useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { save, open } from "@tauri-apps/plugin-dialog"
+import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs"
 
 interface SearchBarProps {
   sections?: Section[]
@@ -101,7 +102,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
   const handleExportList = async () => {
     try {
       const allSections = await cmd.getSections()
-      let csvContent = "分组名称,物品ID,物品名称,购买火价,数量,溢出价值\n"
+      let csvContent = "\uFEFF分组名称,物品ID,物品名称,购买火价,数量,溢出价值\n"
       
       for (const section of allSections) {
         const sectionItems = await cmd.getSectionItems(section.id)
@@ -117,11 +118,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       })
       
       if (filePath) {
-        const encoder = new TextEncoder()
-        const bytes = encoder.encode(csvContent)
-        const binary = Array.from(bytes).map(b => String.fromCharCode(b)).join('')
-        const base64 = btoa(binary)
-        await cmd.writeFile(filePath, base64)
+        await writeTextFile(filePath, csvContent)
         toast.success(`已导出 ${allSections.length} 个分组`)
       }
     } catch (err) {
@@ -137,14 +134,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       })
       
       if (filePath) {
-        const base64Content = await cmd.readFile(filePath as string)
-        const binary = atob(base64Content)
-        const bytes = new Uint8Array(binary.length)
-        for (let i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i)
-        }
-        const decoder = new TextDecoder('utf-8')
-        const csvContent = decoder.decode(bytes)
+        const csvContent = await readTextFile(filePath as string)
         const lines = csvContent.trim().split('\n')
         
         if (lines.length < 2) {

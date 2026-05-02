@@ -42,11 +42,19 @@ pub async fn insert_fire_record(
     })
 }
 
-pub async fn get_latest_fire(pool: &SqlitePool) -> Result<Option<FirePriceRecord>, crate::core::errors::AppError> {
+pub async fn get_latest_fire(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<Option<FirePriceRecord>, crate::core::errors::AppError> {
     let record: Option<FirePriceRecord> = sqlx::query_as(
         r#"SELECT id, season_id, market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, created_at
-           FROM fire_price_records ORDER BY scraped_at DESC LIMIT 1"#
+           FROM fire_price_records 
+           WHERE season_id = ? AND market_mode = ?
+           ORDER BY scraped_at DESC LIMIT 1"#
     )
+    .bind(season_id)
+    .bind(market_mode)
     .fetch_optional(pool)
     .await?;
     Ok(record)
@@ -54,14 +62,20 @@ pub async fn get_latest_fire(pool: &SqlitePool) -> Result<Option<FirePriceRecord
 
 pub async fn get_fire_history(
     pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
     hours: i64,
 ) -> Result<Vec<serde_json::Value>, crate::core::errors::AppError> {
     let cutoff = Utc::now().timestamp() - (hours * 3600);
 
     let records: Vec<FirePriceRecord> = sqlx::query_as(
         r#"SELECT id, season_id, market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, created_at
-           FROM fire_price_records WHERE scraped_at >= ? ORDER BY scraped_at DESC"#
+           FROM fire_price_records 
+           WHERE season_id = ? AND market_mode = ? AND scraped_at >= ? 
+           ORDER BY scraped_at DESC"#
     )
+    .bind(season_id)
+    .bind(market_mode)
     .bind(cutoff)
     .fetch_all(pool)
     .await?;

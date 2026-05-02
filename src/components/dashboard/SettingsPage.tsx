@@ -173,6 +173,12 @@ export default function SettingsPage() {
         quiet_start: null,
         quiet_end: null,
       },
+      deal: {
+        bargain_enabled: true,
+        bargain_threshold_percent: 30,
+        sell_enabled: true,
+        sell_threshold_percent: 30,
+      },
       data: {
         history_retention: "permanent",
         compress_history: false,

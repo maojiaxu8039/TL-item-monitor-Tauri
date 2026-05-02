@@ -1,6 +1,5 @@
 use crate::commands::types::{DbStats, ItemsStats, SearchResult, OkResponse};
 use crate::core::state::AppState;
-use crate::core::errors::AppError;
 use crate::db::repo_items;
 use crate::db::repo_history;
 use crate::scraper;

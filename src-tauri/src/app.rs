@@ -114,8 +114,10 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
         AppConfig::default()
     });
 
-    // Load latest fire price from DB on startup
-    let fire_price = match repo_fire::get_latest_fire(&pool).await {
+    // Load latest fire price from DB on startup (using default context)
+    let default_season = config.app.season_id.clone();
+    let default_mode = config.scrape.fire_price_mode.clone();
+    let fire_price = match repo_fire::get_latest_fire(&pool, &default_season, &default_mode).await {
         Ok(Some(record)) => {
             let snapshot = FirePriceSnapshot {
                 price_per_wan: if record.fire_per_rmb > 0.0 { 10000.0 / record.fire_per_rmb } else { 0.0 },
@@ -271,7 +273,39 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     }
 
+    // Seed seasons data
+    seed_seasons(pool).await?;
+
     tracing::info!("Database migrations complete");
+    Ok(())
+}
+
+async fn seed_seasons(pool: &SqlitePool) -> Result<(), String> {
+    let now = chrono::Utc::now().timestamp();
+    
+    let seasons = vec![
+        ("ss12", "SS12 当前赛季", "ss12", 1),
+        ("ss11", "SS11 历史赛季", "ss11", 0),
+        ("ss10", "SS10 历史赛季", "ss10", 0),
+    ];
+    
+    for (id, name, code, is_current) in seasons {
+        sqlx::query(
+            r#"INSERT OR IGNORE INTO seasons (id, name, code, is_current, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)"#
+        )
+        .bind(id)
+        .bind(name)
+        .bind(code)
+        .bind(is_current)
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to seed season {}: {}", id, e))?;
+    }
+    
+    tracing::info!("Seasons seed data ensured");
     Ok(())
 }
 

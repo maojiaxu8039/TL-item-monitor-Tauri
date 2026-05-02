@@ -3,7 +3,6 @@ use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
 use crate::core::state::{AppState, NotificationSettings};
-use crate::db::models::SectionItem;
 use crate::db::repo_items;
 use crate::services::send_notification;
 

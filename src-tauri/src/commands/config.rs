@@ -19,7 +19,12 @@ pub async fn save_config(
     crate::core::config::save_config(&config)?;
     {
         let mut cfg = state.config.write();
-        *cfg = config;
+        *cfg = config.clone();
+    }
+    // Sync active context when season or mode changes
+    {
+        let mut ctx = state.active_context.write();
+        ctx.season_id = config.app.season_id.clone();
     }
     Ok(OkResponse::success("Config saved"))
 }

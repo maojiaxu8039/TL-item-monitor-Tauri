@@ -47,6 +47,7 @@ pub async fn get_dashboard_summary(state: State<'_, Arc<AppState>>) -> Result<Da
 #[tauri::command]
 #[allow(non_snake_case)]
 pub async fn set_active_market_context(
+    app: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     #[allow(non_snake_case)] seasonId: String,
     #[allow(non_snake_case)] marketMode: String,
@@ -62,16 +63,63 @@ pub async fn set_active_market_context(
     };
     {
         let mut ctx = state.active_context.write();
-        ctx.season_id = seasonId;
+        ctx.season_id = seasonId.clone();
         ctx.market_mode = mode;
     }
+
+    // Sync config
+    if let Ok(mut cfg) = crate::core::config::load_config() {
+        cfg.app.season_id = seasonId.clone();
+        cfg.scrape.fire_price_mode = mode.as_str().to_string();
+        let _ = crate::core::config::save_config(&cfg);
+    }
+
+    // Refresh fire price from DB for new context
+    match repo_fire::get_latest_fire(&state.db, &seasonId, mode.as_str()).await {
+        Ok(Some(record)) => {
+            let snapshot = FirePriceSnapshot {
+                price_per_wan: record.rmb_per_10k_fire,
+                rmb_per_10k_fire: record.rmb_per_10k_fire,
+                fire_per_rmb: record.fire_per_rmb,
+                increase_ratio: record.increase_ratio,
+                trading_volume: record.trading_volume,
+                source: record.source,
+                source_time: record.source_time,
+                scraped_at: record.scraped_at,
+            };
+            {
+                let mut fire = state.fire_price.write();
+                *fire = Some(snapshot);
+            }
+        }
+        _ => {
+            // Clear fire price if no data for new context
+            let mut fire = state.fire_price.write();
+            *fire = None;
+        }
+    }
+
+    // Emit context changed event
+    crate::core::events::emit_market_context_changed(
+        &app,
+        crate::core::events::MarketContextPayload {
+            season_id: seasonId,
+            market_mode: mode.as_str().to_string(),
+        },
+    );
+
     Ok(OkResponse::success("Market context updated"))
 }
 
 #[tauri::command]
 pub async fn refresh_fire_price(state: State<'_, Arc<AppState>>) -> Result<FirePriceUI, String> {
-    let snapshot = scraper::scrape_fire_price().await?;
     let ctx = state.active_context.read().clone();
+    let mode_str = match ctx.market_mode {
+        MarketMode::SeasonExpert => "专家",
+        _ => "普通",
+    };
+
+    let snapshot = scraper::qiandao::scrape_by_mode(mode_str).await?;
 
     let _ = repo_fire::insert_fire_record(
         &state.db,
@@ -117,12 +165,14 @@ pub async fn get_fire_history(
     state: State<'_, Arc<AppState>>,
     hours: i64,
 ) -> Result<Vec<serde_json::Value>, String> {
-    Ok(repo_fire::get_fire_history(&state.db, hours).await?)
+    let ctx = state.active_context.read().clone();
+    Ok(repo_fire::get_fire_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), hours).await?)
 }
 
 #[tauri::command]
 pub async fn export_fire_history_csv(state: State<'_, Arc<AppState>>, hours: i64) -> Result<String, String> {
-    let records = repo_fire::get_fire_history(&state.db, hours).await?;
+    let ctx = state.active_context.read().clone();
+    let records = repo_fire::get_fire_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), hours).await?;
     let mut wtr = csv::Writer::from_writer(vec![]);
     wtr.write_record(["rmb_per_10k_fire", "fire_per_rmb", "increase_ratio", "scraped_at"])
         .map_err(|e| e.to_string())?;
@@ -224,7 +274,7 @@ pub async fn get_fire_price_insight(
     state: State<'_, Arc<AppState>>,
 ) -> Result<serde_json::Value, String> {
     let ctx = state.active_context.read().clone();
-    let history = repo_fire::get_fire_history(&state.db, 168).await?;
+    let history = repo_fire::get_fire_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), 168).await?;
     
     if history.is_empty() {
         return Ok(serde_json::json!({

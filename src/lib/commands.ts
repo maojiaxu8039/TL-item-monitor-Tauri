@@ -133,6 +133,41 @@ export interface ComparePoint {
   current_price: number | null;
 }
 
+export interface ItemPriceCompare {
+  item_id: string;
+  name: string;
+  current_price: number;
+  history_price: number | null;
+  premium_rate: number | null;
+  price_diff: number | null;
+  percentile: number | null;
+}
+
+export interface FirePriceInsight {
+  current_fire_price: number;
+  avg_fire_price: number;
+  min_fire_price: number;
+  max_fire_price: number;
+  fire_trend: string;
+  fire_trend_percent: number;
+  best_buy_time: string;
+  best_sell_time: string;
+}
+
+export interface ItemPriceInsight {
+  item_id: string;
+  item_name: string;
+  current_price: number;
+  avg_price: number;
+  min_price: number;
+  max_price: number;
+  price_trend: string;
+  trend_percent: number;
+  recommendation: string;
+  confidence: number;
+  reason: string;
+}
+
 export interface DbStats {
   item_count: number;
   db_record_count: number;
@@ -175,6 +210,13 @@ export interface NotificationSettings {
   quiet_end: string | null;
 }
 
+export interface DealSettings {
+  bargain_enabled: boolean;
+  bargain_threshold_percent: number;
+  sell_enabled: boolean;
+  sell_threshold_percent: number;
+}
+
 export interface NotificationPermissionStatus {
   granted: boolean;
   denied: boolean;
@@ -198,6 +240,7 @@ export interface AppConfig {
   scrape: ScrapeSettings;
   desktop: DesktopSettings;
   notification: NotificationSettings;
+  deal: DealSettings;
   data: DataSettings;
   app: AppSettings;
 }
@@ -331,9 +374,6 @@ export const cmd = {
   importWatchlistCsv: (content: string) =>
     invoke<{ imported: number; errors: string[] }>("import_watchlist_csv", { content }),
   exportWatchlistCsv: () => invoke<string>("export_watchlist_csv"),
-  writeFile: (path: string, base64Content: string) =>
-    invoke<{ success: boolean; message?: string }>("write_file", { path, base64Content }),
-  readFile: (path: string) => invoke<string>("read_file", { path }),
 
   getConfig: () => invoke<AppConfig>("get_config"),
   saveConfig: (config: AppConfig) =>
@@ -453,14 +493,30 @@ export const cmd = {
   getItemHistoryBySeason: (itemId: string, seasonId: string, limit?: number) =>
     invoke<ItemHistoryRecord[]>("get_item_history_by_season", { item_id: itemId, season_id: seasonId, limit }),
   getItemsPriceCompare: (historySeason: string) =>
-    invoke<any[]>("get_items_price_compare", { history_season: historySeason }),
+    invoke<ItemPriceCompare[]>("get_items_price_compare", { history_season: historySeason }),
   getFirePriceInsight: () =>
-    invoke<any>("get_fire_price_insight"),
+    invoke<FirePriceInsight>("get_fire_price_insight"),
   getItemPriceInsights: () =>
-    invoke<any[]>("get_item_price_insights"),
+    invoke<ItemPriceInsight[]>("get_item_price_insights"),
   getSeasonSummary: () => invoke<SeasonSummary>("get_season_summary"),
   getSeasonTrends: (hours?: number) =>
     invoke<SeasonTrendHour[]>("get_season_trends", { hours }),
   selectLocalItemsFile: () =>
     invoke<string | null>("select_local_items_file"),
+
+  getDealAlerts: () =>
+    invoke<{ bargains: DealAlert[]; sells: DealAlert[] }>("get_deal_alerts"),
 };
+
+export interface DealAlert {
+  item_id: string;
+  item_name: string;
+  item_type: string | null;
+  current_price: number;
+  previous_price: number;
+  change_percent: number;
+  change_amount: number;
+  direction: string;
+  detected_at: number;
+  confidence: number;
+}

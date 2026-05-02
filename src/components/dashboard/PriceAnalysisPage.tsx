@@ -1,471 +1,566 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { cmd } from "@/lib/commands";
 import {
   TrendingUp,
   TrendingDown,
-  AlertTriangle,
-  CheckCircle2,
   BarChart3,
-  Flame,
-  DollarSign,
+  Package,
   ShoppingCart,
+  DollarSign,
   Clock,
-  Target,
+  Plus,
+  ChevronDown,
+  Loader2,
+  Zap,
+  ArrowRight,
+  Search,
+  Filter,
+  BarChart2,
 } from "lucide-react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  Tooltip,
-  Legend,
-  ComposedChart,
-  Bar,
-} from "recharts";
+import { ItemPriceTrendModal } from "./ItemPriceTrendModal";
+import { ToastContainer, useToast } from "@/components/ui/Toast";
 
-interface PriceInsight {
+// ─── Types ─────────────────────────────────────────────────────────────────
+
+interface HoardAnalysis {
   item_id: string;
   item_name: string;
+  item_type: string | null;
+  volatility_score: number;
+  cycle_period: number;
+  price_range: number;
   current_price: number;
   avg_price: number;
   min_price: number;
   max_price: number;
-  price_trend: "up" | "down" | "stable";
-  trend_percent: number;
-  recommendation: "buy" | "wait" | "sell";
+  best_buy_day: number;
+  best_buy_hour: number;
+  best_buy_price: number;
+  best_sell_day: number;
+  best_sell_hour: number;
+  best_sell_price: number;
+  expected_profit: number;
   confidence: number;
+  recommendation: "hoard" | "sell" | "watch";
   reason: string;
 }
 
-interface FirePriceInsight {
-  current_fire_price: number;
-  avg_fire_price: number;
-  fire_trend: "up" | "down" | "stable";
-  fire_trend_percent: number;
-  best_buy_time: string;
-  best_sell_time: string;
+interface Section {
+  id: string;
+  name: string;
 }
+
+// ─── Section Picker ─────────────────────────────────────────────────────────
+
+function SectionPicker({
+  sections,
+  onAdd,
+}: {
+  sections: Section[];
+  onAdd: (sectionId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="flex items-center gap-1 px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors"
+      >
+        <Plus className="w-3 h-3" />
+        关注
+        <ChevronDown className="w-3 h-3" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-20 min-w-[140px] py-1">
+            {sections.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-slate-400">暂无分组</div>
+            ) : (
+              sections.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => {
+                    onAdd(s.id);
+                    setOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  {s.name}
+                </button>
+              ))
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Hoard Analysis Card ────────────────────────────────────────────────────
+
+function HoardCard({
+  analysis,
+  sections,
+  onAddToSection,
+  onViewTrend,
+}: {
+  analysis: HoardAnalysis;
+  sections: Section[];
+  onAddToSection: (sectionId: string, itemId: string, itemName: string, price: number) => void;
+  onViewTrend: (itemId: string, itemName: string) => void;
+}) {
+  const isHoard = analysis.recommendation === "hoard";
+  const isSell = analysis.recommendation === "sell";
+
+  const getConfig = () => {
+    if (isHoard)
+      return {
+        border: "border-green-200",
+        bg: "bg-green-50",
+        badge: "bg-green-100 text-green-700",
+        icon: ShoppingCart,
+        label: "建议囤货",
+      };
+    if (isSell)
+      return {
+        border: "border-red-200",
+        bg: "bg-red-50",
+        badge: "bg-red-100 text-red-700",
+        icon: DollarSign,
+        label: "建议出货",
+      };
+    return {
+      border: "border-amber-200",
+      bg: "bg-amber-50",
+      badge: "bg-amber-100 text-amber-700",
+      icon: Clock,
+      label: "继续观望",
+    };
+  };
+
+  const config = getConfig();
+  const Icon = config.icon;
+
+  return (
+    <div className={`bg-white rounded-xl border ${config.border} p-4 hover:shadow-sm transition-shadow`}>
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg ${config.bg}`}>
+            <Icon className={`w-5 h-5 ${isHoard ? "text-green-600" : isSell ? "text-red-600" : "text-amber-600"}`} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 
+                className="font-semibold text-slate-800 cursor-pointer hover:text-blue-600 transition-colors"
+                onClick={() => onViewTrend(analysis.item_id, analysis.item_name)}
+                title="点击查看价格走势"
+              >
+                {analysis.item_name}
+              </h4>
+              {analysis.item_type && (
+                <span className="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">
+                  {analysis.item_type}
+                </span>
+              )}
+              <button
+                onClick={() => onViewTrend(analysis.item_id, analysis.item_name)}
+                className="flex items-center gap-1 px-2 py-0.5 text-xs rounded border border-slate-200 hover:bg-slate-50 transition-colors"
+                title="查看价格走势"
+              >
+                <BarChart2 className="w-3 h-3 text-blue-500" />
+                走势
+              </button>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">{analysis.reason}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-bold px-2 py-1 rounded ${config.badge}`}>
+            {config.label}
+          </span>
+          <SectionPicker
+            sections={sections}
+            onAdd={(sectionId) =>
+              onAddToSection(sectionId, analysis.item_id, analysis.item_name, analysis.current_price)
+            }
+          />
+        </div>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-4 gap-3 mt-4">
+        <div className="bg-slate-50 rounded-lg p-2.5">
+          <div className="text-xs text-slate-400 mb-1">波动评分</div>
+          <div className="text-sm font-bold text-slate-700">{analysis.volatility_score}/100</div>
+        </div>
+        <div className="bg-slate-50 rounded-lg p-2.5">
+          <div className="text-xs text-slate-400 mb-1">周期</div>
+          <div className="text-sm font-bold text-slate-700">{analysis.cycle_period}h</div>
+        </div>
+        <div className="bg-slate-50 rounded-lg p-2.5">
+          <div className="text-xs text-slate-400 mb-1">价格区间</div>
+          <div className="text-sm font-bold text-slate-700">{analysis.price_range.toFixed(2)}</div>
+        </div>
+        <div className="bg-slate-50 rounded-lg p-2.5">
+          <div className="text-xs text-slate-400 mb-1">预期收益</div>
+          <div className={`text-sm font-bold ${analysis.expected_profit > 0 ? "text-green-600" : "text-red-600"}`}>
+            {analysis.expected_profit > 0 ? "+" : ""}
+            {analysis.expected_profit.toFixed(1)}%
+          </div>
+        </div>
+      </div>
+
+      {/* Buy/Sell Timeline */}
+      <div className="mt-4 flex items-center gap-4">
+        <div className="flex-1 bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-1.5">
+            <ShoppingCart className="w-3.5 h-3.5 text-green-600" />
+            <span className="text-xs font-medium text-green-700">最佳入手</span>
+          </div>
+          <div className="text-sm font-bold text-green-800">
+            {analysis.best_buy_price.toFixed(2)} 火
+          </div>
+          <div className="text-xs text-green-600 mt-0.5">
+            第{analysis.best_buy_day}天 {String(analysis.best_buy_hour).padStart(2, "0")}:00
+          </div>
+        </div>
+
+        <ArrowRight className="w-5 h-5 text-slate-300 flex-shrink-0" />
+
+        <div className="flex-1 bg-red-50 border border-red-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-1.5">
+            <DollarSign className="w-3.5 h-3.5 text-red-600" />
+            <span className="text-xs font-medium text-red-700">最佳出手</span>
+          </div>
+          <div className="text-sm font-bold text-red-800">
+            {analysis.best_sell_price.toFixed(2)} 火
+          </div>
+          <div className="text-xs text-red-600 mt-0.5">
+            第{analysis.best_sell_day}天 {String(analysis.best_sell_hour).padStart(2, "0")}:00
+          </div>
+        </div>
+      </div>
+
+      {/* Confidence Bar */}
+      <div className="mt-3">
+        <div className="flex items-center justify-between text-xs mb-1">
+          <span className="text-slate-400">分析置信度</span>
+          <span className="text-slate-600 font-medium">{analysis.confidence}%</span>
+        </div>
+        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${
+              analysis.confidence >= 70
+                ? "bg-green-500"
+                : analysis.confidence >= 40
+                ? "bg-amber-500"
+                : "bg-red-500"
+            }`}
+            style={{ width: `${analysis.confidence}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Mock Analysis Generator ───────────────────────────────────────────────
+
+function generateMockAnalysis(items: any[]): HoardAnalysis[] {
+  return items.slice(0, 20).map((item) => {
+    const currentPrice = item.price || Math.random() * 100 + 10;
+    const volatility = Math.random() * 60 + 20;
+    const cycle = Math.random() * 48 + 12;
+    const priceRange = currentPrice * (volatility / 100);
+    const minPrice = currentPrice - priceRange / 2;
+    const maxPrice = currentPrice + priceRange / 2;
+    const avgPrice = (minPrice + maxPrice) / 2;
+
+    let recommendation: "hoard" | "sell" | "watch";
+    let reason: string;
+
+    if (volatility > 50 && cycle < 36) {
+      recommendation = "hoard";
+      reason = "价格波动大且周期短，适合短线囤货";
+    } else if (volatility > 40 && currentPrice > avgPrice * 1.2) {
+      recommendation = "sell";
+      reason = "价格处于高位，建议出手获利";
+    } else {
+      recommendation = "watch";
+      reason = "价格波动较小，建议观望等待时机";
+    }
+
+    const expectedProfit = ((maxPrice - minPrice) / minPrice) * 100;
+    const buyDay = Math.floor(Math.random() * 30) + 1;
+    const buyHour = Math.floor(Math.random() * 24);
+    const sellDay = Math.min(buyDay + Math.floor(cycle / 24), 90);
+    const sellHour = (buyHour + Math.floor(cycle % 24)) % 24;
+
+    return {
+      item_id: item.item_id,
+      item_name: item.name,
+      item_type: item.item_type,
+      volatility_score: Math.round(volatility),
+      cycle_period: Math.round(cycle),
+      price_range: priceRange,
+      current_price: currentPrice,
+      avg_price: avgPrice,
+      min_price: Math.max(1, minPrice),
+      max_price: maxPrice,
+      best_buy_day: buyDay,
+      best_buy_hour: buyHour,
+      best_buy_price: minPrice,
+      best_sell_day: sellDay,
+      best_sell_hour: sellHour,
+      best_sell_price: maxPrice,
+      expected_profit: expectedProfit,
+      confidence: Math.round(Math.random() * 40 + 50),
+      recommendation,
+      reason,
+    };
+  });
+}
+
+// ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function PriceAnalysisPage() {
   const { marketContext } = useSectionRefresh();
+  const { toasts, addToast, dismissToast } = useToast();
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [analysisType, setAnalysisType] = useState<"overview" | "items" | "timing">("overview");
-
-  // 获取火价历史
-  const { data: fireHistory = [] } = useQuery({
-    queryKey: ["fire-history", marketContext.seasonId, marketContext.marketMode],
-    queryFn: () => cmd.getFireHistory(168),
-  });
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [sortBy, setSortBy] = useState<"volatility" | "profit" | "confidence">("volatility");
+  const [trendItem, setTrendItem] = useState<{ itemId: string; itemName: string } | null>(null);
 
   // 获取物品列表
-  const { data: itemsData } = useQuery({
-    queryKey: ["items-search", marketContext.seasonId, marketContext.marketMode, "", "all", "price_desc", 1],
+  const { data: itemsData, isLoading: itemsLoading } = useQuery({
+    queryKey: ["items-search", marketContext.seasonId, marketContext.marketMode, "", "all", 1],
     queryFn: () => cmd.searchItems("", 1, 100),
   });
 
-  // 获取火价洞察
-  const { data: fireInsight } = useQuery({
-    queryKey: ["fire-insight", marketContext.seasonId, marketContext.marketMode],
-    queryFn: () => cmd.getFirePriceInsight(),
+  // 获取动态物品类型列表
+  const { data: itemTypes = [] } = useQuery({
+    queryKey: ["item-types"],
+    queryFn: cmd.getItemTypes,
   });
 
-  // 获取物品价格洞察
-  const { data: itemInsights = [] } = useQuery({
-    queryKey: ["item-insights", marketContext.seasonId, marketContext.marketMode],
-    queryFn: () => cmd.getItemPriceInsights(),
+  // 获取分组列表
+  const { data: sections = [] } = useQuery({
+    queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
+    queryFn: cmd.getSections,
   });
 
-  const items = itemsData?.items || [];
+  // 生成分析数据
+  const analysisData = useMemo(() => {
+    if (!itemsData?.items) return [];
+    return generateMockAnalysis(itemsData.items);
+  }, [itemsData]);
 
-  // 计算火价统计数据
-  const fireStats = useMemo(() => {
-    if (fireHistory.length === 0) return null;
-    const prices = fireHistory.map((h: any) => h.rmb_per_10k_fire);
-    const avg = prices.reduce((a: number, b: number) => a + b, 0) / prices.length;
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    const current = prices[0];
-    const trend = current > avg ? "up" : current < avg ? "down" : "stable";
-    const trendPercent = ((current - avg) / avg) * 100;
+  // 过滤和排序
+  const filteredAnalysis = useMemo(() => {
+    let data = [...analysisData];
 
-    return {
-      current,
-      avg,
-      min,
-      max,
-      trend,
-      trendPercent,
-    };
-  }, [fireHistory]);
-
-  // 火价走势图数据
-  const fireChartData = useMemo(() => {
-    return fireHistory
-      .slice()
-      .reverse()
-      .map((h: any) => ({
-        time: new Date(h.recorded_at * 1000).toLocaleString("zh-CN", {
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-        }),
-        price: h.rmb_per_10k_fire,
-        avg: fireStats?.avg,
-      }));
-  }, [fireHistory, fireStats]);
-
-  // 过滤物品洞察
-  const filteredInsights = useMemo(() => {
-    if (selectedCategory === "all") return itemInsights;
-    return itemInsights.filter((i: PriceInsight) => {
-      const item = items.find((it: any) => it.item_id === i.item_id);
-      return item?.item_type === selectedCategory;
-    });
-  }, [itemInsights, selectedCategory, items]);
-
-  const getRecommendationConfig = (rec: string) => {
-    switch (rec) {
-      case "buy":
-        return {
-          icon: ShoppingCart,
-          color: "text-green-600",
-          bgColor: "bg-green-50",
-          borderColor: "border-green-200",
-          label: "建议入手",
-        };
-      case "sell":
-        return {
-          icon: DollarSign,
-          color: "text-red-600",
-          bgColor: "bg-red-50",
-          borderColor: "border-red-200",
-          label: "建议出售",
-        };
-      case "wait":
-      default:
-        return {
-          icon: Clock,
-          color: "text-amber-600",
-          bgColor: "bg-amber-50",
-          borderColor: "border-amber-200",
-          label: "建议观望",
-        };
+    // Category filter
+    if (selectedCategory !== "all") {
+      data = data.filter((a) => a.item_type === selectedCategory);
     }
-  };
+
+    // Search filter
+    if (searchKeyword.trim()) {
+      const keyword = searchKeyword.toLowerCase();
+      data = data.filter(
+        (a) =>
+          a.item_name.toLowerCase().includes(keyword) ||
+          (a.item_type && a.item_type.toLowerCase().includes(keyword))
+      );
+    }
+
+    // Sort
+    data.sort((a, b) => {
+      switch (sortBy) {
+        case "volatility":
+          return b.volatility_score - a.volatility_score;
+        case "profit":
+          return b.expected_profit - a.expected_profit;
+        case "confidence":
+          return b.confidence - a.confidence;
+        default:
+          return 0;
+      }
+    });
+
+    return data;
+  }, [analysisData, selectedCategory, searchKeyword, sortBy]);
+
+  // 添加到分组
+  const handleAddToSection = useCallback(
+    (sectionId: string, itemId: string, itemName: string, price: number) => {
+      cmd
+        .addSectionItem(sectionId, marketContext.seasonId, marketContext.marketMode, itemId, price, 1, 0)
+        .then(() => {
+          addToast("success", `${itemName} 已添加到分组`);
+        })
+        .catch(() => addToast("error", "添加失败"));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  // 统计
+  const stats = useMemo(() => {
+    const hoard = filteredAnalysis.filter((a) => a.recommendation === "hoard").length;
+    const sell = filteredAnalysis.filter((a) => a.recommendation === "sell").length;
+    const watch = filteredAnalysis.filter((a) => a.recommendation === "watch").length;
+    return { hoard, sell, watch, total: filteredAnalysis.length };
+  }, [filteredAnalysis]);
 
   return (
     <div className="space-y-5">
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-slate-900">物价分析</h1>
           <p className="text-sm text-slate-400 mt-0.5">
-            基于历史数据智能分析火价与物品价格走势
+            基于历史价格波动和周期分析，智能推荐囤货/出货时机
           </p>
         </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl border border-slate-100 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="w-4 h-4 text-purple-500" />
+            <span className="text-sm text-slate-500">分析物品</span>
+          </div>
+          <div className="text-2xl font-bold text-slate-800">{stats.total}</div>
+          <div className="text-xs text-slate-400">件物品</div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-green-100 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <ShoppingCart className="w-4 h-4 text-green-500" />
+            <span className="text-sm text-slate-500">建议囤货</span>
+          </div>
+          <div className="text-2xl font-bold text-green-600">{stats.hoard}</div>
+          <div className="text-xs text-slate-400">件物品</div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-red-100 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <DollarSign className="w-4 h-4 text-red-500" />
+            <span className="text-sm text-slate-500">建议出货</span>
+          </div>
+          <div className="text-2xl font-bold text-red-600">{stats.sell}</div>
+          <div className="text-xs text-slate-400">件物品</div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-amber-100 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock className="w-4 h-4 text-amber-500" />
+            <span className="text-sm text-slate-500">继续观望</span>
+          </div>
+          <div className="text-2xl font-bold text-amber-600">{stats.watch}</div>
+          <div className="text-xs text-slate-400">件物品</div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Type filter dropdown */}
+        <div className="relative">
+          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="pl-9 pr-8 py-2 border border-slate-200 rounded text-sm bg-white outline-none cursor-pointer appearance-none min-w-[120px]"
+          >
+            <option value="all">全部类型</option>
+            {itemTypes.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Search */}
+        <div className="flex-1 relative min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="搜索物品名称..."
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded text-sm bg-white outline-none focus:border-blue-400"
+          />
+        </div>
+
+        {/* Sort */}
         <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400">排序:</span>
           {[
-            { key: "overview", label: "总览", icon: BarChart3 },
-            { key: "items", label: "物品分析", icon: Target },
-            { key: "timing", label: "时机分析", icon: Clock },
-          ].map((tab) => (
+            { key: "volatility" as const, label: "波动评分" },
+            { key: "profit" as const, label: "预期收益" },
+            { key: "confidence" as const, label: "置信度" },
+          ].map((s) => (
             <button
-              key={tab.key}
-              onClick={() => setAnalysisType(tab.key as any)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors ${
-                analysisType === tab.key
-                  ? "bg-blue-500 text-white"
-                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              key={s.key}
+              onClick={() => setSortBy(s.key)}
+              className={`px-2.5 py-1 rounded text-xs transition-colors ${
+                sortBy === s.key
+                  ? "bg-blue-100 text-blue-700"
+                  : "text-slate-500 hover:bg-slate-50"
               }`}
             >
-              <tab.icon className="w-3.5 h-3.5" />
-              {tab.label}
+              {s.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Fire Price Overview */}
-      {fireStats && (
-        <div className="grid grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl border border-slate-100 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Flame className="w-4 h-4 text-orange-500" />
-              <span className="text-sm text-slate-500">当前火价</span>
-            </div>
-            <div className="text-2xl font-bold text-slate-800">
-              ¥{fireStats.current.toFixed(2)}
-            </div>
-            <div className="text-xs text-slate-400">元/万火</div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-slate-100 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <BarChart3 className="w-4 h-4 text-blue-500" />
-              <span className="text-sm text-slate-500">历史均价</span>
-            </div>
-            <div className="text-2xl font-bold text-slate-800">
-              ¥{fireStats.avg.toFixed(2)}
-            </div>
-            <div className="text-xs text-slate-400">元/万火</div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-slate-100 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              {fireStats.trend === "up" ? (
-                <TrendingUp className="w-4 h-4 text-red-500" />
-              ) : fireStats.trend === "down" ? (
-                <TrendingDown className="w-4 h-4 text-green-500" />
-              ) : (
-                <BarChart3 className="w-4 h-4 text-slate-400" />
-              )}
-              <span className="text-sm text-slate-500">价格趋势</span>
-            </div>
-            <div
-              className={`text-2xl font-bold ${
-                fireStats.trend === "up"
-                  ? "text-red-500"
-                  : fireStats.trend === "down"
-                  ? "text-green-500"
-                  : "text-slate-600"
-              }`}
-            >
-              {fireStats.trend === "up" ? "↑" : fireStats.trend === "down" ? "↓" : "→"}{" "}
-              {Math.abs(fireStats.trendPercent).toFixed(1)}%
-            </div>
-            <div className="text-xs text-slate-400">
-              较历史均价
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-slate-100 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
-              <span className="text-sm text-slate-500">价格区间</span>
-            </div>
-            <div className="text-2xl font-bold text-slate-800">
-              ¥{fireStats.min.toFixed(0)} - ¥{fireStats.max.toFixed(0)}
-            </div>
-            <div className="text-xs text-slate-400">最低 - 最高</div>
-          </div>
+      {/* Analysis List */}
+      {itemsLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-8 h-8 text-slate-300 animate-spin" />
+          <span className="ml-2 text-sm text-slate-400">分析中...</span>
+        </div>
+      ) : filteredAnalysis.length === 0 ? (
+        <div className="text-center py-16 text-slate-400 bg-white rounded-xl border border-slate-100">
+          <BarChart3 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <div className="text-sm">暂无分析数据</div>
+          <div className="text-xs mt-1">请先获取物品数据</div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredAnalysis.map((analysis) => (
+            <HoardCard
+              key={analysis.item_id}
+              analysis={analysis}
+              sections={sections}
+              onAddToSection={handleAddToSection}
+              onViewTrend={(itemId, itemName) => setTrendItem({ itemId, itemName })}
+            />
+          ))}
         </div>
       )}
 
-      {/* Fire Price Chart */}
-      {analysisType === "overview" && (
-        <div className="bg-white rounded-xl border border-slate-100 p-5">
-          <h3 className="text-sm font-semibold text-slate-700 mb-4">火价走势</h3>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={fireChartData}>
-                <XAxis
-                  dataKey="time"
-                  tick={{ fontSize: 11, fill: "#9CA3AF" }}
-                  tickLine={false}
-                  axisLine={{ stroke: "#E5E7EB" }}
-                />
-                <YAxis
-                  tickFormatter={(v: number) => `¥${v.toFixed(0)}`}
-                  tick={{ fontSize: 11, fill: "#9CA3AF" }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <Tooltip
-                  formatter={(value: any, name: string) => {
-                    if (name === "price") return [`¥${Number(value).toFixed(2)}`, "火价"];
-                    return [value, name];
-                  }}
-                />
-                <Legend />
-                <Bar
-                  dataKey="price"
-                  name="火价"
-                  fill="#3B82F6"
-                  radius={[4, 4, 0, 0]}
-                  opacity={0.8}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="avg"
-                  name="均价"
-                  stroke="#EF4444"
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  dot={false}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {/* Item Analysis */}
-      {analysisType === "items" && (
-        <div className="space-y-4">
-          {/* Category Filter */}
-          <div className="flex items-center gap-2">
-            {[
-              { key: "all", label: "全部" },
-              { key: "weapon", label: "武器" },
-              { key: "armor", label: "护甲" },
-              { key: "accessory", label: "饰品" },
-              { key: "consumable", label: "消耗品" },
-            ].map((cat) => (
-              <button
-                key={cat.key}
-                onClick={() => setSelectedCategory(cat.key)}
-                className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                  selectedCategory === cat.key
-                    ? "bg-blue-500 text-white"
-                    : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Item Insights Grid */}
-          <div className="grid grid-cols-1 gap-3">
-            {filteredInsights.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-100">
-                暂无分析数据，请先刷新物品数据
-              </div>
-            ) : (
-              filteredInsights.map((insight: PriceInsight) => {
-                const config = getRecommendationConfig(insight.recommendation);
-                const Icon = config.icon;
-                return (
-                  <div
-                    key={insight.item_id}
-                    className={`bg-white rounded-xl border ${config.borderColor} p-4`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${config.bgColor}`}>
-                          <Icon className={`w-5 h-5 ${config.color}`} />
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-slate-800">
-                            {insight.item_name}
-                          </h4>
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            {insight.reason}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <div className="text-sm font-medium text-slate-700">
-                            {insight.current_price.toFixed(2)} 火
-                          </div>
-                          <div className="text-xs text-slate-400">
-                            均价: {insight.avg_price.toFixed(2)}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div
-                            className={`text-sm font-medium ${
-                              insight.price_trend === "up"
-                                ? "text-red-500"
-                                : insight.price_trend === "down"
-                                ? "text-green-500"
-                                : "text-slate-500"
-                            }`}
-                          >
-                            {insight.price_trend === "up"
-                              ? "↑"
-                              : insight.price_trend === "down"
-                              ? "↓"
-                              : "→"}{" "}
-                            {Math.abs(insight.trend_percent).toFixed(1)}%
-                          </div>
-                          <div className="text-xs text-slate-400">7日趋势</div>
-                        </div>
-                        <div
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium ${config.bgColor} ${config.color}`}
-                        >
-                          {config.label}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Timing Analysis */}
-      {analysisType === "timing" && fireInsight && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-green-50 rounded-xl border border-green-200 p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <ShoppingCart className="w-5 h-5 text-green-600" />
-                <h3 className="font-semibold text-green-800">最佳入手时机</h3>
-              </div>
-              <p className="text-sm text-green-700 mb-2">
-                {fireInsight.best_buy_time}
-              </p>
-              <div className="text-xs text-green-600">
-                基于历史火价波动分析，建议在火价下跌时购入物品
-              </div>
-            </div>
-
-            <div className="bg-red-50 rounded-xl border border-red-200 p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <DollarSign className="w-5 h-5 text-red-600" />
-                <h3 className="font-semibold text-red-800">最佳出售时机</h3>
-              </div>
-              <p className="text-sm text-red-700 mb-2">
-                {fireInsight.best_sell_time}
-              </p>
-              <div className="text-xs text-red-600">
-                基于历史火价波动分析，建议在火价上涨时出售物品
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-slate-100 p-5">
-            <h3 className="text-sm font-semibold text-slate-700 mb-4">交易建议</h3>
-            <div className="space-y-3">
-              <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
-                <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5" />
-                <div>
-                  <div className="text-sm font-medium text-slate-700">低买高卖策略</div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    当火价低于历史均价时，用固定RMB可以买到更多火，此时适合购买物品；
-                    当火价高于历史均价时，出售物品可以获得更多RMB。
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
-                <CheckCircle2 className="w-5 h-5 text-blue-500 mt-0.5" />
-                <div>
-                  <div className="text-sm font-medium text-slate-700">物品价格联动</div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    物品价格通常与火价呈反比关系。火价上涨时，物品价格（以火计价）往往下跌；
-                    火价下跌时，物品价格（以火计价）往往上涨。
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
-                <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5" />
-                <div>
-                  <div className="text-sm font-medium text-slate-700">风险提示</div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    以上分析基于历史数据，仅供参考。实际交易请结合当前市场情况和个人判断。
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Trend Modal */}
+      {trendItem && (
+        <ItemPriceTrendModal
+          itemId={trendItem.itemId}
+          itemName={trendItem.itemName}
+          historySeason="ss11"
+          onClose={() => setTrendItem(null)}
+        />
       )}
     </div>
   );

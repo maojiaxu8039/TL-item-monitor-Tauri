@@ -1,5 +1,5 @@
 use crate::core::paths::config_path;
-use crate::core::state::{AppConfig, AppSettings, DataSettings, DesktopSettings, NotificationSettings, ScrapeSettings};
+use crate::core::state::{AppConfig, AppSettings, DataSettings, DealSettings, DesktopSettings, NotificationSettings, ScrapeSettings};
 
 /// Legacy flat config for migration from pre-nested schema.
 #[derive(Debug, serde::Deserialize)]
@@ -69,6 +69,7 @@ pub fn load_config() -> Result<AppConfig, String> {
             },
             desktop: DesktopSettings::default(),
             notification: NotificationSettings::default(),
+            deal: DealSettings::default(),
             data: DataSettings::default(),
             app: AppSettings {
                 season_id: flat.season_id,

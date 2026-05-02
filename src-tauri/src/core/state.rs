@@ -32,6 +32,7 @@ pub struct AppConfig {
     pub scrape: ScrapeSettings,
     pub desktop: DesktopSettings,
     pub notification: NotificationSettings,
+    pub deal: DealSettings,
     pub data: DataSettings,
     pub app: AppSettings,
 }
@@ -73,6 +74,15 @@ pub struct NotificationSettings {
     pub price_alert_cooldown_seconds: i32,
     pub quiet_start: Option<String>,
     pub quiet_end: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct DealSettings {
+    pub bargain_enabled: bool,
+    pub bargain_threshold_percent: u32,
+    pub sell_enabled: bool,
+    pub sell_threshold_percent: u32,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -131,6 +141,17 @@ impl Default for NotificationSettings {
     }
 }
 
+impl Default for DealSettings {
+    fn default() -> Self {
+        Self {
+            bargain_enabled: true,
+            bargain_threshold_percent: 30,
+            sell_enabled: true,
+            sell_threshold_percent: 30,
+        }
+    }
+}
+
 impl Default for DataSettings {
     fn default() -> Self {
         Self {
@@ -157,6 +178,7 @@ impl Default for AppConfig {
             scrape: ScrapeSettings::default(),
             desktop: DesktopSettings::default(),
             notification: NotificationSettings::default(),
+            deal: DealSettings::default(),
             data: DataSettings::default(),
             app: AppSettings::default(),
         }
