@@ -1,4 +1,4 @@
-# TL 物品火价监控桌面版 - 开发文档 v2.1
+# TL 物品火价监控桌面版 - 开发文档 v2.2
 
 > 本文档记录 TL 物品火价监控桌面版的技术实现细节。
 > 最后更新：2026-05-02
@@ -38,18 +38,24 @@ TL-item-monitor-Tauri/
 │   │   ├── dashboard/            # 仪表板相关页面
 │   │   │   ├── DashboardContent.tsx   # 主页
 │   │   │   ├── DataRecordsPage.tsx    # 数据记录
-│   │   │   ├── ItemsPage.tsx          # 物品库
-│   │   │   ├── StrategiesPage.tsx     # 策略管理
-│   │   │   ├── AlertsPage.tsx        # 价格预警
+│   │   │   ├── ItemsPage.tsx          # 物价数据
+│   │   │   ├── DealsPage.tsx          # 捡漏出货（开发中）
+│   │   │   ├── ImageAssistPage.tsx    # 识图助手（开发中）
+│   │   │   ├── StrategiesPage.tsx     # 策略管理（开发中）
+│   │   │   ├── PriceAnalysisPage.tsx  # 物价分析
+│   │   │   ├── AIAnalysisPage.tsx     # AI分析
+│   │   │   ├── FirePriceComparePage.tsx # 火价对比
+│   │   │   ├── ItemPriceTrendModal.tsx  # 物品价格走势弹窗
 │   │   │   ├── ImportExportPage.tsx   # 导入导出
 │   │   │   ├── SettingsPage.tsx       # 设置
 │   │   │   ├── HelpPage.tsx           # 帮助
+│   │   │   ├── SeasonPage.tsx         # 赛季管理
+│   │   │   ├── DashboardStats.tsx     # 仪表板统计
 │   │   │   ├── GroupCard.tsx          # 分组卡片
+│   │   │   ├── SortableGroupCard.tsx  # 可拖拽分组卡片
 │   │   │   ├── AddSectionDialog.tsx   # 添加分组弹窗
 │   │   │   ├── AddItemModal.tsx       # 添加物品弹窗
-│   │   │   ├── SearchBar.tsx          # 搜索栏（包含导入导出）
-│   │   │   ├── SeasonPage.tsx         # 赛季管理
-│   │   │   └── DashboardStats.tsx      # 仪表板统计
+│   │   │   └── SearchBar.tsx          # 搜索栏（包含导入导出）
 │   │   ├── charts/                 # 图表组件
 │   │   ├── layout/                  # 布局组件
 │   │   │   ├── Sidebar.tsx            # 侧边栏
@@ -71,8 +77,14 @@ TL-item-monitor-Tauri/
 │   │   └── qiandao_fire.mjs       # Node.js HTTP/2 火价脚本
 │   └── src/
 │       ├── main.rs                  # 主函数入口
+│       ├── lib.rs                   # 库模块导出
 │       ├── app.rs                   # 应用初始化、迁移、后台任务
 │       ├── tray.rs                  # 系统托盘
+│       ├── server/                  # 服务器模块（NAS采集器）
+│       │   ├── mod.rs
+│       │   ├── config.rs            # 服务器配置
+│       │   ├── db.rs                # 服务器数据库操作
+│       │   └── scraper.rs           # 服务器数据抓取
 │       ├── commands/                 # Tauri IPC Commands
 │       │   ├── mod.rs
 │       │   ├── types.rs             # 命令类型定义
@@ -119,7 +131,7 @@ TL-item-monitor-Tauri/
 
 ### 2.1 Tauri Commands
 
-共 **43 个 IPC 命令**，前端通过 `invoke()` 调用。
+共 **47 个 IPC 命令**，前端通过 `invoke()` 调用。
 
 | Command | 功能 | 返回类型 |
 |---------|------|----------|
@@ -138,6 +150,12 @@ TL-item-monitor-Tauri/
 | `update_section_item` | 更新分组物品信息 | `OkResponse` |
 | `remove_section_item` | 从分组移除物品 | `OkResponse` |
 | `get_fire_history` | 获取火价历史 | `FireHistoryItem[]` |
+| `get_fire_price_compare` | 获取火价历史对比 | `FirePriceCompareResult` |
+| `get_fire_price_insight` | 获取火价洞察分析 | `JSON` |
+| `get_item_price_insights` | 获取物品价格洞察 | `JSON[]` |
+| `get_item_history` | 获取物品价格历史 | `ItemHistoryRecord[]` |
+| `get_item_history_by_season` | 按赛季获取物品历史 | `ItemHistoryRecord[]` |
+| `get_items_price_compare` | 获取物品价格对比 | `ItemPriceCompare[]` |
 | `import_watchlist_csv` | 导入 CSV 监控列表 | `{ imported, errors }` |
 | `export_watchlist_csv` | 导出监控列表 CSV | `string` |
 | `get_config` | 获取应用配置 | `AppConfig` |
@@ -168,7 +186,6 @@ TL-item-monitor-Tauri/
 | `delete_strategy` | 删除策略 | `OkResponse` |
 | `get_source_diagnostics` | 获取数据源诊断 | `SourceDiagnostic[]` |
 | `test_source_connection` | 测试数据源连接 | `OkResponse` |
-| `get_item_history` | 获取物品价格历史 | `ItemHistoryRecord[]` |
 | `get_item_types` | 获取物品类型列表 | `string[]` |
 | `clear_items_database` | 清空物品数据库 | `string` |
 | `get_notification_permission_status` | 获取通知权限状态 | `NotificationPermissionStatus` |
@@ -184,6 +201,7 @@ TL-item-monitor-Tauri/
 | 文件 | 作用 |
 |------|------|
 | `001_initial.sql` | 创建 11 张表、15 个索引，外键约束 |
+| `002_split_tables.sql` | 创建火价/物品历史分表（普通/专家） |
 
 #### 核心表结构
 
@@ -216,6 +234,47 @@ CREATE TABLE fire_price_records (
     scraped_at INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
     UNIQUE(season_id, market_mode, scraped_at)
+);
+
+-- 火价历史（普通服）
+CREATE TABLE fire_history_normal (
+    id TEXT PRIMARY KEY,
+    season_id TEXT NOT NULL,
+    rmb_per_10k_fire REAL NOT NULL,
+    fire_per_rmb REAL NOT NULL DEFAULT 0,
+    increase_ratio REAL,
+    trading_volume TEXT,
+    source TEXT NOT NULL,
+    source_time TEXT,
+    recorded_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+-- 火价历史（专家服）
+CREATE TABLE fire_history_expert (
+    id TEXT PRIMARY KEY,
+    season_id TEXT NOT NULL,
+    rmb_per_10k_fire REAL NOT NULL,
+    fire_per_rmb REAL NOT NULL DEFAULT 0,
+    increase_ratio REAL,
+    trading_volume TEXT,
+    source TEXT NOT NULL,
+    source_time TEXT,
+    recorded_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+-- 物品价格快照
+CREATE TABLE item_price_snapshots (
+    id TEXT PRIMARY KEY,
+    item_id TEXT NOT NULL,
+    season_id TEXT NOT NULL,
+    market_mode TEXT NOT NULL,
+    name TEXT NOT NULL,
+    item_type TEXT,
+    fire_price REAL NOT NULL DEFAULT 0,
+    scraped_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
 );
 
 -- 分组
@@ -349,7 +408,33 @@ pub async fn scrape_by_mode(mode: &str) -> Result<FirePriceSnapshot, AppError> {
 }
 ```
 
-### 2.4 定时任务
+### 2.4 服务器端采集器 (NAS)
+
+独立的服务器二进制文件，支持 24 小时数据采集。
+
+**文件**：`src-tauri/src/bin/server.rs`
+
+**功能**：
+- 每小时整点自动采集火价和物品数据
+- HTTP API 提供数据查询接口
+- 支持普通服和专家服同时采集
+- 独立的数据库（与桌面端分离）
+
+**API 端点**：
+| 端点 | 功能 |
+|------|------|
+| `GET /` / `GET /status` | 服务器状态 |
+| `GET /fire-history?mode=&limit=` | 火价历史 |
+| `GET /items-history?mode=&item_id=&limit=` | 物品历史 |
+| `GET /items-history-all?mode=&limit=` | 所有物品历史 |
+| `GET /health` | 健康检查 |
+
+**运行方式**：
+```bash
+cargo run --bin server
+```
+
+### 2.5 定时任务
 
 | 任务 | 启用条件 | 间隔 | 作用 |
 |------|---------|------|------|
@@ -360,7 +445,7 @@ pub async fn scrape_by_mode(mode: &str) -> Result<FirePriceSnapshot, AppError> {
 
 **定时检测**：每 10 秒检测一次配置，如果启用则按配置的间隔执行，如果关闭则继续等待。
 
-### 2.5 事件系统
+### 2.6 事件系统
 
 后端通过 `emit()` 向前端发送事件，前端通过 `useTauriEvents.ts` 监听：
 
@@ -378,35 +463,50 @@ pub async fn scrape_by_mode(mode: &str) -> Result<FirePriceSnapshot, AppError> {
 
 ## 3. 前端实现 (React)
 
-### 3.1 组件架构
+### 3.1 页面架构
 
 ```
-src/components/
-├── ErrorBoundary.tsx              # 全局错误边界
-├── dashboard/
-│   ├── DashboardContent.tsx      # 主页（拖拽分组）
-│   ├── DataRecordsPage.tsx       # 历史数据记录
-│   ├── ItemsPage.tsx             # 物品库（搜索、筛选）
-│   ├── StrategiesPage.tsx         # 策略管理
-│   ├── AlertsPage.tsx           # 价格预警
-│   ├── ImportExportPage.tsx      # 导入导出
-│   ├── SettingsPage.tsx          # 设置页面
-│   ├── HelpPage.tsx              # 帮助页面
-│   ├── SeasonPage.tsx           # 赛季管理
-│   ├── DashboardStats.tsx        # 仪表板统计
-│   ├── GroupCard.tsx             # 分组卡片（Flex 布局）
-│   ├── SearchBar.tsx            # 搜索栏（包含导入导出按钮）
-│   ├── SortableGroupCard.tsx    # 可拖拽分组卡片
-│   ├── AddSectionDialog.tsx      # 添加分组弹窗
-│   └── AddItemModal.tsx          # 添加物品弹窗
-├── layout/
-│   ├── Sidebar.tsx              # 侧边栏
-│   ├── TopBar.tsx               # 顶部栏（包含数据源/通知指示灯）
-│   └── PageHeader.tsx           # 页面头部
-└── ui/                           # shadcn/ui 组件
+src/components/dashboard/
+├── DashboardContent.tsx      # 监控首页（拖拽分组）
+├── FirePriceComparePage.tsx  # 火价分析（双赛季对比）
+├── ItemsPage.tsx             # 物价数据（物品列表+对比）
+├── ItemPriceTrendModal.tsx   # 物品价格走势弹窗
+├── DealsPage.tsx             # 捡漏出货（开发中）
+├── ImageAssistPage.tsx       # 识图助手（开发中）
+├── StrategiesPage.tsx        # 策略管理（开发中）
+├── PriceAnalysisPage.tsx     # 物价分析（火价+物品关联）
+├── AIAnalysisPage.tsx        # AI分析（智能建议）
+├── DataRecordsPage.tsx       # 数据记录
+├── ImportExportPage.tsx      # 导入导出
+├── SettingsPage.tsx          # 设置页面
+├── HelpPage.tsx              # 帮助页面
+├── SeasonPage.tsx            # 赛季管理
+├── DashboardStats.tsx        # 仪表板统计
+├── GroupCard.tsx             # 分组卡片（Flex 布局）
+├── SearchBar.tsx             # 搜索栏（包含导入导出按钮）
+├── SortableGroupCard.tsx     # 可拖拽分组卡片
+├── AddSectionDialog.tsx      # 添加分组弹窗
+└── AddItemModal.tsx          # 添加物品弹窗
 ```
 
-### 3.2 状态管理
+### 3.2 导航结构
+
+| 页面 | ID | 状态 |
+|------|-----|------|
+| 监控首页 | `dashboard` | ✅ 已完成 |
+| 火价分析 | `firecompare` | ✅ 已完成 |
+| 物价数据 | `items` | ✅ 已完成 |
+| 捡漏出货 | `deals` | 🚧 开发中 |
+| 识图助手 | `imageassist` | 🚧 开发中 |
+| 策略管理 | `strategies` | 🚧 开发中 |
+| 物价分析 | `priceanalysis` | ✅ 已完成 |
+| AI分析 | `aianalysis` | ✅ 已完成 |
+| 数据监控 | `records` | ✅ 已完成 |
+| 导入导出 | `import_export` | ✅ 已完成 |
+| 设置 | `settings` | ✅ 已完成 |
+| 帮助 | `help` | ✅ 已完成 |
+
+### 3.3 状态管理
 
 ```typescript
 // contexts/SectionRefreshContext.tsx
@@ -427,13 +527,13 @@ export const queryClient = new QueryClient({
 });
 ```
 
-### 3.3 前端指示灯
+### 3.4 前端指示灯
 
 在 `TopBar.tsx` 中显示：
 - **数据源指示灯**：🔵 蓝色=网络（API）/ 🟢 绿色=本地（JSON）
 - **系统通知指示灯**：🟢 绿色=已开启 / 🔴 红色=已关闭
 
-### 3.4 CSV 导入导出功能
+### 3.5 CSV 导入导出功能
 
 **位置**：`SearchBar.tsx`（监控首页搜索栏右侧）
 
@@ -569,7 +669,7 @@ sqlite3 ~/.Library/Application\ Support/com.tlmonitor.app/data/tl_monitor.db "SE
 ### 6.5 添加新的 Tauri Command
 
 1. 在 `src-tauri/src/commands/` 中添加处理函数
-2. 在 `src-tauri/src/main.rs` 中注册命令
+2. 在 `src-tauri/src/commands/mod.rs` 中导出命令
 3. 在 `src/lib/commands.ts` 中添加前端调用
 4. 运行 `npm run typecheck` 验证类型
 
@@ -601,6 +701,10 @@ sqlite3 ~/.Library/Application\ Support/com.tlmonitor.app/data/tl_monitor.db "SE
 | JSON 文件验证 | ✅ 正常 |
 | 数据源切换 | ✅ 正常 |
 | 顶部栏指示灯 | ✅ 正常 |
+| 火价双赛季对比 | ✅ 正常 |
+| 物价数据分析 | ✅ 正常 |
+| AI智能分析 | ✅ 正常 |
+| 数据监控同步 | ✅ 正常 |
 
 ---
 
@@ -616,3 +720,24 @@ sqlite3 ~/.Library/Application\ Support/com.tlmonitor.app/data/tl_monitor.db "SE
 | 可维护性 | ⭐⭐⭐⭐⭐ |
 
 **项目状态：生产就绪**
+
+---
+
+## 9. 更新日志
+
+### v2.2 (2026-05-02)
+- 新增物价分析页面（火价+物品关联分析）
+- 新增AI分析页面（本地/外部AI接口）
+- 新增捡漏出货页面（开发中）
+- 新增识图助手页面（开发中）
+- 新增火价双赛季对比功能
+- 新增物品价格历史对比功能
+- 新增服务器端采集器（NAS 24小时采集）
+- 新增数据监控同步功能
+- 重构策略管理页面（待重新开发）
+- 优化数据库结构（分表存储）
+
+### v2.1 (2026-05-01)
+- 新增CSV导入导出功能
+- 新增数据监控页面
+- 优化UI界面

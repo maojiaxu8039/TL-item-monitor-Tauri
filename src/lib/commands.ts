@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 // Types (mirror Rust structs)
 // ============================================================================
 
-export type PageId = "dashboard" | "firecompare" | "items" | "records" | "strategies" | "alerts" | "import_export" | "settings" | "help";
+export type PageId = "dashboard" | "firecompare" | "items" | "deals" | "imageassist" | "records" | "strategies" | "priceanalysis" | "aianalysis" | "import_export" | "settings" | "help";
 
 export interface FirePriceUI {
   price_per_wan: number;
@@ -450,6 +450,14 @@ export const cmd = {
 
   getItemHistory: (itemId: string, limit?: number) =>
     invoke<ItemHistoryRecord[]>("get_item_history", { item_id: itemId, limit }),
+  getItemHistoryBySeason: (itemId: string, seasonId: string, limit?: number) =>
+    invoke<ItemHistoryRecord[]>("get_item_history_by_season", { item_id: itemId, season_id: seasonId, limit }),
+  getItemsPriceCompare: (historySeason: string) =>
+    invoke<any[]>("get_items_price_compare", { history_season: historySeason }),
+  getFirePriceInsight: () =>
+    invoke<any>("get_fire_price_insight"),
+  getItemPriceInsights: () =>
+    invoke<any[]>("get_item_price_insights"),
   getSeasonSummary: () => invoke<SeasonSummary>("get_season_summary"),
   getSeasonTrends: (hours?: number) =>
     invoke<SeasonTrendHour[]>("get_season_trends", { hours }),

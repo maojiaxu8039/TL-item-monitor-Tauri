@@ -117,6 +117,139 @@ pub async fn get_item_history(
     Ok(records)
 }
 
+/// Get all item price history for a season.
+pub async fn get_all_item_history(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    hours: i64,
+) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
+    let since = chrono::Utc::now().timestamp() - hours * 3600;
+    let records = sqlx::query_as::<_, ItemHistoryRecord>(
+        "SELECT item_id, season_id, market_mode, fire_price, scraped_at \
+         FROM item_price_snapshots \
+         WHERE season_id = ? AND market_mode = ? AND scraped_at > ? \
+         ORDER BY scraped_at DESC"
+    )
+    .bind(season_id)
+    .bind(market_mode)
+    .bind(since)
+    .fetch_all(pool)
+    .await?;
+    Ok(records)
+}
+
+/// Get item price history by specific season.
+pub async fn get_item_history_by_season(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    item_id: &str,
+    limit: i64,
+) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
+    let records = sqlx::query_as::<_, ItemHistoryRecord>(
+        "SELECT item_id, season_id, market_mode, fire_price, scraped_at \
+         FROM item_price_snapshots \
+         WHERE season_id = ? AND market_mode = ? AND item_id = ? \
+         ORDER BY scraped_at DESC LIMIT ?"
+    )
+    .bind(season_id)
+    .bind(market_mode)
+    .bind(item_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(records)
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ItemPriceCompare {
+    pub item_id: String,
+    pub name: String,
+    pub current_price: f64,
+    pub history_price: Option<f64>,
+    pub premium_rate: Option<f64>,
+    pub price_diff: Option<f64>,
+    pub percentile: Option<f64>,
+}
+
+/// Get items price comparison between current and history season.
+pub async fn get_items_price_compare(
+    pool: &SqlitePool,
+    current_season: &str,
+    history_season: &str,
+    market_mode: &str,
+) -> Result<Vec<ItemPriceCompare>, crate::core::errors::AppError> {
+    // Get current season items
+    let current_items: Vec<(String, String, f64)> = sqlx::query_as(
+        "SELECT item_id, name, price FROM items WHERE season_id = ? AND market_mode = ?"
+    )
+    .bind(current_season)
+    .bind(market_mode)
+    .fetch_all(pool)
+    .await?;
+
+    // Get history season snapshots for comparison
+    let history_records: Vec<(String, f64)> = sqlx::query_as(
+        "SELECT item_id, AVG(fire_price) as avg_price \
+         FROM item_price_snapshots \
+         WHERE season_id = ? AND market_mode = ? \
+         GROUP BY item_id"
+    )
+    .bind(history_season)
+    .bind(market_mode)
+    .fetch_all(pool)
+    .await?;
+
+    let history_map: std::collections::HashMap<String, f64> = history_records
+        .into_iter()
+        .collect();
+
+    // Get all history prices for percentile calculation
+    let all_history: Vec<(String, f64)> = sqlx::query_as(
+        "SELECT item_id, fire_price FROM item_price_snapshots \
+         WHERE season_id = ? AND market_mode = ?"
+    )
+    .bind(history_season)
+    .bind(market_mode)
+    .fetch_all(pool)
+    .await?;
+
+    let mut history_prices_by_item: std::collections::HashMap<String, Vec<f64>> = std::collections::HashMap::new();
+    for (item_id, price) in all_history {
+        history_prices_by_item.entry(item_id).or_default().push(price);
+    }
+
+    let mut result = Vec::new();
+    for (item_id, name, current_price) in current_items {
+        let history_price = history_map.get(&item_id).copied();
+        let premium_rate = history_price.map(|hp| ((current_price - hp) / hp * 100.0));
+        let price_diff = history_price.map(|hp| current_price - hp);
+        
+        // Calculate percentile
+        let percentile = if let Some(prices) = history_prices_by_item.get(&item_id) {
+            let mut sorted = prices.clone();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let pos = sorted.iter().position(|&p| p >= current_price).unwrap_or(sorted.len());
+            Some((pos as f64 / sorted.len() as f64 * 100.0).min(100.0))
+        } else {
+            None
+        };
+
+        result.push(ItemPriceCompare {
+            item_id,
+            name,
+            current_price,
+            history_price,
+            premium_rate,
+            price_diff,
+            percentile,
+        });
+    }
+
+    Ok(result)
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct FirePriceCompareResult {
     pub current_price: f64,

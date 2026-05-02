@@ -218,3 +218,126 @@ pub async fn get_fire_price_compare(
     .await
     .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn get_fire_price_insight(
+    state: State<'_, Arc<AppState>>,
+) -> Result<serde_json::Value, String> {
+    let ctx = state.active_context.read().clone();
+    let history = repo_fire::get_fire_history(&state.db, 168).await?;
+    
+    if history.is_empty() {
+        return Ok(serde_json::json!({
+            "current_fire_price": 0.0,
+            "avg_fire_price": 0.0,
+            "fire_trend": "stable",
+            "fire_trend_percent": 0.0,
+            "best_buy_time": "暂无数据",
+            "best_sell_time": "暂无数据",
+        }));
+    }
+
+    let prices: Vec<f64> = history.iter()
+        .map(|r| r.get("rmb_per_10k_fire").and_then(|v| v.as_f64()).unwrap_or(0.0))
+        .filter(|&p| p > 0.0)
+        .collect();
+
+    let current = prices.first().copied().unwrap_or(0.0);
+    let avg = prices.iter().sum::<f64>() / prices.len() as f64;
+    let min = prices.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = prices.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let trend_percent = if avg > 0.0 { ((current - avg) / avg) * 100.0 } else { 0.0 };
+    let trend = if trend_percent > 5.0 { "up" } else if trend_percent < -5.0 { "down" } else { "stable" };
+
+    let best_buy_time = if current > avg * 1.1 {
+        "火价处于高位，建议等待火价回落至均价附近再购入"
+    } else if current < avg * 0.9 {
+        "火价处于低位，是购入火的好时机"
+    } else {
+        "火价处于正常区间，可按需交易"
+    };
+
+    let best_sell_time = if current > avg * 1.1 {
+        "火价处于高位，适合出售物品换取RMB"
+    } else if current < avg * 0.9 {
+        "火价处于低位，建议等待上涨后再出售"
+    } else {
+        "火价处于正常区间，可按需交易"
+    };
+
+    Ok(serde_json::json!({
+        "current_fire_price": current,
+        "avg_fire_price": avg,
+        "min_fire_price": min,
+        "max_fire_price": max,
+        "fire_trend": trend,
+        "fire_trend_percent": trend_percent,
+        "best_buy_time": best_buy_time,
+        "best_sell_time": best_sell_time,
+    }))
+}
+
+#[tauri::command]
+pub async fn get_item_price_insights(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let ctx = state.active_context.read().clone();
+    let items = repo_items::search_items(&state.db, &ctx.season_id, ctx.market_mode.as_str(), "", 1, 100).await?;
+    let item_history = repo_history::get_all_item_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), 168).await?;
+
+    let mut insights = Vec::new();
+
+    for (item_id, name, current_price) in items.0.iter().map(|i| (i.item_id.clone(), i.name.clone(), i.price)) {
+        let history: Vec<f64> = item_history.iter()
+            .filter(|h| h.item_id == item_id)
+            .map(|h| h.fire_price)
+            .collect();
+
+        if history.len() < 3 {
+            continue;
+        }
+
+        let avg = history.iter().sum::<f64>() / history.len() as f64;
+        let min = history.iter().copied().fold(f64::INFINITY, f64::min);
+        let max = history.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let trend_percent = if avg > 0.0 { ((current_price - avg) / avg) * 100.0 } else { 0.0 };
+        let trend = if trend_percent > 5.0 { "up" } else if trend_percent < -5.0 { "down" } else { "stable" };
+
+        let (recommendation, reason) = if current_price < avg * 0.85 {
+            ("buy", format!("价格低于均价{}%，处于低位", ((1.0 - current_price / avg) * 100.0).round()))
+        } else if current_price > avg * 1.15 {
+            ("sell", format!("价格高于均价{}%，处于高位", ((current_price / avg - 1.0) * 100.0).round()))
+        } else {
+            ("wait", "价格处于正常区间，建议观望".to_string())
+        };
+
+        insights.push(serde_json::json!({
+            "item_id": item_id,
+            "item_name": name,
+            "current_price": current_price,
+            "avg_price": avg,
+            "min_price": min,
+            "max_price": max,
+            "price_trend": trend,
+            "trend_percent": trend_percent,
+            "recommendation": recommendation,
+            "confidence": 85,
+            "reason": reason,
+        }));
+    }
+
+    // 按推荐排序：buy > wait > sell
+    insights.sort_by(|a, b| {
+        let a_rec = a.get("recommendation").and_then(|v| v.as_str()).unwrap_or("wait");
+        let b_rec = b.get("recommendation").and_then(|v| v.as_str()).unwrap_or("wait");
+        let order = |rec: &str| match rec {
+            "buy" => 0,
+            "wait" => 1,
+            "sell" => 2,
+            _ => 3,
+        };
+        order(a_rec).cmp(&order(b_rec))
+    });
+
+    Ok(insights.into_iter().take(50).collect())
+}

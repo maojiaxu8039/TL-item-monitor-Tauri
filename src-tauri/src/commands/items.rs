@@ -395,3 +395,38 @@ pub async fn sync_items_record(
     
     Ok(OkResponse::success("Item record synced"))
 }
+
+#[tauri::command]
+pub async fn get_item_history_by_season(
+    state: State<'_, Arc<AppState>>,
+    item_id: String,
+    season_id: String,
+    limit: Option<i64>,
+) -> Result<Vec<repo_history::ItemHistoryRecord>, String> {
+    let ctx = state.active_context.read().clone();
+    repo_history::get_item_history_by_season(
+        &state.db,
+        &season_id,
+        ctx.market_mode.as_str(),
+        &item_id,
+        limit.unwrap_or(100),
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_items_price_compare(
+    state: State<'_, Arc<AppState>>,
+    history_season: String,
+) -> Result<Vec<repo_history::ItemPriceCompare>, String> {
+    let ctx = state.active_context.read().clone();
+    repo_history::get_items_price_compare(
+        &state.db,
+        &ctx.season_id,
+        &history_season,
+        ctx.market_mode.as_str(),
+    )
+    .await
+    .map_err(|e| e.to_string())
+}

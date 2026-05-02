@@ -15,7 +15,10 @@ const StrategiesPage = lazy(() => import("@/components/dashboard/StrategiesPage"
 const SettingsPage = lazy(() => import("@/components/dashboard/SettingsPage"))
 const ImportExportPage = lazy(() => import("@/components/dashboard/ImportExportPage"))
 const ItemsPage = lazy(() => import("@/components/dashboard/ItemsPage"))
-const AlertsPage = lazy(() => import("@/components/dashboard/AlertsPage"))
+const DealsPage = lazy(() => import("@/components/dashboard/DealsPage"))
+const ImageAssistPage = lazy(() => import("@/components/dashboard/ImageAssistPage"))
+const PriceAnalysisPage = lazy(() => import("@/components/dashboard/PriceAnalysisPage"))
+const AIAnalysisPage = lazy(() => import("@/components/dashboard/AIAnalysisPage"))
 const DataMonitorPage = lazy(() => import("@/components/dashboard/DataMonitorPage"))
 const FirePriceComparePage = lazy(() => import("@/components/dashboard/FirePriceComparePage"))
 const HelpPage = lazy(() => import("@/components/dashboard/HelpPage"))
@@ -76,9 +79,24 @@ export default function App() {
                   <ItemsPage />
                 </LazyPage>
               )}
-              {page === "alerts" && (
+              {page === "deals" && (
                 <LazyPage>
-                  <AlertsPage />
+                  <DealsPage />
+                </LazyPage>
+              )}
+              {page === "imageassist" && (
+                <LazyPage>
+                  <ImageAssistPage />
+                </LazyPage>
+              )}
+              {page === "priceanalysis" && (
+                <LazyPage>
+                  <PriceAnalysisPage />
+                </LazyPage>
+              )}
+              {page === "aianalysis" && (
+                <LazyPage>
+                  <AIAnalysisPage />
                 </LazyPage>
               )}
               {page === "records" && (

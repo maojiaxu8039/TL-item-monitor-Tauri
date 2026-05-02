@@ -20,7 +20,11 @@ import {
   X,
   Check,
   Loader2,
+  TrendingUp,
+  Eye,
+  BarChart3,
 } from "lucide-react";
+import { ItemPriceTrendModal } from "./ItemPriceTrendModal";
 
 const COLUMN_HELPER = createColumnHelper<ItemData>();
 
@@ -30,6 +34,16 @@ interface Toast {
   id: string;
   message: string;
   type: "success" | "error";
+}
+
+interface ItemPriceCompare {
+  item_id: string;
+  name: string;
+  current_price: number;
+  history_price: number | null;
+  premium_rate: number | null;
+  price_diff: number | null;
+  percentile: number | null;
 }
 
 // ─── Toast ──────────────────────────────────────────────────────────────────
@@ -115,6 +129,8 @@ export default function ItemsPage() {
   const [selectedItem, setSelectedItem] = useState<ItemData | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [dataSource, setDataSource] = useState<"api" | "local">("api");
+  const [historySeason, setHistorySeason] = useState("ss11");
+  const [trendItem, setTrendItem] = useState<{ itemId: string; name: string } | null>(null);
 
   const PAGE_SIZE = 50;
 
@@ -151,11 +167,18 @@ export default function ItemsPage() {
     queryFn: cmd.getSections,
   });
 
+  // 获取物品价格对比数据
+  const { data: priceCompareData } = useQuery({
+    queryKey: ["items-compare", marketContext.seasonId, historySeason, marketContext.marketMode],
+    queryFn: () => cmd.getItemsPriceCompare(historySeason),
+    enabled: !!marketContext.seasonId,
+  });
+
   const refreshMutation = useMutation({
     mutationFn: cmd.refreshItems,
     onSuccess: () => {
       refetch();
-      addToast("success", "物品库已刷新");
+      addToast("success", "物价数据已刷新");
     },
     onError: (error: Error) => {
       const errorMsg = error.message || String(error);
@@ -203,6 +226,14 @@ export default function ItemsPage() {
     return list;
   }, [searchResult?.items, sortOrder]);
 
+  // 获取物品的对比数据
+  const getItemCompare = useCallback((itemId: string): ItemPriceCompare | null => {
+    if (!priceCompareData) return null;
+    const compare = priceCompareData.find((c: any) => c.item_id === itemId);
+    if (!compare) return null;
+    return compare;
+  }, [priceCompareData]);
+
   const total = searchResult?.total ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const startItem = (page - 1) * PAGE_SIZE + 1;
@@ -240,7 +271,6 @@ export default function ItemsPage() {
   );
 
   // ─── Columns (stable definition, minimal rebuilds) ──────────────────────
-  // selectedItemId is a primitive string — much cheaper to compare than object refs
   const selectedItemId = selectedItem?.item_id ?? null;
 
   const columns = useMemo(
@@ -260,7 +290,7 @@ export default function ItemsPage() {
         },
       }),
       COLUMN_HELPER.accessor("price", {
-        header: "当前火价(元/万火)",
+        header: "当前价格(火)",
         cell: (info) => (
           <span className="text-orange-600 font-medium">
             {info.getValue().toFixed(2)}
@@ -268,13 +298,45 @@ export default function ItemsPage() {
         ),
       }),
       COLUMN_HELPER.display({
-        id: "rmb",
-        header: "折算RMB",
-        cell: ({ row }) => (
-          <span className="text-green-600">
-            ¥{(row.original.price * 0.006187).toFixed(2)}
-          </span>
-        ),
+        id: "compare",
+        header: "历史对比",
+        cell: ({ row }) => {
+          const compare = getItemCompare(row.original.item_id);
+          if (!compare || !compare.history_price) {
+            return <span className="text-slate-400 text-xs">—</span>;
+          }
+          const premium = compare.premium_rate ?? 0;
+          const isHigh = premium > 0;
+          return (
+            <div className="flex flex-col gap-0.5">
+              <span className={`text-xs font-medium ${isHigh ? "text-red-500" : "text-green-500"}`}>
+                {isHigh ? "↑" : "↓"} {Math.abs(premium).toFixed(1)}%
+              </span>
+              <span className="text-xs text-slate-400">
+                历史: {compare.history_price.toFixed(2)}
+              </span>
+            </div>
+          );
+        },
+      }),
+      COLUMN_HELPER.display({
+        id: "percentile",
+        header: "历史分位",
+        cell: ({ row }) => {
+          const compare = getItemCompare(row.original.item_id);
+          if (!compare || compare.percentile === null) {
+            return <span className="text-slate-400 text-xs">—</span>;
+          }
+          const p = compare.percentile;
+          let color = "text-slate-500";
+          if (p > 80) color = "text-red-500";
+          else if (p < 20) color = "text-green-500";
+          return (
+            <span className={`text-xs font-medium ${color}`}>
+              {p.toFixed(0)}%
+            </span>
+          );
+        },
       }),
       COLUMN_HELPER.accessor("updated_at", {
         header: "更新时间",
@@ -296,11 +358,21 @@ export default function ItemsPage() {
       }),
       COLUMN_HELPER.display({
         id: "actions",
-        header: "",
+        header: "操作",
         cell: ({ row }) => {
           const isSelected = selectedItemId === row.original.item_id;
           return (
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTrendItem({ itemId: row.original.item_id, name: row.original.name });
+                }}
+                className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded transition-colors"
+              >
+                <BarChart3 className="w-3 h-3" />
+                走势
+              </button>
               {isSelected && (
                 <SectionPicker
                   sections={sections}
@@ -313,8 +385,7 @@ export default function ItemsPage() {
         },
       }),
     ],
-    // Only rebuild when selection identity or sections change (not on every searchResult)
-    [selectedItemId, sections, addToSection]
+    [selectedItemId, sections, addToSection, getItemCompare]
   );
 
   // ─── Table setup ────────────────────────────────────────────────────────
@@ -341,19 +412,30 @@ export default function ItemsPage() {
       {/* ── Page header ── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold text-slate-900">物品库</h1>
+          <h1 className="text-lg font-semibold text-slate-900">物价数据</h1>
           {total > 0 && (
             <span className="text-sm text-slate-400">共 {total} 件物品</span>
           )}
         </div>
-        <button
-          onClick={() => refreshMutation.mutate()}
-          disabled={refreshMutation.isPending}
-          className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
-          刷新物品
-        </button>
+        <div className="flex items-center gap-3">
+          <select
+            value={historySeason}
+            onChange={(e) => setHistorySeason(e.target.value)}
+            className="px-3 py-1.5 border border-slate-200 rounded text-sm bg-white outline-none"
+          >
+            <option value="ss11">对比 SS11</option>
+            <option value="ss10">对比 SS10</option>
+            <option value="ss09">对比 SS09</option>
+          </select>
+          <button
+            onClick={() => refreshMutation.mutate()}
+            disabled={refreshMutation.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
+            刷新物价
+          </button>
+        </div>
       </div>
 
       {/* ── Filter bar ── */}
@@ -417,7 +499,7 @@ export default function ItemsPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-16">
+                  <td colSpan={6} className="text-center py-16">
                     <div className="flex items-center justify-center gap-2 text-slate-400 text-sm">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       加载中...
@@ -426,7 +508,7 @@ export default function ItemsPage() {
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-16">
+                  <td colSpan={6} className="text-center py-16">
                     <div className="text-slate-400 text-sm">
                       {debouncedKeyword ? `未找到匹配"${debouncedKeyword}"的物品` : "暂无物品数据"}
                     </div>
@@ -492,6 +574,16 @@ export default function ItemsPage() {
           </div>
         )}
       </div>
+
+      {/* ── Trend Modal ── */}
+      {trendItem && (
+        <ItemPriceTrendModal
+          itemId={trendItem.itemId}
+          itemName={trendItem.name}
+          historySeason={historySeason}
+          onClose={() => setTrendItem(null)}
+        />
+      )}
     </div>
   );
 }
