@@ -90,8 +90,8 @@ jobs:
         with:
           name: macos-app
           path: |
-            src-tauri/target/release/bundle/dmg/*.dmg
-            src-tauri/target/release/bundle/macos/*.app
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.app
 
   release:
     needs: [build-windows, build-macos]
