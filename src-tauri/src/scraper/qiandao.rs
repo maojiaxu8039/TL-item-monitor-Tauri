@@ -29,17 +29,36 @@ pub async fn scrape_by_mode(mode: &str) -> Result<FirePriceSnapshot, AppError> {
 
 /// Node.js native HTTP/2 implementation
 async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppError> {
-    let script_path = std::path::PathBuf::from(
-        option_env!("CARGO_MANIFEST_DIR")
-            .unwrap_or(".")
-    ).join("resources/qiandao_fire.mjs");
+    // Try multiple possible paths for the Node.js script
+    let possible_paths = [
+        // Development path (when running from cargo)
+        std::path::PathBuf::from(option_env!("CARGO_MANIFEST_DIR").unwrap_or(".")).join("resources/qiandao_fire.mjs"),
+        // Production path (when running from installed app)
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|p| p.join("resources/qiandao_fire.mjs")))
+            .unwrap_or_default(),
+        // Alternative production path
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().and_then(|p| p.parent()).map(|p| p.join("resources/qiandao_fire.mjs")))
+            .unwrap_or_default(),
+    ];
 
-    if !script_path.exists() {
-        return Err(AppError::Scrape(format!(
-            "Node.js script not found at: {}",
-            script_path.display()
-        )));
-    }
+    let script_path = possible_paths
+        .iter()
+        .find(|p| p.exists())
+        .cloned()
+        .ok_or_else(|| {
+            let paths_str = possible_paths.iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            AppError::Scrape(format!(
+                "Node.js script not found. Tried paths: {}",
+                paths_str
+            ))
+        })?;
 
     let output = tokio::process::Command::new("node")
         .arg(&script_path)

@@ -6,7 +6,8 @@ use std::collections::HashMap;
 use tracing::info;
 
 const LUOSI_API: &str = "http://115.231.176.101:8080/get";
-const QIANDAL_URL: &str = "https://www.palworld.com.cn/api/fire-price";
+const QIANDAO_API: &str = "https://api.qiandao.com";
+const QIANDAO_FIRE_PRICE_ENDPOINT: &str = "/c2c-web/v1/common/currency-spu-price-list";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FirePriceSnapshot {
@@ -86,7 +87,7 @@ impl Scraper {
 
     /// 从千岛 API 抓取火价数据
     pub async fn scrape_fire_price(market_mode: &str) -> Result<FirePriceSnapshot, String> {
-        let url = format!("{}?mode={}", QIANDAL_URL, market_mode);
+        let url = format!("{}{}?mode={}", QIANDAO_API, QIANDAO_FIRE_PRICE_ENDPOINT, market_mode);
         info!("抓取火价: {}", url);
 
         let client = Client::builder()

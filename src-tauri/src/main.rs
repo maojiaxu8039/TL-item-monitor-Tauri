@@ -10,11 +10,18 @@ use tl_monitor::app::{init_app, start_background_tasks};
 use tl_monitor::tray::setup_tray;
 use tl_monitor::commands::*;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
+    if let Err(e) = run_app() {
+        eprintln!("Application failed to start: {}", e);
+        std::process::exit(1);
+    }
+}
+
+fn run_app() -> Result<(), Box<dyn std::error::Error>> {
     info!("TL Monitor v1.0.0 starting...");
     
-    // Start Tokio runtime first
-    let rt = tokio::runtime::Runtime::new()?;
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("Failed to create Tokio runtime: {}", e))?;
     let rt_handle = rt.handle().clone();
 
     tauri::Builder::default()
@@ -26,7 +33,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
-            // Fire commands
             get_dashboard_summary,
             set_active_market_context,
             refresh_fire_price,
@@ -39,7 +45,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             get_fire_price_compare,
             get_fire_price_insight,
             get_item_price_insights,
-            // Items commands
             search_items,
             get_items_stats,
             validate_json_file,
@@ -54,7 +59,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             sync_items_record,
             get_item_history_by_season,
             get_items_price_compare,
-            // Sections commands
             get_sections,
             create_section,
             update_section,
@@ -64,37 +68,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             add_section_item,
             update_section_item,
             remove_section_item,
-            // Alerts commands
             get_alert_rules,
             create_alert_rule,
             update_alert_rule,
             toggle_alert_rule,
             delete_alert_rule,
             get_alert_events,
-            // Strategies commands
             get_strategies,
             create_strategy,
             update_strategy,
             delete_strategy,
-            // Config commands
             get_config,
             save_config,
             evaluate_worth_cmd,
             test_notification,
             open_log_dir,
             select_local_items_file,
-            // Import/Export commands
             import_watchlist_csv,
             export_watchlist_csv,
             get_backup_info,
             backup_database,
             restore_database,
-            // Diagnostics commands
             get_source_diagnostics,
             test_source_connection,
-            // Deals commands
             get_deal_alerts,
-            // Season commands
             archive_season,
             init_new_season,
             list_seasons,
@@ -104,41 +101,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .setup(move |app| {
             let handle = app.handle().clone();
             
-            // Initialize app state and database
-            let state = rt_handle.block_on(async {
+            let state: Arc<tl_monitor::core::state::AppState> = rt_handle.block_on(async {
                 match init_app(&handle).await {
-                    Ok(state) => Arc::new(state),
+                    Ok(state) => Ok(Arc::new(state)),
                     Err(e) => {
                         error!("App initialization failed: {}", e);
-                        panic!("Failed to initialize app: {}", e);
+                        Err(format!("Failed to initialize app: {}", e))
                     }
                 }
-            });
+            })?;
             
-            // Register state with Tauri so commands can access it via State
             app.manage(state.clone());
             
-            // Start background tasks
             let app_handle = handle.clone();
             let rt_handle_clone = rt.handle().clone();
             std::thread::spawn(move || {
                 start_background_tasks(rt_handle_clone, app_handle, state);
             });
             
-            // Setup system tray
             setup_tray(app)?;
             
             Ok(())
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                // Hide window instead of closing
-                window.hide().unwrap();
+                if let Err(e) = window.hide() {
+                    error!("Failed to hide window: {}", e);
+                }
                 api.prevent_close();
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .map_err(|e| format!("Tauri application error: {}", e))?;
 
     Ok(())
 }

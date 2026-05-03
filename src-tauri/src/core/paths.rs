@@ -2,9 +2,12 @@
 use std::path::PathBuf;
 
 fn app_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("com.tlmonitor.app")
+    let base = dirs::data_dir()
+        .or_else(|| dirs::home_dir().map(|h| h.join("AppData").join("Roaming")))
+        .unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        });
+    base.join("com.tlmonitor.app")
 }
 
 pub fn db_path() -> PathBuf {
