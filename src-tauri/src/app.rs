@@ -291,6 +291,22 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     }
 
+    // Apply v4: remove section_items foreign key constraint
+    if current_version < 4 {
+        tracing::info!("Applying migration v4: remove section_items FK constraint");
+        let sql = include_str!("db/migrations/004_remove_section_items_fk.sql");
+        sqlx::query(sql)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Migration v4 failed: {}", e))?;
+
+        sqlx::query("INSERT INTO _migrations (version, applied_at) VALUES (4, ?)")
+            .bind(chrono::Utc::now().timestamp())
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
     // Ensure split tables exist (idempotent, handles cases where v3 migration
     // was marked as applied but tables weren't actually created)
     ensure_split_tables(pool).await?;
