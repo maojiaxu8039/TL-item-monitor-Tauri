@@ -1,4 +1,5 @@
 use crate::db::models::Item;
+use crate::db::table_resolver::TableResolver;
 use crate::core::state::FirePriceSnapshot;
 use crate::core::errors::AppError;
 use sqlx::SqlitePool;
@@ -24,7 +25,7 @@ pub struct SeasonSummary {
 }
 
 /// Bulk insert item price snapshots for hourly history.
-/// Uses INSERT OR IGNORE to deduplicate by (season_id, item_id, market_mode, snapshot_at).
+/// Uses INSERT OR IGNORE to deduplicate by (item_id, snapshot_at).
 pub async fn insert_item_price_snapshots(
     pool: &SqlitePool,
     season_id: &str,
@@ -36,6 +37,7 @@ pub async fn insert_item_price_snapshots(
         return Ok(0);
     }
 
+    let table = TableResolver::item_snapshots_table(season_id, market_mode);
     let mut tx = pool.begin().await?;
     let mut inserted = 0usize;
 
@@ -43,13 +45,10 @@ pub async fn insert_item_price_snapshots(
     for chunk in items.chunks(BATCH_SIZE) {
         let mut qb: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
             sqlx::query_builder::QueryBuilder::new(
-                "INSERT OR IGNORE INTO item_price_snapshots (item_id, season_id, market_mode, fire_price, scraped_at) "
+                &format!("INSERT OR IGNORE INTO {} (item_id, fire_price, scraped_at) ", table)
             );
-        let _now = Utc::now().timestamp();
         qb.push_values(chunk, |mut b, item| {
             b.push_bind(&item.item_id)
-                .push_bind(season_id)
-                .push_bind(market_mode)
                 .push_bind(item.price)
                 .push_bind(snapshot_at);
         });
@@ -62,7 +61,7 @@ pub async fn insert_item_price_snapshots(
 }
 
 /// Insert a fire price record for hourly snapshot.
-/// Uses INSERT OR IGNORE to deduplicate by (season_id, market_mode, scraped_at).
+/// Uses INSERT OR IGNORE to deduplicate by scraped_at.
 pub async fn insert_fire_snapshot(
     pool: &SqlitePool,
     season_id: &str,
@@ -71,14 +70,16 @@ pub async fn insert_fire_snapshot(
     scraped_at: i64,
 ) -> Result<(), crate::core::errors::AppError> {
     let now = Utc::now().timestamp();
+    let table = TableResolver::fire_price_table(season_id, market_mode);
 
     sqlx::query(
-        r#"INSERT OR IGNORE INTO fire_price_records
-           (season_id, market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#
+        &format!(
+            r#"INSERT OR IGNORE INTO {}
+           (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+            table
+        )
     )
-    .bind(season_id)
-    .bind(market_mode)
     .bind(snapshot.rmb_per_10k_fire)
     .bind(snapshot.fire_per_rmb)
     .bind(snapshot.increase_ratio)
@@ -88,8 +89,7 @@ pub async fn insert_fire_snapshot(
     .bind(scraped_at)
     .bind(now)
     .execute(pool)
-    .await
-    ?;
+    .await?;
 
     Ok(())
 }
@@ -102,14 +102,16 @@ pub async fn get_item_history(
     item_id: &str,
     limit: i64,
 ) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
+    let table = TableResolver::item_snapshots_table(season_id, market_mode);
     let records = sqlx::query_as::<_, ItemHistoryRecord>(
-        "SELECT item_id, season_id, market_mode, fire_price, scraped_at \
-         FROM item_price_snapshots \
-         WHERE season_id = ? AND market_mode = ? AND item_id = ? \
-         ORDER BY scraped_at DESC LIMIT ?"
+        &format!(
+            "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at \
+             FROM {} \
+             WHERE item_id = ? \
+             ORDER BY scraped_at DESC LIMIT ?",
+            season_id, market_mode, table
+        )
     )
-    .bind(season_id)
-    .bind(market_mode)
     .bind(item_id)
     .bind(limit)
     .fetch_all(pool)
@@ -125,14 +127,16 @@ pub async fn get_all_item_history(
     hours: i64,
 ) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
     let since = chrono::Utc::now().timestamp() - hours * 3600;
+    let table = TableResolver::item_snapshots_table(season_id, market_mode);
     let records = sqlx::query_as::<_, ItemHistoryRecord>(
-        "SELECT item_id, season_id, market_mode, fire_price, scraped_at \
-         FROM item_price_snapshots \
-         WHERE season_id = ? AND market_mode = ? AND scraped_at > ? \
-         ORDER BY scraped_at DESC"
+        &format!(
+            "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at \
+             FROM {} \
+             WHERE scraped_at > ? \
+             ORDER BY scraped_at DESC",
+            season_id, market_mode, table
+        )
     )
-    .bind(season_id)
-    .bind(market_mode)
     .bind(since)
     .fetch_all(pool)
     .await?;
@@ -147,19 +151,7 @@ pub async fn get_item_history_by_season(
     item_id: &str,
     limit: i64,
 ) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
-    let records = sqlx::query_as::<_, ItemHistoryRecord>(
-        "SELECT item_id, season_id, market_mode, fire_price, scraped_at \
-         FROM item_price_snapshots \
-         WHERE season_id = ? AND market_mode = ? AND item_id = ? \
-         ORDER BY scraped_at DESC LIMIT ?"
-    )
-    .bind(season_id)
-    .bind(market_mode)
-    .bind(item_id)
-    .bind(limit)
-    .fetch_all(pool)
-    .await?;
-    Ok(records)
+    get_item_history(pool, season_id, market_mode, item_id, limit).await
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -180,24 +172,25 @@ pub async fn get_items_price_compare(
     history_season: &str,
     market_mode: &str,
 ) -> Result<Vec<ItemPriceCompare>, crate::core::errors::AppError> {
+    let current_items_table = TableResolver::items_table(current_season, market_mode);
+    let history_snapshots_table = TableResolver::item_snapshots_table(history_season, market_mode);
+
     // Get current season items
     let current_items: Vec<(String, String, f64)> = sqlx::query_as(
-        "SELECT item_id, name, price FROM items WHERE season_id = ? AND market_mode = ?"
+        &format!("SELECT item_id, name, price FROM {}", current_items_table)
     )
-    .bind(current_season)
-    .bind(market_mode)
     .fetch_all(pool)
     .await?;
 
     // Get history season snapshots for comparison
     let history_records: Vec<(String, f64)> = sqlx::query_as(
-        "SELECT item_id, AVG(fire_price) as avg_price \
-         FROM item_price_snapshots \
-         WHERE season_id = ? AND market_mode = ? \
-         GROUP BY item_id"
+        &format!(
+            "SELECT item_id, AVG(fire_price) as avg_price \
+             FROM {} \
+             GROUP BY item_id",
+            history_snapshots_table
+        )
     )
-    .bind(history_season)
-    .bind(market_mode)
     .fetch_all(pool)
     .await?;
 
@@ -207,11 +200,11 @@ pub async fn get_items_price_compare(
 
     // Get all history prices for percentile calculation
     let all_history: Vec<(String, f64)> = sqlx::query_as(
-        "SELECT item_id, fire_price FROM item_price_snapshots \
-         WHERE season_id = ? AND market_mode = ?"
+        &format!(
+            "SELECT item_id, fire_price FROM {}",
+            history_snapshots_table
+        )
     )
-    .bind(history_season)
-    .bind(market_mode)
     .fetch_all(pool)
     .await?;
 
@@ -281,33 +274,17 @@ pub async fn get_fire_price_compare(
     market_mode: &str,
 ) -> Result<FirePriceCompareResult, AppError> {
     let now = Utc::now().timestamp();
-    let _now_chrono = match chrono::DateTime::from_timestamp(now, 0) {
-        Some(dt) => dt,
-        None => {
-            return Ok(FirePriceCompareResult {
-                current_price: 0.0,
-                current_day: 0,
-                current_hour: 0,
-                history_avg: 0.0,
-                history_high: 0.0,
-                history_low: 0.0,
-                price_level: "无数据".to_string(),
-                price_trend: "未知".to_string(),
-                reference_price: 0.0,
-                suggested_price: 0.0,
-                risk_tip: "时间戳解析失败".to_string(),
-                compare_data: vec![],
-            });
-        }
-    };
+    let current_fire_table = TableResolver::fire_price_table(current_season, market_mode);
+    let history_fire_table = TableResolver::fire_price_table(history_season, market_mode);
     
     let current_record: Option<(f64, i64)> = sqlx::query_as(
-        "SELECT rmb_per_10k_fire, scraped_at FROM fire_price_records \
-         WHERE season_id = ? AND market_mode = ? AND scraped_at >= ? \
-         ORDER BY scraped_at DESC LIMIT 1"
+        &format!(
+            "SELECT rmb_per_10k_fire, scraped_at FROM {} \
+             WHERE scraped_at >= ? \
+             ORDER BY scraped_at DESC LIMIT 1",
+            current_fire_table
+        )
     )
-    .bind(current_season)
-    .bind(market_mode)
     .bind(now - 3600)
     .fetch_optional(pool)
     .await?;
@@ -331,16 +308,16 @@ pub async fn get_fire_price_compare(
         });
     };
     
-    let current_day = ((current_scraped_at / 86400) % 365) as i64;
-    let current_hour = ((current_scraped_at / 3600) % 24) as i64;
+    let current_day = (current_scraped_at / 86400) % 365;
+    let current_hour = (current_scraped_at / 3600) % 24;
     
-    let history_records: Vec<(f64, i64, i64)> = sqlx::query_as(
-        "SELECT rmb_per_10k_fire, scraped_at FROM fire_price_records \
-         WHERE season_id = ? AND market_mode = ? \
-         ORDER BY scraped_at ASC"
+    let history_records: Vec<(f64, i64)> = sqlx::query_as(
+        &format!(
+            "SELECT rmb_per_10k_fire, scraped_at FROM {} \
+             ORDER BY scraped_at ASC",
+            history_fire_table
+        )
     )
-    .bind(history_season)
-    .bind(market_mode)
     .fetch_all(pool)
     .await?;
     
@@ -366,9 +343,9 @@ pub async fn get_fire_price_compare(
     let mut all_prices: Vec<f64> = vec![];
     let mut compare_data: Vec<ComparePoint> = vec![];
     
-    for (price, scraped, _) in &history_records {
-        let day = ((scraped / 86400) % 365) as i64;
-        let hour = ((scraped / 3600) % 24) as i64;
+    for (price, scraped) in &history_records {
+        let day = (scraped / 86400) % 365;
+        let hour = (scraped / 3600) % 24;
         all_prices.push(*price);
         
         if day == current_day {
@@ -428,10 +405,10 @@ pub async fn get_fire_price_compare(
     };
     
     let risk_tip = format!(
-        "当前火价 {} 元/10K，较历史{}时段均价 {} 元/10K {}{:.1}%",
-        format!("{:.2}", current_price),
+        "当前火价 {:.2} 元/10K，较历史{}时段均价 {:.2} 元/10K {}{:.1}%",
+        current_price,
         if same_day_hour_prices.is_empty() { "同期" } else { "同时段" },
-        format!("{:.2}", same_day_avg),
+        same_day_avg,
         if current_price > same_day_avg { "高" } else { "低" },
         ((current_price - same_day_avg) / same_day_avg * 100.0).abs()
     );
@@ -463,13 +440,15 @@ pub async fn insert_item_snapshot(
     _last_time: Option<i64>,
     recorded_at: i64,
 ) -> Result<(), AppError> {
+    let table = TableResolver::item_snapshots_table(season_id, market_mode);
     sqlx::query(
-        r#"INSERT INTO item_price_snapshots (item_id, season_id, market_mode, fire_price, scraped_at)
-           VALUES (?, ?, ?, ?, ?)"#
+        &format!(
+            r#"INSERT INTO {} (item_id, fire_price, scraped_at)
+           VALUES (?, ?, ?)"#,
+            table
+        )
     )
     .bind(item_id)
-    .bind(season_id)
-    .bind(market_mode)
     .bind(price)
     .bind(recorded_at)
     .execute(pool)
@@ -485,17 +464,22 @@ pub async fn get_season_summary(
     market_mode: &str,
 ) -> Result<SeasonSummary, crate::core::errors::AppError> {
     let since_24h = Utc::now().timestamp() - 86400;
+    let items_table = TableResolver::items_table(season_id, market_mode);
+    let fire_table = TableResolver::fire_price_table(season_id, market_mode);
 
     let row = sqlx::query_as::<_, SeasonSummary>(
-        "SELECT \
-            COALESCE((SELECT rmb_per_10k_fire FROM fire_price_records WHERE season_id = ?1 AND market_mode = ?2 ORDER BY scraped_at DESC LIMIT 1), 0.0) as current_fire_price, \
-            COALESCE((SELECT COUNT(*) FROM items WHERE season_id = ?1 AND market_mode = ?2), 0) as item_count, \
-            COALESCE((SELECT MAX(rmb_per_10k_fire) FROM fire_price_records WHERE season_id = ?1 AND market_mode = ?2 AND scraped_at > ?3), 0.0) as fire_high_24h, \
-            COALESCE((SELECT MIN(rmb_per_10k_fire) FROM fire_price_records WHERE season_id = ?1 AND market_mode = ?2 AND scraped_at > ?3), 0.0) as fire_low_24h, \
-            COALESCE((SELECT AVG(rmb_per_10k_fire) FROM fire_price_records WHERE season_id = ?1 AND market_mode = ?2 AND scraped_at > ?3), 0.0) as fire_avg_24h"
+        &format!(
+            "SELECT \
+            COALESCE((SELECT rmb_per_10k_fire FROM {} ORDER BY scraped_at DESC LIMIT 1), 0.0) as current_fire_price, \
+            COALESCE((SELECT COUNT(*) FROM {}), 0) as item_count, \
+            COALESCE((SELECT MAX(rmb_per_10k_fire) FROM {} WHERE scraped_at > ?), 0.0) as fire_high_24h, \
+            COALESCE((SELECT MIN(rmb_per_10k_fire) FROM {} WHERE scraped_at > ?), 0.0) as fire_low_24h, \
+            COALESCE((SELECT AVG(rmb_per_10k_fire) FROM {} WHERE scraped_at > ?), 0.0) as fire_avg_24h",
+            fire_table, items_table, fire_table, fire_table, fire_table
+        )
     )
-    .bind(season_id)
-    .bind(market_mode)
+    .bind(since_24h)
+    .bind(since_24h)
     .bind(since_24h)
     .fetch_one(pool)
     .await?;
@@ -520,21 +504,23 @@ pub async fn get_season_trends(
     hours: i64,
 ) -> Result<Vec<SeasonTrendHour>, crate::core::errors::AppError> {
     let since = Utc::now().timestamp() - hours * 3600;
+    let fire_table = TableResolver::fire_price_table(season_id, market_mode);
 
     let records = sqlx::query_as::<_, SeasonTrendHour>(
-        "SELECT \
+        &format!(
+            "SELECT \
             strftime('%Y-%m-%d %H:00:00', datetime(scraped_at, 'unixepoch')) as hour, \
             AVG(rmb_per_10k_fire) as avg_fire_price, \
             MAX(rmb_per_10k_fire) as max_fire_price, \
             MIN(rmb_per_10k_fire) as min_fire_price, \
             COUNT(*) as record_count \
-         FROM fire_price_records \
-         WHERE season_id = ? AND market_mode = ? AND scraped_at > ? \
-         GROUP BY hour \
-         ORDER BY hour ASC"
+             FROM {} \
+             WHERE scraped_at > ? \
+             GROUP BY hour \
+             ORDER BY hour ASC",
+            fire_table
+        )
     )
-    .bind(season_id)
-    .bind(market_mode)
     .bind(since)
     .fetch_all(pool)
     .await?;

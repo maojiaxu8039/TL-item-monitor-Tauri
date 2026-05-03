@@ -115,7 +115,7 @@ async fn scrape_via_rust(mode: &str) -> Result<FirePriceSnapshot, AppError> {
         .map_err(|e| AppError::Scrape(format!("reqwest build failed: {}", e)))?;
 
     let resp = client
-        .post(&format!(
+        .post(format!(
             "{}/c2c-web/v1/common/currency-spu-price-list",
             QIANDAO_API
         ))

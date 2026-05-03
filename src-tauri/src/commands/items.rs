@@ -36,7 +36,8 @@ pub async fn search_items(
 
 #[tauri::command]
 pub async fn get_items_stats(state: State<'_, Arc<AppState>>) -> Result<ItemsStats, String> {
-    let total_items = repo_items::get_items_count(&state.db).await.unwrap_or(0);
+    let ctx = state.active_context.read().clone();
+    let total_items = repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await.unwrap_or(0);
     let status = state.task_status.read().clone();
     Ok(ItemsStats {
         total_items,
@@ -146,7 +147,7 @@ pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats,
     tracing::info!("reload_items: loaded {} items", items.len());
     let count = items.len() as i64;
 
-    repo_items::bulk_insert_items(&state.db, &items).await
+    repo_items::bulk_insert_items(&state.db, &season_id, "season_normal", &items).await
         .map_err(|e| format!("Failed to bulk-insert items: {}", e))?;
     
     tracing::info!("reload_items: inserted {} items into database", count);
@@ -168,10 +169,8 @@ pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats,
 
 #[tauri::command]
 pub async fn get_db_stats(state: State<'_, Arc<AppState>>) -> Result<DbStats, String> {
-    let (item_count, db_record_count) = tokio::join!(
-        repo_items::get_items_count(&state.db),
-        repo_items::get_db_record_count(&state.db)
-    );
+    let ctx = state.active_context.read().clone();
+    let item_count = repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await;
 
     let db_path = crate::core::paths::db_path();
     let db_size_kb = std::fs::metadata(&db_path)
@@ -180,7 +179,7 @@ pub async fn get_db_stats(state: State<'_, Arc<AppState>>) -> Result<DbStats, St
 
     Ok(DbStats {
         item_count: item_count.unwrap_or(0),
-        db_record_count: db_record_count.unwrap_or(0),
+        db_record_count: 0, // TODO: implement for split tables
         db_size_kb,
     })
 }
@@ -205,7 +204,8 @@ pub async fn get_item_history(
 
 #[tauri::command]
 pub async fn clear_items_database(state: State<'_, Arc<AppState>>) -> Result<String, String> {
-    repo_items::clear_all_items(&state.db).await
+    let ctx = state.active_context.read().clone();
+    repo_items::clear_items(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await
         .map_err(|e| format!("Failed to clear items: {}", e))?;
     
     {
@@ -221,7 +221,7 @@ pub async fn trigger_price_alert(app: AppHandle, state: State<'_, Arc<AppState>>
     let ctx = state.active_context.read().clone();
     let config = state.config.read().clone();
     
-    let all_section_items = repo_items::get_all_section_items(&state.db, &ctx.season_id, ctx.market_mode.as_str())
+    let all_section_items = crate::db::repo_sections::get_section_items(&state.db, &ctx.season_id)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -321,7 +321,8 @@ pub async fn trigger_price_alert(app: AppHandle, state: State<'_, Arc<AppState>>
 
 #[tauri::command]
 pub async fn get_item_types(state: State<'_, Arc<AppState>>) -> Result<Vec<String>, String> {
-    repo_items::get_distinct_item_types(&state.db)
+    let ctx = state.active_context.read().clone();
+    repo_items::get_distinct_item_types(&state.db, &ctx.season_id, ctx.market_mode.as_str())
         .await
         .map_err(|e| e.to_string())
 }

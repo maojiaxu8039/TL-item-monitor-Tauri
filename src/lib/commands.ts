@@ -506,7 +506,65 @@ export const cmd = {
 
   getDealAlerts: () =>
     invoke<{ bargains: DealAlert[]; sells: DealAlert[] }>("get_deal_alerts"),
+
+  // Season management
+  archiveSeason: (seasonId: string, archiveName?: string) =>
+    invoke<ArchiveResult>("archive_season", { seasonId, archiveName }),
+  initNewSeason: (seasonId: string, seasonName?: string, apiConfig?: SeasonApiConfigInput) =>
+    invoke<NewSeasonResult>("init_new_season", { seasonId, seasonName, apiConfig }),
+  listSeasons: () =>
+    invoke<SeasonInfo[]>("list_seasons"),
+  getSeasonApiConfig: (seasonId: string) =>
+    invoke<SeasonApiConfigResponse>("get_season_api_config_cmd", { seasonId }),
+  setSeasonApiConfig: (seasonId: string, config: SeasonApiConfigInput) =>
+    invoke<OkResponse>("set_season_api_config_cmd", { seasonId, ...config }),
 };
+
+export interface ArchiveResult {
+  success: boolean;
+  season_id: string;
+  message: string;
+  items_archived: number;
+  fire_records_archived: number;
+  snapshot_records_archived: number;
+  archive_path: string | null;
+}
+
+export interface NewSeasonResult {
+  success: boolean;
+  season_id: string;
+  message: string;
+  tables_created: string[];
+}
+
+export interface SeasonInfo {
+  season_id: string;
+  name: string;
+  is_current: boolean;
+  started_at: number | null;
+  ended_at: number | null;
+  item_count: number;
+  fire_record_count: number;
+}
+
+export interface SeasonApiConfigResponse {
+  season_id: string;
+  qiandao_tag_id_normal: string;
+  qiandao_spec_id_normal: string;
+  qiandao_tag_id_expert: string;
+  qiandao_spec_id_expert: string;
+  luosi_season_id_normal: number;
+  luosi_season_id_expert: number;
+}
+
+export interface SeasonApiConfigInput {
+  qiandao_tag_id_normal: string;
+  qiandao_spec_id_normal: string;
+  qiandao_tag_id_expert: string;
+  qiandao_spec_id_expert: string;
+  luosi_season_id_normal: number;
+  luosi_season_id_expert: number;
+}
 
 export interface DealAlert {
   item_id: string;

@@ -94,6 +94,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             test_source_connection,
             // Deals commands
             get_deal_alerts,
+            // Season commands
+            archive_season,
+            init_new_season,
+            list_seasons,
+            get_season_api_config_cmd,
+            set_season_api_config_cmd,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

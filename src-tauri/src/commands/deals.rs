@@ -1,4 +1,5 @@
 use crate::core::state::AppState;
+use crate::db::table_resolver::TableResolver;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::sync::Arc;
@@ -52,12 +53,13 @@ async fn calculate_real_alerts(
     let window_seconds = 24 * 3600; // 24h window for comparison
     let cutoff = now - window_seconds;
     
+    let items_table = TableResolver::items_table(season_id, market_mode);
+    let snapshots_table = TableResolver::item_snapshots_table(season_id, market_mode);
+    
     // Get current items with their latest prices
     let current_items: Vec<(String, String, String, f64)> = sqlx::query_as(
-        "SELECT item_id, name, item_type, price FROM items WHERE season_id = ? AND market_mode = ?"
+        &format!("SELECT item_id, name, item_type, price FROM {}", items_table)
     )
-    .bind(season_id)
-    .bind(market_mode)
     .fetch_all(pool)
     .await?;
     
@@ -70,14 +72,14 @@ async fn calculate_real_alerts(
     
     // Get previous snapshot prices (closest to 24h ago)
     let previous_snapshots: Vec<(String, f64)> = sqlx::query_as(
-        "SELECT item_id, fire_price FROM item_price_snapshots s1 \
-         WHERE season_id = ? AND market_mode = ? AND scraped_at >= ? \
-         AND scraped_at = (SELECT MAX(scraped_at) FROM item_price_snapshots s2 \
-                           WHERE s2.item_id = s1.item_id AND s2.season_id = s1.season_id \
-                           AND s2.market_mode = s1.market_mode AND s2.scraped_at >= ?)"
+        &format!(
+            "SELECT item_id, fire_price FROM {} s1 \
+             WHERE scraped_at >= ? \
+             AND scraped_at = (SELECT MAX(scraped_at) FROM {} s2 \
+                               WHERE s2.item_id = s1.item_id AND s2.scraped_at >= ?)",
+            snapshots_table, snapshots_table
+        )
     )
-    .bind(season_id)
-    .bind(market_mode)
     .bind(cutoff)
     .bind(cutoff)
     .fetch_all(pool)
@@ -88,14 +90,14 @@ async fn calculate_real_alerts(
     // Also get 1h ago snapshots for short-term changes
     let hour_ago = now - 3600;
     let recent_snapshots: Vec<(String, f64)> = sqlx::query_as(
-        "SELECT item_id, fire_price FROM item_price_snapshots s1 \
-         WHERE season_id = ? AND market_mode = ? AND scraped_at >= ? \
-         AND scraped_at = (SELECT MAX(scraped_at) FROM item_price_snapshots s2 \
-                           WHERE s2.item_id = s1.item_id AND s2.season_id = s1.season_id \
-                           AND s2.market_mode = s1.market_mode AND s2.scraped_at >= ?)"
+        &format!(
+            "SELECT item_id, fire_price FROM {} s1 \
+             WHERE scraped_at >= ? \
+             AND scraped_at = (SELECT MAX(scraped_at) FROM {} s2 \
+                               WHERE s2.item_id = s1.item_id AND s2.scraped_at >= ?)",
+            snapshots_table, snapshots_table
+        )
     )
-    .bind(season_id)
-    .bind(market_mode)
     .bind(hour_ago)
     .bind(hour_ago)
     .fetch_all(pool)

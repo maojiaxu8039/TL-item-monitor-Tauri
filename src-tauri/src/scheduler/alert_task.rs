@@ -3,7 +3,6 @@ use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
 use crate::core::state::{AppState, NotificationSettings};
-use crate::db::repo_items;
 use crate::services::send_notification;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -47,7 +46,7 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
 
     let ctx = state.active_context.read().clone();
 
-    let all_section_items = repo_items::get_all_section_items(&state.db, &ctx.season_id, ctx.market_mode.as_str())
+    let all_section_items = crate::db::repo_sections::get_section_items(&state.db, &ctx.season_id)
         .await;
 
     match all_section_items {

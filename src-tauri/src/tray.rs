@@ -62,7 +62,7 @@ async fn refresh_and_sync_fire_price(app: AppHandle) {
     }
 
     // Emit event to frontend
-    let _ = emit_fire_price_updated(
+    emit_fire_price_updated(
         &app,
         FirePricePayload {
             rmb_per_10k_fire: snapshot.rmb_per_10k_fire,

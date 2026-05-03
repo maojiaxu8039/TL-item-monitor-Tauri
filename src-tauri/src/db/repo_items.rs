@@ -1,4 +1,5 @@
-use crate::db::models::{Item, SectionItem};
+use crate::db::models::Item;
+use crate::db::table_resolver::TableResolver;
 use sqlx::SqlitePool;
 
 pub async fn search_items(
@@ -11,18 +12,20 @@ pub async fn search_items(
 ) -> Result<(Vec<Item>, i64), crate::core::errors::AppError> {
     let offset = (page - 1) * page_size;
     let pattern = format!("%{}%", keyword);
+    let table = TableResolver::items_table(season_id, market_mode);
 
     let items: Vec<Item> = sqlx::query_as(
-        r#"
-        SELECT item_id, season_id, market_mode, name, item_type, source, price, last_time, updated_at
-        FROM items
-        WHERE season_id = ? AND market_mode = ? AND name LIKE ?
-        ORDER BY name
-        LIMIT ? OFFSET ?
-        "#,
+        &format!(
+            r#"
+            SELECT item_id, '{}' as season_id, '{}' as market_mode, name, item_type, source, price, last_time, updated_at
+            FROM {}
+            WHERE name LIKE ?
+            ORDER BY name
+            LIMIT ? OFFSET ?
+            "#,
+            season_id, market_mode, table
+        ),
     )
-    .bind(season_id)
-    .bind(market_mode)
     .bind(&pattern)
     .bind(page_size)
     .bind(offset)
@@ -30,10 +33,8 @@ pub async fn search_items(
     .await?;
 
     let total: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM items WHERE season_id = ? AND market_mode = ? AND name LIKE ?",
+        &format!("SELECT COUNT(*) FROM {} WHERE name LIKE ?", table),
     )
-    .bind(season_id)
-    .bind(market_mode)
     .bind(&pattern)
     .fetch_one(pool)
     .await?;
@@ -41,28 +42,37 @@ pub async fn search_items(
     Ok((items, total.0))
 }
 
-/// Count ALL items regardless of season/market_mode.
-pub async fn get_items_count(pool: &SqlitePool) -> Result<i64, crate::core::errors::AppError> {
-    let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM items")
+/// Count items in a specific season/mode table.
+pub async fn get_items_count(pool: &SqlitePool, season_id: &str, market_mode: &str) -> Result<i64, crate::core::errors::AppError> {
+    let table = TableResolver::items_table(season_id, market_mode);
+    let (count,): (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", table))
         .fetch_one(pool)
         .await?;
     Ok(count)
 }
 
-/// Bulk upsert items using INSERT OR REPLACE, batched in groups of 100.
-/// Uses a transaction: if any batch fails, all changes are rolled back.
-pub async fn bulk_insert_items(pool: &SqlitePool, items: &[Item]) -> Result<(), crate::core::errors::AppError> {
+/// Bulk upsert items into the season/mode specific table.
+pub async fn bulk_insert_items(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    items: &[Item],
+) -> Result<(), crate::core::errors::AppError> {
+    if items.is_empty() {
+        return Ok(());
+    }
+    
+    let table = TableResolver::items_table(season_id, market_mode);
     let mut tx = pool.begin().await?;
     const BATCH_SIZE: usize = 100;
+    
     for chunk in items.chunks(BATCH_SIZE) {
         let mut qb: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
             sqlx::query_builder::QueryBuilder::new(
-                "INSERT OR REPLACE INTO items (item_id, season_id, market_mode, name, item_type, source, price, last_time, updated_at) "
+                &format!("INSERT OR REPLACE INTO {} (item_id, name, item_type, source, price, last_time, updated_at) ", table)
             );
         qb.push_values(chunk, |mut b, item| {
             b.push_bind(&item.item_id)
-                .push_bind(&item.season_id)
-                .push_bind(&item.market_mode)
                 .push_bind(&item.name)
                 .push_bind(&item.item_type)
                 .push_bind(&item.source)
@@ -77,17 +87,36 @@ pub async fn bulk_insert_items(pool: &SqlitePool, items: &[Item]) -> Result<(), 
 }
 
 pub async fn get_db_record_count(pool: &SqlitePool) -> Result<i64, crate::core::errors::AppError> {
-    let (count,): (i64,) = sqlx::query_as(
-        "SELECT (SELECT COUNT(*) FROM items) + (SELECT COUNT(*) FROM fire_price_records) + (SELECT COUNT(*) FROM section_items)"
-    )
-    .fetch_one(pool)
-    .await?;
-    Ok(count)
+    // Sum counts from all split tables
+    let mut total = 0i64;
+    for (season, mode) in TableResolver::supported_combinations() {
+        let items_table = TableResolver::items_table(season, mode);
+        let fire_table = TableResolver::fire_price_table(season, mode);
+        
+        let count: (i64,) = sqlx::query_as(
+            &format!(
+                "SELECT (SELECT COUNT(*) FROM {}) + (SELECT COUNT(*) FROM {})",
+                items_table, fire_table
+            )
+        )
+        .fetch_one(pool)
+        .await?;
+        total += count.0;
+    }
+    Ok(total)
 }
 
-pub async fn get_distinct_item_types(pool: &SqlitePool) -> Result<Vec<String>, crate::core::errors::AppError> {
+pub async fn get_distinct_item_types(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<Vec<String>, crate::core::errors::AppError> {
+    let table = TableResolver::items_table(season_id, market_mode);
     let types: Vec<(String,)> = sqlx::query_as(
-        "SELECT DISTINCT item_type FROM items WHERE item_type IS NOT NULL AND item_type != '' ORDER BY item_type"
+        &format!(
+            "SELECT DISTINCT item_type FROM {} WHERE item_type IS NOT NULL AND item_type != '' ORDER BY item_type",
+            table
+        )
     )
     .fetch_all(pool)
     .await?;
@@ -99,90 +128,37 @@ pub async fn get_items_by_season(
     season_id: &str,
     market_mode: &str,
 ) -> Result<Vec<Item>, crate::core::errors::AppError> {
+    let table = TableResolver::items_table(season_id, market_mode);
     let items: Vec<Item> = sqlx::query_as(
-        r#"
-        SELECT item_id, season_id, market_mode, name, item_type, source, price, last_time, updated_at
-        FROM items
-        WHERE season_id = ? AND market_mode = ?
-        "#
+        &format!(
+            r#"
+            SELECT item_id, '{}' as season_id, '{}' as market_mode, name, item_type, source, price, last_time, updated_at
+            FROM {}
+            ORDER BY name
+            "#,
+            season_id, market_mode, table
+        )
     )
-    .bind(season_id)
-    .bind(market_mode)
     .fetch_all(pool)
     .await?;
     Ok(items)
 }
 
-pub async fn get_item_previous_price(
-    pool: &SqlitePool,
-    item_id: &str,
-    season_id: &str,
-    market_mode: &str,
-    seconds_ago: i64,
-) -> Result<Option<f64>, crate::core::errors::AppError> {
-    let now = chrono::Utc::now().timestamp();
-    let cutoff = now - seconds_ago;
-
-    let result: Option<(f64,)> = sqlx::query_as(
-        r#"
-        SELECT price FROM items
-        WHERE item_id = ? AND season_id = ? AND market_mode = ? AND updated_at <= ?
-        ORDER BY updated_at DESC
-        LIMIT 1
-        "#
-    )
-    .bind(item_id)
-    .bind(season_id)
-    .bind(market_mode)
-    .bind(cutoff)
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(result.map(|(p,)| p))
-}
-
-pub async fn get_all_section_items(
+pub async fn get_all_items(
     pool: &SqlitePool,
     season_id: &str,
     market_mode: &str,
-) -> Result<Vec<SectionItem>, crate::core::errors::AppError> {
-    let items: Vec<SectionItem> = sqlx::query_as(
-        r#"
-        SELECT si.id, si.section_id, si.season_id, si.market_mode, si.item_id,
-               i.name as item_name, i.item_type as item_type, i.price as current_price,
-               si.purchase_fire_price, si.count, si.more_value, si.sort_order,
-               CASE WHEN i.last_time IS NOT NULL THEN CAST(i.last_time AS TEXT) ELSE NULL END as last_time,
-               si.created_at, si.updated_at
-        FROM section_items si
-        LEFT JOIN items i ON si.item_id = i.item_id AND si.season_id = i.season_id AND si.market_mode = i.market_mode
-        WHERE si.season_id = ? AND si.market_mode = ?
-        "#
-    )
-    .bind(season_id)
-    .bind(market_mode)
-    .fetch_all(pool)
-    .await?;
-    Ok(items)
+) -> Result<Vec<Item>, crate::core::errors::AppError> {
+    get_items_by_season(pool, season_id, market_mode).await
 }
 
-pub async fn get_all_items(pool: &SqlitePool) -> Result<Vec<Item>, crate::core::errors::AppError> {
-    let items: Vec<Item> = sqlx::query_as(
-        r#"
-        SELECT item_id, season_id, market_mode, name, item_type, source, price, last_time, updated_at
-        FROM items
-        ORDER BY name
-        "#,
-    )
-    .fetch_all(pool)
-    .await?;
-    Ok(items)
-}
-
-pub async fn clear_all_items(pool: &SqlitePool) -> Result<(), crate::core::errors::AppError> {
-    sqlx::query("DELETE FROM items")
-        .execute(pool)
-        .await?;
-    sqlx::query("DELETE FROM section_items")
+pub async fn clear_items(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<(), crate::core::errors::AppError> {
+    let table = TableResolver::items_table(season_id, market_mode);
+    sqlx::query(&format!("DELETE FROM {}", table))
         .execute(pool)
         .await?;
     Ok(())

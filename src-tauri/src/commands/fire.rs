@@ -14,9 +14,8 @@ pub async fn get_dashboard_summary(state: State<'_, Arc<AppState>>) -> Result<Da
     let fire = state.fire_price.read().clone();
     let status = state.task_status.read().clone();
 
-    let (item_count, db_record_count, totals) = tokio::join!(
-        repo_items::get_items_count(&state.db),
-        repo_items::get_db_record_count(&state.db),
+    let (item_count, totals) = tokio::join!(
+        repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str()),
         repo_sections::get_totals(&state.db, &ctx.season_id, ctx.market_mode.as_str())
     );
 
@@ -37,7 +36,7 @@ pub async fn get_dashboard_summary(state: State<'_, Arc<AppState>>) -> Result<Da
         season_name: ctx.season_id.clone(),
         market_mode: ctx.market_mode.as_str().to_string(),
         item_count: item_count.unwrap_or(0),
-        db_record_count: db_record_count.unwrap_or(0),
+        db_record_count: 0, // TODO: implement for split tables
         last_fire_at,
         last_items_at,
         task_running: status.fire_scrape_running || status.items_reload_running,
@@ -144,7 +143,8 @@ pub async fn refresh_items(state: State<'_, Arc<AppState>>) -> Result<OkResponse
         .map_err(|e| format!("Scrape failed: {}", e))?;
     let count = items.len() as i64;
 
-    crate::db::repo_items::bulk_insert_items(&state.db, &items)
+    let ctx = state.active_context.read().clone();
+    crate::db::repo_items::bulk_insert_items(&state.db, &ctx.season_id, ctx.market_mode.as_str(), &items)
         .await
         .map_err(|e| format!("Bulk insert failed: {}", e))?;
 

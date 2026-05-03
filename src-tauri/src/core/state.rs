@@ -100,6 +100,39 @@ pub struct AppSettings {
     pub auto_update: bool,
 }
 
+/// Per-season API configuration for data sources.
+/// Each season may have different API parameters from Qiandao and Luosi.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct SeasonApiConfig {
+    /// Qiandao API tagId for normal mode (赛季普通)
+    pub qiandao_tag_id_normal: String,
+    /// Qiandao API specId for normal mode
+    pub qiandao_spec_id_normal: String,
+    /// Qiandao API tagId for expert mode (赛季专家)
+    pub qiandao_tag_id_expert: String,
+    /// Qiandao API specId for expert mode
+    pub qiandao_spec_id_expert: String,
+    /// Luosi API season_id for normal mode (e.g. 1401 for ss12)
+    pub luosi_season_id_normal: i32,
+    /// Luosi API season_id for expert mode (e.g. 1431 for ss12)
+    pub luosi_season_id_expert: i32,
+}
+
+impl Default for SeasonApiConfig {
+    fn default() -> Self {
+        // SS12 defaults
+        Self {
+            qiandao_tag_id_normal: "1560053".to_string(),
+            qiandao_spec_id_normal: "267416".to_string(),
+            qiandao_tag_id_expert: "1560055".to_string(),
+            qiandao_spec_id_expert: "267417".to_string(),
+            luosi_season_id_normal: 1401,
+            luosi_season_id_expert: 1431,
+        }
+    }
+}
+
 impl Default for ScrapeSettings {
     fn default() -> Self {
         Self {

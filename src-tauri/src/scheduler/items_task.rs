@@ -60,12 +60,12 @@ pub async fn run_items_reload_task(
                     Ok(items) => {
                         let count = items.len() as i64;
 
-                        if let Err(e) = repo_items::bulk_insert_items(&state.db, &items).await {
+                        if let Err(e) = repo_items::bulk_insert_items(&state.db, &ctx.season_id, ctx.market_mode.as_str(), &items).await {
                             error!("Failed to bulk-insert items: {}", e);
                             let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
                                 &state.db,
                                 source_name,
-                                &source_type,
+                                source_type,
                                 true,
                                 Some(ctx.market_mode.as_str()),
                                 None,
@@ -80,7 +80,7 @@ pub async fn run_items_reload_task(
                             let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
                                 &state.db,
                                 source_name,
-                                &source_type,
+                                source_type,
                                 true,
                                 Some(ctx.market_mode.as_str()),
                                 None,
@@ -115,7 +115,7 @@ pub async fn run_items_reload_task(
                         let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
                             &state.db,
                             source_name,
-                            &source_type,
+                            source_type,
                             true,
                             Some(ctx.market_mode.as_str()),
                             None,

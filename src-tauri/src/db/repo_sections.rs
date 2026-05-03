@@ -1,4 +1,5 @@
 use crate::db::models::{Section, SectionItem};
+use crate::db::table_resolver::TableResolver;
 use sqlx::SqlitePool;
 use chrono::Utc;
 
@@ -71,23 +72,45 @@ pub async fn reorder_sections(pool: &SqlitePool, ids: &[String]) -> Result<(), c
 }
 
 pub async fn get_section_items(pool: &SqlitePool, section_id: &str) -> Result<Vec<SectionItem>, crate::core::errors::AppError> {
-    let items: Vec<SectionItem> = sqlx::query_as(
-        r#"
-        SELECT
-            si.id, si.section_id, si.season_id, si.market_mode, si.item_id,
-            i.name as item_name, i.item_type as item_type, i.price as current_price,
-            si.purchase_fire_price, si.count, si.more_value, si.sort_order,
-            CASE WHEN i.last_time IS NOT NULL THEN CAST(i.last_time AS TEXT) ELSE NULL END as last_time,
-            si.created_at, si.updated_at
-        FROM section_items si
-        LEFT JOIN items i ON si.item_id = i.item_id AND si.season_id = i.season_id AND si.market_mode = i.market_mode
-        WHERE si.section_id = ?
-        ORDER BY si.sort_order, si.created_at
-        "#
-    )
-    .bind(section_id)
-    .fetch_all(pool)
-    .await?;
+    // Need to LEFT JOIN with season/mode specific items table
+    // Since section_items can contain items from different seasons/modes,
+    // we use a UNION approach to query all possible items tables
+    let mut items = Vec::new();
+
+    for (season, mode) in TableResolver::supported_combinations() {
+        let items_table = TableResolver::items_table(season, mode);
+        let rows: Vec<SectionItem> = sqlx::query_as(
+            &format!(
+                r#"
+                SELECT
+                    si.id, si.section_id, si.season_id, si.market_mode, si.item_id,
+                    i.name as item_name, i.item_type as item_type, i.price as current_price,
+                    si.purchase_fire_price, si.count, si.more_value, si.sort_order,
+                    CASE WHEN i.last_time IS NOT NULL THEN CAST(i.last_time AS TEXT) ELSE NULL END as last_time,
+                    si.created_at, si.updated_at
+                FROM section_items si
+                LEFT JOIN {} i ON si.item_id = i.item_id
+                WHERE si.section_id = ? AND si.season_id = ? AND si.market_mode = ?
+                ORDER BY si.sort_order, si.created_at
+                "#,
+                items_table
+            )
+        )
+        .bind(section_id)
+        .bind(season)
+        .bind(mode)
+        .fetch_all(pool)
+        .await?;
+
+        items.extend(rows);
+    }
+
+    // Sort by sort_order then created_at
+    items.sort_by(|a, b| {
+        a.sort_order.cmp(&b.sort_order)
+            .then_with(|| a.created_at.cmp(&b.created_at))
+    });
+
     Ok(items)
 }
 
@@ -104,12 +127,11 @@ pub async fn add_section_item(
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().timestamp();
 
+    let items_table = TableResolver::items_table(season_id, market_mode);
     let last_time: Option<String> = sqlx::query_scalar::<_, Option<i64>>(
-        "SELECT last_time FROM items WHERE item_id = ? AND season_id = ? AND market_mode = ?"
+        &format!("SELECT last_time FROM {} WHERE item_id = ?", items_table)
     )
     .bind(item_id)
-    .bind(season_id)
-    .bind(market_mode)
     .fetch_optional(pool)
     .await?
     .flatten()
@@ -204,13 +226,17 @@ pub async fn get_totals(
     season_id: &str,
     market_mode: &str,
 ) -> Result<(f64, f64), crate::core::errors::AppError> {
+    let items_table = TableResolver::items_table(season_id, market_mode);
     let rows: Vec<(f64, i32, Option<f64>)> = sqlx::query_as(
-        r#"
-        SELECT si.purchase_fire_price, si.count, i.price as current_price
-        FROM section_items si
-        LEFT JOIN items i ON si.item_id = i.item_id AND si.season_id = i.season_id AND si.market_mode = i.market_mode
-        WHERE si.season_id = ? AND si.market_mode = ?
-        "#
+        &format!(
+            r#"
+            SELECT si.purchase_fire_price, si.count, i.price as current_price
+            FROM section_items si
+            LEFT JOIN {} i ON si.item_id = i.item_id
+            WHERE si.season_id = ? AND si.market_mode = ?
+            "#,
+            items_table
+        )
     )
     .bind(season_id)
     .bind(market_mode)

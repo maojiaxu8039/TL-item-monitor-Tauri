@@ -156,33 +156,35 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
     };
 
     // Auto-import items: prefer API scrape, fall back to JSON file
-    let items_count = repo_items::get_items_count(&pool).await.unwrap_or(0);
+    let default_season = config.app.season_id.clone();
+    let default_mode = config.scrape.fire_price_mode.clone();
+    let items_count = repo_items::get_items_count(&pool, &default_season, &default_mode).await.unwrap_or(0);
     let json_path = config.scrape.items_json_path.clone();
     let json_exists = std::path::Path::new(&json_path).exists();
 
     let items_cache: Vec<Item> = if items_count == 0 {
         if json_exists {
             // JSON exists: try API first, fall back to JSON
-            match scraper::scrape_items(&config.app.season_id, "season_normal").await {
+            match scraper::scrape_items(&default_season, &default_mode).await {
                 Ok(items) => {
-                    if repo_items::bulk_insert_items(&pool, &items).await.is_ok() {
+                    if repo_items::bulk_insert_items(&pool, &default_season, &default_mode, &items).await.is_ok() {
                         tracing::info!("Startup loaded {} items from API", items.len());
                         items
                     } else {
                         tracing::warn!("API items bulk-insert failed, falling back to JSON");
-                        load_items_from_json(&config.app.season_id, "season_normal", &json_path).unwrap_or_default()
+                        load_items_from_json(&default_season, &default_mode, &json_path).unwrap_or_default()
                     }
                 }
                 Err(e) => {
                     tracing::warn!("API scrape failed, falling back to JSON: {}", e);
-                    load_items_from_json(&config.app.season_id, "season_normal", &json_path).unwrap_or_default()
+                    load_items_from_json(&default_season, &default_mode, &json_path).unwrap_or_default()
                 }
             }
         } else {
             // No JSON: try API directly
-            match scraper::scrape_items(&config.app.season_id, "season_normal").await {
+            match scraper::scrape_items(&default_season, &default_mode).await {
                 Ok(items) => {
-                    if repo_items::bulk_insert_items(&pool, &items).await.is_ok() {
+                    if repo_items::bulk_insert_items(&pool, &default_season, &default_mode, &items).await.is_ok() {
                         tracing::info!("Startup loaded {} items from API", items.len());
                     }
                     items
@@ -273,10 +275,101 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     }
 
+    // Apply v3: split season tables
+    if current_version < 3 {
+        tracing::info!("Applying migration v3: split season tables");
+        let sql = include_str!("db/migrations/003_split_season_tables.sql");
+        sqlx::query(sql)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Migration v3 failed: {}", e))?;
+
+        sqlx::query("INSERT INTO _migrations (version, applied_at) VALUES (3, ?)")
+            .bind(chrono::Utc::now().timestamp())
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    // Ensure split tables exist (idempotent, handles cases where v3 migration
+    // was marked as applied but tables weren't actually created)
+    ensure_split_tables(pool).await?;
+
     // Seed seasons data
     seed_seasons(pool).await?;
 
     tracing::info!("Database migrations complete");
+    Ok(())
+}
+
+/// Idempotently ensure all season/mode split tables exist.
+/// This guards against partial or failed migrations.
+async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
+    use crate::db::table_resolver::TableResolver;
+
+    for (season, mode) in TableResolver::supported_combinations() {
+        let items_table = TableResolver::items_table(season, mode);
+        let fire_table = TableResolver::fire_price_table(season, mode);
+        let snapshots_table = TableResolver::item_snapshots_table(season, mode);
+
+        // Items table
+        sqlx::query(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (
+                item_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                item_type TEXT NOT NULL DEFAULT '',
+                source TEXT NOT NULL DEFAULT '',
+                price REAL NOT NULL DEFAULT 0,
+                last_time INTEGER,
+                updated_at INTEGER NOT NULL
+            )",
+            items_table
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to ensure items table {}: {}", items_table, e))?;
+
+        // Fire price table
+        sqlx::query(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rmb_per_10k_fire REAL NOT NULL,
+                fire_per_rmb REAL NOT NULL DEFAULT 0,
+                increase_ratio REAL,
+                trading_volume TEXT,
+                source TEXT NOT NULL DEFAULT '',
+                source_time TEXT,
+                scraped_at INTEGER NOT NULL,
+                created_at INTEGER NOT NULL,
+                UNIQUE(scraped_at)
+            )",
+            fire_table
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to ensure fire_price table {}: {}", fire_table, e))?;
+
+        // Item snapshots table
+        sqlx::query(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id TEXT NOT NULL,
+                fire_price REAL NOT NULL,
+                scraped_at INTEGER NOT NULL,
+                UNIQUE(item_id, scraped_at)
+            )",
+            snapshots_table
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to ensure snapshots table {}: {}", snapshots_table, e))?;
+
+        tracing::info!(
+            "Ensured split tables for {}/{}: {}, {}, {}",
+            season, mode, items_table, fire_table, snapshots_table
+        );
+    }
+
     Ok(())
 }
 
