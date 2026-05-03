@@ -86,6 +86,7 @@ async fn scrape_by_season_id(api_season_id: i32, season_id: &str, market_mode: &
         .map_err(|e| AppError::Scrape(format!("failed to parse JSON: {}", e)))?;
 
     let now = chrono::Utc::now().timestamp();
+    let season_day = crate::db::repo_items::calculate_season_day();
     let items: Vec<Item> = map
         .into_iter()
         .map(|(item_id, item)| Item {
@@ -97,6 +98,7 @@ async fn scrape_by_season_id(api_season_id: i32, season_id: &str, market_mode: &
             source: "luosi_api".to_string(),
             price: item.price,
             last_time: Some(item.last_time),
+            season_day,
             updated_at: now,
         })
         .collect();

@@ -80,6 +80,7 @@ export interface FireHistoryItem {
   fire_per_rmb: number;
   increase_ratio: number | null;
   scraped_at: number;
+  season_day: number;
 }
 
 export interface ItemHistoryRecord {
@@ -370,6 +371,8 @@ export const cmd = {
 
   getFireHistory: (hours: number) =>
     invoke<FireHistoryItem[]>("get_fire_history", { hours }),
+  getFireHistoryBySeason: (seasonId: string, marketMode: string, hours: number) =>
+    invoke<FireHistoryItem[]>("get_fire_history_by_season", { seasonId, marketMode, hours }),
 
   importWatchlistCsv: (content: string) =>
     invoke<{ imported: number; errors: string[] }>("import_watchlist_csv", { content }),
@@ -510,8 +513,8 @@ export const cmd = {
   // Season management
   archiveSeason: (seasonId: string, archiveName?: string) =>
     invoke<ArchiveResult>("archive_season", { seasonId, archiveName }),
-  initNewSeason: (seasonId: string, seasonName?: string, apiConfig?: SeasonApiConfigInput) =>
-    invoke<NewSeasonResult>("init_new_season", { seasonId, seasonName, apiConfig }),
+  initNewSeason: (seasonId: string, seasonName?: string) =>
+    invoke<NewSeasonResult>("init_new_season", { seasonId, seasonName }),
   listSeasons: () =>
     invoke<SeasonInfo[]>("list_seasons"),
   getSeasonApiConfig: (seasonId: string) =>

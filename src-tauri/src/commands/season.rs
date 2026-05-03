@@ -144,13 +144,30 @@ pub async fn archive_season(
 
 /// Initialize tables for a new season.
 /// Creates empty split tables for the given season_id.
+/// Requires current season to be archived first.
 #[tauri::command]
 pub async fn init_new_season(
     state: State<'_, Arc<AppState>>,
     season_id: String,
     season_name: Option<String>,
-    api_config: Option<SeasonApiConfig>,
 ) -> Result<NewSeasonResult, String> {
+    // Check if current season exists and is not archived
+    let current_season: Option<(String, i32)> = sqlx::query_as(
+        "SELECT id, is_current FROM seasons WHERE is_current = 1 LIMIT 1"
+    )
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| format!("Failed to check current season: {}", e))?;
+
+    if let Some((id, is_current)) = current_season {
+        if is_current == 1 {
+            return Err(format!(
+                "请先归档当前赛季 '{}' 后再初始化新赛季",
+                id
+            ));
+        }
+    }
+
     let mut created_tables = Vec::new();
 
     for mode in ["season_normal", "season_expert"] {
@@ -282,9 +299,9 @@ pub async fn init_new_season(
         let _ = crate::core::config::save_config(&cfg);
     }
 
-    // Insert API config for new season (use provided or default)
-    let config = api_config.unwrap_or_default();
-    crate::db::repo_season_api::set_season_api_config(&state.db, &season_id, &config)
+    // Insert default API config for new season (can be updated later)
+    let default_config = SeasonApiConfig::default();
+    crate::db::repo_season_api::set_season_api_config(&state.db, &season_id, &default_config)
         .await
         .map_err(|e| format!("Failed to save API config: {}", e))?;
 

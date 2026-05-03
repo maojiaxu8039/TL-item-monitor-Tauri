@@ -1,6 +1,16 @@
 use crate::db::models::Item;
 use crate::db::table_resolver::TableResolver;
 use sqlx::SqlitePool;
+use chrono::Utc;
+
+/// Calculate season day based on current timestamp.
+/// Season day is the number of days since the season start (day 1, 2, 3, ...)
+/// TODO: In production, fetch actual season start date from seasons table
+pub fn calculate_season_day() -> i32 {
+    // Placeholder: returns 1 for now
+    // Should be calculated based on season start date
+    1
+}
 
 pub async fn search_items(
     pool: &SqlitePool,
@@ -17,7 +27,7 @@ pub async fn search_items(
     let items: Vec<Item> = sqlx::query_as(
         &format!(
             r#"
-            SELECT item_id, '{}' as season_id, '{}' as market_mode, name, item_type, source, price, last_time, updated_at
+            SELECT item_id, '{}' as season_id, '{}' as market_mode, name, item_type, source, price, last_time, season_day, updated_at
             FROM {}
             WHERE name LIKE ?
             ORDER BY name
@@ -63,13 +73,14 @@ pub async fn bulk_insert_items(
     }
     
     let table = TableResolver::items_table(season_id, market_mode);
+    let season_day = calculate_season_day();
     let mut tx = pool.begin().await?;
     const BATCH_SIZE: usize = 100;
     
     for chunk in items.chunks(BATCH_SIZE) {
         let mut qb: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
             sqlx::query_builder::QueryBuilder::new(
-                &format!("INSERT OR REPLACE INTO {} (item_id, name, item_type, source, price, last_time, updated_at) ", table)
+                &format!("INSERT OR REPLACE INTO {} (item_id, name, item_type, source, price, last_time, season_day, updated_at) ", table)
             );
         qb.push_values(chunk, |mut b, item| {
             b.push_bind(&item.item_id)
@@ -78,6 +89,7 @@ pub async fn bulk_insert_items(
                 .push_bind(&item.source)
                 .push_bind(item.price)
                 .push_bind(item.last_time)
+                .push_bind(season_day)
                 .push_bind(item.updated_at);
         });
         qb.build().execute(&mut *tx).await?;
@@ -132,7 +144,7 @@ pub async fn get_items_by_season(
     let items: Vec<Item> = sqlx::query_as(
         &format!(
             r#"
-            SELECT item_id, '{}' as season_id, '{}' as market_mode, name, item_type, source, price, last_time, updated_at
+            SELECT item_id, '{}' as season_id, '{}' as market_mode, name, item_type, source, price, last_time, season_day, updated_at
             FROM {}
             ORDER BY name
             "#,

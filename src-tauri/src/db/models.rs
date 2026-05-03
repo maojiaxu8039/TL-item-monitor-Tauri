@@ -13,6 +13,7 @@ pub struct Item {
     pub source: String,
     pub price: f64,
     pub last_time: Option<i64>,
+    pub season_day: i32,
     pub updated_at: i64,
 }
 
@@ -28,6 +29,7 @@ pub struct FirePriceRecord {
     pub source: String,
     pub source_time: Option<String>,
     pub scraped_at: i64,
+    pub season_day: i32,
     pub created_at: i64,
 }
 

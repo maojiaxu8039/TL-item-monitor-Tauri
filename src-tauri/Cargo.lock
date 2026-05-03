@@ -5397,6 +5397,7 @@ dependencies = [
  "dirs 5.0.1",
  "once_cell",
  "parking_lot",
+ "rand 0.8.6",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

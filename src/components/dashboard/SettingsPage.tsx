@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus, type JsonFileValidationResult, type SeasonInfo } from "@/lib/commands";
+import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus, type JsonFileValidationResult, type SeasonInfo, type SeasonApiConfigResponse } from "@/lib/commands";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { RefreshCw, Save, Settings, Bell, Database, Globe, AlertTriangle, Trash2, Volume2, Archive, Plus, Calendar } from "lucide-react";
+import { RefreshCw, Save, Settings, Bell, Database, Globe, AlertTriangle, Trash2, Volume2, Archive, Plus, Calendar, Edit3, Key } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -51,13 +51,16 @@ export default function SettingsPage() {
   const [newSeasonName, setNewSeasonName] = useState("");
   const [showNewSeasonForm, setShowNewSeasonForm] = useState(false);
 
-  // New season API config inputs
-  const [newQdTgn, setNewQdTgn] = useState("");
-  const [newQdSpn, setNewQdSpn] = useState("");
-  const [newQdTge, setNewQdTge] = useState("");
-  const [newQdSpe, setNewQdSpe] = useState("");
-  const [newLsSn, setNewLsSn] = useState("");
-  const [newLsSe, setNewLsSe] = useState("");
+  // API config editing state
+  const [editingApiSeason, setEditingApiSeason] = useState<string | null>(null);
+  const [apiConfigForm, setApiConfigForm] = useState({
+    qiandao_tag_id_normal: "",
+    qiandao_spec_id_normal: "",
+    qiandao_tag_id_expert: "",
+    qiandao_spec_id_expert: "",
+    luosi_season_id_normal: "",
+    luosi_season_id_expert: "",
+  });
 
   const seasonsQuery = useQuery<SeasonInfo[]>({
     queryKey: ["seasons"],
@@ -104,27 +107,13 @@ export default function SettingsPage() {
 
   const initNewSeasonMutation = useMutation({
     mutationFn: () => {
-      const apiConfig = {
-        qiandao_tag_id_normal: newQdTgn,
-        qiandao_spec_id_normal: newQdSpn,
-        qiandao_tag_id_expert: newQdTge,
-        qiandao_spec_id_expert: newQdSpe,
-        luosi_season_id_normal: parseInt(newLsSn || "0", 10),
-        luosi_season_id_expert: parseInt(newLsSe || "0", 10),
-      };
-      return cmd.initNewSeason(newSeasonId, newSeasonName || undefined, apiConfig);
+      return cmd.initNewSeason(newSeasonId, newSeasonName || undefined);
     },
     onSuccess: (result) => {
       toast.success(`新赛季 ${result.season_id} 初始化完成`);
       setSeasonId(result.season_id);
       setNewSeasonId("");
       setNewSeasonName("");
-      setNewQdTgn("");
-      setNewQdSpn("");
-      setNewQdTge("");
-      setNewQdSpe("");
-      setNewLsSn("");
-      setNewLsSe("");
       setShowNewSeasonForm(false);
       seasonsQuery.refetch();
     },
@@ -132,6 +121,44 @@ export default function SettingsPage() {
       toast.error(`初始化失败: ${err.message}`);
     },
   });
+
+  const saveApiConfigMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingApiSeason) throw new Error("未选择赛季");
+      return cmd.setSeasonApiConfig(editingApiSeason, {
+        qiandao_tag_id_normal: apiConfigForm.qiandao_tag_id_normal,
+        qiandao_spec_id_normal: apiConfigForm.qiandao_spec_id_normal,
+        qiandao_tag_id_expert: apiConfigForm.qiandao_tag_id_expert,
+        qiandao_spec_id_expert: apiConfigForm.qiandao_spec_id_expert,
+        luosi_season_id_normal: parseInt(apiConfigForm.luosi_season_id_normal || "0", 10),
+        luosi_season_id_expert: parseInt(apiConfigForm.luosi_season_id_expert || "0", 10),
+      });
+    },
+    onSuccess: () => {
+      toast.success("API 配置已保存");
+      setEditingApiSeason(null);
+    },
+    onError: (err: Error) => {
+      toast.error(`保存失败: ${err.message}`);
+    },
+  });
+
+  const loadApiConfig = async (seasonId: string) => {
+    try {
+      const config = await cmd.getSeasonApiConfig(seasonId);
+      setApiConfigForm({
+        qiandao_tag_id_normal: config.qiandao_tag_id_normal || "",
+        qiandao_spec_id_normal: config.qiandao_spec_id_normal || "",
+        qiandao_tag_id_expert: config.qiandao_tag_id_expert || "",
+        qiandao_spec_id_expert: config.qiandao_spec_id_expert || "",
+        luosi_season_id_normal: config.luosi_season_id_normal?.toString() || "",
+        luosi_season_id_expert: config.luosi_season_id_expert?.toString() || "",
+      });
+      setEditingApiSeason(seasonId);
+    } catch (err) {
+      toast.error(`加载配置失败: ${err}`);
+    }
+  };
 
   const testAlertMutation = useMutation<string, Error, void>({
     mutationFn: () => cmd.triggerPriceAlert(),
@@ -290,68 +317,40 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium text-slate-700">当前赛季 ID</div>
-              <div className="text-xs text-slate-400 mt-0.5">如 ss12、ss11 等</div>
+              <div className="text-xs text-slate-400 mt-0.5">归档当前赛季后可初始化新赛季</div>
             </div>
-            <input
-              type="text"
-              value={seasonId}
-              onChange={(e) => setSeasonId(e.target.value)}
-              placeholder="ss12"
-              className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 w-40 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-            />
+            <div className="text-sm font-semibold text-slate-800 bg-slate-100 px-4 py-1.5 rounded-lg border border-slate-200">
+              {seasonId.toUpperCase()}
+            </div>
           </div>
 
-          {/* Season list */}
-          <div className="border-t border-slate-100 pt-4">
-            <div className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-slate-500" />
-              赛季列表
-            </div>
-            {seasonsQuery.isLoading ? (
-              <div className="text-xs text-slate-400">加载中...</div>
-            ) : seasonsQuery.data && seasonsQuery.data.length > 0 ? (
-              <div className="space-y-2">
-                {seasonsQuery.data.map((s) => (
-                  <div
-                    key={s.season_id}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg border ${
-                      s.is_current
-                        ? 'border-blue-200 bg-blue-50'
-                        : 'border-slate-100 bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${s.is_current ? 'bg-blue-500' : 'bg-slate-300'}`} />
-                      <div>
-                        <div className="text-sm font-medium text-slate-700">
-                          {s.name}
-                          {s.is_current && (
-                            <span className="ml-2 text-xs px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">当前</span>
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          物品: {s.item_count} · 火价记录: {s.fire_record_count}
-                        </div>
-                      </div>
-                    </div>
-                    {!s.is_current && (
-                      <button
-                        onClick={() => {
-                          setSeasonId(s.season_id);
-                          toast.success(`已切换到赛季 ${s.season_id}`);
-                        }}
-                        className="text-xs px-2 py-1 border border-slate-200 rounded text-slate-600 hover:bg-white transition-colors"
-                      >
-                        切换
-                      </button>
-                    )}
+          {/* Season Dates */}
+          {seasonsQuery.data?.find(s => s.is_current) && (() => {
+            const currentSeason = seasonsQuery.data.find(s => s.is_current);
+            if (!currentSeason) return null;
+            return (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                  <div className="text-xs text-slate-400 mb-1">赛季开始日期</div>
+                  <div className="text-sm font-medium text-slate-700">
+                    {currentSeason.started_at 
+                      ? new Date(currentSeason.started_at * 1000).toLocaleDateString('zh-CN')
+                      : '未设置'
+                    }
                   </div>
-                ))}
+                </div>
+                <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                  <div className="text-xs text-slate-400 mb-1">赛季状态</div>
+                  <div className="text-sm font-medium text-green-600">
+                    {currentSeason.ended_at 
+                      ? `已结束 (${new Date(currentSeason.ended_at * 1000).toLocaleDateString('zh-CN')})`
+                      : '进行中'
+                    }
+                  </div>
+                </div>
               </div>
-            ) : (
-              <div className="text-xs text-slate-400">暂无赛季数据</div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* Archive current season */}
           <div className="border-t border-slate-100 pt-4">
@@ -374,11 +373,20 @@ export default function SettingsPage() {
           {/* Initialize new season */}
           <div className="border-t border-slate-100 pt-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="text-sm font-medium text-slate-700">初始化新赛季</div>
+              <div>
+                <div className="text-sm font-medium text-slate-700">初始化新赛季</div>
+                <div className="text-xs text-slate-400 mt-0.5">
+                  {seasonsQuery.data?.some(s => s.is_current)
+                    ? "请先归档当前赛季后再创建新赛季"
+                    : "当前无进行中的赛季，可以创建新赛季"
+                  }
+                </div>
+              </div>
               {!showNewSeasonForm && (
                 <button
                   onClick={() => setShowNewSeasonForm(true)}
-                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  disabled={seasonsQuery.data?.some(s => s.is_current) ?? false}
+                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   新建赛季
@@ -412,6 +420,50 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => {
+                      setShowNewSeasonForm(false);
+                      setNewSeasonId("");
+                      setNewSeasonName("");
+                    }}
+                    className="text-sm px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-white transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={() => setConfirmNewSeasonOpen(true)}
+                    disabled={!newSeasonId || initNewSeasonMutation.isPending}
+                    className="flex items-center gap-1.5 text-sm px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    {initNewSeasonMutation.isPending ? "初始化中..." : "确认初始化"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* API Config for Current Season */}
+          <div className="border-t border-slate-100 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                <Key className="w-4 h-4 text-slate-500" />
+                当前赛季 API 参数配置
+              </div>
+              <button
+                onClick={() => loadApiConfig(seasonId)}
+                className="flex items-center gap-1 text-xs px-2 py-1 border border-slate-200 rounded text-slate-600 hover:bg-white transition-colors"
+              >
+                <Edit3 className="w-3 h-3" />
+                {editingApiSeason === seasonId ? "收起" : "配置"}
+              </button>
+            </div>
+
+            {/* API Config Edit Form */}
+            {editingApiSeason === seasonId && (
+              <div className="space-y-4 bg-amber-50 rounded-lg p-4 border border-amber-100">
                 {/* Qiandao API */}
                 <div>
                   <div className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">
@@ -419,41 +471,41 @@ export default function SettingsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-slate-500 block mb-1">普通服 tagId *</label>
+                      <label className="text-xs text-slate-500 block mb-1">普通服 tagId</label>
                       <input
                         type="text"
-                        value={newQdTgn}
-                        onChange={(e) => setNewQdTgn(e.target.value)}
+                        value={apiConfigForm.qiandao_tag_id_normal}
+                        onChange={(e) => setApiConfigForm({ ...apiConfigForm, qiandao_tag_id_normal: e.target.value })}
                         placeholder="如 1560053"
                         className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-500 block mb-1">普通服 specId *</label>
+                      <label className="text-xs text-slate-500 block mb-1">普通服 specId</label>
                       <input
                         type="text"
-                        value={newQdSpn}
-                        onChange={(e) => setNewQdSpn(e.target.value)}
+                        value={apiConfigForm.qiandao_spec_id_normal}
+                        onChange={(e) => setApiConfigForm({ ...apiConfigForm, qiandao_spec_id_normal: e.target.value })}
                         placeholder="如 267416"
                         className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-500 block mb-1">专家服 tagId *</label>
+                      <label className="text-xs text-slate-500 block mb-1">专家服 tagId</label>
                       <input
                         type="text"
-                        value={newQdTge}
-                        onChange={(e) => setNewQdTge(e.target.value)}
+                        value={apiConfigForm.qiandao_tag_id_expert}
+                        onChange={(e) => setApiConfigForm({ ...apiConfigForm, qiandao_tag_id_expert: e.target.value })}
                         placeholder="如 1560055"
                         className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-500 block mb-1">专家服 specId *</label>
+                      <label className="text-xs text-slate-500 block mb-1">专家服 specId</label>
                       <input
                         type="text"
-                        value={newQdSpe}
-                        onChange={(e) => setNewQdSpe(e.target.value)}
+                        value={apiConfigForm.qiandao_spec_id_expert}
+                        onChange={(e) => setApiConfigForm({ ...apiConfigForm, qiandao_spec_id_expert: e.target.value })}
                         placeholder="如 267417"
                         className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                       />
@@ -468,21 +520,21 @@ export default function SettingsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-slate-500 block mb-1">普通服 season_id *</label>
+                      <label className="text-xs text-slate-500 block mb-1">普通服 season_id</label>
                       <input
                         type="number"
-                        value={newLsSn}
-                        onChange={(e) => setNewLsSn(e.target.value)}
+                        value={apiConfigForm.luosi_season_id_normal}
+                        onChange={(e) => setApiConfigForm({ ...apiConfigForm, luosi_season_id_normal: e.target.value })}
                         placeholder="如 1401"
                         className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-500 block mb-1">专家服 season_id *</label>
+                      <label className="text-xs text-slate-500 block mb-1">专家服 season_id</label>
                       <input
                         type="number"
-                        value={newLsSe}
-                        onChange={(e) => setNewLsSe(e.target.value)}
+                        value={apiConfigForm.luosi_season_id_expert}
+                        onChange={(e) => setApiConfigForm({ ...apiConfigForm, luosi_season_id_expert: e.target.value })}
                         placeholder="如 1431"
                         className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                       />
@@ -490,31 +542,20 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* Actions */}
                 <div className="flex items-center justify-end gap-2 pt-2">
                   <button
-                    onClick={() => {
-                      setShowNewSeasonForm(false);
-                      setNewSeasonId("");
-                      setNewSeasonName("");
-                      setNewQdTgn("");
-                      setNewQdSpn("");
-                      setNewQdTge("");
-                      setNewQdSpe("");
-                      setNewLsSn("");
-                      setNewLsSe("");
-                    }}
+                    onClick={() => setEditingApiSeason(null)}
                     className="text-sm px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-white transition-colors"
                   >
                     取消
                   </button>
                   <button
-                    onClick={() => setConfirmNewSeasonOpen(true)}
-                    disabled={!newSeasonId || !newQdTgn || !newQdSpn || !newQdTge || !newQdSpe || !newLsSn || !newLsSe || initNewSeasonMutation.isPending}
-                    className="flex items-center gap-1.5 text-sm px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => saveApiConfigMutation.mutate()}
+                    disabled={saveApiConfigMutation.isPending}
+                    className="flex items-center gap-1.5 text-sm px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    {initNewSeasonMutation.isPending ? "初始化中..." : "确认初始化"}
+                    <Save className="w-3.5 h-3.5" />
+                    {saveApiConfigMutation.isPending ? "保存中..." : "保存配置"}
                   </button>
                 </div>
               </div>
@@ -569,12 +610,9 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Volume2 className="w-4 h-4 text-slate-500" />
-              <div>
-                <div className="text-sm font-medium text-slate-700">开启语音提醒</div>
-                <div className="text-xs text-slate-400 mt-0.5">预警触发时播放语音提示</div>
-              </div>
+            <div>
+              <div className="text-sm font-medium text-slate-700">开启语音提醒</div>
+              <div className="text-xs text-slate-400 mt-0.5">预警触发时播放语音提示</div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -623,16 +661,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <div className="flex items-center justify-end pt-2">
-            <button
-              onClick={() => testAlertMutation.mutate()}
-              disabled={testAlertMutation.isPending}
-              className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-amber-200 rounded-lg text-amber-600 hover:bg-amber-50 transition-colors disabled:opacity-50"
-            >
-              <AlertTriangle className="w-3.5 h-3.5" />
-              {testAlertMutation.isPending ? "检测中..." : "测试价格预警"}
-            </button>
-          </div>
+
         </div>
       </section>
 
@@ -640,14 +669,14 @@ export default function SettingsPage() {
       <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
         <div className="flex items-center gap-2 mb-4">
           <Bell className="w-4 h-4 text-red-500" />
-          <h2 className="text-sm font-semibold text-slate-700">火价设置</h2>
+          <h2 className="text-sm font-semibold text-slate-700">火价监控</h2>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-slate-700">自动刷新火价</div>
-              <div className="text-xs text-slate-400 mt-0.5">开启后自动定期获取最新火价</div>
+              <div className="text-sm font-medium text-slate-700">自动采集火价</div>
+              <div className="text-xs text-slate-400 mt-0.5">定时从千岛获取当前赛季火价数据</div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -661,7 +690,10 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="text-sm font-medium text-slate-700">刷新间隔</div>
+            <div>
+              <div className="text-sm font-medium text-slate-700">采集间隔</div>
+              <div className="text-xs text-slate-400 mt-0.5">两次火价采集之间的时间间隔</div>
+            </div>
             <select
               value={fireInterval}
               onChange={(e) => setFireInterval(Number(e.target.value))}
@@ -682,14 +714,14 @@ export default function SettingsPage() {
       <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
         <div className="flex items-center gap-2 mb-4">
           <Database className="w-4 h-4 text-blue-500" />
-          <h2 className="text-sm font-semibold text-slate-700">物品数据设置</h2>
+          <h2 className="text-sm font-semibold text-slate-700">物品数据</h2>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-slate-700">自动刷新物品</div>
-              <div className="text-xs text-slate-400 mt-0.5">开启后自动定期重新加载物品数据</div>
+              <div className="text-sm font-medium text-slate-700">自动同步物品价格</div>
+              <div className="text-xs text-slate-400 mt-0.5">定时从小助手获取当前赛季物品价格数据</div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -703,7 +735,10 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="text-sm font-medium text-slate-700">刷新间隔</div>
+            <div>
+              <div className="text-sm font-medium text-slate-700">同步间隔</div>
+              <div className="text-xs text-slate-400 mt-0.5">两次物品价格同步之间的时间间隔</div>
+            </div>
             <select
               value={itemsInterval}
               onChange={(e) => setItemsInterval(Number(e.target.value))}
@@ -719,7 +754,10 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="text-sm font-medium text-slate-700">数据源</div>
+            <div>
+              <div className="text-sm font-medium text-slate-700">数据来源</div>
+              <div className="text-xs text-slate-400 mt-0.5">选择物品价格的获取方式</div>
+            </div>
             <select
               value={itemsSource}
               onChange={(e) => handleItemsSourceChange(e.target.value)}
@@ -784,7 +822,7 @@ export default function SettingsPage() {
                 className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
-                {refreshMutation.isPending ? "刷新中…" : "刷新物品"}
+                {refreshMutation.isPending ? "同步中…" : "立即同步"}
               </button>
             </div>
           </div>

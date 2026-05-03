@@ -38,6 +38,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             refresh_fire_price,
             refresh_items,
             get_fire_history,
+            get_fire_history_by_season,
             export_fire_history_csv,
             get_season_summary,
             get_season_trends,

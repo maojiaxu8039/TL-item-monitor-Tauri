@@ -166,7 +166,32 @@ pub async fn get_fire_history(
     hours: i64,
 ) -> Result<Vec<serde_json::Value>, String> {
     let ctx = state.active_context.read().clone();
-    Ok(repo_fire::get_fire_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), hours).await?)
+    let result = repo_fire::get_fire_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), hours).await?;
+    // If no data found in time range, return all data for the season
+    if result.is_empty() {
+        Ok(repo_fire::get_fire_history_all(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await?)
+    } else {
+        Ok(result)
+    }
+}
+
+#[tauri::command]
+pub async fn get_fire_history_by_season(
+    state: State<'_, Arc<AppState>>,
+    season_id: String,
+    market_mode: String,
+    hours: i64,
+) -> Result<Vec<serde_json::Value>, String> {
+    // For historical seasons, get all data without time filtering
+    // For current season, use time filtering
+    let ctx = state.active_context.read().clone();
+    let is_current_season = season_id == ctx.season_id;
+    
+    if is_current_season {
+        Ok(repo_fire::get_fire_history(&state.db, &season_id, &market_mode, hours).await?)
+    } else {
+        Ok(repo_fire::get_fire_history_all(&state.db, &season_id, &market_mode).await?)
+    }
 }
 
 #[tauri::command]

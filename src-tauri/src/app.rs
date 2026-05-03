@@ -62,6 +62,7 @@ pub fn load_items_from_json(season_id: &str, market_mode: &str, json_path: &str)
     }
     
     let now = chrono::Utc::now().timestamp();
+    let season_day = crate::db::repo_items::calculate_season_day();
     let items: Vec<Item> = map
         .into_values()
         .map(|entry| Item {
@@ -73,6 +74,7 @@ pub fn load_items_from_json(season_id: &str, market_mode: &str, json_path: &str)
             source: "local_json".to_string(),
             price: entry.price,
             last_time: Some(entry.last_time),
+            season_day,
             updated_at: now,
         })
         .collect();
@@ -337,6 +339,7 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
                 source TEXT NOT NULL DEFAULT '',
                 price REAL NOT NULL DEFAULT 0,
                 last_time INTEGER,
+                season_day INTEGER NOT NULL DEFAULT 1,
                 updated_at INTEGER NOT NULL
             )",
             items_table
@@ -356,6 +359,7 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
                 source TEXT NOT NULL DEFAULT '',
                 source_time TEXT,
                 scraped_at INTEGER NOT NULL,
+                season_day INTEGER NOT NULL DEFAULT 1,
                 created_at INTEGER NOT NULL,
                 UNIQUE(scraped_at)
             )",
@@ -372,6 +376,7 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
                 item_id TEXT NOT NULL,
                 fire_price REAL NOT NULL,
                 scraped_at INTEGER NOT NULL,
+                season_day INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(item_id, scraped_at)
             )",
             snapshots_table
@@ -415,6 +420,335 @@ async fn seed_seasons(pool: &SqlitePool) -> Result<(), String> {
     }
     
     tracing::info!("Seasons seed data ensured");
+    
+    // Seed test data: generate realistic SS11 and SS12 data for comparison testing
+    seed_test_data_for_ss11(pool).await?;
+    seed_test_data_for_ss12(pool).await?;
+    
+    Ok(())
+}
+
+/// Generate realistic test data for SS11 season.
+/// SS11 season start date: 2026-01-16, end date: 2026-04-16
+async fn seed_test_data_for_ss11(pool: &SqlitePool) -> Result<(), String> {
+    use crate::db::table_resolver::TableResolver;
+    use rand::{Rng, SeedableRng};
+    use rand::rngs::StdRng;
+    
+    tracing::info!("Generating realistic test data for SS11...");
+    
+    let mut rng = StdRng::seed_from_u64(42); // Fixed seed for reproducibility
+    
+    // SS11 season: 2026-01-16 to 2026-04-16 (90 days)
+    let season_start = chrono::DateTime::parse_from_rfc3339("2026-01-16T00:00:00Z")
+        .unwrap()
+        .timestamp();
+    let season_end = chrono::DateTime::parse_from_rfc3339("2026-04-16T00:00:00Z")
+        .unwrap()
+        .timestamp();
+    
+    for mode in ["season_normal", "season_expert"] {
+        let ss11_fire = TableResolver::fire_price_table("ss11", mode);
+        let ss11_items = TableResolver::items_table("ss11", mode);
+        
+        // Check if SS11 fire_price table already has data
+        let ss11_count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", ss11_fire))
+            .fetch_one(pool)
+            .await
+            .unwrap_or((0,));
+        
+        if ss11_count.0 > 0 {
+            tracing::info!("SS11 {} fire_price already has {} records, skipping", mode, ss11_count.0);
+            continue;
+        }
+        
+        // Generate 90 days of hourly fire price data for SS11
+        // SS11 pattern: starts lower, peaks around day 45, then declines
+        let base_price = if mode == "season_normal" { 28.0 } else { 32.0 };
+        let mut records_inserted = 0;
+        let total_days = ((season_end - season_start) / 86400) as i32;
+        
+        for day in 0..total_days {
+            for hour in 0..24 {
+                let scraped_at = season_start + (day as i64 * 24 * 3600) + (hour as i64 * 3600);
+                let season_day = day + 1;
+                
+                // Create a realistic price curve for SS11
+                // Week 1: rising, Week 2: peak, Week 3-4: declining
+                let day_factor = if day < 7 {
+                    1.0 + (day as f64 * 0.02) // Rising first week
+                } else if day < 14 {
+                    1.14 - ((day - 7) as f64 * 0.01) // Peak then slight decline
+                } else {
+                    1.07 - ((day - 14) as f64 * 0.015) // Declining
+                };
+                
+                // Add hourly volatility
+                let hour_volatility = (hour as f64 - 12.0) / 100.0; // Slight daily pattern
+                let random_noise = rng.gen_range(-0.02..0.02);
+                
+                let rmb_per_10k = base_price * day_factor * (1.0 + hour_volatility + random_noise);
+                let fire_per_rmb = 10000.0 / rmb_per_10k;
+                let increase_ratio = if records_inserted > 0 {
+                    Some(random_noise * 100.0)
+                } else {
+                    None
+                };
+                
+                let sql = format!(
+                    "INSERT INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, created_at) \
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    ss11_fire
+                );
+                
+                match sqlx::query(&sql)
+                    .bind(rmb_per_10k)
+                    .bind(fire_per_rmb)
+                    .bind(increase_ratio)
+                    .bind(format!("{}", rng.gen_range(1000..10000)))
+                    .bind("qiandao_api")
+                    .bind(chrono::DateTime::from_timestamp(scraped_at, 0).map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string()))
+                    .bind(scraped_at)
+                    .bind(season_day)
+                    .bind(scraped_at)
+                    .execute(pool)
+                    .await
+                {
+                    Ok(_) => records_inserted += 1,
+                    Err(e) => tracing::warn!("Failed to insert fire record: {}", e),
+                }
+            }
+        }
+        
+        tracing::info!("Generated {} fire_price records for SS11 {}", records_inserted, mode);
+        
+        // Check if SS11 items table already has data
+        let ss11_items_count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", ss11_items))
+            .fetch_one(pool)
+            .await
+            .unwrap_or((0,));
+        
+        if ss11_items_count.0 > 0 {
+            tracing::info!("SS11 {} items already has {} records, skipping", mode, ss11_items_count.0);
+            continue;
+        }
+        
+        // Generate sample items for SS11 with different prices than SS12
+        let sample_items = vec![
+            ("item_001", "传奇武器", "武器", 150.0),
+            ("item_002", "史诗护甲", "护甲", 80.0),
+            ("item_003", "稀有戒指", "饰品", 45.0),
+            ("item_004", "传送卷轴", "消耗品", 5.0),
+            ("item_005", "强化石", "材料", 25.0),
+            ("item_006", "生命药水", "消耗品", 3.0),
+            ("item_007", "魔法剑", "武器", 200.0),
+            ("item_008", "守护盾牌", "护甲", 120.0),
+        ];
+        
+        let mut items_inserted = 0;
+        let item_timestamp = chrono::Utc::now().timestamp();
+        for (item_id, name, item_type, base_price) in sample_items {
+            // SS11 prices are generally lower (80-90% of current season)
+            let price_factor = rng.gen_range(0.75..0.88);
+            let price = base_price * price_factor;
+            
+            let sql = format!(
+                "INSERT OR REPLACE INTO {} (item_id, name, item_type, source, price, last_time, season_day, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ss11_items
+            );
+            
+            match sqlx::query(&sql)
+                .bind(item_id)
+                .bind(name)
+                .bind(item_type)
+                .bind("test_data")
+                .bind(price)
+                .bind(item_timestamp)
+                .bind(45i32) // Mid-season day (day 45 of 90)
+                .bind(item_timestamp)
+                .execute(pool)
+                .await
+            {
+                Ok(_) => items_inserted += 1,
+                Err(e) => tracing::warn!("Failed to insert item: {}", e),
+            }
+        }
+        
+        tracing::info!("Generated {} items for SS11 {}", items_inserted, mode);
+    }
+    
+    // Update SS11 season record with correct dates
+    let _ = sqlx::query(
+        "UPDATE seasons SET started_at = ?, ended_at = ? WHERE id = 'ss11'"
+    )
+    .bind(season_start)
+    .bind(season_end)
+    .execute(pool)
+    .await;
+    
+    tracing::info!("SS11 test data generation complete");
+    Ok(())
+}
+
+/// Generate realistic test data for SS12 season.
+/// SS12 season start date: 2026-04-17
+async fn seed_test_data_for_ss12(pool: &SqlitePool) -> Result<(), String> {
+    use crate::db::table_resolver::TableResolver;
+    use rand::{Rng, SeedableRng};
+    use rand::rngs::StdRng;
+    
+    tracing::info!("Generating realistic test data for SS12...");
+    
+    let mut rng = StdRng::seed_from_u64(123); // Different seed from SS11
+    let now = chrono::Utc::now().timestamp();
+    
+    // SS12 season start date: 2026-04-17
+    let season_start = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+        .unwrap()
+        .timestamp();
+    
+    // Calculate how many days have passed since season start
+    let days_since_start = ((now - season_start) / 86400).max(1).min(30) as i32;
+    
+    for mode in ["season_normal", "season_expert"] {
+        let ss12_fire = TableResolver::fire_price_table("ss12", mode);
+        let ss12_items = TableResolver::items_table("ss12", mode);
+        
+        // Check if SS12 fire_price table already has data
+        let ss12_count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", ss12_fire))
+            .fetch_one(pool)
+            .await
+            .unwrap_or((0,));
+        
+        if ss12_count.0 > 0 {
+            tracing::info!("SS12 {} fire_price already has {} records, skipping", mode, ss12_count.0);
+            continue;
+        }
+        
+        // Generate fire price data from season start to now
+        // SS12 pattern: starts high, dips around day 10, then recovers
+        let base_price = if mode == "season_normal" { 35.0 } else { 38.0 };
+        let mut records_inserted = 0;
+        
+        for day in 0..days_since_start {
+            for hour in 0..24 {
+                let scraped_at = season_start + (day as i64 * 24 * 3600) + (hour as i64 * 3600);
+                let season_day = day + 1;
+                
+                // Create a realistic price curve for SS12
+                // Week 1: high, Week 2: dip, Week 3-4: recovery
+                let day_factor = if day < 7 {
+                    1.0 - (day as f64 * 0.01) // Slight decline first week
+                } else if day < 14 {
+                    0.93 + ((day - 7) as f64 * 0.005) // Dip then recovery
+                } else {
+                    0.965 + ((day - 14) as f64 * 0.008) // Recovery continues
+                };
+                
+                // Add hourly volatility
+                let hour_volatility = (hour as f64 - 12.0) / 80.0; // More volatile than SS11
+                let random_noise = rng.gen_range(-0.025..0.025);
+                
+                let rmb_per_10k = base_price * day_factor * (1.0 + hour_volatility + random_noise);
+                let fire_per_rmb = 10000.0 / rmb_per_10k;
+                let increase_ratio = if records_inserted > 0 {
+                    Some(random_noise * 100.0)
+                } else {
+                    None
+                };
+                
+                let sql = format!(
+                    "INSERT INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, created_at) \
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    ss12_fire
+                );
+                
+                match sqlx::query(&sql)
+                    .bind(rmb_per_10k)
+                    .bind(fire_per_rmb)
+                    .bind(increase_ratio)
+                    .bind(format!("{}", rng.gen_range(2000..15000)))
+                    .bind("qiandao_api")
+                    .bind(chrono::DateTime::from_timestamp(scraped_at, 0).map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string()))
+                    .bind(scraped_at)
+                    .bind(season_day)
+                    .bind(scraped_at)
+                    .execute(pool)
+                    .await
+                {
+                    Ok(_) => records_inserted += 1,
+                    Err(e) => tracing::warn!("Failed to insert fire record: {}", e),
+                }
+            }
+        }
+        
+        tracing::info!("Generated {} fire_price records for SS12 {}", records_inserted, mode);
+        
+        // Check if SS12 items table already has data
+        let ss12_items_count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", ss12_items))
+            .fetch_one(pool)
+            .await
+            .unwrap_or((0,));
+        
+        if ss12_items_count.0 > 0 {
+            tracing::info!("SS12 {} items already has {} records, skipping", mode, ss12_items_count.0);
+            continue;
+        }
+        
+        // Generate sample items for SS12 with current season prices
+        let sample_items = vec![
+            ("item_001", "传奇武器", "武器", 180.0),
+            ("item_002", "史诗护甲", "护甲", 95.0),
+            ("item_003", "稀有戒指", "饰品", 55.0),
+            ("item_004", "传送卷轴", "消耗品", 6.0),
+            ("item_005", "强化石", "材料", 30.0),
+            ("item_006", "生命药水", "消耗品", 4.0),
+            ("item_007", "魔法剑", "武器", 240.0),
+            ("item_008", "守护盾牌", "护甲", 140.0),
+        ];
+        
+        let mut items_inserted = 0;
+        for (item_id, name, item_type, base_price) in sample_items {
+            // SS12 prices are current season prices
+            let price_factor = rng.gen_range(0.95..1.05);
+            let price = base_price * price_factor;
+            
+            let sql = format!(
+                "INSERT OR REPLACE INTO {} (item_id, name, item_type, source, price, last_time, season_day, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ss12_items
+            );
+            
+            match sqlx::query(&sql)
+                .bind(item_id)
+                .bind(name)
+                .bind(item_type)
+                .bind("test_data")
+                .bind(price)
+                .bind(now)
+                .bind(days_since_start) // Current season day
+                .bind(now)
+                .execute(pool)
+                .await
+            {
+                Ok(_) => items_inserted += 1,
+                Err(e) => tracing::warn!("Failed to insert item: {}", e),
+            }
+        }
+        
+        tracing::info!("Generated {} items for SS12 {}", items_inserted, mode);
+    }
+    
+    // Update SS12 season record with correct start date
+    let _ = sqlx::query(
+        "UPDATE seasons SET started_at = ? WHERE id = 'ss12'"
+    )
+    .bind(season_start)
+    .execute(pool)
+    .await;
+    
+    tracing::info!("SS12 test data generation complete");
     Ok(())
 }
 
