@@ -336,29 +336,178 @@ export default function FirePriceComparePage() {
       </div>
 
       {/* Best Time Analysis */}
-      {currentData.length > 0 && (() => {
-        const hourlyPrices: Record<number, number[]> = {};
-        currentData.forEach((r) => {
-          const hour = new Date(r.scraped_at * 1000).getHours();
-          if (!hourlyPrices[hour]) hourlyPrices[hour] = [];
-          hourlyPrices[hour].push(r.rmb_per_10k_fire);
-        });
+      {filteredCurrentData.length > 0 && (() => {
+        let analysisData: { hour: number; price: number; day: number }[] = [];
+        
+        if (isShortTimeRange) {
+          // For short time ranges, use hourly aggregated data
+          const hourlyData: Record<number, { prices: number[]; days: number[] }> = {};
+          
+          filteredCurrentData.forEach((r) => {
+            const hour = new Date(r.scraped_at * 1000).getHours();
+            if (!hourlyData[hour]) hourlyData[hour] = { prices: [], days: [] };
+            hourlyData[hour].prices.push(r.rmb_per_10k_fire);
+            hourlyData[hour].days.push(r.season_day);
+          });
+          
+          analysisData = Object.entries(hourlyData).map(([hour, data]) => ({
+            hour: parseInt(hour),
+            price: data.prices.reduce((a, b) => a + b, 0) / data.prices.length,
+            day: Math.min(...data.days),
+          })).sort((a, b) => a.hour - b.hour);
+        } else {
+          // For long time ranges, use daily aggregated data
+          const dailyData: Record<number, { prices: number[]; days: number[] }> = {};
+          
+          filteredCurrentData.forEach((r) => {
+            const day = r.season_day;
+            if (!dailyData[day]) dailyData[day] = { prices: [], days: [] };
+            dailyData[day].prices.push(r.rmb_per_10k_fire);
+            dailyData[day].days.push(r.season_day);
+          });
+          
+          analysisData = Object.entries(dailyData).map(([day, data]) => ({
+            hour: 0, // Not used for daily
+            price: data.prices.reduce((a, b) => a + b, 0) / data.prices.length,
+            day: parseInt(day),
+          })).sort((a, b) => a.day - b.day);
+        }
+        
+        if (analysisData.length < 2) {
+          return (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <CalendarDays className="w-4 h-4 text-slate-500" />
+                <h3 className="text-sm font-semibold text-slate-700">最佳交易时段分析</h3>
+              </div>
+              <div className="text-slate-400">数据不足，无法分析</div>
+            </div>
+          );
+        }
+        
+        // Calculate price changes between consecutive points
+        const priceChanges: { index: number; startPrice: number; endPrice: number; changePct: number; hour: number; day: number }[] = [];
+        
+        for (let i = 1; i < analysisData.length; i++) {
+          const prev = analysisData[i - 1];
+          const curr = analysisData[i];
+          const changePct = ((curr.price - prev.price) / prev.price) * 100;
+          
+          priceChanges.push({
+            index: i,
+            startPrice: prev.price,
+            endPrice: curr.price,
+            changePct,
+            hour: curr.hour,
+            day: curr.day,
+          });
+        }
 
-        const hourlyAvg = Object.entries(hourlyPrices).map(([hour, prices]) => ({
-          hour: parseInt(hour),
-          avg: prices.reduce((a, b) => a + b, 0) / prices.length,
-        }));
+        // Dynamic thresholds based on time range
+        const dropThreshold = isShortTimeRange ? -2 : -5;
+        const stableThreshold = isShortTimeRange ? 1 : 2;
 
-        const sortedByPrice = [...hourlyAvg].sort((a, b) => b.avg - a.avg);
-        const bestSell = sortedByPrice[0];
-        const bestBuy = sortedByPrice[sortedByPrice.length - 1];
+        // Find best sell time: largest price drop
+        const largestDrops = priceChanges
+          .filter(pc => pc.changePct < dropThreshold)
+          .sort((a, b) => a.changePct - b.changePct);
+
+        let bestSellTime: { startHour: number; endHour: number; day: number; reason: string } | null = null;
+        
+        if (largestDrops.length > 0) {
+          const biggestDrop = largestDrops[0];
+          const prevData = analysisData[biggestDrop.index - 1];
+          
+          if (isShortTimeRange) {
+            // For short time ranges, show hour-based recommendation
+            const sellHour = prevData.hour;
+            bestSellTime = {
+              startHour: sellHour,
+              endHour: (sellHour + 2) % 24,
+              day: prevData.day,
+              reason: `预计 ${String(sellHour).padStart(2, '0')}:00 后火价将下跌 ${Math.abs(biggestDrop.changePct).toFixed(1)}%`
+            };
+          } else {
+            // For long time ranges, show day-based recommendation
+            bestSellTime = {
+              startHour: 0,
+              endHour: 2,
+              day: prevData.day,
+              reason: `预计第${prevData.day}天火价将下跌 ${Math.abs(biggestDrop.changePct).toFixed(1)}%`
+            };
+          }
+        }
+
+        // Find best buy time: after large drop, during long stable period
+        const stablePeriods: { startIndex: number; endIndex: number; startPrice: number; avgPrice: number; duration: number; hour: number; day: number }[] = [];
+        
+        let stableStart: typeof priceChanges[0] | null = null;
+        let stablePrices: number[] = [];
+        
+        for (const pc of priceChanges) {
+          if (pc.changePct >= -stableThreshold && pc.changePct <= stableThreshold) {
+            if (!stableStart) {
+              stableStart = pc;
+              stablePrices = [pc.startPrice, pc.endPrice];
+            } else {
+              stablePrices.push(pc.endPrice);
+            }
+          } else {
+            if (stableStart && stablePrices.length >= (isShortTimeRange ? 2 : 3)) {
+              const avgPrice = stablePrices.reduce((a, b) => a + b, 0) / stablePrices.length;
+              const startData = analysisData[stableStart.index - 1];
+              
+              stablePeriods.push({
+                startIndex: stableStart.index,
+                endIndex: pc.index,
+                startPrice: stableStart.startPrice,
+                avgPrice,
+                duration: stablePrices.length,
+                hour: startData.hour,
+                day: startData.day,
+              });
+            }
+            stableStart = null;
+            stablePrices = [];
+          }
+        }
+
+        stablePeriods.sort((a, b) => b.duration - a.duration);
+
+        let bestBuyTime: { startHour: number; endHour: number; day: number; reason: string } | null = null;
+        
+        if (stablePeriods.length > 0) {
+          const longestStable = stablePeriods[0];
+          
+          if (isShortTimeRange) {
+            const buyHour = longestStable.hour;
+            bestBuyTime = {
+              startHour: buyHour,
+              endHour: (buyHour + 2) % 24,
+              day: longestStable.day,
+              reason: `预计 ${String(buyHour).padStart(2, '0')}:00 后火价进入 ${longestStable.duration} 小时平稳期`
+            };
+          } else {
+            bestBuyTime = {
+              startHour: 0,
+              endHour: 2,
+              day: longestStable.day,
+              reason: `预计第${longestStable.day}天后火价进入 ${longestStable.duration} 天平稳期`
+            };
+          }
+        }
+
+        // Dynamic title based on time range
+        const analysisTitle = isShortTimeRange 
+          ? `基于 ${currentSeason.toUpperCase()} 最近${timeRange === '12h' ? '12小时' : '24小时'}数据统计`
+          : `基于 ${currentSeason.toUpperCase()} ${timeRange === '3d' ? '最近3天' : timeRange === '7d' ? '最近7天' : timeRange === '30d' ? '最近30天' : '整个赛季'}数据统计`;
 
         return (
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
             <div className="flex items-center gap-2 mb-4">
               <CalendarDays className="w-4 h-4 text-slate-500" />
               <h3 className="text-sm font-semibold text-slate-700">最佳交易时段分析</h3>
-              <span className="text-xs text-slate-400">基于 {currentSeason.toUpperCase()} 数据统计</span>
+              <span className="text-xs text-slate-400">{analysisTitle}</span>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -367,12 +516,26 @@ export default function FirePriceComparePage() {
                   <ArrowUpCircle className="w-4 h-4 text-slate-600" />
                   <span className="text-sm font-medium text-slate-700">最适合出售火价</span>
                 </div>
-                <div className="text-2xl font-bold text-slate-800">
-                  {bestSell ? `${String(bestSell.hour).padStart(2, '0')}:00` : "--"}
-                </div>
-                <div className="text-sm text-slate-500 mt-1">
-                  均价 ¥{bestSell?.avg.toFixed(2)}/万火
-                </div>
+                {bestSellTime ? (
+                  <>
+                    <div className="text-lg font-bold text-slate-800">
+                      {isShortTimeRange 
+                        ? `${String(bestSellTime.startHour).padStart(2, '0')}:00 - ${String(bestSellTime.endHour).padStart(2, '0')}:00`
+                        : `第${bestSellTime.day}天 00:00 - 02:00`
+                      }
+                    </div>
+                    <div className="text-sm text-slate-500 mt-1">
+                      {bestSellTime.reason}
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      建议在火价大幅下跌前2小时出售
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-lg text-slate-400">
+                    {isShortTimeRange ? "所选时间段内无大幅下跌" : "所选时间段内无大幅下跌"}
+                  </div>
+                )}
               </div>
 
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
@@ -380,12 +543,26 @@ export default function FirePriceComparePage() {
                   <ArrowDownCircle className="w-4 h-4 text-slate-600" />
                   <span className="text-sm font-medium text-slate-700">最适合收火</span>
                 </div>
-                <div className="text-2xl font-bold text-slate-800">
-                  {bestBuy ? `${String(bestBuy.hour).padStart(2, '0')}:00` : "--"}
-                </div>
-                <div className="text-sm text-slate-500 mt-1">
-                  均价 ¥{bestBuy?.avg.toFixed(2)}/万火
-                </div>
+                {bestBuyTime ? (
+                  <>
+                    <div className="text-lg font-bold text-slate-800">
+                      {isShortTimeRange 
+                        ? `${String(bestBuyTime.startHour).padStart(2, '0')}:00 - ${String(bestBuyTime.endHour).padStart(2, '0')}:00`
+                        : `第${bestBuyTime.day}天 00:00 - 02:00`
+                      }
+                    </div>
+                    <div className="text-sm text-slate-500 mt-1">
+                      {bestBuyTime.reason}
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      建议在长时间平稳期开始前2小时收火
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-lg text-slate-400">
+                    {isShortTimeRange ? "所选时间段内无长时间平稳期" : "所选时间段内无长时间平稳期"}
+                  </div>
+                )}
               </div>
             </div>
           </div>
