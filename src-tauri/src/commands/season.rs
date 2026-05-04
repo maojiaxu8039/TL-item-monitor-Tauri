@@ -45,8 +45,9 @@ pub struct SeasonApiConfigResponse {
     pub luosi_season_id_expert: i32,
 }
 
-/// Archive a season's data and export to a backup SQLite file.
-/// This copies all season/mode tables into a separate archive database.
+/// Archive a season's snapshot data to a backup SQLite file.
+/// Only archives snapshot tables (hourly data), not real-time tables.
+/// Real-time tables (items_*, fire_price_*) are not archived as they only contain current season data.
 #[tauri::command]
 pub async fn archive_season(
     state: State<'_, Arc<AppState>>,
@@ -71,52 +72,43 @@ pub async fn archive_season(
         .await
         .map_err(|e| format!("Failed to create archive DB: {}", e))?;
 
-    let mut total_items = 0i64;
-    let mut total_fire = 0i64;
     let mut total_snapshots = 0i64;
+    let mut total_fire_snapshots = 0i64;
 
-    // Archive each mode's tables
+    // Archive only snapshot tables (item_snapshots and fire_price_snapshots)
     for mode in ["season_normal", "season_expert"] {
-        let items_table = TableResolver::items_table(&season_id, mode);
-        let fire_table = TableResolver::fire_price_table(&season_id, mode);
-        let snapshots_table = TableResolver::item_snapshots_table(&season_id, mode);
+        let item_snapshots_table = TableResolver::item_snapshots_table(&season_id, mode);
+        let fire_snapshots_table = TableResolver::fire_price_snapshots_table(&season_id, mode);
 
-        // Check if source tables exist
-        let items_exists: bool = sqlx::query_scalar(
+        // Check if item snapshot table exists
+        let snapshots_exists: bool = sqlx::query_scalar(
             "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?"
         )
-        .bind(&items_table)
+        .bind(&item_snapshots_table)
         .fetch_one(&state.db)
         .await
         .unwrap_or(false);
 
-        if !items_exists {
-            tracing::warn!("Table {} does not exist, skipping", items_table);
+        if !snapshots_exists {
+            tracing::warn!("Snapshot table {} does not exist, skipping", item_snapshots_table);
             continue;
         }
 
-        // Create tables in archive DB
-        create_archive_items_table(&archive_pool, &items_table).await?;
-        create_archive_fire_table(&archive_pool, &fire_table).await?;
-        create_archive_snapshots_table(&archive_pool, &snapshots_table).await?;
+        // Create snapshot tables in archive DB
+        create_archive_snapshots_table(&archive_pool, &item_snapshots_table).await?;
+        create_archive_fire_snapshots_table(&archive_pool, &fire_snapshots_table).await?;
 
-        // Copy items data
-        let items_copied: i64 = copy_table_data(&state.db, &archive_pool, &items_table, &items_table)
+        // Copy item snapshots data
+        let snapshots_copied: i64 = copy_table_data(&state.db, &archive_pool, &item_snapshots_table, &item_snapshots_table)
             .await
-            .map_err(|e| format!("Failed to copy items: {}", e))?;
-        total_items += items_copied;
-
-        // Copy fire price data
-        let fire_copied: i64 = copy_table_data(&state.db, &archive_pool, &fire_table, &fire_table)
-            .await
-            .map_err(|e| format!("Failed to copy fire records: {}", e))?;
-        total_fire += fire_copied;
-
-        // Copy snapshots data
-        let snapshots_copied: i64 = copy_table_data(&state.db, &archive_pool, &snapshots_table, &snapshots_table)
-            .await
-            .map_err(|e| format!("Failed to copy snapshots: {}", e))?;
+            .map_err(|e| format!("Failed to copy item snapshots: {}", e))?;
         total_snapshots += snapshots_copied;
+
+        // Copy fire price snapshots data
+        let fire_snapshots_copied: i64 = copy_table_data(&state.db, &archive_pool, &fire_snapshots_table, &fire_snapshots_table)
+            .await
+            .map_err(|e| format!("Failed to copy fire price snapshots: {}", e))?;
+        total_fire_snapshots += fire_snapshots_copied;
     }
 
     archive_pool.close().await;
@@ -134,10 +126,10 @@ pub async fn archive_season(
     Ok(ArchiveResult {
         success: true,
         season_id,
-        message: "赛季数据归档完成".to_string(),
-        items_archived: total_items,
-        fire_records_archived: total_fire,
-        snapshot_records_archived: total_snapshots,
+        message: "赛季快照数据归档完成".to_string(),
+        items_archived: 0, // Real-time tables are not archived
+        fire_records_archived: 0, // Real-time tables are not archived
+        snapshot_records_archived: total_snapshots + total_fire_snapshots,
         archive_path: Some(archive_path.to_string_lossy().to_string()),
     })
 }
@@ -171,29 +163,29 @@ pub async fn init_new_season(
     let mut created_tables = Vec::new();
 
     for mode in ["season_normal", "season_expert"] {
-        let items_table = TableResolver::items_table(&season_id, mode);
-        let fire_table = TableResolver::fire_price_table(&season_id, mode);
+        // Only create snapshot tables for the new season
+        // Real-time tables (items_*, fire_price_*) are shared and already exist
         let snapshots_table = TableResolver::item_snapshots_table(&season_id, mode);
+        let fire_snapshots_table = TableResolver::fire_price_snapshots_table(&season_id, mode);
 
-        // Create items table
+        // Create item snapshots table for historical data
         sqlx::query(&format!(
             "CREATE TABLE IF NOT EXISTS {} (
-                item_id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                item_type TEXT NOT NULL DEFAULT '',
-                source TEXT NOT NULL DEFAULT '',
-                price REAL NOT NULL DEFAULT 0,
-                last_time INTEGER,
-                updated_at INTEGER NOT NULL
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id TEXT NOT NULL,
+                fire_price REAL NOT NULL,
+                scraped_at INTEGER NOT NULL,
+                season_day INTEGER NOT NULL DEFAULT 1,
+                UNIQUE(item_id, scraped_at)
             )",
-            items_table
+            snapshots_table
         ))
         .execute(&state.db)
         .await
-        .map_err(|e| format!("Failed to create items table: {}", e))?;
-        created_tables.push(items_table.clone());
+        .map_err(|e| format!("Failed to create snapshots table: {}", e))?;
+        created_tables.push(snapshots_table.clone());
 
-        // Create fire price table
+        // Create fire price snapshots table for historical data
         sqlx::query(&format!(
             "CREATE TABLE IF NOT EXISTS {} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -204,49 +196,23 @@ pub async fn init_new_season(
                 source TEXT NOT NULL DEFAULT '',
                 source_time TEXT,
                 scraped_at INTEGER NOT NULL,
-                created_at INTEGER NOT NULL,
+                season_day INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(scraped_at)
             )",
-            fire_table
+            fire_snapshots_table
         ))
         .execute(&state.db)
         .await
-        .map_err(|e| format!("Failed to create fire_price table: {}", e))?;
-        created_tables.push(fire_table.clone());
-
-        // Create snapshots table
-        sqlx::query(&format!(
-            "CREATE TABLE IF NOT EXISTS {} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_id TEXT NOT NULL,
-                fire_price REAL NOT NULL,
-                scraped_at INTEGER NOT NULL,
-                UNIQUE(item_id, scraped_at)
-            )",
-            snapshots_table
-        ))
-        .execute(&state.db)
-        .await
-        .map_err(|e| format!("Failed to create snapshots table: {}", e))?;
-        created_tables.push(snapshots_table.clone());
+        .map_err(|e| format!("Failed to create fire_price snapshots table: {}", e))?;
+        created_tables.push(fire_snapshots_table.clone());
 
         // Create indexes
-        let idx_name = format!("idx_{}_items_name", items_table);
-        let idx_type = format!("idx_{}_items_type", items_table);
-        let idx_fire = format!("idx_{}_fire_scraped", fire_table);
         let idx_snap = format!("idx_{}_snapshots_item", snapshots_table);
+        let idx_fire_snap = format!("idx_{}_scraped", fire_snapshots_table);
 
         sqlx::query(&format!(
-            "CREATE INDEX IF NOT EXISTS {} ON {}(name)",
-            idx_name, items_table
-        ))
-        .execute(&state.db)
-        .await
-        .ok();
-
-        sqlx::query(&format!(
-            "CREATE INDEX IF NOT EXISTS {} ON {}(item_type)",
-            idx_type, items_table
+            "CREATE INDEX IF NOT EXISTS {} ON {}(item_id, scraped_at)",
+            idx_snap, snapshots_table
         ))
         .execute(&state.db)
         .await
@@ -254,15 +220,7 @@ pub async fn init_new_season(
 
         sqlx::query(&format!(
             "CREATE INDEX IF NOT EXISTS {} ON {}(scraped_at)",
-            idx_fire, fire_table
-        ))
-        .execute(&state.db)
-        .await
-        .ok();
-
-        sqlx::query(&format!(
-            "CREATE INDEX IF NOT EXISTS {} ON {}(item_id, scraped_at)",
-            idx_snap, snapshots_table
+            idx_fire_snap, fire_snapshots_table
         ))
         .execute(&state.db)
         .await
@@ -461,6 +419,27 @@ async fn create_archive_snapshots_table(pool: &SqlitePool, table: &str) -> Resul
             fire_price REAL NOT NULL,
             scraped_at INTEGER NOT NULL,
             UNIQUE(item_id, scraped_at)
+        )",
+        table
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+async fn create_archive_fire_snapshots_table(pool: &SqlitePool, table: &str) -> Result<(), String> {
+    sqlx::query(&format!(
+        "CREATE TABLE IF NOT EXISTS {} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rmb_per_10k_fire REAL NOT NULL,
+            fire_per_rmb REAL NOT NULL DEFAULT 0,
+            increase_ratio REAL,
+            trading_volume TEXT,
+            source TEXT NOT NULL DEFAULT '',
+            source_time TEXT,
+            scraped_at INTEGER NOT NULL,
+            UNIQUE(scraped_at)
         )",
         table
     ))

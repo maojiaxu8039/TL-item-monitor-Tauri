@@ -320,17 +320,18 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
     Ok(())
 }
 
-/// Idempotently ensure all season/mode split tables exist.
-/// This guards against partial or failed migrations.
+/// Idempotently ensure all tables exist.
+/// Real-time tables (items_*, fire_price_*): no season suffix, always current season
+/// Snapshot tables (*_snapshots_ss{season}_*): with season suffix, for historical data
 async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
     use crate::db::table_resolver::TableResolver;
 
-    for (season, mode) in TableResolver::supported_combinations() {
-        let items_table = TableResolver::items_table(season, mode);
-        let fire_table = TableResolver::fire_price_table(season, mode);
-        let snapshots_table = TableResolver::item_snapshots_table(season, mode);
+    // 1. Ensure real-time tables (no season suffix)
+    for mode in ["season_normal", "season_expert"] {
+        let items_table = TableResolver::items_table("ss12", mode);
+        let fire_table = TableResolver::fire_price_table("ss12", mode);
 
-        // Items table
+        // Items table - real-time latest prices (client采集)
         sqlx::query(&format!(
             "CREATE TABLE IF NOT EXISTS {} (
                 item_id TEXT PRIMARY KEY,
@@ -348,7 +349,7 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
         .await
         .map_err(|e| format!("Failed to ensure items table {}: {}", items_table, e))?;
 
-        // Fire price table
+        // Fire price table - real-time latest fire price (client采集)
         sqlx::query(&format!(
             "CREATE TABLE IF NOT EXISTS {} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -369,7 +370,18 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
         .await
         .map_err(|e| format!("Failed to ensure fire_price table {}: {}", fire_table, e))?;
 
-        // Item snapshots table
+        tracing::info!(
+            "Ensured real-time tables for {}: {}, {}",
+            mode, items_table, fire_table
+        );
+    }
+
+    // 2. Ensure snapshot tables (with season suffix)
+    for (season, mode) in TableResolver::supported_combinations() {
+        let snapshots_table = TableResolver::item_snapshots_table(season, mode);
+        let fire_snapshots_table = TableResolver::fire_price_snapshots_table(season, mode);
+
+        // Item snapshots table - hourly snapshots (server定时写入)
         sqlx::query(&format!(
             "CREATE TABLE IF NOT EXISTS {} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -383,11 +395,31 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
         ))
         .execute(pool)
         .await
-        .map_err(|e| format!("Failed to ensure snapshots table {}: {}", snapshots_table, e))?;
+        .map_err(|e| format!("Failed to ensure item snapshots table {}: {}", snapshots_table, e))?;
+
+        // Fire price snapshots table - hourly snapshots (server定时写入)
+        sqlx::query(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rmb_per_10k_fire REAL NOT NULL,
+                fire_per_rmb REAL NOT NULL DEFAULT 0,
+                increase_ratio REAL,
+                trading_volume TEXT,
+                source TEXT NOT NULL DEFAULT '',
+                source_time TEXT,
+                scraped_at INTEGER NOT NULL,
+                season_day INTEGER NOT NULL DEFAULT 1,
+                UNIQUE(scraped_at)
+            )",
+            fire_snapshots_table
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to ensure fire_price snapshots table {}: {}", fire_snapshots_table, e))?;
 
         tracing::info!(
-            "Ensured split tables for {}/{}: {}, {}, {}",
-            season, mode, items_table, fire_table, snapshots_table
+            "Ensured snapshot tables for {}/{}: {}, {}",
+            season, mode, snapshots_table, fire_snapshots_table
         );
     }
 
@@ -451,14 +483,24 @@ async fn seed_test_data_for_ss11(pool: &SqlitePool) -> Result<(), String> {
         let ss11_fire = TableResolver::fire_price_table("ss11", mode);
         let ss11_items = TableResolver::items_table("ss11", mode);
         
-        // Check if SS11 fire_price table already has data
-        let ss11_count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", ss11_fire))
+        // Clear SS11 real-time tables (fire_price and items) - only keep snapshots
+        let _ = sqlx::query(&format!("DELETE FROM {}", ss11_fire))
+            .execute(pool)
+            .await;
+        let _ = sqlx::query(&format!("DELETE FROM {}", ss11_items))
+            .execute(pool)
+            .await;
+        tracing::info!("Cleared SS11 {} real-time tables (fire_price, items)", mode);
+        
+        // Check if SS11 fire_price_snapshots table already has data
+        let ss11_fire_snapshots = TableResolver::fire_price_snapshots_table("ss11", mode);
+        let ss11_count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", ss11_fire_snapshots))
             .fetch_one(pool)
             .await
             .unwrap_or((0,));
         
         if ss11_count.0 > 0 {
-            tracing::info!("SS11 {} fire_price already has {} records, skipping", mode, ss11_count.0);
+            tracing::info!("SS11 {} fire_price_snapshots already has {} records, skipping", mode, ss11_count.0);
             continue;
         }
         
@@ -522,63 +564,198 @@ async fn seed_test_data_for_ss11(pool: &SqlitePool) -> Result<(), String> {
         }
         
         tracing::info!("Generated {} fire_price records for SS11 {}", records_inserted, mode);
-        
+
         // Check if SS11 items table already has data
         let ss11_items_count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", ss11_items))
             .fetch_one(pool)
             .await
             .unwrap_or((0,));
-        
+
         if ss11_items_count.0 > 0 {
             tracing::info!("SS11 {} items already has {} records, skipping", mode, ss11_items_count.0);
+        } else {
+            // Generate sample items for SS11 with different prices than SS12
+            let sample_items = vec![
+                ("item_001", "传奇武器", "武器", 150.0),
+                ("item_002", "史诗护甲", "护甲", 80.0),
+                ("item_003", "稀有戒指", "饰品", 45.0),
+                ("item_004", "传送卷轴", "消耗品", 5.0),
+                ("item_005", "强化石", "材料", 25.0),
+                ("item_006", "生命药水", "消耗品", 3.0),
+                ("item_007", "魔法剑", "武器", 200.0),
+                ("item_008", "守护盾牌", "护甲", 120.0),
+            ];
+
+            let mut items_inserted = 0;
+            let item_timestamp = chrono::Utc::now().timestamp();
+            for (item_id, name, item_type, base_price) in &sample_items {
+                // SS11 prices are generally lower (80-90% of current season)
+                let price_factor = rng.gen_range(0.75..0.88);
+                let price = base_price * price_factor;
+
+                let sql = format!(
+                    "INSERT OR REPLACE INTO {} (item_id, name, item_type, source, price, last_time, season_day, updated_at) \
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    ss11_items
+                );
+
+                match sqlx::query(&sql)
+                    .bind(item_id)
+                    .bind(name)
+                    .bind(item_type)
+                    .bind("test_data")
+                    .bind(price)
+                    .bind(item_timestamp)
+                    .bind(45i32) // Mid-season day (day 45 of 90)
+                    .bind(item_timestamp)
+                    .execute(pool)
+                    .await
+                {
+                    Ok(_) => items_inserted += 1,
+                    Err(e) => tracing::warn!("Failed to insert item: {}", e),
+                }
+            }
+
+            tracing::info!("Generated {} items for SS11 {}", items_inserted, mode);
+        }
+
+        // ─── Generate hourly item snapshots for SS11 ─────────────────────────
+        let ss11_snapshots = TableResolver::item_snapshots_table("ss11", mode);
+
+        let ss11_snapshot_count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", ss11_snapshots))
+            .fetch_one(pool)
+            .await
+            .unwrap_or((0,));
+
+        if ss11_snapshot_count.0 > 0 {
+            tracing::info!("SS11 {} item_snapshots already has {} records, skipping", mode, ss11_snapshot_count.0);
             continue;
         }
-        
-        // Generate sample items for SS11 with different prices than SS12
-        let sample_items = vec![
-            ("item_001", "传奇武器", "武器", 150.0),
-            ("item_002", "史诗护甲", "护甲", 80.0),
-            ("item_003", "稀有戒指", "饰品", 45.0),
-            ("item_004", "传送卷轴", "消耗品", 5.0),
-            ("item_005", "强化石", "材料", 25.0),
-            ("item_006", "生命药水", "消耗品", 3.0),
-            ("item_007", "魔法剑", "武器", 200.0),
-            ("item_008", "守护盾牌", "护甲", 120.0),
+
+        // Sample items for snapshot generation (same IDs as above)
+        let snapshot_items = vec![
+            ("item_001", 150.0),
+            ("item_002", 80.0),
+            ("item_003", 45.0),
+            ("item_004", 5.0),
+            ("item_005", 25.0),
+            ("item_006", 3.0),
+            ("item_007", 200.0),
+            ("item_008", 120.0),
         ];
-        
-        let mut items_inserted = 0;
-        let item_timestamp = chrono::Utc::now().timestamp();
-        for (item_id, name, item_type, base_price) in sample_items {
-            // SS11 prices are generally lower (80-90% of current season)
-            let price_factor = rng.gen_range(0.75..0.88);
-            let price = base_price * price_factor;
-            
-            let sql = format!(
-                "INSERT OR REPLACE INTO {} (item_id, name, item_type, source, price, last_time, season_day, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                ss11_items
-            );
-            
-            match sqlx::query(&sql)
-                .bind(item_id)
-                .bind(name)
-                .bind(item_type)
-                .bind("test_data")
-                .bind(price)
-                .bind(item_timestamp)
-                .bind(45i32) // Mid-season day (day 45 of 90)
-                .bind(item_timestamp)
-                .execute(pool)
-                .await
-            {
-                Ok(_) => items_inserted += 1,
-                Err(e) => tracing::warn!("Failed to insert item: {}", e),
+
+        let mut snapshots_inserted = 0;
+        let total_days = ((season_end - season_start) / 86400) as i32;
+
+        for day in 0..total_days {
+            for hour in 0..24 {
+                let scraped_at = season_start + (day as i64 * 24 * 3600) + (hour as i64 * 3600);
+                let season_day = day + 1;
+
+                for (item_id, base_price) in &snapshot_items {
+                    // Price varies by day and hour with some randomness
+                    let day_factor = if day < 7 {
+                        1.0 + (day as f64 * 0.015)
+                    } else if day < 14 {
+                        1.105 - ((day - 7) as f64 * 0.008)
+                    } else {
+                        (1.049 - ((day - 14) as f64 * 0.006)).max(0.6)
+                    };
+
+                    let hour_volatility = (hour as f64 - 12.0) / 120.0;
+                    let random_noise = rng.gen_range(-0.03..0.03);
+                    let price = (base_price * day_factor * (1.0 + hour_volatility + random_noise)).max(1.0);
+
+                    let sql = format!(
+                        "INSERT OR IGNORE INTO {} (item_id, fire_price, scraped_at, season_day) \
+                         VALUES (?, ?, ?, ?)",
+                        ss11_snapshots
+                    );
+
+                    match sqlx::query(&sql)
+                        .bind(item_id)
+                        .bind(price)
+                        .bind(scraped_at)
+                        .bind(season_day)
+                        .execute(pool)
+                        .await
+                    {
+                        Ok(_) => snapshots_inserted += 1,
+                        Err(e) => tracing::warn!("Failed to insert snapshot: {}", e),
+                    }
+                }
             }
         }
-        
-        tracing::info!("Generated {} items for SS11 {}", items_inserted, mode);
+
+        tracing::info!("Generated {} item_snapshots for SS11 {}", snapshots_inserted, mode);
+
+        // ─── Generate hourly fire price snapshots for SS11 ───────────────────
+        let ss11_fire_snapshots = TableResolver::fire_price_snapshots_table("ss11", mode);
+
+        let ss11_fire_snapshot_count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", ss11_fire_snapshots))
+            .fetch_one(pool)
+            .await
+            .unwrap_or((0,));
+
+        if ss11_fire_snapshot_count.0 > 0 {
+            tracing::info!("SS11 {} fire_price_snapshots already has {} records, skipping", mode, ss11_fire_snapshot_count.0);
+            continue;
+        }
+
+        let mut fire_snapshots_inserted = 0;
+        let base_price = if mode == "season_normal" { 28.0 } else { 32.0 };
+
+        for day in 0..total_days {
+            for hour in 0..24 {
+                let scraped_at = season_start + (day as i64 * 24 * 3600) + (hour as i64 * 3600);
+                let season_day = day + 1;
+
+                let day_factor = if day < 7 {
+                    1.0 + (day as f64 * 0.02)
+                } else if day < 14 {
+                    1.14 - ((day - 7) as f64 * 0.01)
+                } else {
+                    (1.07 - ((day - 14) as f64 * 0.008)).max(0.5)
+                };
+
+                let hour_volatility = (hour as f64 - 12.0) / 100.0;
+                let random_noise = rng.gen_range(-0.02..0.02);
+
+                let rmb_per_10k = (base_price * day_factor * (1.0 + hour_volatility + random_noise)).max(1.0);
+                let fire_per_rmb = 10000.0 / rmb_per_10k;
+                let increase_ratio = if fire_snapshots_inserted > 0 {
+                    Some(random_noise * 100.0)
+                } else {
+                    None
+                };
+
+                let sql = format!(
+                    "INSERT INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day) \
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    ss11_fire_snapshots
+                );
+
+                match sqlx::query(&sql)
+                    .bind(rmb_per_10k)
+                    .bind(fire_per_rmb)
+                    .bind(increase_ratio)
+                    .bind(format!("{}", rng.gen_range(1000..10000)))
+                    .bind("server_snapshot")
+                    .bind(chrono::DateTime::from_timestamp(scraped_at, 0).map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string()))
+                    .bind(scraped_at)
+                    .bind(season_day)
+                    .execute(pool)
+                    .await
+                {
+                    Ok(_) => fire_snapshots_inserted += 1,
+                    Err(e) => tracing::warn!("Failed to insert fire snapshot: {}", e),
+                }
+            }
+        }
+
+        tracing::info!("Generated {} fire_price_snapshots for SS11 {}", fire_snapshots_inserted, mode);
     }
-    
+
     // Update SS11 season record with correct dates
     let _ = sqlx::query(
         "UPDATE seasons SET started_at = ?, ended_at = ? WHERE id = 'ss11'"
@@ -587,7 +764,7 @@ async fn seed_test_data_for_ss11(pool: &SqlitePool) -> Result<(), String> {
     .bind(season_end)
     .execute(pool)
     .await;
-    
+
     tracing::info!("SS11 test data generation complete");
     Ok(())
 }
@@ -616,14 +793,24 @@ async fn seed_test_data_for_ss12(pool: &SqlitePool) -> Result<(), String> {
         let ss12_fire = TableResolver::fire_price_table("ss12", mode);
         let ss12_items = TableResolver::items_table("ss12", mode);
         
-        // Check if SS12 fire_price table already has data
-        let ss12_count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", ss12_fire))
+        // Clear SS12 real-time tables (fire_price and items) - only keep snapshots
+        let _ = sqlx::query(&format!("DELETE FROM {}", ss12_fire))
+            .execute(pool)
+            .await;
+        let _ = sqlx::query(&format!("DELETE FROM {}", ss12_items))
+            .execute(pool)
+            .await;
+        tracing::info!("Cleared SS12 {} real-time tables (fire_price, items)", mode);
+        
+        // Check if SS12 fire_price_snapshots table already has data
+        let ss12_fire_snapshots = TableResolver::fire_price_snapshots_table("ss12", mode);
+        let ss12_count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", ss12_fire_snapshots))
             .fetch_one(pool)
             .await
             .unwrap_or((0,));
         
         if ss12_count.0 > 0 {
-            tracing::info!("SS12 {} fire_price already has {} records, skipping", mode, ss12_count.0);
+            tracing::info!("SS12 {} fire_price_snapshots already has {} records, skipping", mode, ss12_count.0);
             continue;
         }
         
@@ -662,7 +849,7 @@ async fn seed_test_data_for_ss12(pool: &SqlitePool) -> Result<(), String> {
                 let sql = format!(
                     "INSERT INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, created_at) \
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    ss12_fire
+                    ss12_fire_snapshots
                 );
                 
                 match sqlx::query(&sql)
@@ -739,8 +926,143 @@ async fn seed_test_data_for_ss12(pool: &SqlitePool) -> Result<(), String> {
         }
         
         tracing::info!("Generated {} items for SS12 {}", items_inserted, mode);
+
+        // ─── Generate hourly item snapshots for SS12 ─────────────────────────
+        let ss12_snapshots = TableResolver::item_snapshots_table("ss12", mode);
+
+        let ss12_snapshot_count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", ss12_snapshots))
+            .fetch_one(pool)
+            .await
+            .unwrap_or((0,));
+
+        if ss12_snapshot_count.0 > 0 {
+            tracing::info!("SS12 {} item_snapshots already has {} records, skipping", mode, ss12_snapshot_count.0);
+            continue;
+        }
+
+        // Sample items for snapshot generation
+        let snapshot_items = vec![
+            ("item_001", 180.0),
+            ("item_002", 95.0),
+            ("item_003", 55.0),
+            ("item_004", 6.0),
+            ("item_005", 30.0),
+            ("item_006", 4.0),
+            ("item_007", 240.0),
+            ("item_008", 140.0),
+        ];
+
+        let mut snapshots_inserted = 0;
+
+        for day in 0..days_since_start {
+            for hour in 0..24 {
+                let scraped_at = season_start + (day as i64 * 24 * 3600) + (hour as i64 * 3600);
+                let season_day = day + 1;
+
+                for (item_id, base_price) in &snapshot_items {
+                    // Price varies by day and hour with some randomness
+                    let day_factor = if day < 7 {
+                        1.0 - (day as f64 * 0.008)
+                    } else if day < 14 {
+                        0.944 + ((day - 7) as f64 * 0.006)
+                    } else {
+                        0.986 + ((day - 14) as f64 * 0.01)
+                    };
+
+                    let hour_volatility = (hour as f64 - 12.0) / 100.0;
+                    let random_noise = rng.gen_range(-0.025..0.025);
+                    let price = (base_price * day_factor * (1.0 + hour_volatility + random_noise)).max(1.0);
+
+                    let sql = format!(
+                        "INSERT OR IGNORE INTO {} (item_id, fire_price, scraped_at, season_day) \
+                         VALUES (?, ?, ?, ?)",
+                        ss12_snapshots
+                    );
+
+                    match sqlx::query(&sql)
+                        .bind(item_id)
+                        .bind(price)
+                        .bind(scraped_at)
+                        .bind(season_day)
+                        .execute(pool)
+                        .await
+                    {
+                        Ok(_) => snapshots_inserted += 1,
+                        Err(e) => tracing::warn!("Failed to insert snapshot: {}", e),
+                    }
+                }
+            }
+        }
+
+        tracing::info!("Generated {} item_snapshots for SS12 {}", snapshots_inserted, mode);
+
+        // ─── Generate hourly fire price snapshots for SS12 ───────────────────
+        let ss12_fire_snapshots = TableResolver::fire_price_snapshots_table("ss12", mode);
+
+        let ss12_fire_snapshot_count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", ss12_fire_snapshots))
+            .fetch_one(pool)
+            .await
+            .unwrap_or((0,));
+
+        if ss12_fire_snapshot_count.0 > 0 {
+            tracing::info!("SS12 {} fire_price_snapshots already has {} records, skipping", mode, ss12_fire_snapshot_count.0);
+            continue;
+        }
+
+        let mut fire_snapshots_inserted = 0;
+        let base_price = if mode == "season_normal" { 35.0 } else { 38.0 };
+
+        for day in 0..days_since_start {
+            for hour in 0..24 {
+                let scraped_at = season_start + (day as i64 * 24 * 3600) + (hour as i64 * 3600);
+                let season_day = day + 1;
+
+                let day_factor = if day < 7 {
+                    1.0 - (day as f64 * 0.01)
+                } else if day < 14 {
+                    0.93 + ((day - 7) as f64 * 0.005)
+                } else {
+                    0.965 + ((day - 14) as f64 * 0.008)
+                };
+
+                let hour_volatility = (hour as f64 - 12.0) / 80.0;
+                let random_noise = rng.gen_range(-0.025..0.025);
+
+                let rmb_per_10k = base_price * day_factor * (1.0 + hour_volatility + random_noise);
+                let fire_per_rmb = 10000.0 / rmb_per_10k;
+                let increase_ratio = if fire_snapshots_inserted > 0 {
+                    Some(random_noise * 100.0)
+                } else {
+                    None
+                };
+
+                let sql = format!(
+                    "INSERT INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day) \
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    ss12_fire_snapshots
+                );
+
+                match sqlx::query(&sql)
+                    .bind(rmb_per_10k)
+                    .bind(fire_per_rmb)
+                    .bind(increase_ratio)
+                    .bind(format!("{}", rng.gen_range(2000..15000)))
+                    .bind("server_snapshot")
+                    .bind(chrono::DateTime::from_timestamp(scraped_at, 0).map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string()))
+                    .bind(scraped_at)
+                    .bind(season_day)
+                    .execute(pool)
+                    .await
+                {
+                    Ok(_) => fire_snapshots_inserted += 1,
+                    Err(e) => tracing::warn!("Failed to insert fire snapshot: {}", e),
+                }
+            }
+        }
+
+        tracing::info!("Generated {} fire_price_snapshots for SS12 {}", fire_snapshots_inserted, mode);
     }
-    
+
     // Update SS12 season record with correct start date
     let _ = sqlx::query(
         "UPDATE seasons SET started_at = ? WHERE id = 'ss12'"
@@ -748,7 +1070,7 @@ async fn seed_test_data_for_ss12(pool: &SqlitePool) -> Result<(), String> {
     .bind(season_start)
     .execute(pool)
     .await;
-    
+
     tracing::info!("SS12 test data generation complete");
     Ok(())
 }

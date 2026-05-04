@@ -404,8 +404,9 @@ export default function FirePriceComparePage() {
         }
 
         // Dynamic thresholds based on time range
-        const dropThreshold = isShortTimeRange ? -2 : -5;
-        const stableThreshold = isShortTimeRange ? 1 : 2;
+        // Use more lenient thresholds for daily data since price changes are smaller
+        const dropThreshold = isShortTimeRange ? -2 : -1;
+        const stableThreshold = isShortTimeRange ? 1 : 0.5;
 
         // Find best sell time: largest price drop
         const largestDrops = priceChanges
@@ -453,7 +454,7 @@ export default function FirePriceComparePage() {
               stablePrices.push(pc.endPrice);
             }
           } else {
-            if (stableStart && stablePrices.length >= (isShortTimeRange ? 2 : 3)) {
+            if (stableStart && stablePrices.length >= (isShortTimeRange ? 2 : 2)) {
               const avgPrice = stablePrices.reduce((a, b) => a + b, 0) / stablePrices.length;
               const startData = analysisData[stableStart.index - 1];
               
@@ -514,7 +515,7 @@ export default function FirePriceComparePage() {
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <ArrowUpCircle className="w-4 h-4 text-slate-600" />
-                  <span className="text-sm font-medium text-slate-700">最适合出售火价</span>
+                  <span className="text-sm font-medium text-slate-700">最适合出售初火时间段</span>
                 </div>
                 {bestSellTime ? (
                   <>
@@ -541,7 +542,7 @@ export default function FirePriceComparePage() {
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <ArrowDownCircle className="w-4 h-4 text-slate-600" />
-                  <span className="text-sm font-medium text-slate-700">最适合收火</span>
+                  <span className="text-sm font-medium text-slate-700">最适合购买初火时间段</span>
                 </div>
                 {bestBuyTime ? (
                   <>

@@ -331,8 +331,8 @@ export const cmd = {
   getNotificationPermissionStatus: () => invoke<NotificationPermissionStatus>("get_notification_permission_status"),
   requestNotificationPermission: () => invoke<boolean>("request_notification_permission"),
   getItemTypes: () => invoke<string[]>("get_item_types"),
-  searchItems: (keyword: string, page = 1, pageSize = 50) =>
-    invoke<SearchResult>("search_items", { keyword, page, pageSize }),
+  searchItems: (keyword: string, page = 1, pageSize = 50, dayFilter?: number, typeFilter?: string) =>
+    invoke<SearchResult>("search_items", { keyword, page, pageSize, dayFilter, typeFilter }),
 
   getSections: () => invoke<Section[]>("get_sections"),
   createSection: (name: string) => invoke<Section>("create_section", { name }),

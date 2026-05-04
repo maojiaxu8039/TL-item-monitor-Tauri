@@ -16,11 +16,13 @@ pub async fn search_items(
     keyword: String,
     page: i64,
     #[allow(non_snake_case)] pageSize: i64,
+    #[allow(non_snake_case)] dayFilter: Option<i32>,
+    #[allow(non_snake_case)] typeFilter: Option<String>,
 ) -> Result<SearchResult, String> {
     let ctx = state.active_context.read().clone();
     tracing::info!(
-        "search_items called: keyword={:?}, season_id={:?}, market_mode={:?}",
-        keyword, ctx.season_id, ctx.market_mode
+        "search_items called: keyword={:?}, season_id={:?}, market_mode={:?}, day_filter={:?}, type_filter={:?}",
+        keyword, ctx.season_id, ctx.market_mode, dayFilter, typeFilter
     );
     let (items, total) = repo_items::search_items(
         &state.db,
@@ -29,6 +31,8 @@ pub async fn search_items(
         &keyword,
         page,
         pageSize,
+        dayFilter,
+        typeFilter.as_deref(),
     ).await?;
     tracing::info!("search_items result: {} items, total={}", items.len(), total);
     Ok(SearchResult { items, total, page, page_size: pageSize })

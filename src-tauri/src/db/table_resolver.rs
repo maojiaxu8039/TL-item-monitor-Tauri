@@ -1,27 +1,31 @@
 /// Table resolver for season/mode split tables.
 /// Maps season_id + market_mode to specific table names.
+/// 
+/// Table naming convention:
+/// - Real-time tables (no season suffix): items_normal, items_expert, fire_price_normal, fire_price_expert
+/// - Snapshot tables (with season suffix): item_snapshots_ss{season}_{mode}, fire_price_snapshots_ss{season}_{mode}
 pub struct TableResolver;
 
 impl TableResolver {
-    /// Get items table name for given season and mode
-    pub fn items_table(season_id: &str, market_mode: &str) -> String {
+    /// Get items table name for given market_mode (real-time, no season suffix)
+    pub fn items_table(_season_id: &str, market_mode: &str) -> String {
         let mode_suffix = match market_mode {
             "season_expert" | "expert" => "expert",
             _ => "normal",
         };
-        format!("items_{}_{}", season_id, mode_suffix)
+        format!("items_{}", mode_suffix)
     }
 
-    /// Get fire price table name for given season and mode
-    pub fn fire_price_table(season_id: &str, market_mode: &str) -> String {
+    /// Get fire price table name for given market_mode (real-time, no season suffix)
+    pub fn fire_price_table(_season_id: &str, market_mode: &str) -> String {
         let mode_suffix = match market_mode {
             "season_expert" | "expert" => "expert",
             _ => "normal",
         };
-        format!("fire_price_{}_{}", season_id, mode_suffix)
+        format!("fire_price_{}", mode_suffix)
     }
 
-    /// Get item snapshots table name for given season and mode
+    /// Get item snapshots table name for given season and mode (historical, with season suffix)
     pub fn item_snapshots_table(season_id: &str, market_mode: &str) -> String {
         let mode_suffix = match market_mode {
             "season_expert" | "expert" => "expert",
@@ -30,7 +34,16 @@ impl TableResolver {
         format!("item_snapshots_{}_{}", season_id, mode_suffix)
     }
 
-    /// List all supported season/mode combinations
+    /// Get fire price snapshots table name for given season and mode (historical, with season suffix)
+    pub fn fire_price_snapshots_table(season_id: &str, market_mode: &str) -> String {
+        let mode_suffix = match market_mode {
+            "season_expert" | "expert" => "expert",
+            _ => "normal",
+        };
+        format!("fire_price_snapshots_{}_{}", season_id, mode_suffix)
+    }
+
+    /// List all supported season/mode combinations for snapshot tables
     pub fn supported_combinations() -> Vec<(&'static str, &'static str)> {
         vec![
             ("ss12", "season_normal"),
@@ -58,29 +71,57 @@ mod tests {
 
     #[test]
     fn test_items_table() {
+        // Real-time tables: no season suffix
         assert_eq!(
             TableResolver::items_table("ss12", "season_normal"),
-            "items_ss12_normal"
+            "items_normal"
         );
         assert_eq!(
             TableResolver::items_table("ss12", "season_expert"),
-            "items_ss12_expert"
+            "items_expert"
         );
         assert_eq!(
             TableResolver::items_table("ss11", "normal"),
-            "items_ss11_normal"
+            "items_normal"
         );
     }
 
     #[test]
     fn test_fire_price_table() {
+        // Real-time tables: no season suffix
         assert_eq!(
             TableResolver::fire_price_table("ss12", "season_normal"),
-            "fire_price_ss12_normal"
+            "fire_price_normal"
         );
         assert_eq!(
             TableResolver::fire_price_table("ss11", "expert"),
-            "fire_price_ss11_expert"
+            "fire_price_expert"
+        );
+    }
+
+    #[test]
+    fn test_item_snapshots_table() {
+        // Snapshot tables: with season suffix
+        assert_eq!(
+            TableResolver::item_snapshots_table("ss12", "season_normal"),
+            "item_snapshots_ss12_normal"
+        );
+        assert_eq!(
+            TableResolver::item_snapshots_table("ss11", "expert"),
+            "item_snapshots_ss11_expert"
+        );
+    }
+
+    #[test]
+    fn test_fire_price_snapshots_table() {
+        // Snapshot tables: with season suffix
+        assert_eq!(
+            TableResolver::fire_price_snapshots_table("ss12", "season_normal"),
+            "fire_price_snapshots_ss12_normal"
+        );
+        assert_eq!(
+            TableResolver::fire_price_snapshots_table("ss11", "expert"),
+            "fire_price_snapshots_ss11_expert"
         );
     }
 

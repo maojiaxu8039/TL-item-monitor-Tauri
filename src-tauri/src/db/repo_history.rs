@@ -61,6 +61,7 @@ pub async fn insert_item_price_snapshots(
 }
 
 /// Insert a fire price record for hourly snapshot.
+/// Writes to both real-time table AND snapshots table.
 /// Uses INSERT OR IGNORE to deduplicate by scraped_at.
 pub async fn insert_fire_snapshot(
     pool: &SqlitePool,
@@ -70,14 +71,15 @@ pub async fn insert_fire_snapshot(
     scraped_at: i64,
 ) -> Result<(), crate::core::errors::AppError> {
     let now = Utc::now().timestamp();
-    let table = TableResolver::fire_price_table(season_id, market_mode);
 
+    // 1. Write to real-time fire_price table (latest price)
+    let realtime_table = TableResolver::fire_price_table(season_id, market_mode);
     sqlx::query(
         &format!(
             r#"INSERT OR IGNORE INTO {}
-           (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
-            table
+           (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            realtime_table
         )
     )
     .bind(snapshot.rmb_per_10k_fire)
@@ -87,7 +89,29 @@ pub async fn insert_fire_snapshot(
     .bind(&snapshot.source)
     .bind(&snapshot.source_time)
     .bind(scraped_at)
+    .bind(1i32) // season_day - will be updated by caller if needed
     .bind(now)
+    .execute(pool)
+    .await?;
+
+    // 2. Write to fire_price_snapshots table (hourly history)
+    let snapshots_table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
+    sqlx::query(
+        &format!(
+            r#"INSERT OR IGNORE INTO {}
+           (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+            snapshots_table
+        )
+    )
+    .bind(snapshot.rmb_per_10k_fire)
+    .bind(snapshot.fire_per_rmb)
+    .bind(snapshot.increase_ratio)
+    .bind(&snapshot.trading_volume)
+    .bind(&snapshot.source)
+    .bind(&snapshot.source_time)
+    .bind(scraped_at)
+    .bind(1i32) // season_day - will be updated by caller if needed
     .execute(pool)
     .await?;
 
@@ -166,18 +190,28 @@ pub struct ItemPriceCompare {
 }
 
 /// Get items price comparison between current and history season.
+/// Both current and history data are read from snapshot tables.
 pub async fn get_items_price_compare(
     pool: &SqlitePool,
     current_season: &str,
     history_season: &str,
     market_mode: &str,
 ) -> Result<Vec<ItemPriceCompare>, crate::core::errors::AppError> {
-    let current_items_table = TableResolver::items_table(current_season, market_mode);
+    let current_snapshots_table = TableResolver::item_snapshots_table(current_season, market_mode);
     let history_snapshots_table = TableResolver::item_snapshots_table(history_season, market_mode);
 
-    // Get current season items
+    // Get current season latest snapshots
     let current_items: Vec<(String, String, f64)> = sqlx::query_as(
-        &format!("SELECT item_id, name, price FROM {}", current_items_table)
+        &format!(
+            "SELECT s.item_id, s.name, s.fire_price as price \
+             FROM {} s \
+             INNER JOIN ( \
+                 SELECT item_id, MAX(scraped_at) as max_scraped_at \
+                 FROM {} \
+                 GROUP BY item_id \
+             ) latest ON s.item_id = latest.item_id AND s.scraped_at = latest.max_scraped_at",
+            current_snapshots_table, current_snapshots_table
+        )
     )
     .fetch_all(pool)
     .await?;

@@ -120,6 +120,8 @@ pub async fn get_latest_fire(
     Ok(record)
 }
 
+/// Get fire price history from snapshots table (hourly data).
+/// All time ranges use fire_price_snapshots table for consistent hourly data.
 pub async fn get_fire_history(
     pool: &SqlitePool,
     season_id: &str,
@@ -127,11 +129,11 @@ pub async fn get_fire_history(
     hours: i64,
 ) -> Result<Vec<serde_json::Value>, crate::core::errors::AppError> {
     let cutoff = Utc::now().timestamp() - (hours * 3600);
-    let table = TableResolver::fire_price_table(season_id, market_mode);
+    let table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
 
     let records: Vec<FirePriceRecord> = sqlx::query_as(
         &format!(
-            r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, created_at
+            r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, scraped_at as created_at
            FROM {} 
            WHERE scraped_at >= ? 
            ORDER BY scraped_at DESC"#,
@@ -161,18 +163,18 @@ pub async fn get_fire_history(
     Ok(result)
 }
 
-/// Get all fire history for a season without time filtering.
-/// Used for historical season comparison where data may be old.
+/// Get all fire price history from snapshots table for a season.
+/// Used for historical season comparison - always reads from fire_price_snapshots.
 pub async fn get_fire_history_all(
     pool: &SqlitePool,
     season_id: &str,
     market_mode: &str,
 ) -> Result<Vec<serde_json::Value>, crate::core::errors::AppError> {
-    let table = TableResolver::fire_price_table(season_id, market_mode);
+    let table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
 
     let records: Vec<FirePriceRecord> = sqlx::query_as(
         &format!(
-            r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, created_at
+            r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, scraped_at as created_at
            FROM {} 
            ORDER BY scraped_at DESC"#,
             season_id, market_mode, table

@@ -124,6 +124,23 @@ pub async fn add_section_item(
     count: i32,
     more_value: f64,
 ) -> Result<SectionItem, crate::core::errors::AppError> {
+    // Check if item already exists in this section
+    let existing: Option<(String,)> = sqlx::query_as(
+        "SELECT id FROM section_items WHERE section_id = ? AND item_id = ? AND season_id = ? AND market_mode = ?"
+    )
+    .bind(section_id)
+    .bind(item_id)
+    .bind(season_id)
+    .bind(market_mode)
+    .fetch_optional(pool)
+    .await?;
+
+    if existing.is_some() {
+        return Err(crate::core::errors::AppError::Validation(
+            format!("物品已存在于该分组中")
+        ));
+    }
+
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().timestamp();
 

@@ -350,7 +350,7 @@ pub async fn get_item_price_insights(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<serde_json::Value>, String> {
     let ctx = state.active_context.read().clone();
-    let items = repo_items::search_items(&state.db, &ctx.season_id, ctx.market_mode.as_str(), "", 1, 100).await?;
+    let items = repo_items::search_items(&state.db, &ctx.season_id, ctx.market_mode.as_str(), "", 1, 100, None, None).await?;
     let item_history = repo_history::get_all_item_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), 168).await?;
 
     let mut insights = Vec::new();
