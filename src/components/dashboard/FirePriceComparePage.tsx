@@ -5,10 +5,10 @@ import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "rec
 import { cmd } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 
-type TimeRange = "6h" | "24h" | "3d" | "7d" | "30d" | "all";
+type TimeRange = "12h" | "24h" | "3d" | "7d" | "30d" | "all";
 
 const RANGE_HOURS: Record<TimeRange, number> = {
-  "6h": 6,
+  "12h": 12,
   "24h": 24,
   "3d": 72,
   "7d": 168,
@@ -18,7 +18,7 @@ const RANGE_HOURS: Record<TimeRange, number> = {
 
 // Day limits for each time range
 const RANGE_DAY_LIMITS: Record<TimeRange, number> = {
-  "6h": 1,
+  "12h": 1,
   "24h": 1,
   "3d": 3,
   "7d": 7,
@@ -48,7 +48,7 @@ export default function FirePriceComparePage() {
   const marketMode = marketContext.marketMode;
 
   // For short time ranges, use filtered data; for long ranges, use all data
-  const isShortTimeRange = ["6h", "24h"].includes(timeRange);
+  const isShortTimeRange = ["12h", "24h"].includes(timeRange);
 
   const currentQuery = useQuery({
     queryKey: ["fire-trend-current", currentSeason, marketMode, timeRange],
@@ -89,8 +89,8 @@ export default function FirePriceComparePage() {
       });
 
       // Create 24 hour slots
-      const hours = timeRange === "6h" 
-        ? [0, 4, 8, 12, 16, 20]
+      const hours = timeRange === "12h" 
+        ? [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]
         : Array.from({ length: 24 }, (_, i) => i);
 
       return hours.map((hour) => {
@@ -156,7 +156,7 @@ export default function FirePriceComparePage() {
   ];
 
   const timeRanges: { label: string; value: TimeRange }[] = [
-    { label: "6小时", value: "6h" },
+    { label: "12小时", value: "12h" },
     { label: "24小时", value: "24h" },
     { label: "3天", value: "3d" },
     { label: "7天", value: "7d" },
@@ -164,16 +164,25 @@ export default function FirePriceComparePage() {
     { label: "整个赛季", value: "all" },
   ];
 
-  const currentAvg = currentData.length > 0
-    ? currentData.reduce((sum, r) => sum + r.rmb_per_10k_fire, 0) / currentData.length
+  // Filter data by time range for stats calculation
+  const dayLimit = RANGE_DAY_LIMITS[timeRange];
+  const filteredCurrentData = isShortTimeRange 
+    ? currentData 
+    : currentData.filter(r => r.season_day <= dayLimit);
+  const filteredHistoryData = isShortTimeRange 
+    ? historyData 
+    : historyData.filter(r => r.season_day <= dayLimit);
+
+  const currentAvg = filteredCurrentData.length > 0
+    ? filteredCurrentData.reduce((sum, r) => sum + r.rmb_per_10k_fire, 0) / filteredCurrentData.length
     : 0;
-  const historyAvg = historyData.length > 0
-    ? historyData.reduce((sum, r) => sum + r.rmb_per_10k_fire, 0) / historyData.length
+  const historyAvg = filteredHistoryData.length > 0
+    ? filteredHistoryData.reduce((sum, r) => sum + r.rmb_per_10k_fire, 0) / filteredHistoryData.length
     : 0;
-  const currentHigh = currentData.length > 0 ? Math.max(...currentData.map((r) => r.rmb_per_10k_fire)) : 0;
-  const currentLow = currentData.length > 0 ? Math.min(...currentData.map((r) => r.rmb_per_10k_fire)) : 0;
-  const historyHigh = historyData.length > 0 ? Math.max(...historyData.map((r) => r.rmb_per_10k_fire)) : 0;
-  const historyLow = historyData.length > 0 ? Math.min(...historyData.map((r) => r.rmb_per_10k_fire)) : 0;
+  const currentHigh = filteredCurrentData.length > 0 ? Math.max(...filteredCurrentData.map((r) => r.rmb_per_10k_fire)) : 0;
+  const currentLow = filteredCurrentData.length > 0 ? Math.min(...filteredCurrentData.map((r) => r.rmb_per_10k_fire)) : 0;
+  const historyHigh = filteredHistoryData.length > 0 ? Math.max(...filteredHistoryData.map((r) => r.rmb_per_10k_fire)) : 0;
+  const historyLow = filteredHistoryData.length > 0 ? Math.min(...filteredHistoryData.map((r) => r.rmb_per_10k_fire)) : 0;
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">

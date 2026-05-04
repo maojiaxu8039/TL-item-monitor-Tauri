@@ -475,19 +475,20 @@ async fn seed_test_data_for_ss11(pool: &SqlitePool) -> Result<(), String> {
                 
                 // Create a realistic price curve for SS11
                 // Week 1: rising, Week 2: peak, Week 3-4: declining
+                // Ensure day_factor doesn't go below 0.5 to prevent negative prices
                 let day_factor = if day < 7 {
                     1.0 + (day as f64 * 0.02) // Rising first week
                 } else if day < 14 {
                     1.14 - ((day - 7) as f64 * 0.01) // Peak then slight decline
                 } else {
-                    1.07 - ((day - 14) as f64 * 0.015) // Declining
+                    (1.07 - ((day - 14) as f64 * 0.008)).max(0.5) // Declining but floor at 0.5
                 };
                 
                 // Add hourly volatility
                 let hour_volatility = (hour as f64 - 12.0) / 100.0; // Slight daily pattern
                 let random_noise = rng.gen_range(-0.02..0.02);
                 
-                let rmb_per_10k = base_price * day_factor * (1.0 + hour_volatility + random_noise);
+                let rmb_per_10k = (base_price * day_factor * (1.0 + hour_volatility + random_noise)).max(1.0);
                 let fire_per_rmb = 10000.0 / rmb_per_10k;
                 let increase_ratio = if records_inserted > 0 {
                     Some(random_noise * 100.0)

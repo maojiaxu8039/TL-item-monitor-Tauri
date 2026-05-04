@@ -87,8 +87,22 @@ impl Scraper {
 
     /// 从千岛 API 抓取火价数据
     pub async fn scrape_fire_price(market_mode: &str) -> Result<FirePriceSnapshot, String> {
-        let url = format!("{}{}?mode={}", QIANDAO_API, QIANDAO_FIRE_PRICE_ENDPOINT, market_mode);
-        info!("抓取火价: {}", url);
+        let is_expert = market_mode == "season_expert" || market_mode == "专家";
+        let (tag_id, spec_id) = if is_expert {
+            ("1560055", "267417")
+        } else {
+            ("1560053", "267416")
+        };
+
+        let timestamp = chrono::Utc::now().timestamp_millis().to_string();
+        let body = serde_json::json!({
+            "tagId": tag_id,
+            "offset": 0,
+            "limit": 20,
+            "specIds": [spec_id]
+        });
+
+        info!("抓取火价: {}{}", QIANDAO_API, QIANDAO_FIRE_PRICE_ENDPOINT);
 
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(15))
@@ -97,7 +111,24 @@ impl Scraper {
             .map_err(|e| format!("HTTP client 创建失败: {}", e))?;
 
         let resp = client
-            .get(&url)
+            .post(format!("{}{}", QIANDAO_API, QIANDAO_FIRE_PRICE_ENDPOINT))
+            .header("content-type", "application/json")
+            .header("authorization", "Bearer undefined")
+            .header("x-request-timestamp", &timestamp)
+            .header("x-request-sign-type", "HMAC_SHA256")
+            .header("x-request-sign-version", "v1")
+            .header("x-request-package-id", "1044")
+            .header("x-request-package-sign-version", "0.0.1")
+            .header("origin", "https://qiandao.com")
+            .header("referer", "https://qiandao.com/")
+            .header(
+                "user-agent",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            )
+            .header("x-echo-region", "CN")
+            .header("accept", "application/json, text/plain, */*")
+            .header("accept-language", "zh-CN,zh;q=0.9")
+            .json(&body)
             .send()
             .await
             .map_err(|e| format!("请求失败: {}", e))?;
@@ -106,38 +137,42 @@ impl Scraper {
             return Err(format!("API 返回错误状态: {}", resp.status()));
         }
 
-        let body = resp
+        let text = resp
             .text()
             .await
             .map_err(|e| format!("读取响应失败: {}", e))?;
 
-        // 解析 JSON 响应
-        let json: serde_json::Value = serde_json::from_str(&body)
-            .map_err(|e| format!("JSON 解析失败: {}", e))?;
+        info!("火价API响应: {}", &text[..text.len().min(500)]);
 
-        let rmb_per_10k_fire = json["data"]["rmb_per_10k_fire"]
-            .as_f64()
-            .unwrap_or(0.0);
-        
-        let fire_per_rmb = if rmb_per_10k_fire > 0.0 {
-            10000.0 / rmb_per_10k_fire
+        // 解析 JSON 响应
+        let json: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| format!("JSON 解析失败: {} | body: {}", e, &text[..200]))?;
+
+        let code = json["code"].as_str().unwrap_or("");
+        if code != "0" {
+            return Err(format!(
+                "千岛API返回错误: code={}, errCode={}, msg={}",
+                code,
+                json["errCode"].as_str().unwrap_or(""),
+                json["message"].as_str().unwrap_or("")
+            ));
+        }
+
+        let item = json["data"]["items"]
+            .as_array()
+            .and_then(|items| items.first())
+            .ok_or("No fire price data in response")?;
+
+        let ratio_price = item["ratioPrice"].as_f64().unwrap_or(0.0);
+        let rmb_per_10k_fire = if ratio_price > 0.0 {
+            10000.0 / ratio_price
         } else {
             0.0
         };
 
-        let increase_ratio = json["data"]["increase_ratio"]
-            .as_f64()
-            .unwrap_or(0.0);
+        let fire_per_rmb = ratio_price;
 
-        let trading_volume = json["data"]["trading_volume"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-
-        let source_time = json["data"]["source_time"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+        let increase_ratio = item["changePct"].as_f64().unwrap_or(0.0);
 
         let now = chrono::Utc::now().timestamp();
 
@@ -145,9 +180,12 @@ impl Scraper {
             rmb_per_10k_fire,
             fire_per_rmb,
             increase_ratio,
-            trading_volume,
-            source: "qiandao".to_string(),
-            source_time,
+            trading_volume: "".to_string(),
+            source: format!(
+                "千岛API-{}",
+                if is_expert { "赛季专家" } else { "赛季普通" }
+            ),
+            source_time: chrono::Utc::now().to_rfc3339(),
             scraped_at: now,
         })
     }

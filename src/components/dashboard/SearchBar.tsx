@@ -102,12 +102,12 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
   const handleExportList = async () => {
     try {
       const allSections = await cmd.getSections()
-      let csvContent = "\uFEFF分组名称,物品ID,物品名称,购买火价,数量,溢出价值\n"
+      let csvContent = "\uFEFF分组名称,物品名称,购买火价,数量\n"
       
       for (const section of allSections) {
         const sectionItems = await cmd.getSectionItems(section.id)
         for (const item of sectionItems) {
-          csvContent += `"${section.name}","${item.item_id}","${item.item_name || ''}",${item.purchase_fire_price},${item.count},${item.more_value}\n`
+          csvContent += `"${section.name}","${item.item_name || ''}",${item.purchase_fire_price || ''},${item.count || ''}\n`
         }
       }
       
@@ -132,59 +132,94 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
         filters: [{ name: 'CSV', extensions: ['csv'] }],
         multiple: false,
       })
-      
+
       if (filePath) {
         const csvContent = await readTextFile(filePath as string)
         const lines = csvContent.trim().split('\n')
-        
+
         if (lines.length < 2) {
           toast.error('CSV 文件为空或格式错误')
           return
         }
-        
+
         const header = lines[0].toLowerCase()
         if (!header.includes('分组名称') && !header.includes('section')) {
-          toast.error('CSV 文件格式不正确')
+          toast.error('CSV 文件格式不正确，需要包含"分组名称"和"物品名称"列')
           return
         }
-        
+
         let imported = 0
+        let errors: string[] = []
+
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim()
           if (!line) continue
-          
-          const match = line.match(/^"([^"]+)","([^"]+)","([^"]*)",([^,]+),([^,]+),(.+)$/)
+
+          // Parse CSV line: "分组名称","物品名称",购买火价,数量
+          const match = line.match(/^"([^"]+)","([^"]+)"(?:,([^,]*))?(?:,([^,]*))?$/)
           if (match) {
-            const [, sectionName, itemId, , purchaseFirePrice, count, moreValue] = match
+            const [, sectionName, itemName, purchaseFirePrice, count] = match
             try {
+              // Search for item by name to get item_id
+              const searchResult = await cmd.searchItems(itemName, 1, 5)
+              const item = searchResult.items.find((it: ItemData) => it.name === itemName)
+
+              if (!item) {
+                errors.push(`第${i + 1}行: 未找到物品"${itemName}"`)
+                continue
+              }
+
               const sections = await cmd.getSections()
               let section = sections.find(s => s.name === sectionName)
-              
+
               if (!section) {
                 await cmd.createSection(sectionName)
                 const newSections = await cmd.getSections()
                 section = newSections.find(s => s.name === sectionName)
               }
-              
+
               if (section) {
                 await cmd.addSectionItem(
                   section.id,
                   marketContext.seasonId,
                   marketContext.marketMode,
-                  itemId,
-                  parseFloat(purchaseFirePrice) || 0,
-                  parseInt(count) || 1,
-                  parseFloat(moreValue) || 0
+                  item.item_id,
+                  parseFloat(purchaseFirePrice || '') || 0,
+                  parseInt(count || '') || 1,
+                  0
                 )
                 imported++
               }
-            } catch {
+            } catch (err: any) {
+              const errorMsg = String(err)
+              if (errorMsg.includes("UNIQUE constraint failed")) {
+                errors.push(`第${i + 1}行: 物品"${itemName}"已在分组"${sectionName}"中`)
+              } else {
+                errors.push(`第${i + 1}行: ${errorMsg}`)
+              }
             }
+          } else {
+            errors.push(`第${i + 1}行: CSV格式不正确`)
           }
         }
-        
+
         refreshSections()
-        toast.success(`已导入 ${imported} 个物品`)
+
+        if (errors.length > 0) {
+          if (imported > 0) {
+            toast.success(`已导入 ${imported} 个物品`)
+          }
+          toast.error(
+            <div className="max-h-40 overflow-auto">
+              <div className="font-medium mb-1">导入完成，但有以下问题：</div>
+              {errors.map((err, idx) => (
+                <div key={idx} className="text-xs text-red-600">{err}</div>
+              ))}
+            </div>
+          )
+        } else {
+          toast.success(`成功导入 ${imported} 个物品`)
+        }
       }
     } catch (err) {
       toast.error(`导入失败: ${err}`)

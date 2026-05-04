@@ -180,18 +180,11 @@ pub async fn get_fire_history_by_season(
     state: State<'_, Arc<AppState>>,
     season_id: String,
     market_mode: String,
-    hours: i64,
+    _hours: i64,
 ) -> Result<Vec<serde_json::Value>, String> {
-    // For historical seasons, get all data without time filtering
-    // For current season, use time filtering
-    let ctx = state.active_context.read().clone();
-    let is_current_season = season_id == ctx.season_id;
-    
-    if is_current_season {
-        Ok(repo_fire::get_fire_history(&state.db, &season_id, &market_mode, hours).await?)
-    } else {
-        Ok(repo_fire::get_fire_history_all(&state.db, &season_id, &market_mode).await?)
-    }
+    // Always return all data for the season
+    // Time filtering is done on the frontend based on user's selected range
+    Ok(repo_fire::get_fire_history_all(&state.db, &season_id, &market_mode).await?)
 }
 
 #[tauri::command]
