@@ -2,6 +2,18 @@
 use std::path::PathBuf;
 
 fn app_dir() -> PathBuf {
+    // Use project directory for development to allow easy DB reset
+    let project_dir = std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("..");
+    
+    // Check if we're in development mode (project directory exists with src-tauri)
+    let dev_path = project_dir.join("dev_data");
+    if dev_path.exists() || std::env::var("TL_MONITOR_DEV").is_ok() {
+        return dev_path;
+    }
+    
+    // Production: use system data directory
     let base = dirs::data_dir()
         .or_else(|| dirs::home_dir().map(|h| h.join("AppData").join("Roaming")))
         .unwrap_or_else(|| {
@@ -11,7 +23,7 @@ fn app_dir() -> PathBuf {
 }
 
 pub fn db_path() -> PathBuf {
-    app_dir().join("data").join("tl_monitor.db")
+    app_dir().join("tl_monitor.db")
 }
 
 pub fn logs_dir() -> PathBuf {

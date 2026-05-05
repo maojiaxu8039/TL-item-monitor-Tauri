@@ -495,8 +495,15 @@ export const cmd = {
     invoke<ItemHistoryRecord[]>("get_item_history", { item_id: itemId, limit }),
   getItemHistoryBySeason: (itemId: string, seasonId: string, limit?: number) =>
     invoke<ItemHistoryRecord[]>("get_item_history_by_season", { item_id: itemId, season_id: seasonId, limit }),
-  getItemsPriceCompare: (historySeason: string) =>
-    invoke<ItemPriceCompare[]>("get_items_price_compare", { history_season: historySeason }),
+  getItemHistoryByDay: (itemId: string, seasonId: string, seasonDay: number) =>
+    invoke<ItemHistoryRecord[]>("get_item_history_by_day", { item_id: itemId, season_id: seasonId, seasonDay }),
+  getItemsPriceCompare: (historySeason: string, dayFilter?: number) => {
+    const params: Record<string, unknown> = { historySeason };
+    if (dayFilter !== undefined) {
+      params.dayFilter = dayFilter;
+    }
+    return invoke<ItemPriceCompare[]>("get_items_price_compare", params);
+  },
   getFirePriceInsight: () =>
     invoke<FirePriceInsight>("get_fire_price_insight"),
   getItemPriceInsights: () =>

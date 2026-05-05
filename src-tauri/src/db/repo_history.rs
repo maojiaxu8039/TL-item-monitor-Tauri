@@ -127,6 +127,10 @@ pub async fn get_item_history(
     limit: i64,
 ) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
+    tracing::info!(
+        "get_item_history: table={}, item_id={}, season_id={}, market_mode={}",
+        table, item_id, season_id, market_mode
+    );
     let records = sqlx::query_as::<_, ItemHistoryRecord>(
         &format!(
             "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at \
@@ -140,6 +144,10 @@ pub async fn get_item_history(
     .bind(limit)
     .fetch_all(pool)
     .await?;
+    tracing::info!(
+        "get_item_history: records count={}",
+        records.len()
+    );
     Ok(records)
 }
 
@@ -178,6 +186,48 @@ pub async fn get_item_history_by_season(
     get_item_history(pool, season_id, market_mode, item_id, limit).await
 }
 
+/// Get item price history for a specific day in a season.
+/// Queries all hourly data for a specific season day (00:00 - 24:00).
+pub async fn get_item_history_by_day(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    item_id: &str,
+    season_day: i32,
+) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
+    let table = TableResolver::item_snapshots_table(season_id, market_mode);
+    
+    let season_start = match season_id {
+        "ss11" => chrono::DateTime::parse_from_rfc3339("2026-01-16T00:00:00+00:00").unwrap().timestamp(),
+        "ss12" => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp(),
+        _ => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp(),
+    };
+    
+    let day_start = season_start + ((season_day - 1) as i64 * 86400);
+    let day_end = day_start + 86400;
+    
+    tracing::info!(
+        "get_item_history_by_day: table={}, item_id={}, season_day={}, time_range=[{}, {}]",
+        table, item_id, season_day, day_start, day_end
+    );
+    
+    let records = sqlx::query_as::<_, ItemHistoryRecord>(
+        &format!(
+            "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at \
+             FROM {} \
+             WHERE item_id = ? AND scraped_at >= {} AND scraped_at < {} \
+             ORDER BY scraped_at ASC",
+            season_id, market_mode, table, day_start, day_end
+        )
+    )
+    .bind(item_id)
+    .fetch_all(pool)
+    .await?;
+    
+    tracing::info!("get_item_history_by_day: records count={}", records.len());
+    Ok(records)
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ItemPriceCompare {
     pub item_id: String,
@@ -189,90 +239,159 @@ pub struct ItemPriceCompare {
     pub percentile: Option<f64>,
 }
 
+/// Helper struct for current season query results
+#[derive(Debug, sqlx::FromRow)]
+struct CurrentItemRow {
+    item_id: String,
+    name: String,
+    price: f64,
+}
+
+/// Helper struct for history season query results
+#[derive(Debug, sqlx::FromRow)]
+struct HistoryPriceRow {
+    item_id: String,
+    name: String,
+    avg_price: f64,
+}
+
 /// Get items price comparison between current and history season.
 /// Both current and history data are read from snapshot tables.
+/// If day_filter is None, query the latest snapshot data.
+/// If day_filter is Some(day), query data for the specific season_day.
 pub async fn get_items_price_compare(
     pool: &SqlitePool,
     current_season: &str,
     history_season: &str,
     market_mode: &str,
+    day_filter: Option<i32>,
 ) -> Result<Vec<ItemPriceCompare>, crate::core::errors::AppError> {
     let current_snapshots_table = TableResolver::item_snapshots_table(current_season, market_mode);
     let history_snapshots_table = TableResolver::item_snapshots_table(history_season, market_mode);
 
-    // Get current season latest snapshots
-    let current_items: Vec<(String, String, f64)> = sqlx::query_as(
-        &format!(
-            "SELECT s.item_id, s.name, s.fire_price as price \
-             FROM {} s \
-             INNER JOIN ( \
-                 SELECT item_id, MAX(scraped_at) as max_scraped_at \
+    tracing::info!(
+        "get_items_price_compare: current_table={}, history_table={}, day_filter={:?}",
+        current_snapshots_table, history_snapshots_table, day_filter
+    );
+
+    let season_start = |season_id: &str| -> i64 {
+        match season_id {
+            "ss11" => chrono::DateTime::parse_from_rfc3339("2026-01-16T00:00:00+00:00").unwrap().timestamp(),
+            "ss12" => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp(),
+            _ => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp(),
+        }
+    };
+
+    let (day_start, day_end) = if let Some(day) = day_filter {
+        let start = season_start(history_season) + (((day - 1) as i64) * 86400);
+        (start, start + 86400)
+    } else {
+        (0i64, i64::MAX)
+    };
+
+    let current_items: Vec<CurrentItemRow> = if let Some(day) = day_filter {
+        let cs = season_start(current_season);
+        let cs_day_start = cs + (((day - 1) as i64) * 86400);
+        let cs_day_end = cs_day_start + 86400;
+
+        sqlx::query_as::<_, CurrentItemRow>(
+            &format!(
+                "SELECT s.item_id, s.name, s.fire_price as price \
+                 FROM {} s \
+                 INNER JOIN ( \
+                     SELECT item_id, MIN(scraped_at) as min_scraped_at \
+                     FROM {} \
+                     WHERE season_day = {} AND scraped_at >= {} AND scraped_at < {} \
+                     GROUP BY item_id \
+                 ) earliest ON s.item_id = earliest.item_id AND s.scraped_at = earliest.min_scraped_at",
+                current_snapshots_table, current_snapshots_table, day, cs_day_start, cs_day_end
+            )
+        )
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query_as::<_, CurrentItemRow>(
+            &format!(
+                "SELECT s.item_id, s.name, s.fire_price as price \
+                 FROM {} s \
+                 INNER JOIN ( \
+                     SELECT item_id, MIN(scraped_at) as min_scraped_at \
+                     FROM {} \
+                     GROUP BY item_id \
+                 ) earliest ON s.item_id = earliest.item_id AND s.scraped_at = earliest.min_scraped_at",
+                current_snapshots_table, current_snapshots_table
+            )
+        )
+        .fetch_all(pool)
+        .await?
+    };
+
+    tracing::info!(
+        "get_items_price_compare: current_items count={}",
+        current_items.len()
+    );
+
+    let history_items: Vec<HistoryPriceRow> = if let Some(_day) = day_filter {
+        sqlx::query_as::<_, HistoryPriceRow>(
+            &format!(
+                "SELECT item_id, name, fire_price as avg_price \
                  FROM {} \
-                 GROUP BY item_id \
-             ) latest ON s.item_id = latest.item_id AND s.scraped_at = latest.max_scraped_at",
-            current_snapshots_table, current_snapshots_table
+                 WHERE scraped_at >= {} AND scraped_at < {}",
+                history_snapshots_table, day_start, day_end
+            )
         )
-    )
-    .fetch_all(pool)
-    .await?;
-
-    // Get history season snapshots for comparison
-    let history_records: Vec<(String, f64)> = sqlx::query_as(
-        &format!(
-            "SELECT item_id, AVG(fire_price) as avg_price \
-             FROM {} \
-             GROUP BY item_id",
-            history_snapshots_table
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query_as::<_, HistoryPriceRow>(
+            &format!(
+                "SELECT h.item_id, h.name, h.fire_price as avg_price \
+                 FROM {} h \
+                 INNER JOIN ( \
+                     SELECT item_id, MIN(scraped_at) as min_scraped_at \
+                     FROM {} \
+                     GROUP BY item_id \
+                 ) earliest ON h.item_id = earliest.item_id AND h.scraped_at = earliest.min_scraped_at",
+                history_snapshots_table, history_snapshots_table
+            )
         )
-    )
-    .fetch_all(pool)
-    .await?;
+        .fetch_all(pool)
+        .await?
+    };
 
-    let history_map: std::collections::HashMap<String, f64> = history_records
+    tracing::info!(
+        "get_items_price_compare: history_items count={}",
+        history_items.len()
+    );
+
+    let history_map: std::collections::HashMap<String, (String, f64)> = history_items
         .into_iter()
+        .map(|r| (r.item_id.clone(), (r.name, r.avg_price)))
         .collect();
 
-    // Get all history prices for percentile calculation
-    let all_history: Vec<(String, f64)> = sqlx::query_as(
-        &format!(
-            "SELECT item_id, fire_price FROM {}",
-            history_snapshots_table
-        )
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let mut history_prices_by_item: std::collections::HashMap<String, Vec<f64>> = std::collections::HashMap::new();
-    for (item_id, price) in all_history {
-        history_prices_by_item.entry(item_id).or_default().push(price);
-    }
-
     let mut result = Vec::new();
-    for (item_id, name, current_price) in current_items {
-        let history_price = history_map.get(&item_id).copied();
-        let premium_rate = history_price.map(|hp| (current_price - hp) / hp * 100.0 );
-        let price_diff = history_price.map(|hp| current_price - hp);
-        
-        // Calculate percentile
-        let percentile = if let Some(prices) = history_prices_by_item.get(&item_id) {
-            let mut sorted = prices.clone();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            let pos = sorted.iter().position(|&p| p >= current_price).unwrap_or(sorted.len());
-            Some((pos as f64 / sorted.len() as f64 * 100.0).min(100.0))
-        } else {
-            None
-        };
-
-        result.push(ItemPriceCompare {
-            item_id,
-            name,
-            current_price,
-            history_price,
-            premium_rate,
-            price_diff,
-            percentile,
-        });
+    for row in current_items {
+        if let Some((history_name, history_price)) = history_map.get(&row.item_id) {
+            let hp = *history_price;
+            let premium_rate = (row.price - hp) / hp * 100.0;
+            let price_diff = row.price - hp;
+            
+            result.push(ItemPriceCompare {
+                item_id: row.item_id,
+                name: history_name.clone(),
+                current_price: row.price,
+                history_price: Some(hp),
+                premium_rate: Some(premium_rate),
+                price_diff: Some(price_diff),
+                percentile: None,
+            });
+        }
     }
+
+    tracing::info!(
+        "get_items_price_compare: result count={}",
+        result.len()
+    );
 
     Ok(result)
 }

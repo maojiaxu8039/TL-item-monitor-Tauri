@@ -420,17 +420,46 @@ pub async fn get_item_history_by_season(
 }
 
 #[tauri::command]
-pub async fn get_items_price_compare(
+#[allow(non_snake_case)]
+pub async fn get_item_history_by_day(
     state: State<'_, Arc<AppState>>,
-    history_season: String,
-) -> Result<Vec<repo_history::ItemPriceCompare>, String> {
+    item_id: String,
+    season_id: String,
+    #[allow(non_snake_case)] seasonDay: i32,
+) -> Result<Vec<repo_history::ItemHistoryRecord>, String> {
     let ctx = state.active_context.read().clone();
-    repo_history::get_items_price_compare(
+    repo_history::get_item_history_by_day(
         &state.db,
-        &ctx.season_id,
-        &history_season,
+        &season_id,
         ctx.market_mode.as_str(),
+        &item_id,
+        seasonDay,
     )
     .await
     .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn get_items_price_compare(
+    state: State<'_, Arc<AppState>>,
+    #[allow(non_snake_case)] historySeason: String,
+    #[allow(non_snake_case)] dayFilter: Option<i32>,
+) -> Result<Vec<repo_history::ItemPriceCompare>, String> {
+    let ctx = state.active_context.read().clone();
+    tracing::info!(
+        "get_items_price_compare called: current_season={}, history_season={}, market_mode={}, day_filter={:?}",
+        ctx.season_id, historySeason, ctx.market_mode.as_str(), dayFilter
+    );
+    let result = repo_history::get_items_price_compare(
+        &state.db,
+        &ctx.season_id,
+        &historySeason,
+        ctx.market_mode.as_str(),
+        dayFilter,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    tracing::info!("get_items_price_compare result: {} items", result.len());
+    Ok(result)
 }

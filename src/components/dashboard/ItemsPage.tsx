@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
@@ -212,6 +213,7 @@ export default function ItemsPage() {
 
   // ─── Data queries ───────────────────────────────────────────────────────
   const { marketContext } = useSectionRefresh();
+  const queryClient = useQueryClient();
 
   const { data: searchResult, isLoading, refetch } = useQuery({
     queryKey: ["items-search", marketContext.seasonId, marketContext.marketMode, debouncedKeyword, typeFilter, page, dayFilter],
@@ -241,10 +243,26 @@ export default function ItemsPage() {
   });
 
   // 获取物品价格对比数据
-  const { data: priceCompareData } = useQuery({
-    queryKey: ["items-compare", marketContext.seasonId, historySeason, marketContext.marketMode],
-    queryFn: () => cmd.getItemsPriceCompare(historySeason),
-    enabled: !!marketContext.seasonId,
+  const { data: priceCompareData, isLoading: isCompareLoading, error: compareError } = useQuery({
+    queryKey: ["items-compare", marketContext.seasonId, historySeason, marketContext.marketMode, dayFilter],
+    queryFn: async () => {
+      console.log("[DEBUG] getItemsPriceCompare called with historySeason:", historySeason, "dayFilter:", dayFilter);
+      try {
+        const result = await cmd.getItemsPriceCompare(
+          historySeason,
+          dayFilter === "all" ? undefined : parseInt(dayFilter)
+        );
+        console.log("[DEBUG] getItemsPriceCompare result count:", result?.length);
+        if (result && result.length > 0) {
+          console.log("[DEBUG] First result item:", result[0]);
+        }
+        return result;
+      } catch (err) {
+        console.error("[DEBUG] getItemsPriceCompare error:", err);
+        throw err;
+      }
+    },
+    enabled: true,
   });
 
   const refreshMutation = useMutation({
@@ -264,7 +282,7 @@ export default function ItemsPage() {
   // ─── Filter and sort items client-side ───────────────────────────────────
   const getItemCompare = useCallback((itemId: string): ItemPriceCompare | null => {
     if (!priceCompareData) return null;
-    const compare = priceCompareData.find((c: any) => c.item_id === itemId);
+    const compare = priceCompareData.find((c: ItemPriceCompare) => c.item_id === itemId);
     if (!compare) return null;
     return compare;
   }, [priceCompareData]);
@@ -300,6 +318,7 @@ export default function ItemsPage() {
         )
         .then(() => {
           addToast("success", `已添加到分组`);
+          queryClient.invalidateQueries({ queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode] });
         })
         .catch((err: any) => {
           const errorMsg = String(err);
@@ -310,8 +329,7 @@ export default function ItemsPage() {
           }
         });
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [queryClient, marketContext.seasonId, marketContext.marketMode]
   );
 
   // ─── Columns ─────────────────────────────────────────────────────────────
@@ -339,18 +357,9 @@ export default function ItemsPage() {
           );
         },
       }),
-      COLUMN_HELPER.accessor("price", {
-        header: "当前价格",
-        cell: (info) => (
-          <div className="flex items-center gap-1">
-            <span className="text-slate-800 font-bold">{info.getValue().toFixed(2)}</span>
-            <span className="text-xs text-slate-400">火</span>
-          </div>
-        ),
-      }),
       COLUMN_HELPER.display({
         id: "compare-fire",
-        header: "对比赛季",
+        header: "对比赛季(火价)",
         cell: ({ row }) => {
           const compare = getItemCompare(row.original.item_id);
           if (!compare || !compare.history_price) {
@@ -363,6 +372,15 @@ export default function ItemsPage() {
             </div>
           );
         },
+      }),
+      COLUMN_HELPER.accessor("price", {
+        header: "当前赛季(火价)",
+        cell: (info) => (
+          <div className="flex items-center gap-1">
+            <span className="text-slate-800 font-bold">{info.getValue().toFixed(2)}</span>
+            <span className="text-xs text-slate-400">火</span>
+          </div>
+        ),
       }),
       COLUMN_HELPER.display({
         id: "price-change",
@@ -516,6 +534,21 @@ export default function ItemsPage() {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3 flex-wrap">
+            {/* Day filter */}
+            <DayRangeInput value={dayFilter} onChange={setDayFilter} />
+
+            {/* History season compare */}
+            <div className="relative">
+              <GitCompare className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <select
+                value={historySeason}
+                onChange={(e) => setHistorySeason(e.target.value)}
+                className="pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none cursor-pointer appearance-none min-w-[160px] hover:border-slate-300 transition-colors focus:ring-2 focus:ring-blue-500/30"
+              >
+                <option value="ss11">对比赛季 SS11</option>
+              </select>
+            </div>
+
             {/* Type filter */}
             <div className="relative">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -545,20 +578,10 @@ export default function ItemsPage() {
               />
             </div>
 
-            {/* History season compare */}
-            <div className="relative">
-              <GitCompare className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <select
-                value={historySeason}
-                onChange={(e) => setHistorySeason(e.target.value)}
-                className="pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none cursor-pointer appearance-none min-w-[160px] hover:border-slate-300 transition-colors focus:ring-2 focus:ring-blue-500/30"
-              >
-                <option value="ss11">对比赛季 SS11</option>
-              </select>
+            {/* Debug info */}
+            <div className="text-xs text-slate-500">
+              {isCompareLoading ? "加载中..." : compareError ? `错误: ${typeof compareError === 'string' ? compareError : compareError?.message || String(compareError)}` : `对比数据: ${priceCompareData?.length ?? 0} 条`}
             </div>
-
-            {/* Day filter */}
-            <DayRangeInput value={dayFilter} onChange={setDayFilter} />
           </div>
 
           {/* Refresh button */}
@@ -668,6 +691,7 @@ export default function ItemsPage() {
           itemId={trendItem.itemId}
           itemName={trendItem.name}
           historySeason={historySeason}
+          currentDay={dayFilter === "all" ? 1 : parseInt(dayFilter)}
           onClose={() => setTrendItem(null)}
         />
       )}

@@ -2,17 +2,8 @@ use crate::db::models::Item;
 use crate::db::table_resolver::TableResolver;
 use sqlx::SqlitePool;
 
-/// Calculate season day based on current timestamp.
-/// Season day is the number of days since the season start (day 1, 2, 3, ...)
-/// TODO: In production, fetch actual season start date from seasons table
-pub fn calculate_season_day() -> i32 {
-    // Placeholder: returns 1 for now
-    // Should be calculated based on season start date
-    1
-}
-
-/// Get latest item snapshot data for a given season.
-/// Uses item_snapshots table to get the most recent price for each item.
+/// Search items from snapshot table filtered by season day.
+/// Returns items with price for the specified season day (00:00 data).
 pub async fn search_items(
     pool: &SqlitePool,
     season_id: &str,
@@ -21,84 +12,90 @@ pub async fn search_items(
     page: i64,
     page_size: i64,
     day_filter: Option<i32>,
-    type_filter: Option<&str>,
+    _type_filter: Option<&str>,
 ) -> Result<(Vec<Item>, i64), crate::core::errors::AppError> {
     let offset = (page - 1) * page_size;
     let pattern = format!("%{}%", keyword);
     let snapshots_table = TableResolver::item_snapshots_table(season_id, market_mode);
 
-    // Get latest snapshot for each item using a subquery
-    let mut conditions = vec!["name LIKE ?".to_string()];
-    
-    if let Some(day) = day_filter {
-        conditions.push(format!("season_day = {}", day));
-    }
-    
-    if let Some(item_type) = type_filter {
-        if item_type != "all" {
-            conditions.push(format!("item_type = '{}'", item_type));
-        }
-    }
-    
-    let where_clause = conditions.join(" AND ");
+    let items: Vec<Item> = if let Some(day) = day_filter {
+        let season_start = match season_id {
+            "ss11" => chrono::DateTime::parse_from_rfc3339("2026-01-16T00:00:00+00:00").unwrap().timestamp(),
+            "ss12" => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp(),
+            _ => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp(),
+        };
+        let day_start = season_start + ((day - 1) as i64 * 86400);
+        let day_end = day_start + 86400;
 
-    // Get latest snapshot for each item
-    let items: Vec<Item> = sqlx::query_as(
-        &format!(
-            r#"
-            SELECT 
-                s.item_id, 
-                '{}' as season_id, 
-                '{}' as market_mode, 
-                s.name, 
-                s.item_type, 
-                'snapshot' as source, 
-                s.fire_price as price, 
-                s.scraped_at as last_time, 
-                s.season_day, 
-                s.scraped_at as updated_at
-            FROM {} s
-            INNER JOIN (
-                SELECT item_id, MAX(scraped_at) as max_scraped_at
-                FROM {}
-                GROUP BY item_id
-            ) latest ON s.item_id = latest.item_id AND s.scraped_at = latest.max_scraped_at
-            WHERE {}
-            ORDER BY s.name
-            LIMIT ? OFFSET ?
-            "#,
-            season_id, market_mode, snapshots_table, snapshots_table, where_clause
-        ),
-    )
-    .bind(&pattern)
-    .bind(page_size)
-    .bind(offset)
-    .fetch_all(pool)
-    .await?;
-
-    let total: (i64,) = sqlx::query_as(
-        &format!(
-            r#"
-            SELECT COUNT(*) FROM (
-                SELECT s.item_id
+        sqlx::query_as(
+            &format!(
+                r#"
+                SELECT 
+                    s.item_id, 
+                    '{}' as season_id, 
+                    '{}' as market_mode, 
+                    s.name, 
+                    s.item_type, 
+                    'snapshot' as source, 
+                    s.fire_price as price, 
+                    s.scraped_at as last_time, 
+                    s.scraped_at as updated_at
                 FROM {} s
                 INNER JOIN (
-                    SELECT item_id, MAX(scraped_at) as max_scraped_at
+                    SELECT item_id, MIN(scraped_at) as min_scraped_at
+                    FROM {}
+                    WHERE season_day = {} AND scraped_at >= {} AND scraped_at < {}
+                    GROUP BY item_id
+                ) earliest ON s.item_id = earliest.item_id AND s.scraped_at = earliest.min_scraped_at
+                WHERE s.name LIKE ?
+                ORDER BY s.name
+                LIMIT ? OFFSET ?
+                "#,
+                season_id, market_mode, snapshots_table, snapshots_table, day, day_start, day_end
+            ),
+        )
+        .bind(&pattern)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query_as(
+            &format!(
+                r#"
+                SELECT 
+                    s.item_id, 
+                    '{}' as season_id, 
+                    '{}' as market_mode, 
+                    s.name, 
+                    s.item_type, 
+                    'snapshot' as source, 
+                    s.fire_price as price, 
+                    s.scraped_at as last_time, 
+                    s.scraped_at as updated_at
+                FROM {} s
+                INNER JOIN (
+                    SELECT item_id, MIN(scraped_at) as min_scraped_at
                     FROM {}
                     GROUP BY item_id
-                ) latest ON s.item_id = latest.item_id AND s.scraped_at = latest.max_scraped_at
-                WHERE {}
-                GROUP BY s.item_id
-            )
-            "#,
-            snapshots_table, snapshots_table, where_clause
-        ),
-    )
-    .bind(&pattern)
-    .fetch_one(pool)
-    .await?;
+                ) earliest ON s.item_id = earliest.item_id AND s.scraped_at = earliest.min_scraped_at
+                WHERE s.name LIKE ?
+                ORDER BY s.name
+                LIMIT ? OFFSET ?
+                "#,
+                season_id, market_mode, snapshots_table, snapshots_table
+            ),
+        )
+        .bind(&pattern)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(pool)
+        .await?
+    };
 
-    Ok((items, total.0))
+    let total = items.len() as i64;
+
+    Ok((items, total))
 }
 
 /// Count items in the real-time table (items_normal/expert).
@@ -130,14 +127,13 @@ pub async fn bulk_insert_items(
     
     // Real-time tables don't have season suffix
     let table = TableResolver::items_table("ss12", market_mode);
-    let season_day = calculate_season_day();
     let mut tx = pool.begin().await?;
     const BATCH_SIZE: usize = 100;
     
     for chunk in items.chunks(BATCH_SIZE) {
         let mut qb: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
             sqlx::query_builder::QueryBuilder::new(
-                &format!("INSERT OR REPLACE INTO {} (item_id, name, item_type, source, price, last_time, season_day, updated_at) ", table)
+                &format!("INSERT OR REPLACE INTO {} (item_id, name, item_type, source, price, last_time, updated_at) ", table)
             );
         qb.push_values(chunk, |mut b, item| {
             b.push_bind(&item.item_id)
@@ -146,7 +142,6 @@ pub async fn bulk_insert_items(
                 .push_bind(&item.source)
                 .push_bind(item.price)
                 .push_bind(item.last_time)
-                .push_bind(season_day)
                 .push_bind(item.updated_at);
         });
         qb.build().execute(&mut *tx).await?;
@@ -180,11 +175,11 @@ pub async fn get_distinct_item_types(
     season_id: &str,
     market_mode: &str,
 ) -> Result<Vec<String>, crate::core::errors::AppError> {
-    let snapshots_table = TableResolver::item_snapshots_table(season_id, market_mode);
+    let items_table = TableResolver::items_table(season_id, market_mode);
     let types: Vec<(String,)> = sqlx::query_as(
         &format!(
             "SELECT DISTINCT item_type FROM {} WHERE item_type IS NOT NULL AND item_type != '' ORDER BY item_type",
-            snapshots_table
+            items_table
         )
     )
     .fetch_all(pool)
@@ -236,6 +231,38 @@ pub async fn get_all_items(
     market_mode: &str,
 ) -> Result<Vec<Item>, crate::core::errors::AppError> {
     get_items_by_season(pool, season_id, market_mode).await
+}
+
+/// Get items from real-time table (items_normal/expert).
+/// Used to load items_cache on startup for snapshot tasks.
+pub async fn get_items_from_realtime_table(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<Vec<Item>, crate::core::errors::AppError> {
+    let items_table = TableResolver::items_table(season_id, market_mode);
+    let items: Vec<Item> = sqlx::query_as(
+        &format!(
+            r#"
+            SELECT
+                item_id,
+                '{}' as season_id,
+                '{}' as market_mode,
+                name,
+                item_type,
+                source,
+                price,
+                last_time,
+                updated_at
+            FROM {}
+            ORDER BY name
+            "#,
+            season_id, market_mode, items_table
+        )
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(items)
 }
 
 /// Clear snapshot items for a season (not real-time tables).

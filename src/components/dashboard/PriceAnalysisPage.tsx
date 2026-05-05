@@ -559,6 +559,7 @@ export default function PriceAnalysisPage() {
           itemId={trendItem.itemId}
           itemName={trendItem.itemName}
           historySeason="ss11"
+          currentDay={1}
           onClose={() => setTrendItem(null)}
         />
       )}

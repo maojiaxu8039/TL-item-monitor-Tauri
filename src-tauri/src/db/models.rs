@@ -13,12 +13,26 @@ pub struct Item {
     pub source: String,
     pub price: f64,
     pub last_time: Option<i64>,
-    pub season_day: i32,
     pub updated_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct FirePriceRecord {
+    pub id: i64,
+    pub season_id: String,
+    pub market_mode: String,
+    pub rmb_per_10k_fire: f64,
+    pub fire_per_rmb: f64,
+    pub increase_ratio: Option<f64>,
+    pub trading_volume: Option<String>,
+    pub source: String,
+    pub source_time: Option<String>,
+    pub scraped_at: i64,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct FirePriceSnapshotRecord {
     pub id: i64,
     pub season_id: String,
     pub market_mode: String,

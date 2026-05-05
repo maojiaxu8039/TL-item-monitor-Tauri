@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS fire_price_expert (
 CREATE TABLE IF NOT EXISTS item_snapshots_ss12_normal (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    item_type TEXT NOT NULL DEFAULT '',
     fire_price REAL NOT NULL,
     scraped_at INTEGER NOT NULL,
     season_day INTEGER NOT NULL DEFAULT 1,
@@ -85,6 +87,8 @@ CREATE TABLE IF NOT EXISTS fire_price_snapshots_ss12_normal (
 CREATE TABLE IF NOT EXISTS item_snapshots_ss12_expert (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    item_type TEXT NOT NULL DEFAULT '',
     fire_price REAL NOT NULL,
     scraped_at INTEGER NOT NULL,
     season_day INTEGER NOT NULL DEFAULT 1,
@@ -111,6 +115,8 @@ CREATE TABLE IF NOT EXISTS fire_price_snapshots_ss12_expert (
 CREATE TABLE IF NOT EXISTS item_snapshots_ss11_normal (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    item_type TEXT NOT NULL DEFAULT '',
     fire_price REAL NOT NULL,
     scraped_at INTEGER NOT NULL,
     season_day INTEGER NOT NULL DEFAULT 1,
@@ -133,6 +139,8 @@ CREATE TABLE IF NOT EXISTS fire_price_snapshots_ss11_normal (
 CREATE TABLE IF NOT EXISTS item_snapshots_ss11_expert (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    item_type TEXT NOT NULL DEFAULT '',
     fire_price REAL NOT NULL,
     scraped_at INTEGER NOT NULL,
     season_day INTEGER NOT NULL DEFAULT 1,

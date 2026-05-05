@@ -1,4 +1,4 @@
-use crate::db::models::FirePriceRecord;
+use crate::db::models::{FirePriceRecord, FirePriceSnapshotRecord};
 use crate::db::table_resolver::TableResolver;
 use sqlx::SqlitePool;
 use chrono::Utc;
@@ -64,12 +64,11 @@ pub async fn insert_fire_record(
 ) -> Result<FirePriceRecord, crate::core::errors::AppError> {
     let now = Utc::now().timestamp();
     let table = TableResolver::fire_price_table(season_id, market_mode);
-    let season_day = calculate_season_day(snapshot.scraped_at, season_id);
 
     let result = sqlx::query(
         &format!(
-            r#"INSERT OR IGNORE INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            r#"INSERT OR IGNORE INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
             table
         )
     )
@@ -80,7 +79,6 @@ pub async fn insert_fire_record(
     .bind(&snapshot.source)
     .bind(&snapshot.source_time)
     .bind(snapshot.scraped_at)
-    .bind(season_day)
     .bind(now)
     .execute(pool)
     .await?;
@@ -96,7 +94,6 @@ pub async fn insert_fire_record(
         source: snapshot.source.clone(),
         source_time: snapshot.source_time.clone(),
         scraped_at: snapshot.scraped_at,
-        season_day,
         created_at: now,
     })
 }
@@ -109,7 +106,7 @@ pub async fn get_latest_fire(
     let table = TableResolver::fire_price_table(season_id, market_mode);
     let record: Option<FirePriceRecord> = sqlx::query_as(
         &format!(
-            r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, created_at
+            r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, created_at
            FROM {} 
            ORDER BY scraped_at DESC LIMIT 1"#,
             season_id, market_mode, table
@@ -131,7 +128,7 @@ pub async fn get_fire_history(
     let cutoff = Utc::now().timestamp() - (hours * 3600);
     let table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
 
-    let records: Vec<FirePriceRecord> = sqlx::query_as(
+    let records: Vec<FirePriceSnapshotRecord> = sqlx::query_as(
         &format!(
             r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, scraped_at as created_at
            FROM {} 
@@ -172,7 +169,7 @@ pub async fn get_fire_history_all(
 ) -> Result<Vec<serde_json::Value>, crate::core::errors::AppError> {
     let table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
 
-    let records: Vec<FirePriceRecord> = sqlx::query_as(
+    let records: Vec<FirePriceSnapshotRecord> = sqlx::query_as(
         &format!(
             r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, scraped_at as created_at
            FROM {} 

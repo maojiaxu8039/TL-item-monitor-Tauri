@@ -59,6 +59,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             request_notification_permission,
             sync_items_record,
             get_item_history_by_season,
+            get_item_history_by_day,
             get_items_price_compare,
             get_sections,
             create_section,
