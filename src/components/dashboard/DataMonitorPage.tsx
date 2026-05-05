@@ -41,8 +41,8 @@ interface FireHistoryRecord {
   trading_volume: string;
   source: string;
   source_time: string;
-  recorded_at: number;
-  created_at: number;
+  scraped_at: number;
+  created_at?: number;
 }
 
 interface ItemsHistoryRecord {
@@ -53,8 +53,8 @@ interface ItemsHistoryRecord {
   item_type: string | null;
   price: number;
   last_time: number | null;
-  recorded_at: number;
-  created_at: number;
+  scraped_at: number;
+  created_at?: number;
 }
 
 type ConnectionStatus = "connected" | "disconnected" | "error";
@@ -119,8 +119,8 @@ export default function DataMonitorPage() {
       const marketMode = syncMode === "expert" ? "season_expert" : "season_normal";
       
       if (dataType === "fire") {
-        const url = hours === 99999 
-          ? `${serverUrl}/fire-history-all?season_id=${marketContext.seasonId}&market_mode=season_${syncMode}`
+        const url = hours === 99999
+          ? `${serverUrl}/fire-history-all?mode=${modeParam}&limit=99999`
           : `${serverUrl}/fire-history?mode=${modeParam}&limit=${hours}`;
         
         const response = await fetch(url);
@@ -145,7 +145,7 @@ export default function DataMonitorPage() {
               trading_volume: record.trading_volume,
               source: record.source,
               source_time: record.source_time,
-              recorded_at: record.recorded_at,
+              recorded_at: record.scraped_at,
             });
             synced++;
           } catch (err) {
@@ -154,8 +154,8 @@ export default function DataMonitorPage() {
         }
         return { synced, type: "fire" };
       } else {
-        const url = hours === 99999 
-          ? `${serverUrl}/items-history-all?season_id=${marketContext.seasonId}&market_mode=season_${syncMode}`
+        const url = hours === 99999
+          ? `${serverUrl}/items-history-all?mode=${modeParam}&limit=99999`
           : `${serverUrl}/items-history?mode=${modeParam}&limit=${hours}`;
         
         const response = await fetch(url);
@@ -179,7 +179,7 @@ export default function DataMonitorPage() {
               item_type: record.item_type,
               price: record.price,
               last_time: record.last_time,
-              recorded_at: record.recorded_at,
+              recorded_at: record.scraped_at,
             });
             synced++;
           } catch (err) {

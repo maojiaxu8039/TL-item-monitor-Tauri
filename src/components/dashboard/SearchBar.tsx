@@ -28,10 +28,8 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
   const { data: searchResult, error } = useQuery({
     queryKey: ["search", searchValue, marketContext.seasonId, marketContext.marketMode],
     queryFn: async () => {
-      console.log("SearchBar queryFn called with:", { keyword: searchValue, seasonId: marketContext.seasonId, marketMode: marketContext.marketMode });
       try {
         const result = await cmd.searchItems(searchValue, 1, 20);
-        console.log("SearchBar queryFn result:", result);
         return result;
       } catch (e) {
         console.error("SearchBar queryFn error:", e);

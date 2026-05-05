@@ -246,19 +246,14 @@ export default function ItemsPage() {
   const { data: priceCompareData, isLoading: isCompareLoading, error: compareError } = useQuery({
     queryKey: ["items-compare", marketContext.seasonId, historySeason, marketContext.marketMode, dayFilter],
     queryFn: async () => {
-      console.log("[DEBUG] getItemsPriceCompare called with historySeason:", historySeason, "dayFilter:", dayFilter);
       try {
         const result = await cmd.getItemsPriceCompare(
           historySeason,
           dayFilter === "all" ? undefined : parseInt(dayFilter)
         );
-        console.log("[DEBUG] getItemsPriceCompare result count:", result?.length);
-        if (result && result.length > 0) {
-          console.log("[DEBUG] First result item:", result[0]);
-        }
         return result;
       } catch (err) {
-        console.error("[DEBUG] getItemsPriceCompare error:", err);
+        console.error("getItemsPriceCompare error:", err);
         throw err;
       }
     },

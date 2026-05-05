@@ -47,13 +47,23 @@ fn calculate_season_day(season_start: i64, recorded_at: i64) -> i32 {
     (days + 1) as i32
 }
 
-/// 获取赛季开始时间戳
-fn get_season_start(season_id: &str) -> i64 {
-    match season_id {
-        "ss12" => 1776384000, // 2026-01-15 00:00:00 UTC
-        "ss11" => 1768521600, // 2026-01-01 00:00:00 UTC
-        _ => 1776384000,
-    }
+/// 获取赛季开始时间戳（从数据库查询，失败时回退到硬编码）
+async fn get_season_start(pool: &SqlitePool, season_id: &str) -> i64 {
+    let started_at: Option<(i64,)> = sqlx::query_as(
+        "SELECT started_at FROM seasons WHERE id = ?"
+    )
+    .bind(season_id)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
+
+    started_at.map(|(ts,)| ts).unwrap_or_else(|| {
+        match season_id {
+            "ss12" => 1776384000,
+            "ss11" => 1768521600,
+            _ => 1776384000,
+        }
+    })
 }
 
 /// 运行数据库迁移
@@ -184,7 +194,7 @@ pub async fn insert_fire_snapshot(
 ) -> Result<(), String> {
     let mode = MarketMode::from_str(market_mode);
     let table = mode.fire_table(season_id);
-    let season_start = get_season_start(season_id);
+    let season_start = get_season_start(pool, season_id).await;
     let season_day = calculate_season_day(season_start, scraped_at);
 
     sqlx::query(&format!(
@@ -222,7 +232,7 @@ pub async fn insert_items_snapshots(
 ) -> Result<usize, String> {
     let mode = MarketMode::from_str(market_mode);
     let table = mode.items_table(season_id);
-    let season_start = get_season_start(season_id);
+    let season_start = get_season_start(pool, season_id).await;
     let season_day = calculate_season_day(season_start, scraped_at);
     let mut count = 0;
 
@@ -376,6 +386,47 @@ pub async fn init_new_season(
 
     info!("新赛季 {} 已初始化，创建了 {} 张表", season_id, created_tables.len());
     Ok(created_tables)
+}
+
+/// 查询所有火价快照历史（不分页，用于数据同步）
+pub async fn get_fire_history_all(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    _limit: i32,
+) -> Result<Vec<FireSnapshotRecord>, String> {
+    let mode = MarketMode::from_str(market_mode);
+    let table = mode.fire_table(season_id);
+
+    let query = format!(
+        r#"
+        SELECT rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day
+        FROM {}
+        ORDER BY scraped_at DESC
+        "#,
+        table
+    );
+
+    let rows = sqlx::query(&query)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("查询火价快照失败: {}", e))?;
+
+    let records: Vec<FireSnapshotRecord> = rows
+        .into_iter()
+        .map(|row| FireSnapshotRecord {
+            rmb_per_10k_fire: row.get("rmb_per_10k_fire"),
+            fire_per_rmb: row.get("fire_per_rmb"),
+            increase_ratio: row.get::<Option<f64>, _>("increase_ratio").unwrap_or(0.0),
+            trading_volume: row.get::<Option<String>, _>("trading_volume").unwrap_or_default(),
+            source: row.get("source"),
+            source_time: row.get::<Option<String>, _>("source_time").unwrap_or_default(),
+            scraped_at: row.get("scraped_at"),
+            season_day: row.get("season_day"),
+        })
+        .collect();
+
+    Ok(records)
 }
 
 /// 查询单个物品的快照历史

@@ -217,6 +217,7 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
             last_items_reload: None,
             db_size_kb: 0.0,
         }),
+        scheduler_handle: RwLock::new(None),
     };
 
     Ok(state)
@@ -306,6 +307,31 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
             .execute(pool)
             .await
             .map_err(|e| e.to_string())?;
+    }
+
+    // Apply v5-v8 migrations automatically
+    let migrations: Vec<(i64, &str)> = vec![
+        (5, include_str!("db/migrations/005_add_season_api_configs.sql")),
+        (6, include_str!("db/migrations/006_add_season_day.sql")),
+        (7, include_str!("db/migrations/007_add_name_type_to_snapshots.sql")),
+        (8, include_str!("db/migrations/008_create_item_realtime_fire_prices.sql")),
+    ];
+
+    for (version, sql) in migrations {
+        if current_version < version {
+            tracing::info!("Applying migration v{}", version);
+            sqlx::query(sql)
+                .execute(pool)
+                .await
+                .map_err(|e| format!("Migration v{} failed: {}", version, e))?;
+
+            sqlx::query("INSERT INTO _migrations (version, applied_at) VALUES (?, ?)")
+                .bind(version)
+                .bind(chrono::Utc::now().timestamp())
+                .execute(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
     }
 
     // Ensure split tables exist (idempotent, handles cases where v3 migration

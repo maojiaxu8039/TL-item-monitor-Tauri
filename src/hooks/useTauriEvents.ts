@@ -3,13 +3,22 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { queryClient } from "@/lib/query";
 import { toast } from "sonner";
 
+function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI__" in window;
+}
+
 /**
  * Global Tauri event listener hook.
  * Listens to all backend events and performs appropriate cache invalidation
  * and UI notifications.
+ * Skips registration in non-Tauri environments (e.g. Vite browser dev).
  */
 export function useTauriEvents() {
   useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
     const unlisteners: UnlistenFn[] = [];
 
     (async () => {

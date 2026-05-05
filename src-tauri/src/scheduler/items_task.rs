@@ -15,9 +15,20 @@ pub async fn run_items_reload_task(
     info!("Items reload task started");
     loop {
         tokio::select! {
-            _ = abort.recv() => {
-                info!("Items reload task received abort");
-                break;
+            result = abort.recv() => {
+                match result {
+                    Ok(_) => {
+                        info!("Items reload task received abort");
+                        break;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        info!("Items reload task abort channel closed, exiting");
+                        break;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        continue;
+                    }
+                }
             }
             _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
                 let fresh_config = match crate::core::config::load_config() {

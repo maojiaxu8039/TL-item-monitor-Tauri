@@ -23,9 +23,20 @@ pub async fn run_price_alert_task(
     
     loop {
         tokio::select! {
-            _ = abort.recv() => {
-                info!("Price alert task received abort");
-                break;
+            result = abort.recv() => {
+                match result {
+                    Ok(_) => {
+                        info!("Price alert task received abort");
+                        break;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        info!("Price alert task abort channel closed, exiting");
+                        break;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        continue;
+                    }
+                }
             }
             _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
                 check_worth_items(&app, &state).await;

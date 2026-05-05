@@ -11,12 +11,34 @@ pub async fn search_items(
     keyword: &str,
     page: i64,
     page_size: i64,
-    _day_filter: Option<i32>,
-    _type_filter: Option<&str>,
+    day_filter: Option<i32>,
+    type_filter: Option<&str>,
 ) -> Result<(Vec<Item>, i64), crate::core::errors::AppError> {
     let offset = (page - 1) * page_size;
     let pattern = format!("%{}%", keyword);
     let items_table = TableResolver::items_table(season_id, market_mode);
+
+    let mut conditions = vec!["name LIKE ?".to_string()];
+    if day_filter.is_some() {
+        conditions.push("season_day = ?".to_string());
+    }
+    if type_filter.is_some() {
+        conditions.push("item_type = ?".to_string());
+    }
+    let where_clause = conditions.join(" AND ");
+
+    let count_sql = format!(
+        "SELECT COUNT(*) FROM {} WHERE {}",
+        items_table, where_clause
+    );
+    let mut count_query = sqlx::query_as(&count_sql).bind(&pattern);
+    if let Some(day) = day_filter {
+        count_query = count_query.bind(day);
+    }
+    if let Some(t) = type_filter {
+        count_query = count_query.bind(t);
+    }
+    let (total,): (i64,) = count_query.fetch_one(pool).await?;
 
     let items: Vec<Item> = sqlx::query_as(
         &format!(
@@ -32,20 +54,20 @@ pub async fn search_items(
                 last_time, 
                 updated_at
             FROM {}
-            WHERE name LIKE ?
+            WHERE {}
             ORDER BY name
             LIMIT ? OFFSET ?
             "#,
-            season_id, market_mode, items_table
+            season_id, market_mode, items_table, where_clause
         ),
     )
     .bind(&pattern)
+    .bind(day_filter)
+    .bind(type_filter)
     .bind(page_size)
     .bind(offset)
     .fetch_all(pool)
     .await?;
-
-    let total = items.len() as i64;
 
     Ok((items, total))
 }

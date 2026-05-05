@@ -5,18 +5,27 @@ use chrono::Utc;
 
 /// Calculate season day based on scraped_at timestamp.
 /// Season day is the number of days since the season start (day 1, 2, 3, ...)
-/// TODO: In production, fetch actual season start date from seasons table
-pub fn calculate_season_day(scraped_at: i64, season_id: &str) -> i32 {
-    // For now, use a fixed season start date based on season_id
-    // In production, this should be fetched from the seasons table
-    let season_start = match season_id {
-        "ss11" => chrono::DateTime::parse_from_rfc3339("2026-01-16T00:00:00+00:00").unwrap().timestamp(),
-        "ss12" => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp(),
-        _ => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp(),
-    };
-
+pub fn calculate_season_day(scraped_at: i64, season_start: i64) -> i32 {
     let days_since_start = (scraped_at - season_start) / 86400;
     std::cmp::max(1, days_since_start as i32 + 1)
+}
+
+/// Fetch season start timestamp from database.
+/// Falls back to a default date if season not found.
+pub async fn get_season_start(pool: &SqlitePool, season_id: &str) -> Result<i64, crate::core::errors::AppError> {
+    let started_at: Option<(i64,)> = sqlx::query_as(
+        "SELECT started_at FROM seasons WHERE id = ?"
+    )
+    .bind(season_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(started_at.map(|(ts,)| ts).unwrap_or_else(|| {
+        // Fallback: parse from season_id if it contains a number
+        // e.g., "ss12" -> use a reasonable default
+        tracing::warn!("Season {} not found in seasons table, using fallback start date", season_id);
+        chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp()
+    }))
 }
 
 #[cfg(test)]
@@ -30,15 +39,15 @@ mod tests {
 
         // Day 1: 2026-04-17 12:00:00 UTC
         let day1 = ss12_start + 12 * 3600;
-        assert_eq!(calculate_season_day(day1, "ss12"), 1);
+        assert_eq!(calculate_season_day(day1, ss12_start), 1);
 
         // Day 16: 2026-05-02 22:56:12 UTC (from DB)
         let day16 = 1777762572i64;
-        assert_eq!(calculate_season_day(day16, "ss12"), 16);
+        assert_eq!(calculate_season_day(day16, ss12_start), 16);
 
         // Day 17: 2026-05-03 20:43:34 UTC (from DB)
         let day17 = 1777841014i64;
-        assert_eq!(calculate_season_day(day17, "ss12"), 17);
+        assert_eq!(calculate_season_day(day17, ss12_start), 17);
     }
 
     #[test]
@@ -48,11 +57,11 @@ mod tests {
 
         // Day 1
         let day1 = ss11_start + 12 * 3600;
-        assert_eq!(calculate_season_day(day1, "ss11"), 1);
+        assert_eq!(calculate_season_day(day1, ss11_start), 1);
 
         // Day 30
         let day30 = ss11_start + 29 * 86400 + 12 * 3600;
-        assert_eq!(calculate_season_day(day30, "ss11"), 30);
+        assert_eq!(calculate_season_day(day30, ss11_start), 30);
     }
 }
 

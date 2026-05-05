@@ -9,6 +9,7 @@
 use std::sync::Arc;
 use chrono::{Utc, Timelike};
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
+use tokio::io::AsyncWriteExt;
 use tokio::sync::{broadcast, RwLock};
 use tracing::{info, error, warn, Level};
 use tracing_subscriber::FmtSubscriber;
@@ -347,10 +348,37 @@ async fn handle_request(
             let limit: i32 = get_query_param(&request, "limit")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(99999);
-            
+
             let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
-            
+
             match db::get_items_history_all(&state.db, &state.config.season_id, market_mode, limit).await {
+                Ok(records) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse {
+                        success: true,
+                        data: Some(records),
+                        error: None,
+                    }).unwrap_or_default();
+                    (200, body)
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(e),
+                    }).unwrap_or_default();
+                    (500, body)
+                }
+            }
+        }
+        ("GET", "/fire-history-all") => {
+            let mode = get_query_param(&request, "mode").unwrap_or_else(|| "normal".to_string());
+            let limit: i32 = get_query_param(&request, "limit")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(99999);
+
+            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
+
+            match db::get_fire_history_all(&state.db, &state.config.season_id, market_mode, limit).await {
                 Ok(records) => {
                     let body = serde_json::to_string_pretty(&ApiResponse {
                         success: true,
@@ -392,31 +420,31 @@ async fn handle_request(
                             data: None,
                             error: Some(e),
                         }).unwrap_or_default();
-                        return send_response(stream, 401, &body).await;
-                    }
-                    
-                    match db::init_new_season(&state.db, &req.season_id, req.season_name.as_deref()).await {
-                        Ok(tables) => {
-                            let response = InitSeasonResponse {
-                                success: true,
-                                season_id: req.season_id.clone(),
-                                tables_created: tables,
-                                message: "新赛季初始化成功".to_string(),
-                            };
-                            let body = serde_json::to_string_pretty(&ApiResponse {
-                                success: true,
-                                data: Some(response),
-                                error: None,
-                            }).unwrap_or_default();
-                            send_response(stream, 200, &body).await;
-                        }
-                        Err(e) => {
-                            let body = serde_json::to_string_pretty(&ApiResponse::<()> {
-                                success: false,
-                                data: None,
-                                error: Some(e),
-                            }).unwrap_or_default();
-                            send_response(stream, 500, &body).await;
+                        (401, body)
+                    } else {
+                        match db::init_new_season(&state.db, &req.season_id, req.season_name.as_deref()).await {
+                            Ok(tables) => {
+                                let response = InitSeasonResponse {
+                                    success: true,
+                                    season_id: req.season_id.clone(),
+                                    tables_created: tables,
+                                    message: "新赛季初始化成功".to_string(),
+                                };
+                                let body = serde_json::to_string_pretty(&ApiResponse {
+                                    success: true,
+                                    data: Some(response),
+                                    error: None,
+                                }).unwrap_or_default();
+                                (200, body)
+                            }
+                            Err(e) => {
+                                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                    success: false,
+                                    data: None,
+                                    error: Some(e),
+                                }).unwrap_or_default();
+                                (500, body)
+                            }
                         }
                     }
                 }
@@ -426,7 +454,7 @@ async fn handle_request(
                         data: None,
                         error: Some(format!("请求格式错误: {}", e)),
                     }).unwrap_or_default();
-                    send_response(stream, 400, &body).await;
+                    (400, body)
                 }
             }
         }
@@ -439,27 +467,27 @@ async fn handle_request(
                             data: None,
                             error: Some(e),
                         }).unwrap_or_default();
-                        return send_response(stream, 401, &body).await;
+                        (401, body)
+                    } else {
+                        let mut new_config = state.config.clone();
+                        new_config.api_config = req.api_config;
+                        
+                        if let Err(e) = tl_monitor::server::config::save_config(CONFIG_PATH, &new_config) {
+                            let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                success: false,
+                                data: None,
+                                error: Some(format!("保存配置失败: {}", e)),
+                            }).unwrap_or_default();
+                            (500, body)
+                        } else {
+                            let body = serde_json::to_string_pretty(&ApiResponse {
+                                success: true,
+                                data: Some("API配置已更新，重启服务器后生效".to_string()),
+                                error: None,
+                            }).unwrap_or_default();
+                            (200, body)
+                        }
                     }
-                    
-                    let mut new_config = state.config.clone();
-                    new_config.api_config = req.api_config;
-                    
-                    if let Err(e) = tl_monitor::server::config::save_config(CONFIG_PATH, &new_config) {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
-                            success: false,
-                            data: None,
-                            error: Some(format!("保存配置失败: {}", e)),
-                        }).unwrap_or_default();
-                        return send_response(stream, 500, &body).await;
-                    }
-                    
-                    let body = serde_json::to_string_pretty(&ApiResponse {
-                        success: true,
-                        data: Some("API配置已更新，重启服务器后生效".to_string()),
-                        error: None,
-                    }).unwrap_or_default();
-                    send_response(stream, 200, &body).await;
                 }
                 Err(e) => {
                     let body = serde_json::to_string_pretty(&ApiResponse::<()> {
@@ -467,7 +495,7 @@ async fn handle_request(
                         data: None,
                         error: Some(format!("请求格式错误: {}", e)),
                     }).unwrap_or_default();
-                    send_response(stream, 400, &body).await;
+                    (400, body)
                 }
             }
         }

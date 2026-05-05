@@ -176,6 +176,7 @@ pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats,
 pub async fn get_db_stats(state: State<'_, Arc<AppState>>) -> Result<DbStats, String> {
     let ctx = state.active_context.read().clone();
     let item_count = repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await;
+    let db_record_count = repo_items::get_db_record_count(&state.db).await.unwrap_or(0);
 
     let db_path = crate::core::paths::db_path();
     let db_size_kb = std::fs::metadata(&db_path)
@@ -184,7 +185,7 @@ pub async fn get_db_stats(state: State<'_, Arc<AppState>>) -> Result<DbStats, St
 
     Ok(DbStats {
         item_count: item_count.unwrap_or(0),
-        db_record_count: 0, // TODO: implement for split tables
+        db_record_count,
         db_size_kb,
     })
 }

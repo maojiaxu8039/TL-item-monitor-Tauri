@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { TrendingDown, TrendingUp, Loader2, Settings, Database, RefreshCw, Package } from "lucide-react";
+import { toast } from "sonner";
 import { cmd, type FirePriceChangeItem } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 
@@ -173,11 +174,11 @@ export default function DealsPage() {
   const seedMutation = useMutation({
     mutationFn: () => cmd.seedRealtimeFireData(),
     onSuccess: (count) => {
-      alert(`生成了 ${count} 条测试数据`);
+      toast.info(`生成了 ${count} 条测试数据`);
       queryClient.invalidateQueries({ queryKey: ["realtime-fire-changes"] });
     },
     onError: (err) => {
-      alert(`生成失败: ${err}`);
+      toast.error(`生成失败: ${err}`);
     },
   });
 

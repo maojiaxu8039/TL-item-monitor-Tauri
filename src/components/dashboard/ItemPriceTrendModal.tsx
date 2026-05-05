@@ -21,9 +21,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
   const [viewMode, setViewMode] = useState<ViewMode>("day");
 
   useEffect(() => {
-    console.log("[ItemPriceTrendModal] MOUNTED with itemId:", itemId);
-    console.log("[ItemPriceTrendModal] currentSeason:", currentSeason, "historySeason:", historySeason);
-    console.log("[ItemPriceTrendModal] currentDay:", currentDay);
+    // modal mounted
   }, [itemId, currentSeason, historySeason, currentDay]);
 
   const currentDayQuery = useQuery({

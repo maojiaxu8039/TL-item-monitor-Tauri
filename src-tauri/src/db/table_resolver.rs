@@ -49,7 +49,9 @@ impl TableResolver {
         "item_realtime_fire_prices".to_string()
     }
 
-    /// List all supported season/mode combinations for snapshot tables
+    /// List all supported season/mode combinations for snapshot tables.
+    /// Returns static combinations for compile-time usage.
+    /// For dynamic season discovery at runtime, query the database seasons table.
     pub fn supported_combinations() -> Vec<(&'static str, &'static str)> {
         vec![
             ("ss12", "season_normal"),
@@ -59,15 +61,17 @@ impl TableResolver {
         ]
     }
 
-    /// Check if a season/mode combination is supported
+    /// Check if a season/mode combination is supported.
+    /// Returns true for any season_id starting with "ss" followed by digits
+    /// and a valid market_mode (season_normal, normal, season_expert, expert).
     pub fn is_supported(season_id: &str, market_mode: &str) -> bool {
-        let mode_normalized = match market_mode {
-            "season_expert" | "expert" => "season_expert",
-            _ => "season_normal",
-        };
-        Self::supported_combinations()
-            .iter()
-            .any(|(s, m)| s == &season_id && m == &mode_normalized)
+        // Check market_mode is valid
+        let is_valid_mode = matches!(market_mode, "season_normal" | "normal" | "season_expert" | "expert");
+        // Support any season_id matching "ss" + digits pattern (e.g., ss11, ss12, ss13)
+        let is_valid_season = season_id.len() >= 3
+            && &season_id[..2] == "ss"
+            && season_id[2..].chars().all(|c| c.is_ascii_digit());
+        is_valid_season && is_valid_mode
     }
 }
 
@@ -136,6 +140,10 @@ mod tests {
         assert!(TableResolver::is_supported("ss12", "season_normal"));
         assert!(TableResolver::is_supported("ss12", "season_expert"));
         assert!(TableResolver::is_supported("ss11", "normal"));
-        assert!(!TableResolver::is_supported("ss10", "season_normal"));
+        assert!(TableResolver::is_supported("ss13", "season_normal"));
+        assert!(TableResolver::is_supported("ss99", "season_expert"));
+        assert!(!TableResolver::is_supported("ss10", "invalid_mode"));
+        assert!(!TableResolver::is_supported("invalid", "season_normal"));
+        assert!(!TableResolver::is_supported("s1", "season_normal"));
     }
 }

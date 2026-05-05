@@ -121,8 +121,10 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             
             let app_handle = handle.clone();
             let rt_handle_clone = rt.handle().clone();
+            let state_for_tasks = state.clone();
             std::thread::spawn(move || {
-                start_background_tasks(rt_handle_clone, app_handle, state);
+                let handle = start_background_tasks(rt_handle_clone, app_handle, state_for_tasks);
+                state.scheduler_handle.write().replace(handle);
             });
             
             setup_tray(app)?;

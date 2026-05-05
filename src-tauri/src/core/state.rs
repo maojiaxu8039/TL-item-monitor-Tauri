@@ -9,6 +9,7 @@ pub struct AppState {
     pub items_cache: RwLock<Vec<crate::db::models::Item>>,
     pub active_context: RwLock<MarketContext>,
     pub task_status: RwLock<TaskStatus>,
+    pub scheduler_handle: RwLock<Option<crate::scheduler::SchedulerHandle>>,
 }
 
 impl Clone for AppState {
@@ -20,6 +21,7 @@ impl Clone for AppState {
             items_cache: RwLock::new(self.items_cache.read().clone()),
             active_context: RwLock::new(self.active_context.read().clone()),
             task_status: RwLock::new(self.task_status.read().clone()),
+            scheduler_handle: RwLock::new(None),
         }
     }
 }

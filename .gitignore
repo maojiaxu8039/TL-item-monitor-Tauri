@@ -1,5 +1,11 @@
 node_modules/
 src-tauri/target/
 dist/
+dist-react/
 *.log
 .DS_Store
+src/node_modules/
+src/package-lock.json
+src/tsconfig.tsbuildinfo
+web-server/target/
+*.local

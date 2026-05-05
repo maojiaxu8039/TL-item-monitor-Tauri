@@ -1,5 +1,6 @@
 use crate::db::models::Item;
 use crate::db::table_resolver::TableResolver;
+use crate::db::repo_fire::get_season_start;
 use crate::core::state::FirePriceSnapshot;
 use crate::core::errors::AppError;
 use sqlx::SqlitePool;
@@ -196,21 +197,16 @@ pub async fn get_item_history_by_day(
     season_day: i32,
 ) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
-    
-    let season_start = match season_id {
-        "ss11" => chrono::DateTime::parse_from_rfc3339("2026-01-16T00:00:00+00:00").unwrap().timestamp(),
-        "ss12" => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp(),
-        _ => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp(),
-    };
-    
+    let season_start = get_season_start(pool, season_id).await?;
+
     let day_start = season_start + ((season_day - 1) as i64 * 86400);
     let day_end = day_start + 86400;
-    
+
     tracing::info!(
         "get_item_history_by_day: table={}, item_id={}, season_day={}, time_range=[{day_start}, {day_end}]",
         table, item_id, season_day, day_start = day_start, day_end = day_end
     );
-    
+
     let records = sqlx::query_as::<_, ItemHistoryRecord>(
         &format!(
             "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at \
@@ -223,7 +219,7 @@ pub async fn get_item_history_by_day(
     .bind(item_id)
     .fetch_all(pool)
     .await?;
-    
+
     tracing::info!("get_item_history_by_day: records count={}", records.len());
     Ok(records)
 }
@@ -427,23 +423,23 @@ pub async fn get_fire_price_compare(
     market_mode: &str,
 ) -> Result<FirePriceCompareResult, AppError> {
     let now = Utc::now().timestamp();
-    let current_fire_table = TableResolver::fire_price_table(current_season, market_mode);
-    let history_fire_table = TableResolver::fire_price_table(history_season, market_mode);
-    
-    let current_record: Option<(f64, i64)> = sqlx::query_as(
+    let current_snapshots_table = TableResolver::fire_price_snapshots_table(current_season, market_mode);
+    let history_snapshots_table = TableResolver::fire_price_snapshots_table(history_season, market_mode);
+
+    let current_record: Option<(f64, i64, i64)> = sqlx::query_as(
         &format!(
-            "SELECT rmb_per_10k_fire, scraped_at FROM {} \
+            "SELECT rmb_per_10k_fire, scraped_at, season_day FROM {} \
              WHERE scraped_at >= ? \
              ORDER BY scraped_at DESC LIMIT 1",
-            current_fire_table
+            current_snapshots_table
         )
     )
     .bind(now - 3600)
     .fetch_optional(pool)
     .await?;
-    
-    let (current_price, current_scraped_at) = if let Some((price, scraped)) = current_record {
-        (price, scraped)
+
+    let (current_price, current_scraped_at, current_season_day) = if let Some((price, scraped, day)) = current_record {
+        (price, scraped, day)
     } else {
         return Ok(FirePriceCompareResult {
             current_price: 0.0,
@@ -460,24 +456,23 @@ pub async fn get_fire_price_compare(
             compare_data: vec![],
         });
     };
-    
-    let current_day = (current_scraped_at / 86400) % 365;
-    let current_hour = (current_scraped_at / 3600) % 24;
-    
-    let history_records: Vec<(f64, i64)> = sqlx::query_as(
+
+    let current_hour = ((current_scraped_at % 86400) / 3600) as i64;
+
+    let history_records: Vec<(f64, i64, i64)> = sqlx::query_as(
         &format!(
-            "SELECT rmb_per_10k_fire, scraped_at FROM {} \
+            "SELECT rmb_per_10k_fire, scraped_at, season_day FROM {} \
              ORDER BY scraped_at ASC",
-            history_fire_table
+            history_snapshots_table
         )
     )
     .fetch_all(pool)
     .await?;
-    
+
     if history_records.is_empty() {
         return Ok(FirePriceCompareResult {
             current_price,
-            current_day,
+            current_day: current_season_day,
             current_hour,
             history_avg: 0.0,
             history_high: 0.0,
@@ -490,26 +485,25 @@ pub async fn get_fire_price_compare(
             compare_data: vec![],
         });
     }
-    
+
     let mut same_day_prices: Vec<f64> = vec![];
     let mut same_day_hour_prices: Vec<f64> = vec![];
     let mut all_prices: Vec<f64> = vec![];
     let mut compare_data: Vec<ComparePoint> = vec![];
-    
-    for (price, scraped) in &history_records {
-        let day = (scraped / 86400) % 365;
-        let hour = (scraped / 3600) % 24;
+
+    for (price, scraped, season_day) in &history_records {
+        let hour = ((scraped % 86400) / 3600) as i64;
         all_prices.push(*price);
-        
-        if day == current_day {
+
+        if *season_day == current_season_day {
             same_day_prices.push(*price);
             compare_data.push(ComparePoint {
-                day,
+                day: *season_day,
                 hour,
                 history_price: *price,
                 current_price: if hour == current_hour { Some(current_price) } else { None },
             });
-            
+
             if hour == current_hour {
                 same_day_hour_prices.push(*price);
             }
@@ -568,7 +562,7 @@ pub async fn get_fire_price_compare(
     
     Ok(FirePriceCompareResult {
         current_price,
-        current_day,
+        current_day: current_season_day,
         current_hour,
         history_avg,
         history_high,

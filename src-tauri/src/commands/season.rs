@@ -416,8 +416,11 @@ async fn create_archive_snapshots_table(pool: &SqlitePool, table: &str) -> Resul
         "CREATE TABLE IF NOT EXISTS {} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             item_id TEXT NOT NULL,
+            name TEXT NOT NULL DEFAULT '',
+            item_type TEXT NOT NULL DEFAULT '',
             fire_price REAL NOT NULL,
             scraped_at INTEGER NOT NULL,
+            season_day INTEGER NOT NULL DEFAULT 1,
             UNIQUE(item_id, scraped_at)
         )",
         table
@@ -439,6 +442,7 @@ async fn create_archive_fire_snapshots_table(pool: &SqlitePool, table: &str) -> 
             source TEXT NOT NULL DEFAULT '',
             source_time TEXT,
             scraped_at INTEGER NOT NULL,
+            season_day INTEGER NOT NULL DEFAULT 1,
             UNIQUE(scraped_at)
         )",
         table

@@ -31,8 +31,12 @@ pub async fn run_hourly_snapshot_task(
     info!("Hourly snapshot waiting until: {}", next_hour.format("%Y-%m-%d %H:%M:%S UTC"));
 
     tokio::select! {
-        _ = abort.recv() => {
-            info!("Hourly snapshot task aborted during initial wait");
+        result = abort.recv() => {
+            match result {
+                Ok(_) => info!("Hourly snapshot task aborted during initial wait"),
+                Err(broadcast::error::RecvError::Closed) => info!("Hourly snapshot task abort channel closed during initial wait"),
+                Err(broadcast::error::RecvError::Lagged(_)) => {}
+            }
             return;
         }
         _ = tokio::time::sleep(initial_sleep) => {}
@@ -40,9 +44,20 @@ pub async fn run_hourly_snapshot_task(
 
     loop {
         tokio::select! {
-            _ = abort.recv() => {
-                info!("Hourly snapshot task received abort");
-                break;
+            result = abort.recv() => {
+                match result {
+                    Ok(_) => {
+                        info!("Hourly snapshot task received abort");
+                        break;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        info!("Hourly snapshot task abort channel closed, exiting");
+                        break;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        continue;
+                    }
+                }
             }
             _ = tokio::time::sleep(std::time::Duration::from_secs(3600)) => {
                 let snapshot_at = match chrono::Utc::now()
