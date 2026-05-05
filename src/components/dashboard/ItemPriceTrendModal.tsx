@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { X, TrendingUp, TrendingDown } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
@@ -19,6 +19,12 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
   const { marketContext } = useSectionRefresh();
   const currentSeason = marketContext.seasonId;
   const [viewMode, setViewMode] = useState<ViewMode>("day");
+
+  useEffect(() => {
+    console.log("[ItemPriceTrendModal] MOUNTED with itemId:", itemId);
+    console.log("[ItemPriceTrendModal] currentSeason:", currentSeason, "historySeason:", historySeason);
+    console.log("[ItemPriceTrendModal] currentDay:", currentDay);
+  }, [itemId, currentSeason, historySeason, currentDay]);
 
   const currentDayQuery = useQuery({
     queryKey: ["item-trend-current-day", itemId, currentSeason, currentDay],
@@ -56,16 +62,36 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
     ? (currentDayQuery.isLoading || historyDayQuery.isLoading)
     : (currentSeasonQuery.isLoading || historySeasonQuery.isLoading);
 
+  const isError = viewMode === "day"
+    ? (currentDayQuery.isError || historyDayQuery.isError)
+    : (currentSeasonQuery.isError || historySeasonQuery.isError);
+
+  const errorMsg = viewMode === "day"
+    ? (currentDayQuery.error || historyDayQuery.error)
+    : (currentSeasonQuery.error || historySeasonQuery.error);
+
+  console.log("[ItemPriceTrendModal] viewMode:", viewMode);
+  console.log("[ItemPriceTrendModal] currentSeason:", currentSeason, "historySeason:", historySeason);
+  console.log("[ItemPriceTrendModal] currentDay:", currentDay);
+  console.log("[ItemPriceTrendModal] currentData length:", currentData?.length);
+  console.log("[ItemPriceTrendModal] historyData length:", historyData?.length);
+  if (currentData?.length > 0) {
+    console.log("[ItemPriceTrendModal] first current record:", currentData[0]);
+  }
+  if (historyData?.length > 0) {
+    console.log("[ItemPriceTrendModal] first history record:", historyData[0]);
+  }
+
   const getCurrentSeasonStart = () => {
     if (currentSeason === "ss12") return 1776384000;
-    if (currentSeason === "ss11") return 1773859200;
+    if (currentSeason === "ss11") return 1768521600;
     return 1776384000;
   };
 
   const getHistorySeasonStart = () => {
-    if (historySeason === "ss11") return 1773859200;
+    if (historySeason === "ss11") return 1768521600;
     if (historySeason === "ss12") return 1776384000;
-    return 1773859200;
+    return 1768521600;
   };
 
   const currentSeasonStart = getCurrentSeasonStart();
@@ -117,6 +143,8 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
       return Array.from(dataMap.values()).sort((a, b) => a.day - b.day) as (HourData | DayData)[];
     }
   }, [viewMode, currentData, historyData, currentSeasonStart, historySeasonStart]);
+
+  console.log("[ItemPriceTrendModal] chartData:", chartData);
 
   const stats = useMemo(() => {
     if (currentData.length === 0) return null;
@@ -236,27 +264,32 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
         )}
 
         {/* Chart */}
-        <div className="flex-1 px-6 py-4 min-h-[400px]">
+        <div className="px-6 py-4" style={{ height: "400px" }}>
           {isLoading ? (
-            <div className="h-full flex items-center justify-center text-slate-400">
+            <div className="flex items-center justify-center h-full text-slate-400">
               加载中...
             </div>
+          ) : isError ? (
+            <div className="flex items-center justify-center h-full text-red-500">
+              加载失败: {String(errorMsg)}
+            </div>
           ) : chartData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-slate-400">
-              暂无数据
+            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+              <p>暂无数据</p>
+              <p className="text-xs mt-2">currentData: {currentData.length}, historyData: {historyData.length}</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
+              <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 50 }}>
                 <XAxis
                   dataKey={viewMode === "day" ? "hour" : "day"}
                   tick={{ fontSize: 11, fill: "#9CA3AF" }}
                   tickLine={false}
                   axisLine={{ stroke: "#E5E7EB" }}
                   label={{ 
-                    value: viewMode === "day" ? "小时 (0-23)" : "开服天数", 
+                    value: viewMode === "day" ? "小时" : "开服天数", 
                     position: "insideBottom", 
-                    offset: -5, 
+                    offset: -30, 
                     fontSize: 12, 
                     fill: "#9CA3AF" 
                   }}
@@ -276,7 +309,12 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
                   }}
                   labelFormatter={(label: any) => viewMode === "day" ? `${label}:00` : `第 ${label} 天`}
                 />
-                <Legend />
+                <Legend 
+                  verticalAlign="top" 
+                  align="center" 
+                  layout="horizontal"
+                  wrapperStyle={{ paddingBottom: 10 }}
+                />
                 <Line
                   type="monotone"
                   dataKey="current"

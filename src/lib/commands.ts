@@ -494,9 +494,9 @@ export const cmd = {
   getItemHistory: (itemId: string, limit?: number) =>
     invoke<ItemHistoryRecord[]>("get_item_history", { item_id: itemId, limit }),
   getItemHistoryBySeason: (itemId: string, seasonId: string, limit?: number) =>
-    invoke<ItemHistoryRecord[]>("get_item_history_by_season", { item_id: itemId, season_id: seasonId, limit }),
+    invoke<ItemHistoryRecord[]>("get_item_history_by_season", { itemId, seasonId, limit }),
   getItemHistoryByDay: (itemId: string, seasonId: string, seasonDay: number) =>
-    invoke<ItemHistoryRecord[]>("get_item_history_by_day", { item_id: itemId, season_id: seasonId, seasonDay }),
+    invoke<ItemHistoryRecord[]>("get_item_history_by_day", { itemId, seasonId, seasonDay }),
   getItemsPriceCompare: (historySeason: string, dayFilter?: number) => {
     const params: Record<string, unknown> = { historySeason };
     if (dayFilter !== undefined) {

@@ -6,7 +6,7 @@ use sqlx::SqlitePool;
 use chrono::Utc;
 use serde::Serialize;
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct ItemHistoryRecord {
     pub item_id: String,
     pub season_id: String,
@@ -207,8 +207,8 @@ pub async fn get_item_history_by_day(
     let day_end = day_start + 86400;
     
     tracing::info!(
-        "get_item_history_by_day: table={}, item_id={}, season_day={}, time_range=[{}, {}]",
-        table, item_id, season_day, day_start, day_end
+        "get_item_history_by_day: table={}, item_id={}, season_day={}, time_range=[{day_start}, {day_end}]",
+        table, item_id, season_day, day_start = day_start, day_end = day_end
     );
     
     let records = sqlx::query_as::<_, ItemHistoryRecord>(
