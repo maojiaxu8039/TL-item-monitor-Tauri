@@ -91,6 +91,18 @@ export interface ItemHistoryRecord {
   scraped_at: number;
 }
 
+export interface FirePriceChangeItem {
+  item_id: string;
+  item_name: string;
+  current_price: number;
+  price_3h_ago: number | null;
+  price_1h_ago: number | null;
+  price_30m_ago: number | null;
+  change_amount_3h: number | null;
+  change_rate_3h: number | null;
+  trend: string;
+}
+
 export interface SeasonSummary {
   current_fire_price: number;
   item_count: number;
@@ -504,6 +516,10 @@ export const cmd = {
     }
     return invoke<ItemPriceCompare[]>("get_items_price_compare", params);
   },
+  getRealtimeFireChanges: () =>
+    invoke<FirePriceChangeItem[]>("get_realtime_fire_changes"),
+  seedRealtimeFireData: () =>
+    invoke<number>("seed_realtime_fire_data"),
   getFirePriceInsight: () =>
     invoke<FirePriceInsight>("get_fire_price_insight"),
   getItemPriceInsights: () =>

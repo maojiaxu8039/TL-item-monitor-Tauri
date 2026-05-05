@@ -2,6 +2,7 @@ use crate::commands::types::{DbStats, ItemsStats, SearchResult, OkResponse};
 use crate::core::state::AppState;
 use crate::db::repo_items;
 use crate::db::repo_history;
+use crate::db::repo_realtime_fire;
 use crate::scraper;
 use crate::services::send_notification;
 use std::sync::Arc;
@@ -463,4 +464,24 @@ pub async fn get_items_price_compare(
     .map_err(|e| e.to_string())?;
     tracing::info!("get_items_price_compare result: {} items", result.len());
     Ok(result)
+}
+
+#[tauri::command]
+pub async fn get_realtime_fire_changes(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<repo_realtime_fire::FirePriceChangeItem>, String> {
+    tracing::info!("get_realtime_fire_changes called");
+    repo_realtime_fire::get_realtime_fire_changes(&state.db)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn seed_realtime_fire_data(
+    state: State<'_, Arc<AppState>>,
+) -> Result<usize, String> {
+    tracing::info!("seed_realtime_fire_data called");
+    repo_realtime_fire::seed_test_data(&state.db)
+        .await
+        .map_err(|e| e.to_string())
 }

@@ -43,6 +43,12 @@ impl TableResolver {
         format!("fire_price_snapshots_{}_{}", season_id, mode_suffix)
     }
 
+    /// Get item realtime fire prices table name.
+    /// This table stores fire price changes for the last 3 hours for quick deal hunting.
+    pub fn realtime_fire_prices_table() -> String {
+        "item_realtime_fire_prices".to_string()
+    }
+
     /// List all supported season/mode combinations for snapshot tables
     pub fn supported_combinations() -> Vec<(&'static str, &'static str)> {
         vec![

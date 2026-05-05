@@ -9,6 +9,7 @@ use crate::scheduler::fire_task::run_fire_scrape_task;
 use crate::scheduler::history_task::run_hourly_snapshot_task;
 use crate::scheduler::items_task::run_items_reload_task;
 use crate::scheduler::alert_task::run_price_alert_task;
+use crate::scheduler::realtime_fire_task::run_realtime_fire_price_collect_task;
 use parking_lot::RwLock;
 use serde::Deserialize;
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
@@ -418,6 +419,33 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
             season, mode, snapshots_table, fire_snapshots_table
         );
     }
+
+    // 3. Ensure realtime fire prices table (for quick deal hunting)
+    let realtime_table = TableResolver::realtime_fire_prices_table();
+    sqlx::query(&format!(
+        "CREATE TABLE IF NOT EXISTS {} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id TEXT NOT NULL,
+            item_name TEXT NOT NULL,
+            fire_price REAL NOT NULL,
+            scraped_at INTEGER NOT NULL,
+            created_at INTEGER NOT NULL
+        )",
+        realtime_table
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Failed to ensure realtime fire prices table: {}", e))?;
+
+    sqlx::query(&format!(
+        "CREATE INDEX IF NOT EXISTS idx_realtime_item_scraped ON {}(item_id, scraped_at DESC)",
+        realtime_table
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Failed to create index on realtime fire prices table: {}", e))?;
+
+    tracing::info!("Ensured realtime fire prices table: {}", realtime_table);
 
     Ok(())
 }
@@ -1333,6 +1361,14 @@ pub fn start_background_tasks(rt: tokio::runtime::Handle, app: tauri::AppHandle,
         let state = state.clone();
         rt.spawn(async move {
             run_price_alert_task(app, state, alert_abort_rx).await;
+        });
+    }
+
+    {
+        let app = app.clone();
+        let state = state.clone();
+        rt.spawn(async move {
+            run_realtime_fire_price_collect_task(app, state).await;
         });
     }
 

@@ -2,6 +2,7 @@ pub mod fire_task;
 pub mod items_task;
 pub mod history_task;
 pub mod alert_task;
+pub mod realtime_fire_task;
 
 use tokio::sync::broadcast;
 
