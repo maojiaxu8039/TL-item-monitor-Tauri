@@ -4,6 +4,7 @@ import { Database, Download, RefreshCw, Server, Wifi, WifiOff, CheckCircle, XCir
 import { cmd } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { toast } from "sonner";
+import ServerAdminPanel from "./ServerAdminPanel";
 
 interface ServerStatus {
   server: string;
@@ -504,6 +505,13 @@ export default function DataMonitorPage() {
           </p>
         </div>
       )}
+
+      {/* Server Admin Panel */}
+      <ServerAdminPanel
+        serverUrl={serverUrl}
+        connectionStatus={connectionStatus}
+        serverStatus={serverStatus}
+      />
     </div>
   );
 }

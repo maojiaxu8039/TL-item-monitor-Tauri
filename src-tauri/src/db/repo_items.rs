@@ -2,8 +2,8 @@ use crate::db::models::Item;
 use crate::db::table_resolver::TableResolver;
 use sqlx::SqlitePool;
 
-/// Search items from snapshot table filtered by season day.
-/// Returns items with price for the specified season day (00:00 data).
+/// Search items from real-time table.
+/// Returns current season items with real-time prices.
 pub async fn search_items(
     pool: &SqlitePool,
     season_id: &str,
@@ -11,87 +11,39 @@ pub async fn search_items(
     keyword: &str,
     page: i64,
     page_size: i64,
-    day_filter: Option<i32>,
+    _day_filter: Option<i32>,
     _type_filter: Option<&str>,
 ) -> Result<(Vec<Item>, i64), crate::core::errors::AppError> {
     let offset = (page - 1) * page_size;
     let pattern = format!("%{}%", keyword);
-    let snapshots_table = TableResolver::item_snapshots_table(season_id, market_mode);
+    let items_table = TableResolver::items_table(season_id, market_mode);
 
-    let items: Vec<Item> = if let Some(day) = day_filter {
-        let season_start = match season_id {
-            "ss11" => chrono::DateTime::parse_from_rfc3339("2026-01-16T00:00:00+00:00").unwrap().timestamp(),
-            "ss12" => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp(),
-            _ => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp(),
-        };
-        let day_start = season_start + ((day - 1) as i64 * 86400);
-        let day_end = day_start + 86400;
-
-        sqlx::query_as(
-            &format!(
-                r#"
-                SELECT 
-                    s.item_id, 
-                    '{}' as season_id, 
-                    '{}' as market_mode, 
-                    s.name, 
-                    s.item_type, 
-                    'snapshot' as source, 
-                    s.fire_price as price, 
-                    s.scraped_at as last_time, 
-                    s.scraped_at as updated_at
-                FROM {} s
-                INNER JOIN (
-                    SELECT item_id, MIN(scraped_at) as min_scraped_at
-                    FROM {}
-                    WHERE season_day = {} AND scraped_at >= {} AND scraped_at < {}
-                    GROUP BY item_id
-                ) earliest ON s.item_id = earliest.item_id AND s.scraped_at = earliest.min_scraped_at
-                WHERE s.name LIKE ?
-                ORDER BY s.name
-                LIMIT ? OFFSET ?
-                "#,
-                season_id, market_mode, snapshots_table, snapshots_table, day, day_start, day_end
-            ),
-        )
-        .bind(&pattern)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(pool)
-        .await?
-    } else {
-        sqlx::query_as(
-            &format!(
-                r#"
-                SELECT 
-                    s.item_id, 
-                    '{}' as season_id, 
-                    '{}' as market_mode, 
-                    s.name, 
-                    s.item_type, 
-                    'snapshot' as source, 
-                    s.fire_price as price, 
-                    s.scraped_at as last_time, 
-                    s.scraped_at as updated_at
-                FROM {} s
-                INNER JOIN (
-                    SELECT item_id, MIN(scraped_at) as min_scraped_at
-                    FROM {}
-                    GROUP BY item_id
-                ) earliest ON s.item_id = earliest.item_id AND s.scraped_at = earliest.min_scraped_at
-                WHERE s.name LIKE ?
-                ORDER BY s.name
-                LIMIT ? OFFSET ?
-                "#,
-                season_id, market_mode, snapshots_table, snapshots_table
-            ),
-        )
-        .bind(&pattern)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(pool)
-        .await?
-    };
+    let items: Vec<Item> = sqlx::query_as(
+        &format!(
+            r#"
+            SELECT 
+                item_id, 
+                '{}' as season_id, 
+                '{}' as market_mode, 
+                name, 
+                item_type, 
+                'realtime' as source, 
+                price, 
+                last_time, 
+                updated_at
+            FROM {}
+            WHERE name LIKE ?
+            ORDER BY name
+            LIMIT ? OFFSET ?
+            "#,
+            season_id, market_mode, items_table
+        ),
+    )
+    .bind(&pattern)
+    .bind(page_size)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
 
     let total = items.len() as i64;
 

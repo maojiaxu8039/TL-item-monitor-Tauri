@@ -8,42 +8,40 @@ use tokio::time::{interval, Duration};
 pub async fn run_realtime_fire_price_collect_task(_app: AppHandle, state: Arc<AppState>) {
     tracing::info!("Realtime fire price collect task started");
     
+    {
+        if let Err(e) = collect_fire_prices_internal(&state.db, &state).await {
+            tracing::error!("Initial collection failed: {}", e);
+        } else {
+            tracing::info!("Initial collection completed");
+        }
+    }
+    
+    let state_clone = state.clone();
     let mut tick = interval(Duration::from_secs(30));
     
     loop {
         tick.tick().await;
         
-        let ctx = state.active_context.read().clone();
-        let season_id = &ctx.season_id;
-        let market_mode = ctx.market_mode.as_str();
-        
-        tracing::debug!(
-            "Collecting realtime fire prices for {}/{}",
-            season_id, market_mode
-        );
-        
-        match collect_fire_prices(&state.db, season_id, market_mode).await {
-            Ok(count) => {
-                if count > 0 {
-                    tracing::info!("Collected {} realtime fire prices", count);
-                }
-            }
-            Err(e) => {
-                tracing::error!("Failed to collect realtime fire prices: {}", e);
-            }
+        if let Err(e) = collect_fire_prices_internal(&state_clone.db, &state_clone).await {
+            tracing::error!("Failed to collect realtime fire prices: {}", e);
         }
         
-        if let Err(e) = repo_realtime_fire::cleanup_old_records(&state.db).await {
+        if let Err(e) = repo_realtime_fire::cleanup_old_records(&state_clone.db).await {
             tracing::error!("Failed to cleanup old records: {}", e);
         }
     }
 }
 
-async fn collect_fire_prices(
-    pool: &sqlx::SqlitePool,
-    season_id: &str,
-    market_mode: &str,
-) -> Result<usize, String> {
+async fn collect_fire_prices_internal(pool: &sqlx::SqlitePool, state: &Arc<AppState>) -> Result<usize, String> {
+    let ctx = state.active_context.read().clone();
+    let season_id = &ctx.season_id;
+    let market_mode = ctx.market_mode.as_str();
+    
+    tracing::debug!(
+        "Collecting realtime fire prices for {}/{}",
+        season_id, market_mode
+    );
+    
     let items_table = TableResolver::items_table(season_id, market_mode);
     let fire_table = TableResolver::fire_price_table(season_id, market_mode);
     let now = chrono::Utc::now().timestamp();
@@ -82,7 +80,13 @@ async fn collect_fire_prices(
         })
         .collect();
     
-    repo_realtime_fire::batch_insert_realtime_fire_prices(pool, &records)
+    let count = repo_realtime_fire::batch_insert_realtime_fire_prices(pool, &records)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    
+    if count > 0 {
+        tracing::info!("Collected {} realtime fire prices", count);
+    }
+    
+    Ok(count)
 }

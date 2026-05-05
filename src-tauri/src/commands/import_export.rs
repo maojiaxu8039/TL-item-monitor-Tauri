@@ -20,10 +20,10 @@ fn parse_csv_import(content: &str) -> (i32, Vec<String>) {
                 if record.len() >= 3 {
                     imported += 1;
                 } else {
-                    errors.push(format!("row {}: insufficient columns", idx + 2));
+                    errors.push(format!("行 {}: 列数不足", idx + 2));
                 }
             }
-            Err(e) => errors.push(format!("row {}: {}", idx + 2, e)),
+            Err(e) => errors.push(format!("行 {}: {}", idx + 2, e)),
         }
     }
     (imported, errors)
@@ -34,8 +34,6 @@ pub async fn import_watchlist_csv(
     state: State<'_, Arc<AppState>>,
     content: String,
 ) -> Result<ImportResp, String> {
-    let (_imported, _errors) = parse_csv_import(&content);
-
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .from_reader(content.as_bytes());
@@ -56,7 +54,7 @@ pub async fn import_watchlist_csv(
 
                 match repo_sections::add_section_item(&state.db, section_id, season_id, market_mode, item_id, purchase_fire_price, count, more_value).await {
                     Ok(_) => imported_count += 1,
-                    Err(e) => error_list.push(format!("row {}: {}", idx + 2, e)),
+                    Err(e) => error_list.push(format!("行 {}: {}", idx + 2, e)),
                 }
             }
         }
@@ -90,7 +88,10 @@ pub async fn export_watchlist_csv(state: State<'_, Arc<AppState>>) -> Result<Str
     }
 
     let data = wtr.into_inner().map_err(|e| e.to_string())?;
-    String::from_utf8(data).map_err(|e| e.to_string())
+    
+    let csv_content = String::from_utf8(data).map_err(|e| e.to_string())?;
+    
+    Ok(csv_content)
 }
 
 #[tauri::command]
@@ -111,31 +112,31 @@ pub async fn get_backup_info(state: State<'_, Arc<AppState>>) -> Result<BackupIn
 #[tauri::command]
 pub async fn backup_database(state: State<'_, Arc<AppState>>, dest_path: String) -> Result<OkResponse, String> {
     let db_path = paths::db_path();
-    std::fs::copy(&db_path, &dest_path).map_err(|e| format!("Backup failed: {}", e))?;
+    std::fs::copy(&db_path, &dest_path).map_err(|e| format!("备份失败: {}", e))?;
 
     let now = chrono::Utc::now().timestamp().to_string();
     let _ = repo_config::save_config(&state.db, "last_backup_at", &now).await;
 
-    Ok(OkResponse::success("Backup created"))
+    Ok(OkResponse::success("备份已创建"))
 }
 
 #[tauri::command]
 pub async fn restore_database(_state: State<'_, Arc<AppState>>, src_path: String) -> Result<OkResponse, String> {
     let db_path = paths::db_path();
-    std::fs::copy(&src_path, &db_path).map_err(|e| format!("Restore failed: {}", e))?;
-    Ok(OkResponse::success("Database restored — please restart the app"))
+    std::fs::copy(&src_path, &db_path).map_err(|e| format!("恢复失败: {}", e))?;
+    Ok(OkResponse::success("数据库已恢复 — 请重启应用"))
 }
 
 #[tauri::command]
 pub async fn write_file(path: String, base64_content: String) -> Result<OkResponse, String> {
     let bytes = base64::decode(&base64_content)
-        .map_err(|e| format!("Base64 decode error: {}", e))?;
-    std::fs::write(&path, bytes).map_err(|e| format!("Write file error: {}", e))?;
-    Ok(OkResponse::success("File written"))
+        .map_err(|e| format!("Base64解码错误: {}", e))?;
+    std::fs::write(&path, bytes).map_err(|e| format!("写入文件错误: {}", e))?;
+    Ok(OkResponse::success("文件已写入"))
 }
 
 #[tauri::command]
 pub async fn read_file(path: String) -> Result<String, String> {
-    let bytes = std::fs::read(&path).map_err(|e| format!("Read file error: {}", e))?;
+    let bytes = std::fs::read(&path).map_err(|e| format!("读取文件错误: {}", e))?;
     Ok(base64::encode(&bytes))
 }

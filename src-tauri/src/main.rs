@@ -101,6 +101,8 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             list_seasons,
             get_season_api_config_cmd,
             set_season_api_config_cmd,
+            get_installed_skills,
+            openclaw_chat,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

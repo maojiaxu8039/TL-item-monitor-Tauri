@@ -37,8 +37,10 @@ pub struct FirePriceChangeItem {
     pub price_3h_ago: Option<f64>,
     pub price_1h_ago: Option<f64>,
     pub price_30m_ago: Option<f64>,
+    pub price_5m_ago: Option<f64>,
     pub change_amount_3h: Option<f64>,
     pub change_rate_3h: Option<f64>,
+    pub change_rate_5m: Option<f64>,
     pub trend: String,
 }
 
@@ -135,6 +137,7 @@ pub async fn get_realtime_fire_changes(
     let mut price_3h: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
     let mut price_1h: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
     let mut price_30m: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+    let mut price_5m: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
 
     for record in &records {
         let item_id = &record.item_id;
@@ -153,6 +156,9 @@ pub async fn get_realtime_fire_changes(
         if age_minutes >= 20 && !price_30m.contains_key(item_id) {
             price_30m.insert(item_id.clone(), record.fire_price);
         }
+        if age_minutes >= 4 && !price_5m.contains_key(item_id) {
+            price_5m.insert(item_id.clone(), record.fire_price);
+        }
     }
 
     let mut result = Vec::new();
@@ -162,11 +168,19 @@ pub async fn get_realtime_fire_changes(
         let price_3h_ago = price_3h.get(&item_id).copied();
         let price_1h_ago = price_1h.get(&item_id).copied();
         let price_30m_ago = price_30m.get(&item_id).copied();
+        let price_5m_ago = price_5m.get(&item_id).copied();
         
         let change_amount_3h = price_3h_ago.map(|p| current_price - p);
         let change_rate_3h = change_amount_3h.zip(price_3h_ago).map(|(change, base)| (change / base) * 100.0);
         
-        let trend = if let Some(rate) = change_rate_3h {
+        let change_rate_5m = price_5m_ago.map(|p| {
+            let change = current_price - p;
+            (change / p) * 100.0
+        });
+        
+        let change_rate_for_trend = change_rate_5m.or(change_rate_3h);
+        
+        let trend = if let Some(rate) = change_rate_for_trend {
             if rate > 5.0 {
                 "sharp_rise".to_string()
             } else if rate > 1.0 {
@@ -189,15 +203,17 @@ pub async fn get_realtime_fire_changes(
             price_3h_ago,
             price_1h_ago,
             price_30m_ago,
+            price_5m_ago,
             change_amount_3h,
             change_rate_3h,
+            change_rate_5m,
             trend,
         });
     }
 
     result.sort_by(|a, b| {
-        let rate_a = a.change_rate_3h.unwrap_or(0.0).abs();
-        let rate_b = b.change_rate_3h.unwrap_or(0.0).abs();
+        let rate_a = a.change_rate_5m.or(a.change_rate_3h).unwrap_or(0.0).abs();
+        let rate_b = b.change_rate_5m.or(b.change_rate_3h).unwrap_or(0.0).abs();
         rate_b.partial_cmp(&rate_a).unwrap_or(std::cmp::Ordering::Equal)
     });
 
@@ -237,13 +253,15 @@ pub async fn seed_test_data(pool: &SqlitePool) -> Result<usize, AppError> {
     let mut count = 0;
     
     for (item_id, item_name, base_price) in &items {
-        for minutes_ago in [180, 150, 120, 90, 60, 45, 30, 15, 10, 5, 3, 1] {
+        for minutes_ago in [180, 150, 120, 90, 60, 45, 30, 20, 15, 10, 8, 5, 4, 3, 2, 1] {
             let scraped_at = now - (minutes_ago * 60);
             
             let variation = if minutes_ago > 120 {
                 rng.gen_range(-0.15..0.20)
             } else if minutes_ago > 60 {
                 rng.gen_range(-0.10..0.15)
+            } else if minutes_ago > 20 {
+                rng.gen_range(-0.08..0.10)
             } else {
                 rng.gen_range(-0.05..0.08)
             };

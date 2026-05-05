@@ -10,6 +10,8 @@ pub mod import_export;
 pub mod diagnostics;
 pub mod deals;
 pub mod season;
+pub mod skills;
+pub mod openclaw;
 
 pub use fire::*;
 pub use items::*;
@@ -21,3 +23,5 @@ pub use import_export::*;
 pub use diagnostics::*;
 pub use deals::*;
 pub use season::*;
+pub use skills::*;
+pub use openclaw::*;

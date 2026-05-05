@@ -1,6 +1,7 @@
-//! TL Monitor Server - 独立数据采集服务器 v3.0
+//! TL Monitor Server - 独立数据采集服务器 v3.1
 //! 
 //! 支持同时采集普通服和专家服数据
+//! 支持管理员操作（需要密码验证）
 //! 
 //! 运行方式：
 //!   cargo run --bin server
@@ -11,9 +12,9 @@ use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 use tokio::sync::{broadcast, RwLock};
 use tracing::{info, error, warn, Level};
 use tracing_subscriber::FmtSubscriber;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
-use tl_monitor::server::config::ServerConfig;
+use tl_monitor::server::config::{ServerConfig, ApiConfig};
 use tl_monitor::server::scraper::Scraper;
 use tl_monitor::server::db;
 
@@ -60,6 +61,32 @@ struct ApiResponse<T> {
     error: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct AdminRequest {
+    password: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct InitSeasonRequest {
+    password: String,
+    season_id: String,
+    season_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateApiConfigRequest {
+    password: String,
+    api_config: ApiConfig,
+}
+
+#[derive(Debug, Serialize)]
+struct InitSeasonResponse {
+    success: bool,
+    season_id: String,
+    tables_created: Vec<String>,
+    message: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = FmtSubscriber::builder()
@@ -73,14 +100,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start_time = Utc::now().timestamp();
 
     info!("==============================================");
-    info!("TL Monitor Server v3.0 - 支持普通服+专家服");
+    info!("TL Monitor Server v3.1 - 支持普通服+专家服+管理员API");
     info!("==============================================");
 
     let config = match tl_monitor::server::config::load_config(CONFIG_PATH) {
         Ok(cfg) => {
-            info!("配置加载成功: season={}, http_port={}, modes={:?}", 
-                cfg.season_id, cfg.http_port, 
-                cfg.scrape_modes.iter().map(|m| format!("{}:{}", m.mode, m.enabled)).collect::<Vec<_>>());
+            info!("配置加载成功: season={}, http_port={}, admin_password_set={}", 
+                cfg.season_id, cfg.http_port, !cfg.admin_password.is_empty());
+            info!("API配置: qiandao_normal={}, luosi_normal={}", 
+                cfg.api_config.qiandao_tag_id_normal, cfg.api_config.luosi_season_id_normal);
             cfg
         }
         Err(e) => {
@@ -162,6 +190,19 @@ async fn start_http_server(state: Arc<ServerState>, port: u16, start_time: i64) 
     }
 }
 
+fn verify_admin(request_body: &str, password: &str) -> Result<(), String> {
+    if password.is_empty() {
+        return Err("管理员密码未设置".to_string());
+    }
+    if request_body.is_empty() {
+        return Err("缺少密码字段".to_string());
+    }
+    if request_body != password {
+        return Err("密码错误".to_string());
+    }
+    Ok(())
+}
+
 async fn handle_request(
     stream: tokio::net::TcpStream,
     client_addr: std::net::SocketAddr,
@@ -170,7 +211,7 @@ async fn handle_request(
 ) {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     
-    let mut buffer = [0u8; 4096];
+    let mut buffer = [0u8; 65536];
     let mut stream = stream;
     
     if let Err(e) = stream.read(&mut buffer).await {
@@ -197,13 +238,32 @@ async fn handle_request(
     
     info!("HTTP {} {} from {}", method, path, client_addr);
     
+    let mut request_body = String::new();
+    let mut content_length = 0usize;
+    
+    for line in &lines[1..] {
+        if line.to_lowercase().starts_with("content-length:") {
+            content_length = line.split(':').nth(1).unwrap_or("0").trim().parse().unwrap_or(0);
+        }
+        if line.is_empty() {
+            break;
+        }
+    }
+    
+    if content_length > 0 && lines.len() > 1 {
+        let body_start = request.find("\r\n\r\n").map(|p| p + 4).unwrap_or(0);
+        if body_start < request.len() {
+            request_body = request[body_start..body_start + content_length.min(request.len() - body_start)].to_string();
+        }
+    }
+    
     let (status, body) = match (method, path) {
         ("GET", "/") | ("GET", "/status") => {
             let last_collection = state.last_collection.read().await.clone();
             
             let status = ApiStatus {
                 server: "TL Monitor Server".to_string(),
-                version: "3.0.0".to_string(),
+                version: "3.1.0".to_string(),
                 uptime_seconds: Utc::now().timestamp() - start_time,
                 season_id: state.config.season_id.clone(),
                 last_collection,
@@ -309,9 +369,109 @@ async fn handle_request(
                 }
             }
         }
+        ("GET", "/api-config") => {
+            let body = serde_json::to_string_pretty(&ApiResponse {
+                success: true,
+                data: Some(&state.config.api_config),
+                error: None,
+            }).unwrap_or_default();
+            (200, body)
+        }
         ("GET", "/health") => {
             (200, "OK".to_string())
         }
+        
+        // ─── 管理员 API ───────────────────────────────────────
+        
+        ("POST", "/admin/init-season") => {
+            match serde_json::from_str::<InitSeasonRequest>(&request_body) {
+                Ok(req) => {
+                    if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        }).unwrap_or_default();
+                        return send_response(stream, 401, &body).await;
+                    }
+                    
+                    match db::init_new_season(&state.db, &req.season_id, req.season_name.as_deref()).await {
+                        Ok(tables) => {
+                            let response = InitSeasonResponse {
+                                success: true,
+                                season_id: req.season_id.clone(),
+                                tables_created: tables,
+                                message: "新赛季初始化成功".to_string(),
+                            };
+                            let body = serde_json::to_string_pretty(&ApiResponse {
+                                success: true,
+                                data: Some(response),
+                                error: None,
+                            }).unwrap_or_default();
+                            send_response(stream, 200, &body).await;
+                        }
+                        Err(e) => {
+                            let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                success: false,
+                                data: None,
+                                error: Some(e),
+                            }).unwrap_or_default();
+                            send_response(stream, 500, &body).await;
+                        }
+                    }
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("请求格式错误: {}", e)),
+                    }).unwrap_or_default();
+                    send_response(stream, 400, &body).await;
+                }
+            }
+        }
+        ("POST", "/admin/update-api-config") => {
+            match serde_json::from_str::<UpdateApiConfigRequest>(&request_body) {
+                Ok(req) => {
+                    if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        }).unwrap_or_default();
+                        return send_response(stream, 401, &body).await;
+                    }
+                    
+                    let mut new_config = state.config.clone();
+                    new_config.api_config = req.api_config;
+                    
+                    if let Err(e) = tl_monitor::server::config::save_config(CONFIG_PATH, &new_config) {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(format!("保存配置失败: {}", e)),
+                        }).unwrap_or_default();
+                        return send_response(stream, 500, &body).await;
+                    }
+                    
+                    let body = serde_json::to_string_pretty(&ApiResponse {
+                        success: true,
+                        data: Some("API配置已更新，重启服务器后生效".to_string()),
+                        error: None,
+                    }).unwrap_or_default();
+                    send_response(stream, 200, &body).await;
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("请求格式错误: {}", e)),
+                    }).unwrap_or_default();
+                    send_response(stream, 400, &body).await;
+                }
+            }
+        }
+        
         _ => {
             let body = serde_json::to_string_pretty(&ApiResponse::<()> {
                 success: false,
@@ -322,6 +482,14 @@ async fn handle_request(
         }
     };
     
+    send_response(stream, status, &body).await;
+}
+
+async fn send_response(
+    mut stream: tokio::net::TcpStream,
+    status: u16,
+    body: &str,
+) {
     let response = format!(
         "HTTP/1.1 {} {}\r\n\
         Content-Type: application/json\r\n\
@@ -438,13 +606,15 @@ async fn collect_all_modes(state: &Arc<ServerState>) {
             error: None,
         };
 
-        // 采集火价
-        match Scraper::scrape_fire_price(market_mode).await {
+        let mut fire_per_rmb = 0.0;
+        
+        match Scraper::scrape_fire_price(market_mode, &state.config.api_config).await {
             Ok(fire) => {
                 mode_status.fire_success = true;
                 mode_status.fire_price = Some(fire.rmb_per_10k_fire);
+                fire_per_rmb = fire.fire_per_rmb;
                 
-                if let Err(e) = db::insert_fire_record(
+                if let Err(e) = db::insert_fire_snapshot(
                     &state.db,
                     &state.config.season_id,
                     market_mode,
@@ -459,28 +629,34 @@ async fn collect_all_modes(state: &Arc<ServerState>) {
             }
         }
 
-        // 采集物品
-        match Scraper::scrape_items(&state.config.season_id, market_mode).await {
-            Ok(items) => {
-                mode_status.items_success = true;
-                mode_status.items_count = items.len();
-                
-                if let Err(e) = db::insert_items_record(
-                    &state.db,
-                    &state.config.season_id,
-                    market_mode,
-                    &items,
-                    timestamp,
-                ).await {
+        if fire_per_rmb > 0.0 {
+            match Scraper::scrape_items(&state.config.season_id, market_mode, &state.config.api_config).await {
+                Ok(items) => {
+                    mode_status.items_success = true;
+                    mode_status.items_count = items.len();
+                    
+                    if let Err(e) = db::insert_items_snapshots(
+                        &state.db,
+                        &state.config.season_id,
+                        market_mode,
+                        fire_per_rmb,
+                        &items,
+                        timestamp,
+                    ).await {
+                        if mode_status.error.is_none() {
+                            mode_status.error = Some(format!("Items DB error: {}", e));
+                        }
+                    }
+                }
+                Err(e) => {
                     if mode_status.error.is_none() {
-                        mode_status.error = Some(format!("Items DB error: {}", e));
+                        mode_status.error = Some(format!("Items scrape error: {}", e));
                     }
                 }
             }
-            Err(e) => {
-                if mode_status.error.is_none() {
-                    mode_status.error = Some(format!("Items scrape error: {}", e));
-                }
+        } else {
+            if mode_status.error.is_none() {
+                mode_status.error = Some("Skip items: no fire price".to_string());
             }
         }
 

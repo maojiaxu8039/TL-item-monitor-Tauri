@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::info;
 
+use super::config::ApiConfig;
+
 const LUOSI_API: &str = "http://115.231.176.101:8080/get";
 const QIANDAO_API: &str = "https://api.qiandao.com";
 const QIANDAO_FIRE_PRICE_ENDPOINT: &str = "/c2c-web/v1/common/currency-spu-price-list";
@@ -42,11 +44,15 @@ pub struct Item {
 pub struct Scraper;
 
 impl Scraper {
-    /// 从罗四 API 抓取物品数据
-    pub async fn scrape_items(season_id: &str, market_mode: &str) -> Result<Vec<Item>, String> {
-        let api_season_id = calculate_api_season_id(season_id, market_mode)?;
+    /// 从刷图小助手 API 抓取物品数据
+    pub async fn scrape_items(season_id: &str, market_mode: &str, config: &ApiConfig) -> Result<Vec<Item>, String> {
+        let luosi_season_id = if market_mode.contains("expert") {
+            config.luosi_season_id_expert
+        } else {
+            config.luosi_season_id_normal
+        };
         
-        let url = format!("{}?season_id={}", LUOSI_API, api_season_id);
+        let url = format!("{}?season_id={}", LUOSI_API, luosi_season_id);
         info!("抓取物品: {}", url);
 
         let client = Client::builder()
@@ -86,12 +92,12 @@ impl Scraper {
     }
 
     /// 从千岛 API 抓取火价数据
-    pub async fn scrape_fire_price(market_mode: &str) -> Result<FirePriceSnapshot, String> {
-        let is_expert = market_mode == "season_expert" || market_mode == "专家";
+    pub async fn scrape_fire_price(market_mode: &str, config: &ApiConfig) -> Result<FirePriceSnapshot, String> {
+        let is_expert = market_mode.contains("expert");
         let (tag_id, spec_id) = if is_expert {
-            ("1560055", "267417")
+            (config.qiandao_tag_id_expert.as_str(), config.qiandao_spec_id_expert.as_str())
         } else {
-            ("1560053", "267416")
+            (config.qiandao_tag_id_normal.as_str(), config.qiandao_spec_id_normal.as_str())
         };
 
         let timestamp = chrono::Utc::now().timestamp_millis().to_string();
@@ -189,21 +195,4 @@ impl Scraper {
             scraped_at: now,
         })
     }
-}
-
-/// 计算 API season_id
-fn calculate_api_season_id(season_id: &str, market_mode: &str) -> Result<i32, String> {
-    let season_num = season_id
-        .strip_prefix("ss")
-        .ok_or("Invalid season_id format")?
-        .parse::<i32>()
-        .map_err(|_| "Invalid season number")?;
-
-    let mode_suffix = match market_mode {
-        "season_expert" => 31,
-        _ => 1,
-    };
-
-    let api_season_id = 200 * season_num - 1000 + mode_suffix;
-    Ok(api_season_id)
 }

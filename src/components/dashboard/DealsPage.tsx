@@ -10,6 +10,9 @@ interface FireChangeCardProps {
 }
 
 function FireChangeCard({ item, isRising }: FireChangeCardProps) {
+  const changeRate = item.change_rate_5m ?? item.change_rate_3h;
+  const price5mAgo = item.price_5m_ago;
+  
   return (
     <div className={`bg-white rounded-lg border p-3 transition-colors hover:shadow-sm ${
       isRising ? "border-red-100 hover:border-red-200" : "border-green-100 hover:border-green-200"
@@ -34,19 +37,22 @@ function FireChangeCard({ item, isRising }: FireChangeCardProps) {
           <div className="text-xs text-slate-500">
             当前: <span className="font-medium text-slate-700">{item.current_price.toFixed(2)}</span>
           </div>
-          <div className="text-xs text-slate-500">
-            3h前: <span className="font-medium text-slate-700">{item.price_3h_ago?.toFixed(2) || "-"}</span>
-          </div>
+          {price5mAgo !== null && price5mAgo !== undefined && (
+            <div className="text-xs text-slate-500">
+              5m前: <span className="font-medium text-slate-700">{price5mAgo.toFixed(2)}</span>
+            </div>
+          )}
         </div>
-        {item.change_rate_3h !== null && item.change_rate_3h !== undefined && (
+        {changeRate !== null && changeRate !== undefined && (
           <div className={`text-sm font-bold ${isRising ? "text-red-500" : "text-green-500"}`}>
-            {item.change_rate_3h >= 0 ? "+" : ""}{item.change_rate_3h.toFixed(2)}%
+            {changeRate >= 0 ? "+" : ""}{changeRate.toFixed(2)}%
           </div>
         )}
       </div>
 
       <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
         <div className="flex items-center gap-3">
+          <span>3h: {item.price_3h_ago?.toFixed(2) || "-"}</span>
           <span>1h: {item.price_1h_ago?.toFixed(2) || "-"}</span>
           <span>30m: {item.price_30m_ago?.toFixed(2) || "-"}</span>
         </div>

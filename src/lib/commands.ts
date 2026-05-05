@@ -98,8 +98,10 @@ export interface FirePriceChangeItem {
   price_3h_ago: number | null;
   price_1h_ago: number | null;
   price_30m_ago: number | null;
+  price_5m_ago: number | null;
   change_amount_3h: number | null;
   change_rate_3h: number | null;
+  change_rate_5m: number | null;
   trend: string;
 }
 
@@ -544,6 +546,22 @@ export const cmd = {
     invoke<SeasonApiConfigResponse>("get_season_api_config_cmd", { seasonId }),
   setSeasonApiConfig: (seasonId: string, config: SeasonApiConfigInput) =>
     invoke<OkResponse>("set_season_api_config_cmd", { seasonId, ...config }),
+
+  // Skills management
+  getInstalledSkills: () => invoke<SkillInfo[]>("get_installed_skills"),
+
+  // OpenClaw chat
+  openclawChat: (
+    gatewayUrl: string,
+    gatewayToken: string,
+    text: string,
+    context?: string
+  ) => invoke<{ success: boolean; message: string; response?: string }>("openclaw_chat", {
+    gatewayUrl,
+    gatewayToken,
+    text,
+    context,
+  }),
 };
 
 export interface ArchiveResult {
@@ -604,3 +622,60 @@ export interface DealAlert {
   detected_at: number;
   confidence: number;
 }
+
+export interface SkillInfo {
+  name: string;
+  description: string;
+  path: string;
+  source: 'system' | 'workspace';
+  enabled: boolean;
+}
+
+export interface ServerApiConfig {
+  qiandao_tag_id_normal: string;
+  qiandao_spec_id_normal: string;
+  qiandao_tag_id_expert: string;
+  qiandao_spec_id_expert: string;
+  luosi_season_id_normal: number;
+  luosi_season_id_expert: number;
+}
+
+export interface ServerAdminResponse {
+  success: boolean;
+  data?: any;
+  error?: string;
+}
+
+export const serverAdmin = {
+  getApiConfig: (serverUrl: string) =>
+    fetch(`${serverUrl}/api-config`)
+      .then(res => res.json())
+      .then((data: ServerAdminResponse) => {
+        if (!data.success) throw new Error(data.error || "获取配置失败");
+        return data.data as ServerApiConfig;
+      }),
+
+  initSeason: (serverUrl: string, password: string, seasonId: string, seasonName?: string) =>
+    fetch(`${serverUrl}/admin/init-season`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password, season_id: seasonId, season_name: seasonName }),
+    })
+      .then(res => res.json())
+      .then((data: ServerAdminResponse) => {
+        if (!data.success) throw new Error(data.error || "初始化失败");
+        return data.data;
+      }),
+
+  updateApiConfig: (serverUrl: string, password: string, apiConfig: ServerApiConfig) =>
+    fetch(`${serverUrl}/admin/update-api-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password, api_config: apiConfig }),
+    })
+      .then(res => res.json())
+      .then((data: ServerAdminResponse) => {
+        if (!data.success) throw new Error(data.error || "更新配置失败");
+        return data.data;
+      }),
+};
