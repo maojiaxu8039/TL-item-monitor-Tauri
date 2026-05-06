@@ -918,7 +918,7 @@ pub async fn openclaw_chat(
                         if is_gateway_response_for(&value, &send_id) {
                             if gateway_response_ok(&value) {
                                 send_ok = true;
-                                break;
+                                continue;
                             }
 
                             let error = error_from_json(&value)
@@ -938,7 +938,7 @@ pub async fn openclaw_chat(
                     }
                 }
                 Ok(Some(Ok(tokio_tungstenite::tungstenite::Message::Close(_)))) => {
-                    if !pending_chunks.is_empty() {
+                    if !pending_chunks.is_empty() && send_ok {
                         return Ok(OpenClawResponse {
                             success: true,
                             message: "Success".to_string(),
@@ -964,22 +964,14 @@ pub async fn openclaw_chat(
                 Err(_) => {}
                 _ => {}
             }
-        }
 
-        if send_ok && !pending_chunks.is_empty() {
-            return Ok(OpenClawResponse {
-                success: true,
-                message: "Success".to_string(),
-                response: Some(pending_chunks.join("")),
-            });
-        }
-
-        if !send_ok {
-            return Ok(OpenClawResponse {
-                success: false,
-                message: "Gateway chat.send未收到有效响应".to_string(),
-                response: None,
-            });
+            if send_ok && !pending_chunks.is_empty() && pending_chunks.iter().any(|c| c.len() > 10) {
+                return Ok(OpenClawResponse {
+                    success: true,
+                    message: "Success".to_string(),
+                    response: Some(pending_chunks.join("")),
+                });
+            }
         }
 
         let history_timeout = Duration::from_secs(60);
