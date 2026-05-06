@@ -12,6 +12,7 @@ pub mod season;
 pub mod sections;
 pub mod skills;
 pub mod strategies;
+pub mod strategy_detail;
 
 pub use alerts::*;
 pub use config::*;
@@ -25,3 +26,4 @@ pub use season::*;
 pub use sections::*;
 pub use skills::*;
 pub use strategies::*;
+pub use strategy_detail::*;

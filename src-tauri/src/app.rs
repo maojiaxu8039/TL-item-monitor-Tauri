@@ -380,6 +380,14 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         )
         .await?;
     }
+    if current_version < 9 {
+        apply_sql_migration(
+            pool,
+            9,
+            include_str!("db/migrations/009_create_strategy_detail_tables.sql"),
+        )
+        .await?;
+    }
 
     // Ensure split tables exist (idempotent, handles cases where v3 migration
     // was marked as applied but tables weren't actually created)

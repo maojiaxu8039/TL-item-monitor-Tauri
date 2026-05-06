@@ -1,4 +1,5 @@
 pub mod models;
+pub mod models_strategy;
 pub mod repo_alerts;
 pub mod repo_config;
 pub mod repo_fire;
@@ -9,4 +10,5 @@ pub mod repo_season_api;
 pub mod repo_sections;
 pub mod repo_source_diagnostics;
 pub mod repo_strategies;
+pub mod repo_strategy_detail;
 pub mod table_resolver;

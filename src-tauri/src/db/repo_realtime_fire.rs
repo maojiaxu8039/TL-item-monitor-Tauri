@@ -291,3 +291,22 @@ pub async fn seed_test_data(pool: &SqlitePool) -> Result<usize, AppError> {
     tracing::info!("Seeded {} realtime fire price records", count);
     Ok(count)
 }
+
+pub async fn get_current_fire_price(pool: &SqlitePool) -> Result<f64, AppError> {
+    let table = TableResolver::fire_price_table("ss12", "season_normal");
+
+    let record: Option<(f64,)> = sqlx::query_as(
+        &format!(
+            "SELECT fire_per_rmb FROM {} ORDER BY scraped_at DESC LIMIT 1",
+            table
+        )
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| AppError::Db(e.to_string()))?;
+
+    match record {
+        Some((fire_per_rmb,)) if fire_per_rmb > 0.0 => Ok(fire_per_rmb),
+        _ => Ok(0.0),
+    }
+}
