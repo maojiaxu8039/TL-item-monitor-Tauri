@@ -139,6 +139,7 @@ export default function AIAnalysisPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const connectionTestIdRef = useRef(0);
   const { marketContext } = useSectionRefresh();
 
   useEffect(() => {
@@ -158,19 +159,22 @@ export default function AIAnalysisPage() {
   }, [messages]);
 
   useEffect(() => {
-    testConnection();
+    testConnection(settings);
   }, [settings.gatewayUrl, settings.gatewayToken]);
 
-  const testConnection = async () => {
+  const testConnection = async (settingsToTest: AISettings = settings) => {
+    const testId = ++connectionTestIdRef.current;
     setConnectionStatus('connecting');
 
     try {
       const result = await cmd.openclawChat(
-        settings.gatewayUrl,
-        settings.gatewayToken,
+        settingsToTest.gatewayUrl,
+        settingsToTest.gatewayToken,
         "ping",
         "Just testing connection"
       );
+
+      if (testId !== connectionTestIdRef.current) return;
 
       if (result.success) {
         setConnectionStatus('connected');
@@ -180,6 +184,8 @@ export default function AIAnalysisPage() {
         addToast("error", `连接失败: ${result.message}`);
       }
     } catch (error) {
+      if (testId !== connectionTestIdRef.current) return;
+
       setConnectionStatus('error');
       addToast("error", "无法连接到OpenClaw Gateway");
     }
@@ -251,7 +257,6 @@ export default function AIAnalysisPage() {
       localStorage.setItem("ai_settings_v9", JSON.stringify(newSettings));
       setSettings(newSettings);
       addToast("success", "配置已保存");
-      testConnection();
     } catch {
       addToast("error", "保存失败");
     }

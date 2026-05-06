@@ -1,0 +1,17 @@
+season_id: "ss12"
+http_port: 8080
+scrape_modes:
+  - mode: "normal"
+    enabled: true
+  - mode: "expert"
+    enabled: true
+admin_password: "change_this_password"
+api_config:
+  qiandao_tag_id_normal: "1560053"
+  qiandao_spec_id_normal: "267416"
+  qiandao_tag_id_expert: "1560055"
+  qiandao_spec_id_expert: "267417"
+  luosi_season_id_normal: 1401
+  luosi_season_id_expert: 1431
+cors_allowed_origins:
+  - "http://localhost:5173"
