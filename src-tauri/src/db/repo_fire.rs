@@ -4,8 +4,6 @@ use crate::db::table_resolver::TableResolver;
 use chrono::Utc;
 use sqlx::SqlitePool;
 
-/// Fetch season start timestamp from database.
-/// Falls back to constant mapping if season not found in DB.
 pub async fn get_season_start(
     pool: &SqlitePool,
     season_id: &str,
@@ -28,45 +26,6 @@ pub async fn get_season_start(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::core::constants::calculate_season_day;
-
-    #[test]
-    fn test_calculate_season_day_ss12() {
-        // SS12 start: 2026-04-17 00:00:00 UTC = 1776384000
-        let ss12_start = 1776384000i64;
-
-        // Day 1: 2026-04-17 12:00:00 UTC
-        let day1 = ss12_start + 12 * 3600;
-        assert_eq!(calculate_season_day(day1, ss12_start), 1);
-
-        // Day 16: 2026-05-02 22:56:12 UTC (from DB)
-        let day16 = 1777762572i64;
-        assert_eq!(calculate_season_day(day16, ss12_start), 16);
-
-        // Day 17: 2026-05-03 20:43:34 UTC (from DB)
-        let day17 = 1777841014i64;
-        assert_eq!(calculate_season_day(day17, ss12_start), 17);
-    }
-
-    #[test]
-    fn test_calculate_season_day_ss11() {
-        // SS11 start: 2026-01-16 00:00:00 UTC
-        let ss11_start = chrono::DateTime::parse_from_rfc3339("2026-01-16T00:00:00+00:00")
-            .unwrap()
-            .timestamp();
-
-        // Day 1
-        let day1 = ss11_start + 12 * 3600;
-        assert_eq!(calculate_season_day(day1, ss11_start), 1);
-
-        // Day 30
-        let day30 = ss11_start + 29 * 86400 + 12 * 3600;
-        assert_eq!(calculate_season_day(day30, ss11_start), 30);
-    }
-}
-
 pub async fn insert_fire_record(
     pool: &SqlitePool,
     season_id: &str,
@@ -78,8 +37,16 @@ pub async fn insert_fire_record(
 
     let result = sqlx::query(
         &format!(
-            r#"INSERT OR IGNORE INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+            r#"INSERT INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(scraped_at) DO UPDATE SET
+               rmb_per_10k_fire = excluded.rmb_per_10k_fire,
+               fire_per_rmb = excluded.fire_per_rmb,
+               increase_ratio = excluded.increase_ratio,
+               trading_volume = excluded.trading_volume,
+               source = excluded.source,
+               source_time = excluded.source_time,
+               created_at = excluded.created_at"#,
             table
         )
     )
@@ -128,8 +95,6 @@ pub async fn get_latest_fire(
     Ok(record)
 }
 
-/// Get fire price history from snapshots table (hourly data).
-/// All time ranges use fire_price_snapshots table for consistent hourly data.
 pub async fn get_fire_history(
     pool: &SqlitePool,
     season_id: &str,
@@ -171,8 +136,6 @@ pub async fn get_fire_history(
     Ok(result)
 }
 
-/// Get all fire price history from snapshots table for a season.
-/// Used for historical season comparison - always reads from fire_price_snapshots.
 pub async fn get_fire_history_all(
     pool: &SqlitePool,
     season_id: &str,
@@ -208,4 +171,25 @@ pub async fn get_fire_history_all(
         .collect();
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::core::constants::calculate_season_day;
+
+    #[test]
+    fn test_calculate_season_day_ss12() {
+        let ss12_start = 1776384000i64;
+        assert_eq!(calculate_season_day(ss12_start, ss12_start), 1);
+        assert_eq!(calculate_season_day(ss12_start + 86400, ss12_start), 2);
+        assert_eq!(calculate_season_day(ss12_start - 86400, ss12_start), 1);
+    }
+
+    #[test]
+    fn test_calculate_season_day_ss11() {
+        let ss11_start = 1768521600i64;
+        assert_eq!(calculate_season_day(ss11_start, ss11_start), 1);
+        assert_eq!(calculate_season_day(ss11_start + 12 * 3600, ss11_start), 1);
+        assert_eq!(calculate_season_day(ss11_start + 29 * 86400, ss11_start), 30);
+    }
 }

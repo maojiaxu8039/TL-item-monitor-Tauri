@@ -41,7 +41,7 @@ pub const SEASONS: &[SeasonInfo] = &[
     },
     SeasonInfo {
         id: "ss11",
-        start_timestamp: 1736985600,
+        start_timestamp: 1768521600,
         name: "SS11 历史赛季",
         is_current: false,
     },

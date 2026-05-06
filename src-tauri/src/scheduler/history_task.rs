@@ -1,12 +1,58 @@
-use chrono::Timelike;
+use chrono::{Timelike, Utc};
 use std::sync::Arc;
 use tokio::sync::broadcast;
+use tokio::time::{interval, Duration};
 use tracing::{error, info, warn};
 
 use crate::core::state::AppState;
 use crate::db::repo_history;
 
-/// Hourly snapshot task: records fire price and all items at the top of each hour.
+fn next_hour_timestamp() -> Option<i64> {
+    let now = Utc::now();
+    let next = (now + chrono::Duration::hours(1))
+        .with_minute(0)
+        .and_then(|t| t.with_second(0))
+        .and_then(|t| t.with_nanosecond(0))?;
+    Some(next.timestamp())
+}
+
+async fn record_hourly_snapshot(state: &Arc<AppState>, snapshot_at: i64) {
+    let ctx = state.active_context.read().clone();
+    let fire_opt = state.fire_price.read().clone();
+    let items = state.items_cache.read().clone();
+
+    if let Some(ref fire) = fire_opt {
+        if let Err(e) = repo_history::insert_fire_snapshot(
+            &state.db,
+            &ctx.season_id,
+            ctx.market_mode.as_str(),
+            fire,
+            snapshot_at,
+        ).await {
+            warn!("Hourly fire snapshot failed: {}", e);
+        } else {
+            info!("Hourly fire snapshot recorded at {}", snapshot_at);
+        }
+    }
+
+    if !items.is_empty() {
+        match repo_history::insert_item_price_snapshots(
+            &state.db,
+            &ctx.season_id,
+            ctx.market_mode.as_str(),
+            &items,
+            snapshot_at,
+        ).await {
+            Ok(count) => {
+                info!("Hourly item snapshot recorded: {} items at {}", count, snapshot_at);
+            }
+            Err(e) => {
+                error!("Hourly item snapshot failed: {}", e);
+            }
+        }
+    }
+}
+
 pub async fn run_hourly_snapshot_task(
     _app: tauri::AppHandle,
     state: Arc<AppState>,
@@ -14,26 +60,23 @@ pub async fn run_hourly_snapshot_task(
 ) {
     info!("Hourly snapshot task started");
 
-    // Sleep until the next top of hour
-    let now = chrono::Utc::now();
-    let next_hour = match (now + chrono::Duration::hours(1))
-        .with_minute(0)
-        .and_then(|t| t.with_second(0))
-        .and_then(|t| t.with_nanosecond(0))
-    {
-        Some(t) => t,
+    let next_hour_ts = match next_hour_timestamp() {
+        Some(ts) => ts,
         None => {
             error!("Failed to calculate next hour timestamp");
             return;
         }
     };
-    let initial_sleep = (next_hour - now)
-        .to_std()
-        .unwrap_or(std::time::Duration::from_secs(0));
+
+    let initial_wait = Duration::from_secs(
+        (next_hour_ts - Utc::now().timestamp()).max(0) as u64
+    );
 
     info!(
         "Hourly snapshot waiting until: {}",
-        next_hour.format("%Y-%m-%d %H:%M:%S UTC")
+        chrono::DateTime::from_timestamp(next_hour_ts, 0)
+            .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+            .unwrap_or_else(|| "unknown".to_string())
     );
 
     tokio::select! {
@@ -45,8 +88,14 @@ pub async fn run_hourly_snapshot_task(
             }
             return;
         }
-        _ = tokio::time::sleep(initial_sleep) => {}
+        _ = tokio::time::sleep(initial_wait) => {}
     }
+
+    let mut ticker = interval(Duration::from_secs(3600));
+    ticker.tick().await;
+
+    let snapshot_at = next_hour_ts;
+    record_hourly_snapshot(&state, snapshot_at).await;
 
     loop {
         tokio::select! {
@@ -65,55 +114,15 @@ pub async fn run_hourly_snapshot_task(
                     }
                 }
             }
-            _ = tokio::time::sleep(std::time::Duration::from_secs(3600)) => {
-                let snapshot_at = match chrono::Utc::now()
+            _ = ticker.tick() => {
+                let snapshot_at = Utc::now()
                     .with_minute(0)
                     .and_then(|t| t.with_second(0))
-                    .and_then(|t| t.with_nanosecond(0)) {
-                    Some(t) => t.timestamp(),
-                    None => {
-                        error!("Failed to calculate snapshot timestamp");
-                        continue;
-                    }
-                };
+                    .and_then(|t| t.with_nanosecond(0))
+                    .map(|t| t.timestamp())
+                    .unwrap_or_else(|| chrono::Utc::now().timestamp());
 
-                // Read consistent snapshot from state
-                let ctx = state.active_context.read().clone();
-                let fire_opt = state.fire_price.read().clone();
-                let items = state.items_cache.read().clone();
-
-                // Record fire price snapshot (deduplicated)
-                if let Some(ref fire) = fire_opt {
-                    if let Err(e) = repo_history::insert_fire_snapshot(
-                        &state.db,
-                        &ctx.season_id,
-                        ctx.market_mode.as_str(),
-                        fire,
-                        snapshot_at,
-                    ).await {
-                        warn!("Hourly fire snapshot failed: {}", e);
-                    } else {
-                        info!("Hourly fire snapshot recorded at {}", snapshot_at);
-                    }
-                }
-
-                // Record item price snapshots (deduplicated)
-                if !items.is_empty() {
-                    match repo_history::insert_item_price_snapshots(
-                        &state.db,
-                        &ctx.season_id,
-                        ctx.market_mode.as_str(),
-                        &items,
-                        snapshot_at,
-                    ).await {
-                        Ok(count) => {
-                            info!("Hourly item snapshot recorded: {} items at {}", count, snapshot_at);
-                        }
-                        Err(e) => {
-                            error!("Hourly item snapshot failed: {}", e);
-                        }
-                    }
-                }
+                record_hourly_snapshot(&state, snapshot_at).await;
             }
         }
     }

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use tokio::sync::broadcast;
+use tokio::time::{interval, Duration};
 use tracing::{error, info};
 
 use crate::core::events::{emit_fire_price_updated, FirePricePayload};
@@ -12,6 +13,9 @@ pub async fn run_fire_scrape_task(
     mut abort: broadcast::Receiver<()>,
 ) {
     info!("Fire price scraper task started");
+
+    let mut ticker = interval(Duration::from_secs(10));
+    ticker.tick().await;
 
     loop {
         tokio::select! {
@@ -30,7 +34,7 @@ pub async fn run_fire_scrape_task(
                     }
                 }
             }
-            _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+            _ = ticker.tick() => {
                 let config = match crate::core::config::load_config() {
                     Ok(cfg) => cfg,
                     Err(e) => {
@@ -55,7 +59,6 @@ pub async fn run_fire_scrape_task(
                     Ok(snapshot) => {
                         let duration_ms = start.elapsed().as_millis() as i64;
 
-                        // Immediately persist to DB with current context
                         let _ = crate::db::repo_fire::insert_fire_record(
                             &state.db,
                             &ctx.season_id,
@@ -97,7 +100,7 @@ pub async fn run_fire_scrape_task(
 
                         info!("Fire price scraped [{}]: {} RMB/10K", mode_str, snapshot.rmb_per_10k_fire);
 
-                        tokio::time::sleep(std::time::Duration::from_secs(interval_secs as u64)).await;
+                        ticker = interval(Duration::from_secs(interval_secs));
                     }
                     Err(e) => {
                         let duration_ms = start.elapsed().as_millis() as i64;
@@ -115,7 +118,7 @@ pub async fn run_fire_scrape_task(
                         ).await;
                         error!("Fire scrape failed [{}]: {}", mode_str, e);
 
-                        tokio::time::sleep(std::time::Duration::from_secs(interval_secs as u64)).await;
+                        ticker = interval(Duration::from_secs(interval_secs));
                     }
                 }
             }

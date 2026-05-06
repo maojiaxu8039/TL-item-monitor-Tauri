@@ -16,8 +16,9 @@ pub async fn get_dashboard_summary(
     let fire = state.fire_price.read().clone();
     let status = state.task_status.read().clone();
 
-    let (item_count, totals) = tokio::join!(
+    let (item_count, db_count, totals) = tokio::join!(
         repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str()),
+        repo_items::get_db_record_count(&state.db),
         repo_sections::get_totals(&state.db, &ctx.season_id, ctx.market_mode.as_str())
     );
 
@@ -40,7 +41,7 @@ pub async fn get_dashboard_summary(
         season_name: ctx.season_id.clone(),
         market_mode: ctx.market_mode.as_str().to_string(),
         item_count: item_count.unwrap_or(0),
-        db_record_count: 0, // TODO: implement for split tables
+        db_record_count: db_count.unwrap_or(0),
         last_fire_at,
         last_items_at,
         task_running: status.fire_scrape_running || status.items_reload_running,

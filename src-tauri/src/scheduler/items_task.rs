@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::broadcast;
+use tokio::time::Duration;
 use tracing::{error, info};
 
 use crate::core::state::AppState;
@@ -13,6 +14,10 @@ pub async fn run_items_reload_task(
     mut abort: broadcast::Receiver<()>,
 ) {
     info!("Items reload task started");
+
+    let mut ticker = tokio::time::interval(Duration::from_secs(10));
+    ticker.tick().await;
+
     loop {
         tokio::select! {
             result = abort.recv() => {
@@ -30,7 +35,7 @@ pub async fn run_items_reload_task(
                     }
                 }
             }
-            _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+            _ = ticker.tick() => {
                 let fresh_config = match crate::core::config::load_config() {
                     Ok(cfg) => cfg,
                     Err(e) => {
@@ -119,7 +124,7 @@ pub async fn run_items_reload_task(
                             info!("Items reload complete: {} items from {}", count, items_source);
                         }
 
-                        tokio::time::sleep(std::time::Duration::from_secs(interval_secs as u64)).await;
+                        ticker = tokio::time::interval(Duration::from_secs(interval_secs));
                     }
                     Err(e) => {
                         error!("Items reload failed: {}", e);
@@ -140,7 +145,7 @@ pub async fn run_items_reload_task(
                             status.last_items_reload = Some(chrono::Utc::now().timestamp());
                         }
 
-                        tokio::time::sleep(std::time::Duration::from_secs(interval_secs as u64)).await;
+                        ticker = tokio::time::interval(Duration::from_secs(interval_secs));
                     }
                 }
             }
