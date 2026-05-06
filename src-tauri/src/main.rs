@@ -11,8 +11,38 @@ use tl_monitor::commands::*;
 use tl_monitor::tray::setup_tray;
 
 fn main() {
+    std::panic::set_hook(Box::new(|panic_info| {
+        let msg = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Unknown panic".to_string()
+        };
+
+        let location = panic_info.location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let error_msg = format!("PANIC at {}: {}\nBacktrace:\n{:?}",
+            location, msg, std::backtrace::Backtrace::capture());
+
+        eprintln!("{}", error_msg);
+
+        if let Ok(log_dir) = std::env::current_dir() {
+            let crash_log = log_dir.join("crash.log");
+            let _ = std::fs::write(&crash_log, &error_msg);
+        }
+    }));
+
     if let Err(e) = run_app() {
         eprintln!("Application failed to start: {}", e);
+
+        if let Ok(log_dir) = std::env::current_dir() {
+            let error_log = log_dir.join("startup_error.log");
+            let _ = std::fs::write(&error_log, format!("{}", e));
+        }
+
         std::process::exit(1);
     }
 }
