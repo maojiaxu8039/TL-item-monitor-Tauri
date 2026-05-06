@@ -281,11 +281,26 @@ pub async fn get_strategy_with_costs(
         None => return Ok(None),
     };
 
-    let costs = get_strategy_costs(pool, strategy_id).await?;
+    let mut costs = get_strategy_costs(pool, strategy_id).await?;
     let outputs = get_strategy_outputs(pool, strategy_id).await?;
 
-    let total_cost_fire: f64 = costs.iter().map(|c| c.total_fire).sum();
-    let total_output_value: f64 = outputs.iter().map(|o| o.estimated_value * o.count).sum();
+    let mut total_cost_fire = 0.0;
+    for cost in &mut costs {
+        let current_price = get_item_fire_price(pool, &cost.item_id).await.unwrap_or(0.0);
+        if cost.is_realtime {
+            cost.fire_price = current_price;
+            cost.total_fire = cost.count * current_price;
+        }
+        total_cost_fire += cost.total_fire;
+    }
+
+    let mut total_output_value = 0.0;
+    for output in &outputs {
+        let current_price = get_item_fire_price_by_name(pool, &output.item_name).await.unwrap_or(output.estimated_value);
+        total_output_value += current_price * output.count;
+    }
+
+    let total_output_value = total_output_value;
     let profit_ratio = if total_cost_fire > 0.0 {
         (total_output_value - total_cost_fire) / total_cost_fire * 100.0
     } else {
@@ -300,6 +315,58 @@ pub async fn get_strategy_with_costs(
         total_output_value,
         profit_ratio,
     }))
+}
+
+async fn get_item_fire_price(pool: &SqlitePool, item_id: &str) -> Result<f64, crate::core::errors::AppError> {
+    let normal_price: Option<(f64,)> = sqlx::query_as(
+        "SELECT price FROM items_normal WHERE item_id = ?"
+    )
+    .bind(item_id)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some((price,)) = normal_price {
+        return Ok(price);
+    }
+
+    let expert_price: Option<(f64,)> = sqlx::query_as(
+        "SELECT price FROM items_expert WHERE item_id = ?"
+    )
+    .bind(item_id)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some((price,)) = expert_price {
+        return Ok(price);
+    }
+
+    Ok(0.0)
+}
+
+async fn get_item_fire_price_by_name(pool: &SqlitePool, item_name: &str) -> Result<f64, crate::core::errors::AppError> {
+    let normal_price: Option<(f64,)> = sqlx::query_as(
+        "SELECT price FROM items_normal WHERE name = ?"
+    )
+    .bind(item_name)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some((price,)) = normal_price {
+        return Ok(price);
+    }
+
+    let expert_price: Option<(f64,)> = sqlx::query_as(
+        "SELECT price FROM items_expert WHERE name = ?"
+    )
+    .bind(item_name)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some((price,)) = expert_price {
+        return Ok(price);
+    }
+
+    Ok(0.0)
 }
 
 pub async fn get_all_strategies_with_costs(
