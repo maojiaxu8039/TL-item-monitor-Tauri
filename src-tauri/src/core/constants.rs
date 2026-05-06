@@ -54,11 +54,18 @@ pub const SEASONS: &[SeasonInfo] = &[
 ];
 
 pub fn get_season_start(season_id: &str) -> Option<i64> {
-    SEASONS.iter().find(|s| s.id == season_id).map(|s| s.start_timestamp)
+    SEASONS
+        .iter()
+        .find(|s| s.id == season_id)
+        .map(|s| s.start_timestamp)
 }
 
 pub fn get_current_season_id() -> &'static str {
-    SEASONS.iter().find(|s| s.is_current).map(|s| s.id).unwrap_or("ss12")
+    SEASONS
+        .iter()
+        .find(|s| s.is_current)
+        .map(|s| s.id)
+        .unwrap_or("ss12")
 }
 
 pub fn calculate_season_day(scraped_at: i64, season_start: i64) -> i32 {

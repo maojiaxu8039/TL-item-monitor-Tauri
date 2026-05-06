@@ -20,8 +20,9 @@ pub async fn get_season_start(
                 "Season {} not found in seasons table, using fallback from constants",
                 season_id
             );
-            get_const_season_start(season_id)
-                .ok_or_else(|| crate::core::errors::AppError::NotFound(format!("Unknown season: {}", season_id)))
+            get_const_season_start(season_id).ok_or_else(|| {
+                crate::core::errors::AppError::NotFound(format!("Unknown season: {}", season_id))
+            })
         }
     }
 }
@@ -190,6 +191,9 @@ mod tests {
         let ss11_start = 1768521600i64;
         assert_eq!(calculate_season_day(ss11_start, ss11_start), 1);
         assert_eq!(calculate_season_day(ss11_start + 12 * 3600, ss11_start), 1);
-        assert_eq!(calculate_season_day(ss11_start + 29 * 86400, ss11_start), 30);
+        assert_eq!(
+            calculate_season_day(ss11_start + 29 * 86400, ss11_start),
+            30
+        );
     }
 }

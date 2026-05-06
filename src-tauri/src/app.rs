@@ -165,7 +165,7 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
             Some(snapshot)
         }
         _ => {
-            // No DB record — try scraping immediately (Node.js HTTP/2 fallback)
+            // No DB record — try scraping immediately via the Qiandao scraper chain.
             match crate::scraper::scrape_fire_price().await {
                 Ok(snapshot) => {
                     let ctx = MarketContext {

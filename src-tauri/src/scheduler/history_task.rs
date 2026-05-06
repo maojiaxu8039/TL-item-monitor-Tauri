@@ -28,7 +28,9 @@ async fn record_hourly_snapshot(state: &Arc<AppState>, snapshot_at: i64) {
             ctx.market_mode.as_str(),
             fire,
             snapshot_at,
-        ).await {
+        )
+        .await
+        {
             warn!("Hourly fire snapshot failed: {}", e);
         } else {
             info!("Hourly fire snapshot recorded at {}", snapshot_at);
@@ -42,9 +44,14 @@ async fn record_hourly_snapshot(state: &Arc<AppState>, snapshot_at: i64) {
             ctx.market_mode.as_str(),
             &items,
             snapshot_at,
-        ).await {
+        )
+        .await
+        {
             Ok(count) => {
-                info!("Hourly item snapshot recorded: {} items at {}", count, snapshot_at);
+                info!(
+                    "Hourly item snapshot recorded: {} items at {}",
+                    count, snapshot_at
+                );
             }
             Err(e) => {
                 error!("Hourly item snapshot failed: {}", e);
@@ -68,9 +75,7 @@ pub async fn run_hourly_snapshot_task(
         }
     };
 
-    let initial_wait = Duration::from_secs(
-        (next_hour_ts - Utc::now().timestamp()).max(0) as u64
-    );
+    let initial_wait = Duration::from_secs((next_hour_ts - Utc::now().timestamp()).max(0) as u64);
 
     info!(
         "Hourly snapshot waiting until: {}",

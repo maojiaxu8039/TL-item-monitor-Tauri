@@ -6,11 +6,11 @@
 //! 运行方式：
 //!   cargo run --bin server
 
-use tl_monitor::core::constants::{SECONDS_PER_HOUR, SERVER_VERSION};
 use chrono::{Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use std::sync::Arc;
+use tl_monitor::core::constants::{SECONDS_PER_HOUR, SERVER_VERSION};
 use tokio::sync::{broadcast, RwLock};
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
@@ -97,7 +97,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start_time = Utc::now().timestamp();
 
     info!("==============================================");
-    info!("TL Monitor Server v{} - 支持普通服+专家服+管理员API", SERVER_VERSION);
+    info!(
+        "TL Monitor Server v{} - 支持普通服+专家服+管理员API",
+        SERVER_VERSION
+    );
     info!("==============================================");
 
     let config = match tl_monitor::server::config::load_config(CONFIG_PATH) {
@@ -633,16 +636,17 @@ async fn send_response(
         body
     );
 
-    if let Err(e) = tokio::io::AsyncWriteExt::write_all(&mut tokio::io::BufWriter::new(stream), response.as_bytes()).await {
+    if let Err(e) = tokio::io::AsyncWriteExt::write_all(
+        &mut tokio::io::BufWriter::new(stream),
+        response.as_bytes(),
+    )
+    .await
+    {
         warn!("发送响应失败: {}", e);
     }
 }
 
-async fn send_error_response(
-    stream: tokio::net::TcpStream,
-    status: u16,
-    message: &str,
-) {
+async fn send_error_response(stream: tokio::net::TcpStream, status: u16, message: &str) {
     let response = format!(
         "HTTP/1.1 {} {}\r\n\
         Content-Type: text/plain\r\n\
@@ -655,7 +659,12 @@ async fn send_error_response(
         message
     );
 
-    if let Err(e) = tokio::io::AsyncWriteExt::write_all(&mut tokio::io::BufWriter::new(stream), response.as_bytes()).await {
+    if let Err(e) = tokio::io::AsyncWriteExt::write_all(
+        &mut tokio::io::BufWriter::new(stream),
+        response.as_bytes(),
+    )
+    .await
+    {
         warn!("发送错误响应失败: {}", e);
     }
 }

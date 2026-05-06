@@ -276,9 +276,8 @@ pub async fn get_items_price_compare(
         day_filter
     );
 
-    let season_start = |season_id: &str| -> i64 {
-        get_const_season_start(season_id).unwrap_or(1776384000)
-    };
+    let season_start =
+        |season_id: &str| -> i64 { get_const_season_start(season_id).unwrap_or(1776384000) };
 
     let (day_start, day_end) = if let Some(day) = day_filter {
         let start = season_start(history_season) + (((day - 1) as i64) * SECONDS_PER_DAY);

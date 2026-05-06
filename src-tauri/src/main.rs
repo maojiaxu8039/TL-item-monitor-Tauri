@@ -27,12 +27,17 @@ fn main() {
             "Unknown panic".to_string()
         };
 
-        let location = panic_info.location()
+        let location = panic_info
+            .location()
             .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
             .unwrap_or_else(|| "unknown".to_string());
 
-        let error_msg = format!("PANIC at {}: {}\nBacktrace:\n{:?}",
-            location, msg, std::backtrace::Backtrace::capture());
+        let error_msg = format!(
+            "PANIC at {}: {}\nBacktrace:\n{:?}",
+            location,
+            msg,
+            std::backtrace::Backtrace::capture()
+        );
 
         eprintln!("{}", error_msg);
 
@@ -51,7 +56,10 @@ fn main() {
 }
 
 fn run_app() -> Result<(), Box<dyn std::error::Error>> {
-    info!("TL Monitor v{} starting...", tl_monitor::core::constants::APP_VERSION);
+    info!(
+        "TL Monitor v{} starting...",
+        tl_monitor::core::constants::APP_VERSION
+    );
 
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| format!("Failed to create Tokio runtime: {}", e))?;

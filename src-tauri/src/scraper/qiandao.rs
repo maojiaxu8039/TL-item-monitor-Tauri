@@ -105,42 +105,67 @@ async fn scrape_via_rust(mode: &str) -> Result<FirePriceSnapshot, AppError> {
 
 /// Node.js native HTTP/2 implementation.
 async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppError> {
-    let possible_paths = [
-        std::path::PathBuf::from(option_env!("CARGO_MANIFEST_DIR").unwrap_or("."))
-            .join("resources/qiandao_fire.mjs"),
-        std::env::current_exe()
-            .ok()
-            .and_then(|exe| exe.parent().map(|p| p.join("resources/qiandao_fire.mjs")))
-            .unwrap_or_default(),
-        std::env::current_exe()
-            .ok()
-            .and_then(|exe| {
-                exe.parent()
-                    .and_then(|p| p.parent())
-                    .map(|p| p.join("resources/qiandao_fire.mjs"))
-            })
-            .unwrap_or_default(),
-    ];
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_default();
 
-    let script_path = possible_paths
-        .iter()
-        .find(|p| p.exists())
-        .cloned()
-        .ok_or_else(|| {
-            let paths = possible_paths
-                .iter()
-                .map(|p| p.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
-            AppError::Scrape(format!("Node.js script not found. Tried paths: {}", paths))
-        })?;
+    let possible_executables = if cfg!(windows) {
+        vec![
+            exe_dir.join("resources/qiandao_fire.exe"),
+            exe_dir.join("qiandao_fire.exe"),
+        ]
+    } else {
+        vec![
+            exe_dir.join("resources/qiandao_fire"),
+            exe_dir.join("qiandao_fire"),
+        ]
+    };
 
-    let output = tokio::process::Command::new("node")
-        .arg(&script_path)
-        .arg(if mode == "专家" { "pro" } else { "normal" })
-        .output()
-        .await
-        .map_err(|e| AppError::Scrape(format!("Node.js execution failed: {}", e)))?;
+    let possible_script = std::path::PathBuf::from(option_env!("CARGO_MANIFEST_DIR").unwrap_or("."))
+        .join("resources/qiandao_fire.mjs");
+
+    let script_path = {
+        let mut paths = possible_executables.clone();
+        if possible_script.exists() {
+            paths.push(possible_script);
+        }
+
+        paths
+            .iter()
+            .find(|p| p.exists())
+            .cloned()
+            .ok_or_else(|| {
+                let paths_str = possible_executables
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                AppError::Scrape(format!(
+                    "Node.js script not found. Tried: {}",
+                    paths_str
+                ))
+            })?
+    };
+
+    let use_executable = script_path.extension().is_none()
+        || script_path.to_string_lossy().ends_with(".exe")
+        || script_path.to_string_lossy().ends_with("_fire");
+
+    let output = if use_executable {
+        tokio::process::Command::new(&script_path)
+            .arg(if mode == "专家" { "pro" } else { "normal" })
+            .output()
+            .await
+            .map_err(|e| AppError::Scrape(format!("Script execution failed: {}", e)))?
+    } else {
+        tokio::process::Command::new("node")
+            .arg(&script_path)
+            .arg(if mode == "专家" { "pro" } else { "normal" })
+            .output()
+            .await
+            .map_err(|e| AppError::Scrape(format!("Node.js execution failed: {}", e)))?
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
