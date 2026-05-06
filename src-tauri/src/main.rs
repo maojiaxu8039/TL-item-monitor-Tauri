@@ -11,7 +11,14 @@ use tl_monitor::commands::*;
 use tl_monitor::tray::setup_tray;
 
 fn main() {
-    std::panic::set_hook(Box::new(|panic_info| {
+    let exe_path = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+
+    let panic_log_path = exe_path.clone();
+
+    std::panic::set_hook(Box::new(move |panic_info| {
         let msg = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
             s.to_string()
         } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
@@ -29,19 +36,15 @@ fn main() {
 
         eprintln!("{}", error_msg);
 
-        if let Ok(log_dir) = std::env::current_dir() {
-            let crash_log = log_dir.join("crash.log");
-            let _ = std::fs::write(&crash_log, &error_msg);
-        }
+        let crash_log = panic_log_path.join("crash.log");
+        let _ = std::fs::write(&crash_log, &error_msg);
     }));
 
     if let Err(e) = run_app() {
         eprintln!("Application failed to start: {}", e);
 
-        if let Ok(log_dir) = std::env::current_dir() {
-            let error_log = log_dir.join("startup_error.log");
-            let _ = std::fs::write(&error_log, format!("{}", e));
-        }
+        let error_log = exe_path.join("startup_error.log");
+        let _ = std::fs::write(&error_log, format!("{}", e));
 
         std::process::exit(1);
     }
