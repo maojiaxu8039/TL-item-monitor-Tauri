@@ -46,7 +46,7 @@ pub async fn scrape_items(season_id: &str, market_mode: &str) -> Result<Vec<Item
     let season_num = match season_num {
         Some(n) if n >= 11 => n,
         _ => {
-            tracing::warn!("Unknown season_id '{}', defaulting to ss12", season_id);
+            tracing::warn!("Unknown season '{}', defaulting to ss12", season_id);
             12
         }
     };

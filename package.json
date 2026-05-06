@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build",
+    "build": "tauri build --bundles app",
+    "build:dmg": "tauri build --bundles dmg",
+    "build:all": "tauri build",
     "debug": "RUST_BACKTRACE=1 cargo test",
     "vite:dev": "vite",
     "vite:build": "vite build",

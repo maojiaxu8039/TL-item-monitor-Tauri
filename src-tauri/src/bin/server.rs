@@ -599,17 +599,42 @@ fn get_query_param(request: &str, param: &str) -> Option<String> {
     for line in request.lines() {
         if line.starts_with("GET") {
             if let Some(query_start) = line.find('?') {
-                let query = &line[query_start + 1..];
+                let query = &line[query_start + 1..line.find(' ').unwrap_or(query_start)];
                 for pair in query.split('&') {
-                    let kv: Vec<&str> = pair.split('=').collect();
-                    if kv.len() == 2 && kv[0] == param {
-                        return Some(kv[1].to_string());
+                    let kv: Vec<&str> = pair.splitn(2, '=').collect();
+                    if kv.len() >= 1 && kv[0] == param {
+                        let value = kv.get(1).unwrap_or(&"");
+                        let decoded = urlencoding_decode(value);
+                        return Some(decoded);
                     }
                 }
             }
         }
     }
     None
+}
+
+fn urlencoding_decode(s: &str) -> String {
+    let mut result = String::new();
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let hex: String = chars.by_ref().take(2).collect();
+            if hex.len() == 2 {
+                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                    result.push(byte as char);
+                    continue;
+                }
+            }
+            result.push('%');
+            result.push_str(&hex);
+        } else if c == '+' {
+            result.push(' ');
+        } else {
+            result.push(c);
+        }
+    }
+    result
 }
 
 fn get_next_collection_time() -> Option<i64> {

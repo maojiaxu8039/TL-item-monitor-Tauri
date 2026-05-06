@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TL Monitor Web Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2.5rem;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .card h2 {
+            color: #333;
+            margin-bottom: 16px;
+            font-size: 1.5rem;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .stat-card h3 {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 8px;
+            transition: transform 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        .data-display {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 16px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .data-display pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .item-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .item-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px;
+            border-left: 4px solid #667eea;
+        }
+        .item-card h4 {
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .item-card p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .price {
+            color: #667eea;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔥 TL Monitor Web Test</h1>
+        
+        <div class="card">
+            <h2>📊 Dashboard</h2>
+            <div class="stats-grid" id="dashboard-stats">
+                <div class="stat-card">
+                    <h3>当前赛季</h3>
+                    <div class="value" id="season-id">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>当前火价</h3>
+                    <div class="value" id="fire-price">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>监控物品</h3>
+                    <div class="value" id="item-count">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>涨跌幅度</h3>
+                    <div class="value" id="fire-change">-</div>
+                </div>
+            </div>
+            <button class="btn" onclick="loadDashboard()">刷新 Dashboard</button>
+        </div>
+
+        <div class="card">
+            <h2>🔥 火价历史</h2>
+            <div>
+                <button class="btn" onclick="loadFireHistory(12)">12小时</button>
+                <button class="btn" onclick="loadFireHistory(24)">24小时</button>
+                <button class="btn" onclick="loadFireHistory(72)">3天</button>
+                <button class="btn" onclick="loadFireHistory(168)">7天</button>
+                <button class="btn" onclick="loadFireHistoryAll()">全部</button>
+            </div>
+            <div class="data-display" id="fire-history">
+                <p class="loading">点击按钮加载数据</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📦 物品列表</h2>
+            <button class="btn" onclick="loadItems()">加载物品</button>
+            <div id="items-list" class="item-grid">
+                <p class="loading">点击按钮加载数据</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🔄 手动刷新</h2>
+            <button class="btn" onclick="refreshFire()">刷新火价</button>
+            <button class="btn" onclick="refreshItems()">刷新物品</button>
+            <div class="data-display" id="refresh-result"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api';
+
+        async function fetchData(endpoint) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.json();
+            } catch (error) {
+                console.error('Fetch error:', error);
+                return { error: error.message };
+            }
+        }
+
+        async function loadDashboard() {
+            const data = await fetchData('/dashboard');
+            if (data.error) {
+                document.getElementById('dashboard-stats').innerHTML = `<p style="color: red;">错误: ${data.error}</p>`;
+                return;
+            }
+            
+            document.getElementById('season-id').textContent = data.season_id;
+            document.getElementById('fire-price').textContent = data.current_fire_price.toFixed(2);
+            document.getElementById('item-count').textContent = data.item_count;
+            document.getElementById('fire-change').textContent = (data.fire_increase_ratio > 0 ? '+' : '') + data.fire_increase_ratio.toFixed(2) + '%';
+        }
+
+        async function loadFireHistory(hours) {
+            const data = await fetchData(`/fire/history?hours=${hours}`);
+            displayFireHistory(data, `${hours}小时`);
+        }
+
+        async function loadFireHistoryAll() {
+            const data = await fetchData('/fire/history/all');
+            displayFireHistory(data, '全部');
+        }
+
+        function displayFireHistory(data, label) {
+            const container = document.getElementById('fire-history');
+            if (data.error) {
+                container.innerHTML = `<p style="color: red;">错误: ${data.error}</p>`;
+                return;
+            }
+            
+            if (!Array.isArray(data) || data.length === 0) {
+                container.innerHTML = '<p class="loading">暂无数据</p>';
+                return;
+            }
+
+            const latest = data[data.length - 1];
+            const earliest = data[0];
+            const avgPrice = data.reduce((sum, r) => sum + r.rmb_per_10k_fire, 0) / data.length;
+            
+            container.innerHTML = `
+                <h3>${label} - 共 ${data.length} 条记录</h3>
+                <p>最新: ${latest.rmb_per_10k_fire.toFixed(2)} | 最早: ${earliest.rmb_per_10k_fire.toFixed(2)} | 平均: ${avgPrice.toFixed(2)}</p>
+                <pre>${JSON.stringify(data.slice(-5), null, 2)}</pre>
+                <p><small>显示最近5条记录</small></p>
+            `;
+        }
+
+        async function loadItems() {
+            const data = await fetchData('/items');
+            const container = document.getElementById('items-list');
+            
+            if (data.error) {
+                container.innerHTML = `<p style="color: red;">错误: ${data.error}</p>`;
+                return;
+            }
+            
+            if (!Array.isArray(data) || data.length === 0) {
+                container.innerHTML = '<p class="loading">暂无数据</p>';
+                return;
+            }
+
+            container.innerHTML = data.map(item => `
+                <div class="item-card">
+                    <h4>${item.name}</h4>
+                    <p>类型: ${item.item_type}</p>
+                    <p class="price">${item.price.toFixed(2)} 火</p>
+                    <p><small>ID: ${item.item_id}</small></p>
+                </div>
+            `).join('');
+        }
+
+        async function refreshFire() {
+            const result = await fetchData('/refresh/fire');
+            document.getElementById('refresh-result').innerHTML = `
+                <pre>${JSON.stringify(result, null, 2)}</pre>
+            `;
+            loadDashboard();
+        }
+
+        async function refreshItems() {
+            const result = await fetchData('/refresh/items');
+            document.getElementById('refresh-result').innerHTML = `
+                <pre>${JSON.stringify(result, null, 2)}</pre>
+            `;
+            loadItems();
+        }
+
+        // 页面加载时自动加载 Dashboard
+        loadDashboard();
+    </script>
+</body>
+</html>

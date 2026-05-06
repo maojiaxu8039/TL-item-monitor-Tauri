@@ -103,29 +103,41 @@ async fn add_column_if_missing(
     Ok(())
 }
 
+async fn get_all_seasons(pool: &SqlitePool) -> Result<Vec<String>, String> {
+    let rows: Vec<(String,)> = sqlx::query_as("SELECT id FROM seasons ORDER BY started_at DESC")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("查询赛季列表失败: {}", e))?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
+}
+
 /// 获取赛季开始时间戳（从数据库查询，失败时回退到硬编码）
 async fn get_season_start(pool: &SqlitePool, season_id: &str) -> i64 {
-    let started_at: Option<(i64,)> = sqlx::query_as("SELECT started_at FROM seasons WHERE id = ?")
-        .bind(season_id)
-        .fetch_optional(pool)
-        .await
-        .unwrap_or(None);
+    let started_at: Option<i64> = sqlx::query_scalar(
+        "SELECT started_at FROM seasons WHERE id = ?"
+    )
+    .bind(season_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
 
-    started_at
-        .map(|(ts,)| ts)
-        .unwrap_or_else(|| match season_id {
-            "ss12" => 1776384000,
-            "ss11" => 1768521600,
-            _ => 1776384000,
-        })
+    started_at.unwrap_or_else(|| match season_id {
+        "ss12" => 1776384000,
+        "ss11" => 1768521600,
+        _ => 1776384000,
+    })
 }
 
 /// 运行数据库迁移
 pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
     info!("执行数据库迁移...");
 
-    // 为每个赛季创建火价快照表（普通）
-    for season in ["ss12", "ss11"] {
+    let seasons = get_all_seasons(pool).await.unwrap_or_else(|_| {
+        vec!["ss12".to_string(), "ss11".to_string()]
+    });
+
+    for season in &seasons {
         let table = format!("fire_price_snapshots_{}_normal", season);
         sqlx::query(&format!(
             r#"
