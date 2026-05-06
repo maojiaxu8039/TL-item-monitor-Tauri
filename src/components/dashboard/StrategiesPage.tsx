@@ -370,12 +370,23 @@ export default function StrategiesPage() {
     return "text-gray-600";
   };
 
+  const guessCostType = (itemName: string, itemType: string): string => {
+    const name = itemName.toLowerCase();
+    const type = itemType.toLowerCase();
+    if (name.includes("回响") || type.includes("回响")) return "回响";
+    if (name.includes("信标") || type.includes("信标")) return "信标";
+    if (name.includes("探针") || type.includes("探针")) return "探针";
+    if (name.includes("罗盘") || name.includes("指南针") || type.includes("罗盘")) return "罗盘";
+    return "材料";
+  };
+
   const handleItemSelect = (item: ItemData) => {
     if (showCostDialog) {
       setCostForm({
         ...costForm,
         item_id: item.item_id,
         item_name: item.name,
+        cost_type: guessCostType(item.name, item.item_type),
       });
       setItemSearchResults([]);
     } else if (showOutputDialog) {
@@ -757,15 +768,6 @@ export default function StrategiesPage() {
             <button onClick={() => setShowCostDialog(null)} className="text-slate-400 hover:text-slate-600">✕</button>
           </div>
           <div className="p-5 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">成本类型</label>
-              <Select
-                value={costForm.cost_type}
-                onChange={(e) => setCostForm({ ...costForm, cost_type: e.target.value })}
-              >
-                {COST_TYPES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </Select>
-            </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">搜索物品</label>
               <div className="relative">
