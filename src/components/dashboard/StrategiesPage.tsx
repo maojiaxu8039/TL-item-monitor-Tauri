@@ -13,6 +13,8 @@ import {
   Layers,
   Zap,
   Search,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { cmd, StrategyWithCosts, ItemData } from "@/lib/commands";
 import { useToast } from "@/components/ui/Toast";
@@ -72,6 +74,7 @@ interface OutputForm {
 export default function StrategiesPage() {
   const { addToast } = useToast();
   const [strategies, setStrategies] = useState<StrategyWithCosts[]>([]);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -110,7 +113,8 @@ export default function StrategiesPage() {
   const loadStrategies = async () => {
     try {
       const data = await cmd.getAllStrategiesWithCosts();
-      setStrategies(data);
+      const sorted = [...data].sort((a, b) => b.profit_ratio - a.profit_ratio);
+      setStrategies(sorted);
     } catch (e) {
       console.error("Failed to load strategies:", e);
       addToast("error", "加载策略失败");
@@ -122,6 +126,18 @@ export default function StrategiesPage() {
   useEffect(() => {
     loadStrategies();
   }, []);
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
 
   const searchItems = async (keyword: string) => {
     if (!keyword.trim()) {
@@ -355,21 +371,6 @@ export default function StrategiesPage() {
     setItemSearchResults([]);
   };
 
-  const getLabelColor = (label: string) => {
-    switch (label) {
-      case "K8": return "bg-orange-100 text-orange-600";
-      case "U8": return "bg-purple-100 text-purple-600";
-      case "深空": return "bg-blue-100 text-blue-600";
-      default: return "bg-gray-100 text-gray-600";
-    }
-  };
-
-  const getProfitColor = (ratio: number) => {
-    if (ratio > 0) return "text-green-600";
-    if (ratio < 0) return "text-red-600";
-    return "text-gray-600";
-  };
-
   const guessCostType = (itemName: string, itemType: string): string => {
     const name = itemName.toLowerCase();
     const type = itemType.toLowerCase();
@@ -399,6 +400,21 @@ export default function StrategiesPage() {
     }
   };
 
+  const getLabelColor = (label: string) => {
+    switch (label) {
+      case "K8": return "bg-orange-100 text-orange-600";
+      case "U8": return "bg-purple-100 text-purple-600";
+      case "深空": return "bg-blue-100 text-blue-600";
+      default: return "bg-gray-100 text-gray-600";
+    }
+  };
+
+  const getProfitColor = (ratio: number) => {
+    if (ratio > 0) return "text-green-600";
+    if (ratio < 0) return "text-red-600";
+    return "text-gray-600";
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -415,7 +431,7 @@ export default function StrategiesPage() {
             <Shield className="w-5 h-5 text-blue-500" />
             策略收益分析
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">对比不同玩法的成本与产出</p>
+          <p className="text-xs text-slate-400 mt-0.5">按盈亏排序 · 点击展开详情</p>
         </div>
         <button
           onClick={() => { resetForm(); setShowCreateDialog(true); }}
@@ -433,193 +449,201 @@ export default function StrategiesPage() {
           <div className="text-xs text-slate-400">点击右上角"新建策略"开始分析</div>
         </div>
       ) : (
-        <div className="space-y-4">
-          {strategies.map((strategy) => (
-            <div key={strategy.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-              <div className="p-4 border-b border-slate-100">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="text-lg font-semibold text-slate-900">{strategy.name}</div>
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${getLabelColor(strategy.label)}`}>
-                      {strategy.label}
-                    </span>
-                    <span className="px-2 py-0.5 text-xs bg-slate-100 text-slate-600 rounded-full">
-                      {strategy.difficulty}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleRefreshPrices(strategy.id)}
-                      disabled={refreshing === strategy.id}
-                      className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
-                      title="刷新火价"
-                    >
-                      <RefreshCw className={`w-4 h-4 ${refreshing === strategy.id ? "animate-spin" : ""}`} />
-                    </button>
-                    <button
-                      onClick={() => handleEdit(strategy)}
-                      className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                      title="编辑策略"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(strategy.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                      title="删除策略"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-                {strategy.remark && (
-                  <div className="mt-2 text-sm text-slate-500">{strategy.remark}</div>
-                )}
-                <div className="mt-3 flex items-center gap-6">
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <Layers className="w-4 h-4 text-slate-400" />
-                    <span className="text-slate-500">输出值:</span>
-                    <span className="font-medium text-slate-700">{strategy.output_value.toFixed(0)}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <Shield className="w-4 h-4 text-slate-400" />
-                    <span className="text-slate-500">防御值:</span>
-                    <span className="font-medium text-slate-700">{strategy.defense_value.toFixed(0)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 grid grid-cols-2 gap-6">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
-                      <Zap className="w-4 h-4 text-red-500" />
-                      成本消耗
-                    </div>
-                    <button
-                      onClick={() => openCostDialog(strategy.id)}
-                      className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-0.5"
-                    >
-                      <Plus className="w-3 h-3" /> 添加
-                    </button>
-                  </div>
-                  {strategy.costs.length === 0 ? (
-                    <div className="text-sm text-slate-400 py-4 text-center border border-dashed border-slate-200 rounded-lg">
-                      暂无成本
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {strategy.costs.map((cost) => (
-                        <div key={cost.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-sm">
-                          <div className="flex items-center gap-2">
-                            <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded">
-                              {cost.cost_type}
-                            </span>
-                            <span className="text-slate-700">{cost.item_name || cost.item_id}</span>
-                            <span className="text-slate-400">×{cost.count}</span>
-                            {cost.is_realtime && (
-                              <span className="px-1 py-0.5 bg-green-100 text-green-600 text-xs rounded">
-                                实时
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-slate-600">
-                              {cost.total_fire.toFixed(1)} 火
-                            </span>
-                            <button
-                              onClick={() => handleDeleteCost(cost.id)}
-                              className="p-1 text-slate-400 hover:text-red-500"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-sm font-medium">
-                        <span className="text-slate-500">总计成本</span>
-                        <span className="text-red-600">{strategy.total_cost_fire.toFixed(1)} 火</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
-                      <TrendingUp className="w-4 h-4 text-green-500" />
-                      产出收益
-                    </div>
-                    <button
-                      onClick={() => openOutputDialog(strategy.id)}
-                      className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-0.5"
-                    >
-                      <Plus className="w-3 h-3" /> 添加
-                    </button>
-                  </div>
-                  {strategy.outputs.length === 0 ? (
-                    <div className="text-sm text-slate-400 py-4 text-center border border-dashed border-slate-200 rounded-lg">
-                      暂无产出
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {strategy.outputs.map((output) => (
-                        <div key={output.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-sm">
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-700">{output.item_name}</span>
-                            <span className="px-1 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
-                              {output.item_type}
-                            </span>
-                            <span className="text-slate-400">×{output.count}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-slate-600">
-                              {(output.realtime_value * output.count).toFixed(0)} 火
-                            </span>
-                            <button
-                              onClick={() => handleDeleteOutput(output.id)}
-                              className="p-1 text-slate-400 hover:text-red-500"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-sm font-medium">
-                        <span className="text-slate-500">预估总产出</span>
-                        <span className="text-green-600">{strategy.total_output_value.toFixed(0)} 火</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="px-4 py-3 bg-slate-50 border-t border-slate-100">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className="flex items-center gap-1.5">
-                      <DollarSign className="w-4 h-4 text-slate-400" />
-                      <span className="text-slate-500">盈亏:</span>
-                      <span className={`font-medium ${getProfitColor(strategy.profit_ratio)}`}>
-                        {strategy.profit_ratio >= 0 ? "+" : ""}{strategy.profit_ratio.toFixed(1)}%
+        <div className="space-y-2">
+          {strategies.map((strategy) => {
+            const isExpanded = expandedIds.has(strategy.id);
+            return (
+              <div key={strategy.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                <div
+                  className="p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                  onClick={() => toggleExpand(strategy.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-slate-400" />
+                      )}
+                      <div className="text-lg font-semibold text-slate-900">{strategy.name}</div>
+                      <span className={`px-2 py-0.5 text-xs rounded-full ${getLabelColor(strategy.label)}`}>
+                        {strategy.label}
+                      </span>
+                      <span className="px-2 py-0.5 text-xs bg-slate-100 text-slate-600 rounded-full">
+                        {strategy.difficulty}
                       </span>
                     </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1.5">
+                        <DollarSign className="w-4 h-4 text-slate-400" />
+                        <span className={`font-medium ${getProfitColor(strategy.profit_ratio)}`}>
+                          {strategy.profit_ratio >= 0 ? "+" : ""}{strategy.profit_ratio.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className={`flex items-center gap-1 text-sm font-medium ${getProfitColor(strategy.profit_ratio)}`}>
+                        {strategy.profit_ratio >= 0 ? (
+                          <TrendingUp className="w-4 h-4" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4" />
+                        )}
+                        <span>
+                          {strategy.total_output_value - strategy.total_cost_fire >= 0 ? "+" : ""}
+                          {(strategy.total_output_value - strategy.total_cost_fire).toFixed(0)} 火
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className={`flex items-center gap-1 text-sm font-medium ${getProfitColor(strategy.profit_ratio)}`}>
-                    {strategy.profit_ratio >= 0 ? (
-                      <TrendingUp className="w-4 h-4" />
-                    ) : (
-                      <TrendingDown className="w-4 h-4" />
-                    )}
-                    <span>
-                      {strategy.total_output_value - strategy.total_cost_fire >= 0 ? "+" : ""}
-                      {(strategy.total_output_value - strategy.total_cost_fire).toFixed(1)} 火
-                    </span>
+                  {strategy.remark && (
+                    <div className="mt-2 text-sm text-slate-500 ml-7">{strategy.remark}</div>
+                  )}
+                  <div className="mt-2 flex items-center gap-6 ml-7 text-xs text-slate-400">
+                    <span>成本: <span className="text-red-500">{strategy.total_cost_fire.toFixed(0)} 火</span></span>
+                    <span>产出: <span className="text-green-500">{strategy.total_output_value.toFixed(0)} 火</span></span>
                   </div>
                 </div>
+
+                {isExpanded && (
+                  <div className="border-t border-slate-100">
+                    <div className="p-4 grid grid-cols-2 gap-6">
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                            <Zap className="w-4 h-4 text-red-500" />
+                            成本消耗
+                          </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openCostDialog(strategy.id); }}
+                            className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-0.5"
+                          >
+                            <Plus className="w-3 h-3" /> 添加
+                          </button>
+                        </div>
+                        {strategy.costs.length === 0 ? (
+                          <div className="text-sm text-slate-400 py-4 text-center border border-dashed border-slate-200 rounded-lg">
+                            暂无成本
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {strategy.costs.map((cost) => (
+                              <div key={cost.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded">
+                                    {cost.cost_type}
+                                  </span>
+                                  <span className="text-slate-700">{cost.item_name || cost.item_id}</span>
+                                  <span className="text-slate-400">×{cost.count}</span>
+                                  {cost.is_realtime && (
+                                    <span className="px-1 py-0.5 bg-green-100 text-green-600 text-xs rounded">
+                                      实时
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-slate-600">
+                                    {cost.total_fire.toFixed(1)} 火
+                                  </span>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteCost(cost.id); }}
+                                    className="p-1 text-slate-400 hover:text-red-500"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                            <TrendingUp className="w-4 h-4 text-green-500" />
+                            产出收益
+                          </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openOutputDialog(strategy.id); }}
+                            className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-0.5"
+                          >
+                            <Plus className="w-3 h-3" /> 添加
+                          </button>
+                        </div>
+                        {strategy.outputs.length === 0 ? (
+                          <div className="text-sm text-slate-400 py-4 text-center border border-dashed border-slate-200 rounded-lg">
+                            暂无产出
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {strategy.outputs.map((output) => (
+                              <div key={output.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-slate-700">{output.item_name}</span>
+                                  <span className="px-1 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
+                                    {output.item_type}
+                                  </span>
+                                  <span className="text-slate-400">×{output.count}</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-slate-600">
+                                    {(output.realtime_value * output.count).toFixed(0)} 火
+                                  </span>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteOutput(output.id); }}
+                                    className="p-1 text-slate-400 hover:text-red-500"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-1.5 text-sm">
+                          <Layers className="w-4 h-4 text-slate-400" />
+                          <span className="text-slate-500">输出值:</span>
+                          <span className="font-medium text-slate-700">{strategy.output_value.toFixed(0)}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-sm">
+                          <Shield className="w-4 h-4 text-slate-400" />
+                          <span className="text-slate-500">防御值:</span>
+                          <span className="font-medium text-slate-700">{strategy.defense_value.toFixed(0)}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRefreshPrices(strategy.id); }}
+                          disabled={refreshing === strategy.id}
+                          className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                          title="刷新火价"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${refreshing === strategy.id ? "animate-spin" : ""}`} />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleEdit(strategy); }}
+                          className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="编辑策略"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(strategy.id); }}
+                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="删除策略"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
