@@ -42,6 +42,7 @@ anyhow = "1"
 dashmap = "6"
 csv = "1"
 base64 = "0.4"
+ring = "0.17"
 
 # Tracing / logging
 tracing = "0.1"

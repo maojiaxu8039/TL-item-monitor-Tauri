@@ -1,7 +1,10 @@
 use futures_util::{SinkExt, StreamExt};
+use ring::signature::Ed25519KeyPair;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::time::{Duration, Instant};
+use std::fs;
+use std::path::PathBuf;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize)]
@@ -49,6 +52,42 @@ struct GatewayFrame {
     done: bool,
 }
 
+#[derive(Debug, Deserialize)]
+struct DeviceIdentityFile {
+    #[serde(rename = "deviceId")]
+    device_id: String,
+    #[serde(rename = "publicKeyPem")]
+    public_key_pem: String,
+    #[serde(rename = "privateKeyPem")]
+    private_key_pem: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct DeviceAuthFile {
+    #[serde(rename = "deviceId")]
+    device_id: String,
+    tokens: std::collections::HashMap<String, DeviceAuthToken>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DeviceAuthToken {
+    token: String,
+    scopes: Vec<String>,
+}
+
+#[derive(Debug)]
+struct OpenClawDeviceAuth {
+    device_id: String,
+    public_key_pem: String,
+    private_key_pem: String,
+    operator_token: Option<String>,
+}
+
+const ED25519_SPKI_PREFIX: &[u8] = &[
+    0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
+];
+const OPERATOR_SCOPES: [&str; 2] = ["operator.read", "operator.write"];
+
 fn gateway_url_candidates(gateway_url: &str) -> Vec<String> {
     let mut url = gateway_url.trim().trim_end_matches('/').to_string();
 
@@ -65,6 +104,222 @@ fn gateway_url_candidates(gateway_url: &str) -> Vec<String> {
     }
 
     candidates
+}
+
+fn expand_home_path(path: &str) -> PathBuf {
+    if path == "~" || path.starts_with("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(path.trim_start_matches("~/"));
+        }
+    }
+
+    PathBuf::from(path)
+}
+
+fn openclaw_state_dir() -> Option<PathBuf> {
+    for key in ["OPENCLAW_STATE_DIR", "CLAWDBOT_STATE_DIR"] {
+        if let Some(value) = std::env::var_os(key).and_then(|value| value.into_string().ok()) {
+            let value = value.trim();
+            if !value.is_empty() {
+                return Some(expand_home_path(value));
+            }
+        }
+    }
+
+    let home = std::env::var_os("OPENCLAW_HOME")
+        .and_then(|value| value.into_string().ok())
+        .map(|value| expand_home_path(value.trim()))
+        .or_else(dirs::home_dir)?;
+
+    let openclaw = home.join(".openclaw");
+    if openclaw.exists() {
+        return Some(openclaw);
+    }
+
+    for legacy in [".clawdbot", ".moldbot", ".moltbot"] {
+        let candidate = home.join(legacy);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+
+    Some(openclaw)
+}
+
+fn is_local_gateway_url(url: &str) -> bool {
+    let without_scheme = url.split_once("://").map(|(_, rest)| rest).unwrap_or(url);
+    let authority = without_scheme
+        .split('/')
+        .next()
+        .unwrap_or_default()
+        .rsplit('@')
+        .next()
+        .unwrap_or_default()
+        .trim();
+
+    let host = if let Some(rest) = authority.strip_prefix('[') {
+        rest.split(']').next().unwrap_or_default()
+    } else {
+        authority.split(':').next().unwrap_or_default()
+    }
+    .trim()
+    .to_ascii_lowercase();
+
+    host == "localhost" || host == "::1" || host == "127.0.0.1" || host.starts_with("127.")
+}
+
+fn gateway_platform() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "darwin",
+        "windows" => "win32",
+        other => other,
+    }
+}
+
+fn scope_is_allowed(scopes: &[String], scope: &str) -> bool {
+    if scopes.iter().any(|item| item == "operator.admin") && scope.starts_with("operator.") {
+        return true;
+    }
+
+    if scope == "operator.read" && scopes.iter().any(|item| item == "operator.write") {
+        return true;
+    }
+
+    scopes.iter().any(|item| item == scope)
+}
+
+fn has_operator_chat_scopes(scopes: &[String]) -> bool {
+    OPERATOR_SCOPES
+        .iter()
+        .all(|scope| scope_is_allowed(scopes, scope))
+}
+
+fn load_openclaw_device_auth() -> Option<OpenClawDeviceAuth> {
+    let state_dir = openclaw_state_dir()?;
+    let identity_path = state_dir.join("identity").join("device.json");
+    let identity = fs::read_to_string(identity_path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<DeviceIdentityFile>(&raw).ok())?;
+
+    let auth_path = state_dir.join("identity").join("device-auth.json");
+    let operator_token = fs::read_to_string(auth_path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<DeviceAuthFile>(&raw).ok())
+        .and_then(|auth| {
+            if auth.device_id != identity.device_id {
+                return None;
+            }
+
+            let token = auth.tokens.get("operator")?;
+            if has_operator_chat_scopes(&token.scopes) {
+                Some(token.token.clone())
+            } else {
+                None
+            }
+        });
+
+    Some(OpenClawDeviceAuth {
+        device_id: identity.device_id,
+        public_key_pem: identity.public_key_pem,
+        private_key_pem: identity.private_key_pem,
+        operator_token,
+    })
+}
+
+fn pem_to_der(pem: &str) -> Result<Vec<u8>, String> {
+    let body: String = pem
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.starts_with("-----") && !line.is_empty())
+        .collect();
+
+    base64::decode(&body).map_err(|e| format!("PEM解码失败: {}", e))
+}
+
+fn base64_url_encode(bytes: &[u8]) -> String {
+    base64::encode(bytes)
+        .replace('+', "-")
+        .replace('/', "_")
+        .trim_end_matches('=')
+        .to_string()
+}
+
+fn public_key_raw_base64url_from_pem(public_key_pem: &str) -> Result<String, String> {
+    let der = pem_to_der(public_key_pem)?;
+    let raw = if der.len() == ED25519_SPKI_PREFIX.len() + 32 && der.starts_with(ED25519_SPKI_PREFIX)
+    {
+        &der[ED25519_SPKI_PREFIX.len()..]
+    } else {
+        der.as_slice()
+    };
+
+    Ok(base64_url_encode(raw))
+}
+
+fn sign_device_payload(private_key_pem: &str, payload: &str) -> Result<String, String> {
+    let der = pem_to_der(private_key_pem)?;
+    let key_pair = Ed25519KeyPair::from_pkcs8(&der)
+        .or_else(|_| Ed25519KeyPair::from_pkcs8_maybe_unchecked(&der))
+        .map_err(|_| "设备私钥格式无效，无法生成OpenClaw签名".to_string())?;
+
+    Ok(base64_url_encode(
+        key_pair.sign(payload.as_bytes()).as_ref(),
+    ))
+}
+
+fn build_device_auth_payload(
+    device_id: &str,
+    client_id: &str,
+    client_mode: &str,
+    role: &str,
+    scopes: &[&str],
+    signed_at_ms: i64,
+    token: &str,
+    nonce: &str,
+) -> String {
+    let joined_scopes = scopes.join(",");
+    let signed_at_text = signed_at_ms.to_string();
+
+    [
+        "v2",
+        device_id,
+        client_id,
+        client_mode,
+        role,
+        joined_scopes.as_str(),
+        signed_at_text.as_str(),
+        token,
+        nonce,
+    ]
+    .join("|")
+}
+
+fn signed_gateway_device_json(
+    device_auth: &OpenClawDeviceAuth,
+    auth_token: &str,
+    nonce: &str,
+    signed_at_ms: i64,
+) -> Result<Value, String> {
+    let payload = build_device_auth_payload(
+        &device_auth.device_id,
+        "gateway-client",
+        "backend",
+        "operator",
+        &OPERATOR_SCOPES,
+        signed_at_ms,
+        auth_token,
+        nonce,
+    );
+    let signature = sign_device_payload(&device_auth.private_key_pem, &payload)?;
+    let public_key = public_key_raw_base64url_from_pem(&device_auth.public_key_pem)?;
+
+    Ok(json!({
+        "id": device_auth.device_id,
+        "publicKey": public_key,
+        "signature": signature,
+        "signedAt": signed_at_ms,
+        "nonce": nonce
+    }))
 }
 
 fn string_at_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a str> {
@@ -404,6 +659,19 @@ pub async fn openclaw_chat(
     println!("[OpenClaw] Connected successfully: {}", url);
 
     let (mut write, mut read) = ws.split();
+    let gateway_token = gateway_token.trim().to_string();
+    let local_device_auth = if is_local_gateway_url(&url) {
+        load_openclaw_device_auth()
+    } else {
+        None
+    };
+    if let Some(device_auth) = local_device_auth.as_ref() {
+        println!(
+            "[OpenClaw] Loaded local device identity: {}, operator token: {}",
+            device_auth.device_id,
+            device_auth.operator_token.is_some()
+        );
+    }
 
     let challenge_timeout = Duration::from_secs(5);
     let start_time = Instant::now();
@@ -426,28 +694,69 @@ pub async fn openclaw_chat(
                             println!("[OpenClaw] Got challenge, nonce: {}", event.payload.nonce);
 
                             let connect_id = Uuid::new_v4().to_string();
+                            let mut connect_params = json!({
+                                "minProtocol": 3,
+                                "maxProtocol": 3,
+                                "client": {
+                                    "id": "gateway-client",
+                                    "displayName": "TL Item Monitor",
+                                    "version": "tl-monitor-tauri",
+                                    "platform": gateway_platform(),
+                                    "mode": "backend"
+                                },
+                                "role": "operator",
+                                "scopes": OPERATOR_SCOPES,
+                                "caps": ["tool-events"],
+                                "userAgent": "tl-monitor-tauri",
+                                "locale": "zh-CN"
+                            });
+
+                            let mut signed_device_added = false;
+                            if let Some(device_auth) = local_device_auth.as_ref() {
+                                let auth_token = device_auth
+                                    .operator_token
+                                    .as_deref()
+                                    .unwrap_or(gateway_token.as_str());
+                                let signed_at_ms = SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .map(|duration| duration.as_millis() as i64)
+                                    .unwrap_or(0);
+
+                                match signed_gateway_device_json(
+                                    device_auth,
+                                    auth_token,
+                                    &event.payload.nonce,
+                                    signed_at_ms,
+                                ) {
+                                    Ok(device) => {
+                                        connect_params["device"] = device;
+                                        signed_device_added = true;
+
+                                        if let Some(device_token) =
+                                            device_auth.operator_token.as_deref()
+                                        {
+                                            connect_params["auth"] =
+                                                json!({ "deviceToken": device_token });
+                                        } else if !gateway_token.is_empty() {
+                                            connect_params["auth"] =
+                                                json!({ "token": gateway_token.as_str() });
+                                        }
+                                    }
+                                    Err(e) => {
+                                        println!("[OpenClaw] Device auth signing failed: {}", e);
+                                    }
+                                }
+                            }
+
+                            if !signed_device_added && !gateway_token.is_empty() {
+                                connect_params["auth"] = json!({ "token": gateway_token.as_str() });
+                            }
+
                             let connect_request = json!({
                                 "type": "req",
                                 "id": connect_id,
                                 "method": "connect",
-                                "params": {
-                                    "minProtocol": 3,
-                                    "maxProtocol": 3,
-                                    "client": {
-                                        "id": "gateway-client",
-                                        "version": "tl-monitor-tauri",
-                                        "platform": "tauri",
-                                        "mode": "backend"
-                                    },
-                                    "role": "operator",
-                                    "scopes": ["operator.read", "operator.write"],
-                                    "caps": ["tool-events"],
-                                    "auth": {
-                                        "token": gateway_token
-                                    },
-                                    "userAgent": "tl-monitor-tauri",
-                                    "locale": "zh-CN"
-                                }
+                                "params": connect_params
                             })
                             .to_string();
                             println!("[OpenClaw] Sending Gateway v3 connect...");
@@ -929,6 +1238,40 @@ mod tests {
         let message = explain_gateway_error("missing scope: operator.write");
         assert!(message.contains("operator.write"));
         assert!(message.contains("无法发起AI对话"));
+    }
+
+    #[test]
+    fn builds_gateway_device_auth_payload_v2() {
+        assert_eq!(
+            build_device_auth_payload(
+                "device-1",
+                "gateway-client",
+                "backend",
+                "operator",
+                &OPERATOR_SCOPES,
+                123,
+                "token-1",
+                "nonce-1",
+            ),
+            "v2|device-1|gateway-client|backend|operator|operator.read,operator.write|123|token-1|nonce-1"
+        );
+    }
+
+    #[test]
+    fn recognizes_loopback_gateway_urls() {
+        assert!(is_local_gateway_url("ws://127.0.0.1:18789"));
+        assert!(is_local_gateway_url("ws://localhost:18789/ws/chat"));
+        assert!(!is_local_gateway_url("wss://gateway.example.com/ws/chat"));
+    }
+
+    #[test]
+    fn operator_admin_satisfies_chat_scopes() {
+        assert!(has_operator_chat_scopes(&["operator.admin".to_string()]));
+        assert!(has_operator_chat_scopes(&[
+            "operator.read".to_string(),
+            "operator.write".to_string()
+        ]));
+        assert!(!has_operator_chat_scopes(&["operator.read".to_string()]));
     }
 
     #[test]
