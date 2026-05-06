@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build --bundles app",
+    "build": "tauri build",
     "build:dmg": "tauri build --bundles dmg",
     "build:all": "tauri build",
     "debug": "RUST_BACKTRACE=1 cargo test",
