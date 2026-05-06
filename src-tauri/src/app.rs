@@ -388,6 +388,14 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         )
         .await?;
     }
+    if current_version < 10 {
+        apply_sql_migration(
+            pool,
+            10,
+            include_str!("db/migrations/010_add_realtime_value_to_outputs.sql"),
+        )
+        .await?;
+    }
 
     // Ensure split tables exist (idempotent, handles cases where v3 migration
     // was marked as applied but tables weren't actually created)

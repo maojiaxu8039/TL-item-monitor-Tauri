@@ -37,6 +37,7 @@ pub struct StrategyOutput {
     pub item_type: String,
     pub count: f64,
     pub estimated_value: f64,
+    pub realtime_value: f64,
     pub remark: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,

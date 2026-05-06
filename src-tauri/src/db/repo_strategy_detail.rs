@@ -282,7 +282,7 @@ pub async fn get_strategy_with_costs(
     };
 
     let mut costs = get_strategy_costs(pool, strategy_id).await?;
-    let outputs = get_strategy_outputs(pool, strategy_id).await?;
+    let mut outputs = get_strategy_outputs(pool, strategy_id).await?;
 
     let mut total_cost_fire = 0.0;
     for cost in &mut costs {
@@ -295,12 +295,12 @@ pub async fn get_strategy_with_costs(
     }
 
     let mut total_output_value = 0.0;
-    for output in &outputs {
-        let current_price = get_item_fire_price_by_name(pool, &output.item_name).await.unwrap_or(output.estimated_value);
+    for output in &mut outputs {
+        let current_price = get_item_fire_price_by_name(pool, &output.item_name).await.unwrap_or(0.0);
+        output.realtime_value = current_price;
         total_output_value += current_price * output.count;
     }
 
-    let total_output_value = total_output_value;
     let profit_ratio = if total_cost_fire > 0.0 {
         (total_output_value - total_cost_fire) / total_cost_fire * 100.0
     } else {

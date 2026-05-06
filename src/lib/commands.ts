@@ -694,6 +694,7 @@ export interface StrategyOutput {
   item_type: string;
   count: number;
   estimated_value: number;
+  realtime_value: number;
   remark: string | null;
   created_at: number;
   updated_at: number;

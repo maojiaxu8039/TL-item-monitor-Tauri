@@ -563,7 +563,7 @@ export default function StrategiesPage() {
                           </div>
                           <div className="flex items-center gap-3">
                             <span className="text-slate-600">
-                              {(output.estimated_value * output.count).toFixed(0)} 火
+                              {(output.realtime_value * output.count).toFixed(0)} 火
                             </span>
                             <button
                               onClick={() => handleDeleteOutput(output.id)}
