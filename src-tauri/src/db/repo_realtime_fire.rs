@@ -1,3 +1,4 @@
+use crate::core::constants::{SECONDS_PER_HOUR, SECONDS_PER_MINUTE};
 use crate::core::errors::AppError;
 use crate::db::table_resolver::TableResolver;
 use chrono::Utc;
@@ -112,9 +113,7 @@ pub async fn get_realtime_fire_changes(
     let table = TableResolver::realtime_fire_prices_table();
     let now = Utc::now().timestamp();
 
-    let three_hours_ago = now - 3 * 3600;
-    let _one_hour_ago = now - 3600;
-    let _thirty_min_ago = now - 1800;
+    let three_hours_ago = now - 3 * SECONDS_PER_HOUR;
 
     let records: Vec<RealtimeFirePriceRecord> = sqlx::query_as(&format!(
         r#"
@@ -225,7 +224,7 @@ pub async fn get_realtime_fire_changes(
 
 pub async fn cleanup_old_records(pool: &SqlitePool) -> Result<usize, AppError> {
     let table = TableResolver::realtime_fire_prices_table();
-    let three_hours_ago = Utc::now().timestamp() - 3 * 3600;
+    let three_hours_ago = Utc::now().timestamp() - 3 * SECONDS_PER_HOUR;
 
     let result = sqlx::query(&format!(
         "DELETE FROM {} WHERE scraped_at < {}",
@@ -256,7 +255,7 @@ pub async fn seed_test_data(pool: &SqlitePool) -> Result<usize, AppError> {
 
     for (item_id, item_name, base_price) in &items {
         for minutes_ago in [180, 150, 120, 90, 60, 45, 30, 20, 15, 10, 8, 5, 4, 3, 2, 1] {
-            let scraped_at = now - (minutes_ago * 60);
+            let scraped_at = now - (minutes_ago as i64 * SECONDS_PER_MINUTE);
 
             let variation = if minutes_ago > 120 {
                 rng.gen_range(-0.15..0.20)

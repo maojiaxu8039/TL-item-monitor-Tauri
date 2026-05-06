@@ -592,7 +592,7 @@ async fn handle_request(
 
 fn get_origin_header(request: &str) -> Option<String> {
     for line in request.lines() {
-        if line.len() > 7 && (&line[..7]).eq_ignore_ascii_case("origin:") {
+        if line.len() > 7 && line[..7].eq_ignore_ascii_case("origin:") {
             return Some(line[7..].trim().to_string());
         }
     }
@@ -667,7 +667,7 @@ fn get_query_param(request: &str, param: &str) -> Option<String> {
                 let query = &line[query_start + 1..line.find(' ').unwrap_or(query_start)];
                 for pair in query.split('&') {
                     let kv: Vec<&str> = pair.splitn(2, '=').collect();
-                    if kv.len() >= 1 && kv[0] == param {
+                    if !kv.is_empty() && kv[0] == param {
                         let value = kv.get(1).unwrap_or(&"");
                         let decoded = urlencoding_decode(value);
                         return Some(decoded);

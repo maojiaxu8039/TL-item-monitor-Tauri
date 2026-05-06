@@ -30,7 +30,6 @@ pub async fn get_season_start(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::core::constants::calculate_season_day;
 
     #[test]

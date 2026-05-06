@@ -1,3 +1,4 @@
+use crate::core::constants::BATCH_SIZE_LARGE;
 use crate::db::models::Item;
 use crate::db::table_resolver::TableResolver;
 use sqlx::SqlitePool;
@@ -108,9 +109,8 @@ pub async fn bulk_insert_items(
     // Real-time tables don't have season suffix, but we pass season_id for consistency
     let table = TableResolver::items_table(season_id, market_mode);
     let mut tx = pool.begin().await?;
-    const BATCH_SIZE: usize = 100;
 
-    for chunk in items.chunks(BATCH_SIZE) {
+    for chunk in items.chunks(BATCH_SIZE_LARGE) {
         let mut qb: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
             sqlx::query_builder::QueryBuilder::new(
                 &format!("INSERT OR REPLACE INTO {} (item_id, name, item_type, source, price, last_time, updated_at) ", table)

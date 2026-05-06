@@ -122,7 +122,7 @@ async fn get_season_start(pool: &SqlitePool, season_id: &str) -> i64 {
     .ok()
     .flatten();
 
-    started_at.unwrap_or_else(|| match season_id {
+    started_at.unwrap_or(match season_id {
         "ss12" => 1776384000,
         "ss11" => 1768521600,
         _ => 1776384000,
