@@ -4,7 +4,6 @@ import {
   Plus,
   Trash2,
   Edit3,
-  Save,
   X,
   RefreshCw,
   TrendingUp,
@@ -13,8 +12,9 @@ import {
   Target,
   Layers,
   Zap,
+  Search,
 } from "lucide-react";
-import { cmd, StrategyWithCosts, CreateStrategyRequest, AddCostRequest, AddOutputRequest } from "@/lib/commands";
+import { cmd, StrategyWithCosts, ItemData } from "@/lib/commands";
 import { useToast } from "@/components/ui/Toast";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -24,8 +24,7 @@ const COST_TYPES = [
   { value: "回响", label: "回响" },
   { value: "信标", label: "信标" },
   { value: "探针", label: "探针" },
-  { value: "小罗盘", label: "小罗盘" },
-  { value: "大罗盘", label: "大罗盘" },
+  { value: "罗盘", label: "罗盘" },
   { value: "材料", label: "其他材料" },
 ];
 
@@ -45,6 +44,7 @@ const DIFFICULTIES = [
 ];
 
 interface EditStrategyForm {
+  id?: string;
   name: string;
   label: string;
   difficulty: string;
@@ -53,17 +53,36 @@ interface EditStrategyForm {
   remark: string;
 }
 
+interface CostForm {
+  strategy_id: string;
+  cost_type: string;
+  item_id: string;
+  item_name: string;
+  count: number;
+  is_realtime: boolean;
+}
+
+interface OutputForm {
+  strategy_id: string;
+  item_name: string;
+  item_type: string;
+  count: number;
+}
+
 export default function StrategiesPage() {
   const { addToast } = useToast();
   const [strategies, setStrategies] = useState<StrategyWithCosts[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [showCostDialog, setShowCostDialog] = useState<string | null>(null);
   const [showOutputDialog, setShowOutputDialog] = useState<string | null>(null);
-  const [editingStrategy, setEditingStrategy] = useState<StrategyWithCosts | null>(null);
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [itemSearchResults, setItemSearchResults] = useState<ItemData[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [currentFirePrice, setCurrentFirePrice] = useState<number>(0);
 
-  const [createForm, setCreateForm] = useState<EditStrategyForm>({
+  const [editForm, setEditForm] = useState<EditStrategyForm>({
     name: "",
     label: "K8",
     difficulty: "普通",
@@ -72,7 +91,8 @@ export default function StrategiesPage() {
     remark: "",
   });
 
-  const [costForm, setCostForm] = useState({
+  const [costForm, setCostForm] = useState<CostForm>({
+    strategy_id: "",
     cost_type: "回响",
     item_id: "",
     item_name: "",
@@ -80,12 +100,11 @@ export default function StrategiesPage() {
     is_realtime: true,
   });
 
-  const [outputForm, setOutputForm] = useState({
+  const [outputForm, setOutputForm] = useState<OutputForm>({
+    strategy_id: "",
     item_name: "",
     item_type: "",
     count: 1,
-    estimated_value: 0,
-    remark: "",
   });
 
   const loadStrategies = async () => {
@@ -104,34 +123,82 @@ export default function StrategiesPage() {
     loadStrategies();
   }, []);
 
+  const searchItems = async (keyword: string) => {
+    if (!keyword.trim()) {
+      setItemSearchResults([]);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const result = await cmd.searchItems(keyword, 1, 20);
+      setItemSearchResults(result.items);
+    } catch (e) {
+      console.error("Search failed:", e);
+      setItemSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
   const handleCreate = async () => {
-    if (!createForm.name.trim()) {
+    if (!editForm.name.trim()) {
       addToast("warning", "请输入策略名称");
       return;
     }
     try {
       await cmd.createStrategyDetail({
-        name: createForm.name,
-        label: createForm.label,
-        difficulty: createForm.difficulty,
-        output_value: createForm.output_value,
-        defense_value: createForm.defense_value,
-        remark: createForm.remark || null,
+        name: editForm.name,
+        label: editForm.label,
+        difficulty: editForm.difficulty,
+        output_value: editForm.output_value,
+        defense_value: editForm.defense_value,
+        remark: editForm.remark || null,
       });
       addToast("success", "策略创建成功");
       setShowCreateDialog(false);
-      setCreateForm({
-        name: "",
-        label: "K8",
-        difficulty: "普通",
-        output_value: 0,
-        defense_value: 0,
-        remark: "",
-      });
+      resetForm();
       loadStrategies();
     } catch (e) {
       console.error("Failed to create strategy:", e);
-      addToast("error", "创建策略失败");
+      addToast("error", `创建策略失败: ${e}`);
+    }
+  };
+
+  const handleEdit = (strategy: StrategyWithCosts) => {
+    setEditForm({
+      id: strategy.id,
+      name: strategy.name,
+      label: strategy.label,
+      difficulty: strategy.difficulty,
+      output_value: strategy.output_value,
+      defense_value: strategy.defense_value,
+      remark: strategy.remark || "",
+    });
+    setShowEditDialog(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!editForm.id || !editForm.name.trim()) {
+      addToast("warning", "请输入策略名称");
+      return;
+    }
+    try {
+      await cmd.updateStrategyDetail({
+        id: editForm.id,
+        name: editForm.name,
+        label: editForm.label,
+        difficulty: editForm.difficulty,
+        output_value: editForm.output_value,
+        defense_value: editForm.defense_value,
+        remark: editForm.remark || null,
+      });
+      addToast("success", "策略更新成功");
+      setShowEditDialog(false);
+      resetForm();
+      loadStrategies();
+    } catch (e) {
+      console.error("Failed to update strategy:", e);
+      addToast("error", `更新策略失败: ${e}`);
     }
   };
 
@@ -147,23 +214,23 @@ export default function StrategiesPage() {
     }
   };
 
-  const handleAddCost = async (strategyId: string) => {
+  const handleAddCost = async () => {
     if (!costForm.item_id.trim() && !costForm.item_name.trim()) {
-      addToast("warning", "请输入物品ID或名称");
+      addToast("warning", "请选择或输入物品");
       return;
     }
     try {
       await cmd.addStrategyCost({
-        strategy_id: strategyId,
+        strategy_id: costForm.strategy_id,
         cost_type: costForm.cost_type,
-        item_id: costForm.item_id || costForm.item_name,
+        item_id: costForm.item_id,
         item_name: costForm.item_name || null,
         count: costForm.count,
         is_realtime: costForm.is_realtime,
       });
       addToast("success", "成本添加成功");
       setShowCostDialog(null);
-      setCostForm({ cost_type: "回响", item_id: "", item_name: "", count: 1, is_realtime: true });
+      resetCostForm();
       loadStrategies();
     } catch (e) {
       console.error("Failed to add cost:", e);
@@ -171,23 +238,23 @@ export default function StrategiesPage() {
     }
   };
 
-  const handleAddOutput = async (strategyId: string) => {
+  const handleAddOutput = async () => {
     if (!outputForm.item_name.trim()) {
-      addToast("warning", "请输入物品名称");
+      addToast("warning", "请选择物品");
       return;
     }
     try {
       await cmd.addStrategyOutput({
-        strategy_id: strategyId,
+        strategy_id: outputForm.strategy_id,
         item_name: outputForm.item_name,
         item_type: outputForm.item_type,
         count: outputForm.count,
-        estimated_value: outputForm.estimated_value,
-        remark: outputForm.remark || null,
+        estimated_value: 0,
+        remark: null,
       });
       addToast("success", "产出添加成功");
       setShowOutputDialog(null);
-      setOutputForm({ item_name: "", item_type: "", count: 1, estimated_value: 0, remark: "" });
+      resetOutputForm();
       loadStrategies();
     } catch (e) {
       console.error("Failed to add output:", e);
@@ -231,6 +298,63 @@ export default function StrategiesPage() {
     }
   };
 
+  const openCostDialog = (strategyId: string) => {
+    setCostForm({
+      strategy_id: strategyId,
+      cost_type: "回响",
+      item_id: "",
+      item_name: "",
+      count: 1,
+      is_realtime: true,
+    });
+    setItemSearchResults([]);
+    setShowCostDialog(strategyId);
+  };
+
+  const openOutputDialog = (strategyId: string) => {
+    setOutputForm({
+      strategy_id: strategyId,
+      item_name: "",
+      item_type: "",
+      count: 1,
+    });
+    setItemSearchResults([]);
+    setShowOutputDialog(strategyId);
+  };
+
+  const resetForm = () => {
+    setEditForm({
+      name: "",
+      label: "K8",
+      difficulty: "普通",
+      output_value: 0,
+      defense_value: 0,
+      remark: "",
+    });
+  };
+
+  const resetCostForm = () => {
+    setCostForm({
+      strategy_id: "",
+      cost_type: "回响",
+      item_id: "",
+      item_name: "",
+      count: 1,
+      is_realtime: true,
+    });
+    setItemSearchResults([]);
+  };
+
+  const resetOutputForm = () => {
+    setOutputForm({
+      strategy_id: "",
+      item_name: "",
+      item_type: "",
+      count: 1,
+    });
+    setItemSearchResults([]);
+  };
+
   const getLabelColor = (label: string) => {
     switch (label) {
       case "K8": return "bg-orange-100 text-orange-600";
@@ -244,6 +368,24 @@ export default function StrategiesPage() {
     if (ratio > 0) return "text-green-600";
     if (ratio < 0) return "text-red-600";
     return "text-gray-600";
+  };
+
+  const handleItemSelect = (item: ItemData) => {
+    if (showCostDialog) {
+      setCostForm({
+        ...costForm,
+        item_id: item.item_id,
+        item_name: item.name,
+      });
+      setItemSearchResults([]);
+    } else if (showOutputDialog) {
+      setOutputForm({
+        ...outputForm,
+        item_name: item.name,
+        item_type: item.item_type,
+      });
+      setItemSearchResults([]);
+    }
   };
 
   if (loading) {
@@ -265,7 +407,7 @@ export default function StrategiesPage() {
           <p className="text-xs text-slate-400 mt-0.5">对比不同玩法的成本与产出</p>
         </div>
         <button
-          onClick={() => setShowCreateDialog(true)}
+          onClick={() => { resetForm(); setShowCreateDialog(true); }}
           className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -304,6 +446,13 @@ export default function StrategiesPage() {
                       <RefreshCw className={`w-4 h-4 ${refreshing === strategy.id ? "animate-spin" : ""}`} />
                     </button>
                     <button
+                      onClick={() => handleEdit(strategy)}
+                      className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="编辑策略"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => handleDelete(strategy.id)}
                       className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                       title="删除策略"
@@ -337,7 +486,7 @@ export default function StrategiesPage() {
                       成本消耗
                     </div>
                     <button
-                      onClick={() => setShowCostDialog(strategy.id)}
+                      onClick={() => openCostDialog(strategy.id)}
                       className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-0.5"
                     >
                       <Plus className="w-3 h-3" /> 添加
@@ -391,7 +540,7 @@ export default function StrategiesPage() {
                       产出收益
                     </div>
                     <button
-                      onClick={() => setShowOutputDialog(strategy.id)}
+                      onClick={() => openOutputDialog(strategy.id)}
                       className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-0.5"
                     >
                       <Plus className="w-3 h-3" /> 添加
@@ -407,11 +556,14 @@ export default function StrategiesPage() {
                         <div key={output.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-sm">
                           <div className="flex items-center gap-2">
                             <span className="text-slate-700">{output.item_name}</span>
+                            <span className="px-1 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
+                              {output.item_type}
+                            </span>
                             <span className="text-slate-400">×{output.count}</span>
                           </div>
                           <div className="flex items-center gap-3">
                             <span className="text-slate-600">
-                              {(output.estimated_value * output.count).toFixed(0)} 元
+                              {(output.estimated_value * output.count).toFixed(0)} 火
                             </span>
                             <button
                               onClick={() => handleDeleteOutput(output.id)}
@@ -424,7 +576,7 @@ export default function StrategiesPage() {
                       ))}
                       <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-sm font-medium">
                         <span className="text-slate-500">预估总产出</span>
-                        <span className="text-green-600">{strategy.total_output_value.toFixed(0)} 元</span>
+                        <span className="text-green-600">{strategy.total_output_value.toFixed(0)} 火</span>
                       </div>
                     </div>
                   )}
@@ -470,8 +622,8 @@ export default function StrategiesPage() {
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">策略名称</label>
               <Input
-                value={createForm.name}
-                onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                 placeholder="例如: K8回响流"
               />
             </div>
@@ -479,8 +631,8 @@ export default function StrategiesPage() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">标签</label>
                 <Select
-                  value={createForm.label}
-                  onChange={(e) => setCreateForm({ ...createForm, label: e.target.value })}
+                  value={editForm.label}
+                  onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
                 >
                   {LABELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
                 </Select>
@@ -488,8 +640,8 @@ export default function StrategiesPage() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">难度</label>
                 <Select
-                  value={createForm.difficulty}
-                  onChange={(e) => setCreateForm({ ...createForm, difficulty: e.target.value })}
+                  value={editForm.difficulty}
+                  onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}
                 >
                   {DIFFICULTIES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
                 </Select>
@@ -500,24 +652,24 @@ export default function StrategiesPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">输出值</label>
                 <Input
                   type="number"
-                  value={createForm.output_value}
-                  onChange={(e) => setCreateForm({ ...createForm, output_value: parseFloat(e.target.value) || 0 })}
+                  value={editForm.output_value}
+                  onChange={(e) => setEditForm({ ...editForm, output_value: parseFloat(e.target.value) || 0 })}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">防御值</label>
                 <Input
                   type="number"
-                  value={createForm.defense_value}
-                  onChange={(e) => setCreateForm({ ...createForm, defense_value: parseFloat(e.target.value) || 0 })}
+                  value={editForm.defense_value}
+                  onChange={(e) => setEditForm({ ...editForm, defense_value: parseFloat(e.target.value) || 0 })}
                 />
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">备注</label>
               <Input
-                value={createForm.remark}
-                onChange={(e) => setCreateForm({ ...createForm, remark: e.target.value })}
+                value={editForm.remark}
+                onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })}
                 placeholder="可选备注信息"
               />
             </div>
@@ -529,7 +681,76 @@ export default function StrategiesPage() {
         </div>
       </Dialog>
 
-      <Dialog open={!!showCostDialog} onOpenChange={() => setShowCostDialog(null)}>
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <h3 className="text-sm font-semibold text-slate-800">编辑策略</h3>
+            <button onClick={() => setShowEditDialog(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+          </div>
+          <div className="p-5 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">策略名称</label>
+              <Input
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                placeholder="例如: K8回响流"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">标签</label>
+                <Select
+                  value={editForm.label}
+                  onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
+                >
+                  {LABELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                </Select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">难度</label>
+                <Select
+                  value={editForm.difficulty}
+                  onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}
+                >
+                  {DIFFICULTIES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">输出值</label>
+                <Input
+                  type="number"
+                  value={editForm.output_value}
+                  onChange={(e) => setEditForm({ ...editForm, output_value: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">防御值</label>
+                <Input
+                  type="number"
+                  value={editForm.defense_value}
+                  onChange={(e) => setEditForm({ ...editForm, defense_value: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">备注</label>
+              <Input
+                value={editForm.remark}
+                onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })}
+                placeholder="可选备注信息"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
+            <button onClick={() => setShowEditDialog(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg">取消</button>
+            <button onClick={handleUpdate} className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600">保存</button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog open={!!showCostDialog} onOpenChange={() => { setShowCostDialog(null); setItemSearchResults([]); }}>
         <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
             <h3 className="text-sm font-semibold text-slate-800">添加成本</h3>
@@ -546,12 +767,32 @@ export default function StrategiesPage() {
               </Select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">物品ID/名称</label>
-              <Input
-                value={costForm.item_id}
-                onChange={(e) => setCostForm({ ...costForm, item_id: e.target.value, item_name: e.target.value })}
-                placeholder="例如: 回响"
-              />
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">搜索物品</label>
+              <div className="relative">
+                <Input
+                  value={costForm.item_name}
+                  onChange={(e) => {
+                    setCostForm({ ...costForm, item_id: "", item_name: e.target.value });
+                    searchItems(e.target.value);
+                  }}
+                  placeholder="输入物品名称搜索"
+                />
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              </div>
+              {itemSearchResults.length > 0 && (
+                <div className="mt-2 max-h-40 overflow-y-auto border border-slate-200 rounded-lg">
+                  {itemSearchResults.map((item) => (
+                    <div
+                      key={item.item_id}
+                      onClick={() => handleItemSelect(item)}
+                      className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-b-0"
+                    >
+                      <div className="text-slate-700">{item.name}</div>
+                      <div className="text-xs text-slate-400">{item.item_type} - {item.price.toFixed(0)} 火</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">数量</label>
@@ -573,12 +814,12 @@ export default function StrategiesPage() {
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
             <button onClick={() => setShowCostDialog(null)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg">取消</button>
-            <button onClick={() => showCostDialog && handleAddCost(showCostDialog)} className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600">添加</button>
+            <button onClick={handleAddCost} className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600">添加</button>
           </div>
         </div>
       </Dialog>
 
-      <Dialog open={!!showOutputDialog} onOpenChange={() => setShowOutputDialog(null)}>
+      <Dialog open={!!showOutputDialog} onOpenChange={() => { setShowOutputDialog(null); setItemSearchResults([]); }}>
         <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
             <h3 className="text-sm font-semibold text-slate-800">添加产出</h3>
@@ -586,51 +827,54 @@ export default function StrategiesPage() {
           </div>
           <div className="p-5 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">物品名称</label>
-              <Input
-                value={outputForm.item_name}
-                onChange={(e) => setOutputForm({ ...outputForm, item_name: e.target.value })}
-                placeholder="例如: 传说装备"
-              />
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">搜索物品</label>
+              <div className="relative">
+                <Input
+                  value={outputForm.item_name}
+                  onChange={(e) => {
+                    setOutputForm({ ...outputForm, item_name: e.target.value, item_type: "" });
+                    searchItems(e.target.value);
+                  }}
+                  placeholder="输入物品名称搜索"
+                />
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              </div>
+              {itemSearchResults.length > 0 && (
+                <div className="mt-2 max-h-40 overflow-y-auto border border-slate-200 rounded-lg">
+                  {itemSearchResults.map((item) => (
+                    <div
+                      key={item.item_id}
+                      onClick={() => handleItemSelect(item)}
+                      className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-b-0"
+                    >
+                      <div className="text-slate-700">{item.name}</div>
+                      <div className="text-xs text-slate-400">{item.item_type} - {item.price.toFixed(0)} 火</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">物品类型</label>
               <Input
                 value={outputForm.item_type}
                 onChange={(e) => setOutputForm({ ...outputForm, item_type: e.target.value })}
-                placeholder="例如: 装备"
+                placeholder="自动从搜索结果填充"
+                disabled
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">数量</label>
-                <Input
-                  type="number"
-                  value={outputForm.count}
-                  onChange={(e) => setOutputForm({ ...outputForm, count: parseFloat(e.target.value) || 1 })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">预估单价(元)</label>
-                <Input
-                  type="number"
-                  value={outputForm.estimated_value}
-                  onChange={(e) => setOutputForm({ ...outputForm, estimated_value: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
-            </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">备注</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">数量</label>
               <Input
-                value={outputForm.remark}
-                onChange={(e) => setOutputForm({ ...outputForm, remark: e.target.value })}
-                placeholder="可选备注"
+                type="number"
+                value={outputForm.count}
+                onChange={(e) => setOutputForm({ ...outputForm, count: parseFloat(e.target.value) || 1 })}
               />
             </div>
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
             <button onClick={() => setShowOutputDialog(null)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg">取消</button>
-            <button onClick={() => showOutputDialog && handleAddOutput(showOutputDialog)} className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600">添加</button>
+            <button onClick={handleAddOutput} className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600">添加</button>
           </div>
         </div>
       </Dialog>

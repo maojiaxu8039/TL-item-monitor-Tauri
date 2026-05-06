@@ -144,6 +144,21 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             set_season_api_config_cmd,
             get_installed_skills,
             openclaw_chat,
+            get_strategy_details,
+            get_strategy_with_costs,
+            get_all_strategies_with_costs,
+            create_strategy_detail,
+            update_strategy_detail,
+            delete_strategy_detail,
+            get_strategy_costs,
+            add_strategy_cost,
+            update_strategy_cost,
+            delete_strategy_cost,
+            get_strategy_outputs,
+            add_strategy_output,
+            update_strategy_output,
+            delete_strategy_output,
+            refresh_strategy_fire_prices,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
