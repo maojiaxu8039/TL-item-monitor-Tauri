@@ -970,6 +970,9 @@ pub async fn openclaw_chat(
 
         let history_timeout = Duration::from_secs(60);
         let history_start = Instant::now();
+        let mut accumulated_text = String::new();
+        let mut found_response = false;
+
         while history_start.elapsed() < history_timeout {
             let history_id = Uuid::new_v4().to_string();
             let history_request = json!({
@@ -995,6 +998,7 @@ pub async fn openclaw_chat(
                 match tokio::time::timeout(Duration::from_secs(2), read.next()).await {
                     Ok(Some(Ok(tokio_tungstenite::tungstenite::Message::Text(text)))) => {
                         println!("[OpenClaw] Gateway v3 history received: {}", text);
+
                         if let Ok(value) = serde_json::from_str::<Value>(&text) {
                             if is_gateway_response_for(&value, &history_id) {
                                 if gateway_response_ok(&value) {
@@ -1021,16 +1025,41 @@ pub async fn openclaw_chat(
 
                             if let Some(chunk) = text_from_json(&value) {
                                 if !chunk.trim().is_empty() {
-                                    return Ok(OpenClawResponse {
-                                        success: true,
-                                        message: "Success".to_string(),
-                                        response: Some(chunk),
-                                    });
+                                    accumulated_text.push_str(&chunk);
+                                }
+                            }
+
+                            let event_type = lower_string_at_path(&value, &["event"])
+                                .or_else(|| lower_string_at_path(&value, &["type"]));
+
+                            if let Some(event) = event_type {
+                                if event.contains("tool_call") || event.contains("message") || event.contains("assistant") {
+                                    if let Some(payload) = value.get("payload") {
+                                        if let Some(response) = assistant_text_from_history(&json!({ "messages": [payload] })) {
+                                            if !response.is_empty() && response.trim() != "NO_REPLY" {
+                                                accumulated_text.push_str(&response);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if event.contains("response") || event.contains("complete") || event.contains("finished") || event.contains("done") {
+                                    if !accumulated_text.is_empty() {
+                                        found_response = true;
+                                        break;
+                                    }
                                 }
                             }
                         }
                     }
                     Ok(Some(Ok(tokio_tungstenite::tungstenite::Message::Close(_)))) => {
+                        if !accumulated_text.is_empty() && found_response {
+                            return Ok(OpenClawResponse {
+                                success: true,
+                                message: "Success".to_string(),
+                                response: Some(accumulated_text),
+                            });
+                        }
                         return Ok(OpenClawResponse {
                             success: false,
                             message: "Gateway在读取AI结果时关闭连接".to_string(),
@@ -1052,7 +1081,23 @@ pub async fn openclaw_chat(
                 }
             }
 
+            if found_response && !accumulated_text.is_empty() {
+                return Ok(OpenClawResponse {
+                    success: true,
+                    message: "Success".to_string(),
+                    response: Some(accumulated_text),
+                });
+            }
+
             tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+
+        if !accumulated_text.is_empty() {
+            return Ok(OpenClawResponse {
+                success: true,
+                message: "Success".to_string(),
+                response: Some(accumulated_text),
+            });
         }
 
         return Ok(OpenClawResponse {

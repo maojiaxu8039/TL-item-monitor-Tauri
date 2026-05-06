@@ -138,9 +138,21 @@ export default function AIAnalysisPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [aiEnabled, setAiEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem("ai_enabled");
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const connectionTestIdRef = useRef(0);
   const { marketContext } = useSectionRefresh();
+
+  useEffect(() => {
+    localStorage.setItem("ai_enabled", JSON.stringify(aiEnabled));
+  }, [aiEnabled]);
 
   useEffect(() => {
     try {
@@ -198,6 +210,10 @@ export default function AIAnalysisPage() {
 
   const handleSend = async () => {
     if (!input.trim()) return;
+    if (!aiEnabled) {
+      addToast("warning", "AI功能已关闭，请在右上角开启");
+      return;
+    }
 
     const userMessage: ChatMessage = {
       id: generateMessageId(),
@@ -287,6 +303,26 @@ export default function AIAnalysisPage() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+            <span className="text-xs">AI功能</span>
+            <div
+              className={`relative w-10 h-5 rounded-full transition-colors ${
+                aiEnabled ? "bg-blue-500" : "bg-slate-300"
+              }`}
+              onClick={() => setAiEnabled(!aiEnabled)}
+            >
+              <div
+                className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                  aiEnabled ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </div>
+            <span className={`text-xs ${aiEnabled ? "text-blue-600" : "text-slate-400"}`}>
+              {aiEnabled ? "开启" : "关闭"}
+            </span>
+          </label>
+
+          <div className="w-px h-4 bg-slate-200" />
           {connectionStatus === "connected" && (
             <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded-full">
               <Wifi className="w-3 h-3" />
