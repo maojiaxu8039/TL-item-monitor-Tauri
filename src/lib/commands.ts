@@ -562,6 +562,36 @@ export const cmd = {
     text,
     context,
   }),
+
+  // Strategy Detail management
+  getStrategyDetails: () => invoke<StrategyDetail[]>("get_strategy_details"),
+  getStrategyWithCosts: (id: string) =>
+    invoke<StrategyWithCosts | null>("get_strategy_with_costs", { id }),
+  getAllStrategiesWithCosts: () => invoke<StrategyWithCosts[]>("get_all_strategies_with_costs"),
+  createStrategyDetail: (req: CreateStrategyRequest) =>
+    invoke<string>("create_strategy_detail", { req }),
+  updateStrategyDetail: (req: UpdateStrategyRequest) =>
+    invoke<OkResponse>("update_strategy_detail", { req }),
+  deleteStrategyDetail: (id: string) =>
+    invoke<OkResponse>("delete_strategy_detail", { id }),
+  getStrategyCosts: (strategyId: string) =>
+    invoke<StrategyCost[]>("get_strategy_costs", { strategyId }),
+  addStrategyCost: (req: AddCostRequest) =>
+    invoke<string>("add_strategy_cost", { req }),
+  updateStrategyCost: (req: UpdateCostRequest) =>
+    invoke<OkResponse>("update_strategy_cost", { req }),
+  deleteStrategyCost: (id: string) =>
+    invoke<OkResponse>("delete_strategy_cost", { id }),
+  getStrategyOutputs: (strategyId: string) =>
+    invoke<StrategyOutput[]>("get_strategy_outputs", { strategyId }),
+  addStrategyOutput: (req: AddOutputRequest) =>
+    invoke<string>("add_strategy_output", { req }),
+  updateStrategyOutput: (req: UpdateOutputRequest) =>
+    invoke<OkResponse>("update_strategy_output", { req }),
+  deleteStrategyOutput: (id: string) =>
+    invoke<OkResponse>("delete_strategy_output", { id }),
+  refreshStrategyFirePrices: (strategyId: string) =>
+    invoke<StrategyWithCosts>("refresh_strategy_fire_prices", { strategyId }),
 };
 
 export interface ArchiveResult {
@@ -629,6 +659,111 @@ export interface SkillInfo {
   path: string;
   source: 'system' | 'workspace';
   enabled: boolean;
+}
+
+export interface StrategyDetail {
+  id: string;
+  name: string;
+  label: string;
+  difficulty: string;
+  output_value: number;
+  defense_value: number;
+  remark: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface StrategyCost {
+  id: string;
+  strategy_id: string;
+  cost_type: string;
+  item_id: string;
+  item_name: string | null;
+  count: number;
+  fire_price: number;
+  total_fire: number;
+  is_realtime: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface StrategyOutput {
+  id: string;
+  strategy_id: string;
+  item_name: string;
+  item_type: string;
+  count: number;
+  estimated_value: number;
+  remark: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface StrategyWithCosts {
+  id: string;
+  name: string;
+  label: string;
+  difficulty: string;
+  output_value: number;
+  defense_value: number;
+  remark: string | null;
+  created_at: number;
+  updated_at: number;
+  costs: StrategyCost[];
+  outputs: StrategyOutput[];
+  total_cost_fire: number;
+  total_output_value: number;
+  profit_ratio: number;
+}
+
+export interface CreateStrategyRequest {
+  name: string;
+  label: string;
+  difficulty: string;
+  output_value: number;
+  defense_value: number;
+  remark: string | null;
+}
+
+export interface UpdateStrategyRequest {
+  id: string;
+  name: string;
+  label: string;
+  difficulty: string;
+  output_value: number;
+  defense_value: number;
+  remark: string | null;
+}
+
+export interface AddCostRequest {
+  strategy_id: string;
+  cost_type: string;
+  item_id: string;
+  item_name: string | null;
+  count: number;
+  is_realtime: boolean;
+}
+
+export interface AddOutputRequest {
+  strategy_id: string;
+  item_name: string;
+  item_type: string;
+  count: number;
+  estimated_value: number;
+  remark: string | null;
+}
+
+export interface UpdateCostRequest {
+  id: string;
+  count: number;
+  is_realtime: boolean;
+}
+
+export interface UpdateOutputRequest {
+  id: string;
+  count: number;
+  estimated_value: number;
+  remark: string | null;
 }
 
 export interface ServerApiConfig {
