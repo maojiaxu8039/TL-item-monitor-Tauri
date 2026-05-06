@@ -205,7 +205,8 @@ pub async fn get_strategy_outputs(
     strategy_id: &str,
 ) -> Result<Vec<StrategyOutput>, crate::core::errors::AppError> {
     let outputs = sqlx::query_as::<_, StrategyOutput>(
-        "SELECT id, strategy_id, item_name, item_type, count, estimated_value, 0 as realtime_value, remark, created_at, updated_at
+        "SELECT id, strategy_id, item_name, item_type, count, estimated_value,
+         COALESCE(realtime_value, 0) as realtime_value, remark, created_at, updated_at
          FROM strategy_outputs WHERE strategy_id = ? ORDER BY created_at"
     )
     .bind(strategy_id)
@@ -222,8 +223,8 @@ pub async fn add_strategy_output(
     let now = Utc::now().timestamp();
 
     sqlx::query(
-        "INSERT INTO strategy_outputs (id, strategy_id, item_name, item_type, count, estimated_value, remark, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO strategy_outputs (id, strategy_id, item_name, item_type, count, estimated_value, realtime_value, remark, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)"
     )
     .bind(&id)
     .bind(&req.strategy_id)
