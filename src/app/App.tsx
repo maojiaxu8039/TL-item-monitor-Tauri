@@ -7,7 +7,7 @@ import { useTauriEvents } from "@/hooks/useTauriEvents"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { TopBar } from "@/components/layout/TopBar"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
-import type { PageId } from "@/types"
+import type { PageId } from "@/lib/commands"
 
 const DashboardContent = lazy(() => import("@/components/dashboard/DashboardContent"))
 const StrategiesPage = lazy(() => import("@/components/dashboard/StrategiesPage"))

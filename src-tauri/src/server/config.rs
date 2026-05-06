@@ -10,6 +10,10 @@ pub struct ServerConfig {
     pub scrape_modes: Vec<ScrapeMode>,
     pub admin_password: String,
     pub api_config: ApiConfig,
+    #[serde(default)]
+    pub cors_allowed_origins: Vec<String>,
+    #[serde(default)]
+    pub environment: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,8 +60,13 @@ impl Default for ServerConfig {
                     enabled: true,
                 },
             ],
-            admin_password: "admin123".to_string(),
+            admin_password: String::new(),
             api_config: ApiConfig::default(),
+            cors_allowed_origins: vec![
+                "http://localhost:5173".to_string(),
+                "http://localhost:8080".to_string(),
+            ],
+            environment: "development".to_string(),
         }
     }
 }

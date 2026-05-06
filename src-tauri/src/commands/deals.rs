@@ -1,3 +1,4 @@
+use crate::core::constants::{SECONDS_PER_DAY, SECONDS_PER_HOUR};
 use crate::core::state::AppState;
 use crate::db::table_resolver::TableResolver;
 use serde::{Deserialize, Serialize};
@@ -55,7 +56,7 @@ async fn calculate_real_alerts(
     market_mode: &str,
 ) -> Result<DealAlertsResponse, crate::core::errors::AppError> {
     let now = chrono::Utc::now().timestamp();
-    let window_seconds = 24 * 3600; // 24h window for comparison
+    let window_seconds = SECONDS_PER_DAY;
     let cutoff = now - window_seconds;
 
     let items_table = TableResolver::items_table(season_id, market_mode);
@@ -92,7 +93,7 @@ async fn calculate_real_alerts(
     let prev_map: std::collections::HashMap<String, f64> = previous_snapshots.into_iter().collect();
 
     // Also get 1h ago snapshots for short-term changes
-    let hour_ago = now - 3600;
+    let hour_ago = now - SECONDS_PER_HOUR;
     let recent_snapshots: Vec<(String, f64)> = sqlx::query_as(&format!(
         "SELECT item_id, fire_price FROM {} s1 \
              WHERE scraped_at >= ? \

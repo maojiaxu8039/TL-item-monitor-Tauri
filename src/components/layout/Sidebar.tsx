@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 import { Flame, LayoutDashboard, BarChart3, Shield, Settings, Download, Box, Bell, Database, CircleHelp, TrendingUp, Brain, Tag, Camera } from "lucide-react"
 import { motion } from "framer-motion"
-import type { PageId } from "@/types"
+import type { PageId } from "@/lib/commands"
 
 const NAV_ITEMS: { id: PageId; label: string; icon: typeof Flame }[] = [
   { id: "dashboard", label: "监控首页", icon: LayoutDashboard },

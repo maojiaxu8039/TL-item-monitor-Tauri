@@ -2,111 +2,111 @@
 
 ## 1. 项目概述
 
-**项目名称**：TL 物品火价监控  
-**版本**：v2.9  
-**最后更新**：2026-05-18  
-**状态**：核心功能稳定，新增HERMES Skill集成
+**项目名称**：TL 物品火价监控
+**版本**：v3.0
+**最后更新**：2026-05-06
+**状态**：核心功能稳定，新增 web-server 独立采集服务器、HERMES Skill 集成
 
 基于 Tauri 2.0 + React + TypeScript + Rust + SQLite 的桌面应用，用于监控火炬之光（Torchlight）游戏中的物品价格和火价（游戏货币汇率）。
 
----
+***
 
 ## 2. 功能清单
 
 ### 2.1 已实现功能 ✅
 
-| 模块 | 功能 | 状态 | 说明 |
-|------|------|------|------|
-| **监控首页** | 分组管理 | ✅ | 创建/编辑/删除分组，添加物品到分组 |
-| | 拖拽排序 | ✅ | 分组拖拽排序 |
-| | 物品监控 | ✅ | 显示物品当前价格、购买价格、溢价率 |
-| | 导入导出CSV | ✅ | 支持UTF-8编码的CSV导入导出 |
-| **火价分析** | 当前火价显示 | ✅ | 实时显示当前火价（按赛季/模式隔离） |
-| | 火价走势图表 | ✅ | 双折线图对比当前赛季和历史赛季 |
-| | 赛季对比 | ✅ | SS12 vs SS11 同时间段对比 |
-| | 模式隔离 | ✅ | 普通服/专家服数据完全隔离 |
-| **物价数据** | 物品搜索 | ✅ | 支持关键词搜索 |
-| | 类型筛选 | ✅ | 动态从数据库获取物品类型 |
-| | 赛季筛选 | ✅ | 对比赛季选择（SS11/SS10） |
-| | 天数筛选 | ✅ | 输入第几天进行筛选 |
-| | 价格对比 | ✅ | 显示当前价格 vs 历史赛季价格 |
-| | 价格变化 | ✅ | 涨跌百分比和具体差值 |
-| | 价格走势 | ✅ | 点击查看双赛季价格曲线图 |
-| | 添加到分组 | ✅ | 直接添加到监控首页分组 |
-| **物价分析** | 囤货分析 | ✅ | 基于波动差+周期分析 |
-| | 最佳入手/出手时间 | ✅ | 显示赛季第几天+几点 |
-| | 预期收益计算 | ✅ | 计算预期收益率 |
-| | 置信度评分 | ✅ | 分析可信度评分 |
-| | 物品搜索 | ✅ | 支持关键词搜索 |
-| | 类型筛选 | ✅ | 下拉框筛选物品类型 |
-| | 加入分组 | ✅ | 添加到监控首页分组 |
-| | 价格走势 | ✅ | 点击查看上赛季物价曲线图 |
-| **捡漏出货** | 实时火价监控 | ✅ | 基于 item_realtime_fire_prices 表 |
-| | 5分钟涨跌检测 | ✅ | 优先使用5分钟变化率 |
-| | 3小时涨跌检测 | ✅ | 回退使用3小时变化率 |
-| | 双列表显示 | ✅ | 上涨/下跌分栏显示 |
-| | 阈值设置 | ✅ | 可配置涨跌百分比阈值（localStorage） |
-| | 自动数据采集 | ✅ | 后台任务每30秒自动采集 |
-| | 生成测试数据 | ✅ | 开发调试用测试数据生成 |
-| **AI分析** | AI对话 | ✅ | 对话框形式与AI交互 |
-| | HERMES Gateway直连 | ✅ | WebSocket直连本地Gateway |
-| | Skill选择器 | ✅ | 选择和启用已安装的Skills |
-| | Tool Call显示 | ✅ | 实时显示Skill调用过程和结果 |
-| | 多提供商支持 | ✅ | HERMES(本地)/OPENClAW/自定义API |
-| | 配置管理 | ✅ | API地址、模型、密钥配置 |
-| | 连接测试 | ✅ | 测试AI连接是否成功 |
-| | 系统提示词 | ✅ | 可自定义AI角色和分析风格 |
-| | 智能上下文 | ✅ | 自动附带当前火价数据和已选Skills |
-| **数据监控** | 服务器状态 | ✅ | 显示服务器连接状态 |
-| | 数据采集状态 | ✅ | 显示采集器工作状态 |
-| | 数据同步 | ✅ | 同步服务器数据到本地 |
-| | 赛季同步 | ✅ | 同步整个赛季数据 |
-| **预警规则** | 规则管理 | ✅ | 创建/编辑/删除预警规则 |
-| | 事件查看 | ✅ | 查看预警触发事件 |
-| | 开关控制 | ✅ | 启用/禁用预警规则 |
-| **设置** | 应用配置 | ✅ | 赛季、模式、数据源等配置 |
-| | 通知设置 | ✅ | 系统通知、语音提醒等 |
-| | 桌面设置 | ✅ | 启动项、窗口行为等 |
-| | AI设置 | ✅ | AI提供商配置（localStorage存储） |
-| **导入导出** | CSV导入导出 | ✅ | 监控列表导入导出 |
-| | 数据库备份 | ✅ | 备份和恢复数据库 |
-| **其他** | 系统托盘 | ✅ | 最小化到托盘 |
-| | 自动更新 | ✅ | 定时抓取火价和物品数据 |
-| | 历史记录 | ✅ | 每小时保存价格快照 |
-| | 上下文切换 | ✅ | 赛季/模式切换后自动刷新数据 |
+| 模块       | 功能               | 状态 | 说明                                |
+| -------- | ---------------- | -- | --------------------------------- |
+| **监控首页** | 分组管理             | ✅  | 创建/编辑/删除分组，添加物品到分组                |
+| <br />   | 拖拽排序             | ✅  | 分组拖拽排序                            |
+| <br />   | 物品监控             | ✅  | 显示物品当前价格、购买价格、溢价率                 |
+| <br />   | 导入导出CSV          | ✅  | 支持UTF-8编码的CSV导入导出                 |
+| **火价分析** | 当前火价显示           | ✅  | 实时显示当前火价（按赛季/模式隔离）                |
+| <br />   | 火价走势图表           | ✅  | 双折线图对比当前赛季和历史赛季                   |
+| <br />   | 赛季对比             | ✅  | SS12 vs SS11 同时间段对比               |
+| <br />   | 模式隔离             | ✅  | 普通服/专家服数据完全隔离                     |
+| **物价数据** | 物品搜索             | ✅  | 支持关键词搜索                           |
+| <br />   | 类型筛选             | ✅  | 动态从数据库获取物品类型                      |
+| <br />   | 赛季筛选             | ✅  | 对比赛季选择（SS11/SS10）                 |
+| <br />   | 天数筛选             | ✅  | 输入第几天进行筛选                         |
+| <br />   | 价格对比             | ✅  | 显示当前价格 vs 历史赛季价格                  |
+| <br />   | 价格变化             | ✅  | 涨跌百分比和具体差值                        |
+| <br />   | 价格走势             | ✅  | 点击查看双赛季价格曲线图                      |
+| <br />   | 添加到分组            | ✅  | 直接添加到监控首页分组                       |
+| **物价分析** | 囤货分析             | ✅  | 基于波动差+周期分析                        |
+| <br />   | 最佳入手/出手时间        | ✅  | 显示赛季第几天+几点                        |
+| <br />   | 预期收益计算           | ✅  | 计算预期收益率                           |
+| <br />   | 置信度评分            | ✅  | 分析可信度评分                           |
+| <br />   | 物品搜索             | ✅  | 支持关键词搜索                           |
+| <br />   | 类型筛选             | ✅  | 下拉框筛选物品类型                         |
+| <br />   | 加入分组             | ✅  | 添加到监控首页分组                         |
+| <br />   | 价格走势             | ✅  | 点击查看上赛季物价曲线图                      |
+| **捡漏出货** | 实时火价监控           | ✅  | 基于 item\_realtime\_fire\_prices 表 |
+| <br />   | 5分钟涨跌检测          | ✅  | 优先使用5分钟变化率                        |
+| <br />   | 3小时涨跌检测          | ✅  | 回退使用3小时变化率                        |
+| <br />   | 双列表显示            | ✅  | 上涨/下跌分栏显示                         |
+| <br />   | 阈值设置             | ✅  | 可配置涨跌百分比阈值（localStorage）          |
+| <br />   | 自动数据采集           | ✅  | 后台任务每30秒自动采集                      |
+| <br />   | 生成测试数据           | ✅  | 开发调试用测试数据生成                       |
+| **AI分析** | AI对话             | ✅  | 对话框形式与AI交互                        |
+| <br />   | HERMES Gateway直连 | ✅  | WebSocket直连本地Gateway              |
+| <br />   | Skill选择器         | ✅  | 选择和启用已安装的Skills                   |
+| <br />   | Tool Call显示      | ✅  | 实时显示Skill调用过程和结果                  |
+| <br />   | 多提供商支持           | ✅  | HERMES(本地)/OPENClAW/自定义API        |
+| <br />   | 配置管理             | ✅  | API地址、模型、密钥配置                     |
+| <br />   | 连接测试             | ✅  | 测试AI连接是否成功                        |
+| <br />   | 系统提示词            | ✅  | 可自定义AI角色和分析风格                     |
+| <br />   | 智能上下文            | ✅  | 自动附带当前火价数据和已选Skills               |
+| **数据监控** | 服务器状态            | ✅  | 显示服务器连接状态                         |
+| <br />   | 数据采集状态           | ✅  | 显示采集器工作状态                         |
+| <br />   | 数据同步             | ✅  | 同步服务器数据到本地                        |
+| <br />   | 赛季同步             | ✅  | 同步整个赛季数据                          |
+| **预警规则** | 规则管理             | ✅  | 创建/编辑/删除预警规则                      |
+| <br />   | 事件查看             | ✅  | 查看预警触发事件                          |
+| <br />   | 开关控制             | ✅  | 启用/禁用预警规则                         |
+| **设置**   | 应用配置             | ✅  | 赛季、模式、数据源等配置                      |
+| <br />   | 通知设置             | ✅  | 系统通知、语音提醒等                        |
+| <br />   | 桌面设置             | ✅  | 启动项、窗口行为等                         |
+| <br />   | AI设置             | ✅  | AI提供商配置（localStorage存储）           |
+| **导入导出** | CSV导入导出          | ✅  | 监控列表导入导出                          |
+| <br />   | 数据库备份            | ✅  | 备份和恢复数据库                          |
+| **其他**   | 系统托盘             | ✅  | 最小化到托盘                            |
+| <br />   | 自动更新             | ✅  | 定时抓取火价和物品数据                       |
+| <br />   | 历史记录             | ✅  | 每小时保存价格快照                         |
+| <br />   | 上下文切换            | ✅  | 赛季/模式切换后自动刷新数据                    |
 
 ### 2.2 待开发功能 🚧
 
-| 模块 | 功能 | 状态 | 说明 |
-|------|------|------|------|
-| **识图助手** | 图片识别 | 🚧 | 通过截图识别交易行物品词条 |
-| | 价格评估 | 🚧 | 根据词条评估物品价格 |
-| | 高价值物品库 | 🚧 | 记录高价值物品 |
-| **策略管理** | 策略配置 | 🚧 | 游戏打宝策略配置 |
-| | 收益计算 | 🚧 | 预计收益计算 |
-| | 策略推荐 | 🚧 | 基于数据的策略推荐 |
-| **预警规则** | 后台任务接入 | 🚧 | alert_task 读取 alert_rules |
-| | Cooldown机制 | 🚧 | 防止重复通知 |
-| **数据监控** | 整赛季火价同步 | 🚧 | /fire-history-all 路由补齐 |
-| | 分页同步 | 🚧 | 大数据量分页同步 |
+| 模块       | 功能         | 状态 | 说明                          |
+| -------- | ---------- | -- | --------------------------- |
+| **识图助手** | 图片识别       | 🚧 | 通过截图识别交易行物品词条               |
+| <br />   | 价格评估       | 🚧 | 根据词条评估物品价格                  |
+| <br />   | 高价值物品库     | 🚧 | 记录高价值物品                     |
+| **策略管理** | 策略配置       | 🚧 | 游戏打宝策略配置                    |
+| <br />   | 收益计算       | 🚧 | 预计收益计算                      |
+| <br />   | 策略推荐       | 🚧 | 基于数据的策略推荐                   |
+| **预警规则** | 后台任务接入     | 🚧 | alert\_task 读取 alert\_rules |
+| <br />   | Cooldown机制 | 🚧 | 防止重复通知                      |
+| **数据监控** | 整赛季火价同步    | 🚧 | /fire-history-all 路由补齐      |
+| <br />   | 分页同步       | 🚧 | 大数据量分页同步                    |
 
----
+***
 
 ## 3. 技术架构
 
 ### 3.1 技术栈
 
-| 层级 | 技术 | 版本 |
-|------|------|------|
-| 前端框架 | React | 19.x |
-| 构建工具 | Vite | 6.x |
-| 类型系统 | TypeScript | 5.x |
-| UI组件 | Tailwind CSS | 3.x/4.x |
-| 状态管理 | TanStack Query | 5.x |
-| 桌面框架 | Tauri | 2.x |
-| 后端语言 | Rust | 1.75+ |
-| 数据库 | SQLite | 3.x |
-| 图表库 | Recharts | 2.x |
+| 层级   | 技术             | 版本      |
+| ---- | -------------- | ------- |
+| 前端框架 | React          | 19.x    |
+| 构建工具 | Vite           | 6.x     |
+| 类型系统 | TypeScript     | 5.x     |
+| UI组件 | Tailwind CSS   | 3.x/4.x |
+| 状态管理 | TanStack Query | 5.x     |
+| 桌面框架 | Tauri          | 2.x     |
+| 后端语言 | Rust           | 1.75+   |
+| 数据库  | SQLite         | 3.x     |
+| 图表库  | Recharts       | 2.x     |
 
 ### 3.2 项目结构
 
@@ -127,19 +127,33 @@ TL-item-monitor-Tauri/
 │   │   │   ├── ImageAssistPage.tsx       # 识图助手(占位)
 │   │   │   ├── StrategiesPage.tsx        # 策略管理(占位)
 │   │   │   ├── SettingsPage.tsx          # 设置
-│   │   │   └── ImportExportPage.tsx      # 导入导出
+│   │   │   ├── ImportExportPage.tsx      # 导入导出
+│   │   │   ├── HelpPage.tsx             # 帮助页
+│   │   │   ├── ServerAdminPanel.tsx       # 服务器管理面板
+│   │   │   ├── AddItemModal.tsx          # 添加物品弹窗
+│   │   │   ├── AddSectionDialog.tsx      # 添加分组弹窗
+│   │   │   ├── ItemPriceTrendModal.tsx   # 价格趋势弹窗
+│   │   │   ├── SkillSelector.tsx          # Skill选择器
+│   │   │   ├── GroupCard.tsx             # 分组卡片
+│   │   │   ├── SortableGroupCard.tsx     # 可拖拽分组卡片
+│   │   │   └── SearchBar.tsx             # 搜索栏
 │   │   ├── layout/                 # 布局组件
 │   │   │   ├── Sidebar.tsx         # 侧边导航
 │   │   │   └── TopBar.tsx          # 顶部栏
+│   │   ├── charts/                 # 图表组件
+│   │   │   └── FireTrendChart.tsx  # 火价趋势图表
 │   │   └── ui/                    # UI组件
 │   ├── lib/
 │   │   ├── commands.ts             # Tauri命令定义
-│   │   └── query.ts               # QueryClient配置
+│   │   ├── query.ts               # QueryClient配置
+│   │   ├── utils.ts               # 工具函数
+│   │   └── hermes.ts              # Hermes Gateway连接
 │   ├── contexts/                  # React Context
 │   │   ├── SectionRefreshContext.tsx  # 刷新上下文
 │   │   └── ToastContext.tsx          # Toast通知
-│   ├── hooks/                     # 自定义Hooks
-│   └── main.tsx                   # 入口文件
+│   ├── hooks/
+│   │   └── useTauriEvents.ts       # Tauri事件监听
+│   └── types.ts                   # 全局类型定义
 ├── src-tauri/                    # Tauri后端
 │   ├── src/
 │   │   ├── commands/              # Rust命令
@@ -147,19 +161,28 @@ TL-item-monitor-Tauri/
 │   │   │   ├── items.rs          # 物品相关
 │   │   │   ├── sections.rs        # 分组相关
 │   │   │   ├── alerts.rs         # 预警相关
-│   │   │   └── season.rs         # 赛季相关
+│   │   │   ├── deals.rs          # 捡漏出货相关
+│   │   │   ├── season.rs         # 赛季相关
+│   │   │   ├── diagnostics.rs    # 数据源诊断
+│   │   │   ├── skills.rs         # Skills相关
+│   │   │   ├── strategies.rs     # 策略相关
+│   │   │   ├── config.rs         # 配置相关
+│   │   │   ├── import_export.rs  # 导入导出
+│   │   │   └── openclaw.rs       # OpenClaw相关
 │   │   ├── db/                   # 数据库
-│   │   │   ├── mod.rs
-│   │   │   ├── models.rs
-│   │   │   ├── table_resolver.rs
-│   │   │   ├── repo_fire.rs
-│   │   │   ├── repo_items.rs
-│   │   │   ├── repo_sections.rs
-│   │   │   ├── repo_history.rs
-│   │   │   ├── repo_alerts.rs
-│   │   │   ├── repo_config.rs
-│   │   │   ├── repo_realtime_fire.rs    # 实时火价监控
-│   │   │   └── migrations/              # 迁移文件
+│   │   │   ├── models.rs         # 数据模型
+│   │   │   ├── table_resolver.rs # 表名解析
+│   │   │   ├── repo_fire.rs      # 火价仓库
+│   │   │   ├── repo_items.rs     # 物品仓库
+│   │   │   ├── repo_sections.rs  # 分组仓库
+│   │   │   ├── repo_history.rs   # 历史仓库
+│   │   │   ├── repo_alerts.rs    # 预警仓库
+│   │   │   ├── repo_config.rs    # 配置仓库
+│   │   │   ├── repo_realtime_fire.rs    # 实时火价仓库
+│   │   │   ├── repo_season_api.rs      # 赛季API仓库
+│   │   │   ├── repo_source_diagnostics.rs # 数据源诊断仓库
+│   │   │   ├── repo_strategies.rs      # 策略仓库
+│   │   │   └── migrations/              # 迁移文件(001-008)
 │   │   ├── scheduler/              # 后台任务
 │   │   │   ├── fire_task.rs      # 火价采集任务
 │   │   │   ├── items_task.rs      # 物品采集任务
@@ -167,14 +190,37 @@ TL-item-monitor-Tauri/
 │   │   │   ├── alert_task.rs     # 预警任务
 │   │   │   └── realtime_fire_task.rs  # 实时火价采集
 │   │   ├── core/                 # 核心逻辑
+│   │   │   ├── state.rs         # 应用状态
+│   │   │   ├── events.rs        # 事件定义
+│   │   │   ├── config.rs        # 配置加载
+│   │   │   └── paths.rs        # 路径工具
 │   │   ├── scraper/              # 爬虫
-│   │   └── bin/
-│   │       └── server.rs          # 服务器采集器
+│   │   │   ├── qiandao.rs       # 千岛火价抓取
+│   │   │   └── luosi.rs        # 罗四物品抓取
+│   │   ├── server/               # 内置服务器模块
+│   │   │   ├── config.rs        # 服务器配置
+│   │   │   ├── db.rs           # 服务器数据库
+│   │   │   └── scraper.rs      # 服务器抓取
+│   │   ├── services/             # 服务层
+│   │   │   ├── worth_service.rs  # 价值评估
+│   │   │   └── notification_service.rs # 通知服务
+│   │   ├── bin/
+│   │   │   └── server.rs          # 服务器采集器（内置独立server）
+│   │   ├── app.rs               # 应用初始化
+│   │   ├── lib.rs               # 库导出
+│   │   ├── main.rs              # 主入口
+│   │   └── tray.rs              # 系统托盘
 │   └── Cargo.toml
-└── DEVELOPMENT_GUIDE.md           # 本文档
+├── web-server/                   # 独立Web服务器（可选）
+│   ├── src/
+│   │   └── main.rs              # Axum服务器入口
+│   └── static/
+│       └── index.html            # 静态页面
+└── docs/
+    └── DEVELOPMENT_GUIDE.md      # 本文档
 ```
 
----
+***
 
 ## 4. 数据库设计
 
@@ -182,53 +228,70 @@ TL-item-monitor-Tauri/
 
 #### 实时表（无赛季后缀，当前赛季数据）
 
-| 表名 | 说明 | 字段 |
-|------|------|------|
-| `items_normal` | 普通服物品 | item_id, name, item_type, price, updated_at |
-| `items_expert` | 专家服物品 | 同上 |
-| `fire_price_normal` | 普通服火价 | rmb_per_10k_fire, fire_per_rmb, increase_ratio, scraped_at |
-| `fire_price_expert` | 专家服火价 | 同上 |
+| 表名                  | 说明    | 字段                                                                |
+| ------------------- | ----- | ----------------------------------------------------------------- |
+| `items_normal`      | 普通服物品 | item\_id, name, item\_type, price, updated\_at                    |
+| `items_expert`      | 专家服物品 | 同上                                                                |
+| `fire_price_normal` | 普通服火价 | rmb\_per\_10k\_fire, fire\_per\_rmb, increase\_ratio, scraped\_at |
+| `fire_price_expert` | 专家服火价 | 同上                                                                |
 
 #### 历史快照表（有赛季后缀）
 
-| 表名 | 说明 |
-|------|------|
-| `item_snapshots_{season}_{mode}` | 物品价格快照 |
-| `fire_price_snapshots_{season}_{mode}` | 火价快照 |
+| 表名                                     | 说明     |
+| -------------------------------------- | ------ |
+| `item_snapshots_{season}_{mode}`       | 物品价格快照 |
+| `fire_price_snapshots_{season}_{mode}` | 火价快照   |
 
 #### 实时火价监控表
 
-| 表名 | 说明 |
-|------|------|
+| 表名                          | 说明                |
+| --------------------------- | ----------------- |
 | `item_realtime_fire_prices` | 近3小时物品火价变化，用于捡漏出货 |
 
 ### 4.2 数据库表结构
 
-| 表名 | 说明 | 状态 |
-|------|------|------|
-| `seasons` | 赛季表 | ✅ |
-| `sections` | 分组表 | ✅ |
-| `section_items` | 分组物品关联表 | ✅ |
-| `alert_rules` | 预警规则表 | ✅ |
-| `alert_events` | 预警事件表 | ✅ |
-| `strategies` | 策略表 | ✅ |
-| `source_diagnostics` | 数据源诊断表 | ✅ |
-| `item_realtime_fire_prices` | 实时火价监控表 | ✅ |
+| 表名                          | 说明      | 状态 |
+| --------------------------- | ------- | -- |
+| `seasons`                   | 赛季表     | ✅  |
+| `sections`                  | 分组表     | ✅  |
+| `section_items`             | 分组物品关联表 | ✅  |
+| `alert_rules`               | 预警规则表   | ✅  |
+| `alert_events`              | 预警事件表   | ✅  |
+| `strategies`                | 策略表     | ✅  |
+| `source_diagnostics`        | 数据源诊断表  | ✅  |
+| `item_realtime_fire_prices` | 实时火价监控表 | ✅  |
 
 ### 4.3 迁移文件
 
-| 文件 | 说明 |
-|------|------|
-| `001_initial.sql` | 初始表结构 |
-| `002_add_constraints.sql` | 添加约束和索引 |
-| `003_split_season_tables.sql` | 分表结构 |
-| `004_remove_section_items_fk.sql` | 移除外键约束 |
-| `005_add_season_api_configs.sql` | 添加API配置 |
-| `006_add_season_day.sql` | 添加赛季天数字段 |
-| `007_add_name_type_to_snapshots.sql` | 快照表添加name/type |
-| `008_create_item_realtime_fire_prices.sql` | 创建实时火价监控表 |
+| 文件                                         | 说明             |
+| ------------------------------------------ | -------------- |
+| `001_initial.sql`                          | 初始表结构          |
+| `002_add_constraints.sql`                  | 添加约束和索引        |
+| `003_split_season_tables.sql`              | 分表结构           |
+| `004_remove_section_items_fk.sql`          | 移除外键约束         |
+| `005_add_season_api_configs.sql`           | 添加API配置        |
+| `006_add_season_day.sql`                   | 添加赛季天数字段       |
+| `007_add_name_type_to_snapshots.sql`       | 快照表添加name/type |
+| `008_create_item_realtime_fire_prices.sql` | 创建实时火价监控表      |
 
-### 4.4 TableResolver
+### 4.4 数据库仓库 (Repository)
+
+| 文件 | 说明 | 状态 |
+| --- | --- | --- |
+| `repo_fire.rs` | 火价数据仓库 | ✅ |
+| `repo_items.rs` | 物品数据仓库（含搜索、分页） | ✅ |
+| `repo_sections.rs` | 分组管理仓库 | ✅ |
+| `repo_history.rs` | 历史快照仓库、火价对比 | ✅ |
+| `repo_alerts.rs` | 预警规则和事件仓库 | ✅ |
+| `repo_config.rs` | 配置管理仓库 | ✅ |
+| `repo_realtime_fire.rs` | 实时火价监控仓库 | ✅ |
+| `repo_season_api.rs` | 赛季API配置仓库 | ✅ |
+| `repo_source_diagnostics.rs` | 数据源诊断仓库 | ✅ |
+| `repo_strategies.rs` | 策略仓库 | ✅ |
+| `models.rs` | 数据模型定义 | ✅ |
+| `table_resolver.rs` | 表名解析器 | ✅ |
+
+### 4.5 TableResolver
 
 用于根据赛季和模式解析表名：
 
@@ -245,19 +308,19 @@ TableResolver::fire_price_snapshots_table("ss11", "season_expert") // => "fire_p
 TableResolver::realtime_fire_prices_table()  // => "item_realtime_fire_prices"
 ```
 
----
+***
 
 ## 5. 后台任务
 
 ### 5.1 任务列表
 
-| 任务 | 频率 | 说明 |
-|------|------|------|
-| `fire_task` | 30秒 | 采集火价数据 |
-| `items_task` | 60秒 | 采集物品数据 |
-| `history_task` | 60分钟 | 保存每小时快照 |
-| `alert_task` | 60秒 | 检查预警规则 |
-| `realtime_fire_task` | 30秒 | 采集实时火价变化 |
+| 任务                   | 频率   | 说明       |
+| -------------------- | ---- | -------- |
+| `fire_task`          | 30秒  | 采集火价数据   |
+| `items_task`         | 60秒  | 采集物品数据   |
+| `history_task`       | 60分钟 | 保存每小时快照  |
+| `alert_task`         | 60秒  | 检查预警规则   |
+| `realtime_fire_task` | 30秒  | 采集实时火价变化 |
 
 ### 5.2 RealtimeFireTask 逻辑
 
@@ -291,74 +354,81 @@ loop {
 // stable: -1%~1%
 ```
 
----
+***
 
 ## 6. API接口
 
 ### 6.1 Tauri命令
 
-| 命令 | 功能 | 状态 |
-|------|------|------|
-| **仪表盘** | | |
-| `get_dashboard_summary` | 获取仪表盘摘要 | ✅ |
-| `set_active_market_context` | 设置市场上下文 | ✅ |
-| **火价** | | |
-| `refresh_fire_price` | 刷新火价 | ✅ |
-| `get_fire_history` | 获取火价历史 | ✅ |
-| `get_fire_history_by_season` | 按赛季获取火价 | ✅ |
-| `get_fire_price_compare` | 火价对比 | ✅ |
-| `export_fire_history_csv` | 导出CSV | ✅ |
-| `sync_fire_record` | 同步火价记录 | ✅ |
-| **物品** | | |
-| `refresh_items` | 刷新物品 | ✅ |
-| `search_items` | 搜索物品 | ✅ |
-| `get_item_types` | 获取物品类型 | ✅ |
-| `get_items_price_compare` | 物品价格对比 | ✅ |
-| `get_item_history_by_season` | 物品历史（赛季） | ✅ |
-| `get_item_history_by_day` | 物品历史（天） | ✅ |
-| `sync_items_record` | 同步物品记录 | ✅ |
-| **实时监控** | | |
-| `get_realtime_fire_changes` | 获取火价变化 | ✅ |
-| `seed_realtime_fire_data` | 生成测试数据 | ✅ |
-| **分组** | | |
-| `get_sections` | 获取分组 | ✅ |
-| `create_section` | 创建分组 | ✅ |
-| `update_section` | 更新分组 | ✅ |
-| `delete_section` | 删除分组 | ✅ |
-| `reorder_sections` | 排序分组 | ✅ |
-| `get_section_items` | 获取分组物品 | ✅ |
-| `add_section_item` | 添加物品到分组 | ✅ |
-| `update_section_item` | 更新分组物品 | ✅ |
-| `remove_section_item` | 移除分组物品 | ✅ |
-| **预警** | | |
-| `get_alert_rules` | 获取预警规则 | ✅ |
-| `create_alert_rule` | 创建预警规则 | ✅ |
-| `update_alert_rule` | 更新预警规则 | ✅ |
-| `toggle_alert_rule` | 切换预警规则 | ✅ |
-| `delete_alert_rule` | 删除预警规则 | ✅ |
-| `get_alert_events` | 获取预警事件 | ✅ |
-| **配置** | | |
-| `get_config` | 获取配置 | ✅ |
-| `save_config` | 保存配置 | ✅ |
-| `get_db_stats` | 数据库统计 | ✅ |
-| `backup_database` | 备份数据库 | ✅ |
-| `restore_database` | 恢复数据库 | ✅ |
-| `export_watchlist_csv` | 导出CSV | ✅ |
-| `import_watchlist_csv` | 导入CSV | ✅ |
+| 命令                           | 功能       | 状态     |
+| ---------------------------- | -------- | ------ |
+| **仪表盘**                      | <br />   | <br /> |
+| `get_dashboard_summary`      | 获取仪表盘摘要  | ✅      |
+| `set_active_market_context`  | 设置市场上下文  | ✅      |
+| **火价**                       | <br />   | <br /> |
+| `refresh_fire_price`         | 刷新火价     | ✅      |
+| `get_fire_history`           | 获取火价历史   | ✅      |
+| `get_fire_history_by_season` | 按赛季获取火价  | ✅      |
+| `get_fire_price_compare`     | 火价对比     | ✅      |
+| `export_fire_history_csv`    | 导出CSV    | ✅      |
+| `sync_fire_record`           | 同步火价记录   | ✅      |
+| **物品**                       | <br />   | <br /> |
+| `refresh_items`              | 刷新物品     | ✅      |
+| `search_items`               | 搜索物品     | ✅      |
+| `get_item_types`             | 获取物品类型   | ✅      |
+| `get_items_price_compare`    | 物品价格对比   | ✅      |
+| `get_item_history_by_season` | 物品历史（赛季） | ✅      |
+| `get_item_history_by_day`    | 物品历史（天）  | ✅      |
+| `sync_items_record`          | 同步物品记录   | ✅      |
+| **实时监控**                     | <br />   | <br /> |
+| `get_realtime_fire_changes`  | 获取火价变化   | ✅      |
+| `seed_realtime_fire_data`    | 生成测试数据   | ✅      |
+| **分组**                       | <br />   | <br /> |
+| `get_sections`               | 获取分组     | ✅      |
+| `create_section`             | 创建分组     | ✅      |
+| `update_section`             | 更新分组     | ✅      |
+| `delete_section`             | 删除分组     | ✅      |
+| `reorder_sections`           | 排序分组     | ✅      |
+| `get_section_items`          | 获取分组物品   | ✅      |
+| `add_section_item`           | 添加物品到分组  | ✅      |
+| `update_section_item`        | 更新分组物品   | ✅      |
+| `remove_section_item`        | 移除分组物品   | ✅      |
+| **预警**                       | <br />   | <br /> |
+| `get_alert_rules`            | 获取预警规则   | ✅      |
+| `create_alert_rule`          | 创建预警规则   | ✅      |
+| `update_alert_rule`          | 更新预警规则   | ✅      |
+| `toggle_alert_rule`          | 切换预警规则   | ✅      |
+| `delete_alert_rule`          | 删除预警规则   | ✅      |
+| `get_alert_events`           | 获取预警事件   | ✅      |
+| **配置**                       | <br />   | <br /> |
+| `get_config`                 | 获取配置     | ✅      |
+| `save_config`                | 保存配置     | ✅      |
+| `get_db_stats`               | 数据库统计    | ✅      |
+| `backup_database`            | 备份数据库    | ✅      |
+| `restore_database`           | 恢复数据库    | ✅      |
+| `export_watchlist_csv`       | 导出CSV    | ✅      |
+| `import_watchlist_csv`       | 导入CSV    | ✅      |
+| **诊断**                       | <br />   | <br /> |
+| `get_source_diagnostics`     | 获取数据源诊断   | ✅      |
+| `test_source_connection`      | 测试数据源连接   | ✅      |
 
-### 6.2 服务器API
+### 6.2 服务器API（内置 server.rs）
 
 | 端点 | 功能 | 状态 |
-|------|------|------|
+| --- | --- | -- |
 | `GET /status` | 服务器状态 | ✅ |
 | `GET /fire-history` | 火价历史 | ✅ |
-| `GET /items-history` | 物品历史 | ✅ |
+| `GET /fire-history-all` | 整赛季火价历史（批量同步） | ✅ |
+| `GET /items-history` | 物品历史（需item_id） | ✅ |
+| `GET /items-history-all` | 所有物品历史（批量同步） | ✅ |
 | `GET /health` | 健康检查 | ✅ |
 | `GET /api-config` | 获取 API 配置 | ✅ |
 | `POST /admin/init-season` | 初始化新赛季（需密码） | ✅ |
 | `POST /admin/update-api-config` | 更新 API 配置（需密码） | ✅ |
 
----
+> 注意：内置 server 使用手写 TCP HTTP 解析，支持 URL decode 和 CORS 预检。
+
+***
 
 ## 10. 服务器端数据采集
 
@@ -428,6 +498,7 @@ scrape_modes:
 ### 10.4 数据来源
 
 #### 火价数据
+
 - **API**: 千岛 API (`https://api.qiandao.com`)
 - **Endpoint**: `/c2c-web/v1/common/currency-spu-price-list`
 - **频率**: 每小时采集一次
@@ -436,23 +507,25 @@ scrape_modes:
   - 专家服: tagId=1560055, specId=267417
 
 #### 物品数据
+
 - **API**: 刷图小助手 API (`http://115.231.176.101:8080/get`)
 - **参数**: `season_id` (计算公式: `200 * season_num - 1000 + mode_suffix`)
 - **频率**: 每小时采集一次
 - **Mode 映射**:
-  - 普通服: mode_suffix = 1
-  - 专家服: mode_suffix = 31
+  - 普通服: mode\_suffix = 1
+  - 专家服: mode\_suffix = 31
 
 ### 10.5 服务器端数据库表（与客户端一致）
 
-| 表名 | 说明 |
-|------|------|
-| `fire_price_snapshots_{season}_{mode}` | 火价快照（普通服/专家服） |
-| `item_snapshots_{season}_{mode}` | 物品价格快照（普通服/专家服） |
+| 表名                                     | 说明              |
+| -------------------------------------- | --------------- |
+| `fire_price_snapshots_{season}_{mode}` | 火价快照（普通服/专家服）   |
+| `item_snapshots_{season}_{mode}`       | 物品价格快照（普通服/专家服） |
 
 **说明**：服务器端表结构与客户端 `item_snapshots_*` 和 `fire_price_snapshots_*` 完全一致，同步时无需转换格式。
 
 #### 火价快照表结构
+
 ```sql
 CREATE TABLE fire_price_snapshots_{season}_{mode} (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -469,6 +542,7 @@ CREATE TABLE fire_price_snapshots_{season}_{mode} (
 ```
 
 #### 物品快照表结构
+
 ```sql
 CREATE TABLE item_snapshots_{season}_{mode} (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -517,9 +591,11 @@ async fn collect_all_modes(state) {
 ### 10.7 API 接口详细
 
 #### GET /status
+
 返回服务器状态和最后一次采集结果。
 
 **响应示例**:
+
 ```json
 {
   "success": true,
@@ -545,6 +621,7 @@ async fn collect_all_modes(state) {
 ```
 
 **FireSnapshotRecord 响应格式** (GET /fire-history):
+
 ```json
 {
   "rmb_per_10k_fire": 1.23,
@@ -559,6 +636,7 @@ async fn collect_all_modes(state) {
 ```
 
 **ItemSnapshotRecord 响应格式** (GET /items-history):
+
 ```json
 {
   "item_id": "392019",
@@ -569,35 +647,43 @@ async fn collect_all_modes(state) {
 ```
 
 #### GET /fire-history
+
 获取火价历史记录。
 
 **参数**:
+
 - `mode`: `normal` | `expert` (默认: `normal`)
 - `limit`: 返回记录数 (默认: 24)
 
 #### GET /items-history
+
 获取单个物品的价格历史。
 
 **参数**:
+
 - `mode`: `normal` | `expert` (默认: `normal`)
 - `item_id`: 物品 ID (必填)
 - `limit`: 返回记录数 (默认: 24)
 
 #### GET /items-history-all
+
 获取所有物品的最新价格记录（用于批量同步）。
 
 **参数**:
+
 - `mode`: `normal` | `expert` (默认: `normal`)
-- `limit`: 返回记录数 (默认: 99999, 最大 1000)```
+- `limit`: 返回记录数 (默认: 99999, 最大 1000)\`\`\`
 
 ### 10.8 管理员 API（需密码验证）
 
 只有知道管理员密码的用户才能执行以下操作：
 
 #### POST /admin/init-season
+
 初始化新赛季的数据库表。
 
 **请求体**:
+
 ```json
 {
   "password": "admin123",
@@ -607,6 +693,7 @@ async fn collect_all_modes(state) {
 ```
 
 **响应**:
+
 ```json
 {
   "success": true,
@@ -620,9 +707,11 @@ async fn collect_all_modes(state) {
 ```
 
 #### POST /admin/update-api-config
+
 更新服务器的 API 配置参数（千岛/刷图小助手的 tagId、specId 等）。
 
 **请求体**:
+
 ```json
 {
   "password": "admin123",
@@ -662,7 +751,7 @@ Desktop App                          Server
     │  [管理员] POST /admin/update-api-config  │ 更新API配置
 ```
 
----
+***
 
 ## 11. 实时火价监控任务
 
@@ -739,11 +828,29 @@ let trend = if change_rate > 5.0 "暴涨"
          else "平稳"
 ```
 
----
+***
 
 ## 12. 更新日志
 
+### v3.0 (2026-05-06)
+
+- ✅ 新增独立 `web-server/` 模块（Axum Web 服务器）
+- ✅ 新增 `GET /fire-history-all` 整赛季火价同步接口
+- ✅ 修复 server URL decode 参数解析问题
+- ✅ 修复 `get_season_start` 返回类型错误
+- ✅ 修复 CORS 预检请求处理
+- ✅ season 表改为从数据库动态获取，不再硬编码
+- ✅ 修复 scraper 未使用变量警告
+- ✅ 移除 TypeScript `ignoreDeprecations` 不支持选项
+- ✅ 清理 `.gitignore`，添加 `dist-react/` 排除
+- ✅ 添加 `ServerAdminPanel.tsx` 服务器管理面板组件
+- ✅ 清理过期文档，精简到 3 个核心文档
+- ✅ 添加新命令：`get_source_diagnostics`、`test_source_connection`
+- ✅ 添加新数据仓库：`repo_season_api.rs`、`repo_source_diagnostics.rs`
+- ✅ 项目分析报告更新，修复 P1/P2 问题清单
+
 ### v2.8 (2026-05-07)
+
 - ✅ 服务器端添加管理员密码验证机制
 - ✅ 服务器端添加 `admin_password` 配置项
 - ✅ 服务器端添加 `api_config` 配置项（千岛/刷图小助手 API 参数）
@@ -756,14 +863,15 @@ let trend = if change_rate > 5.0 "暴涨"
 - ✅ 开发文档更新服务器端架构说明
 
 ### v2.7 (2026-05-06)
+
 - ✅ 服务器端数据库表结构与客户端统一
 - ✅ 表名改为 `fire_price_snapshots_{season}_{mode}` 和 `item_snapshots_{season}_{mode}`
 - ✅ 添加 `season_day` 字段到所有快照表
-- ✅ 服务器端自动计算物品火价（物品价格 * 火价比例）
+- ✅ 服务器端自动计算物品火价（物品价格 \* 火价比例）
 - ✅ 物品存储 `fire_price` 而非原始价格
 - ✅ 同步时无需数据格式转换
 
----
+***
 
 ## 7. 开发指南
 
@@ -817,20 +925,20 @@ cd src-tauri && cargo fmt
 2. 在 `run_migrations` 函数中添加迁移逻辑
 3. 更新 `_migrations` 表版本
 
----
+***
 
 ## 8. 项目规划
 
 ### 8.1 近期计划
 
-| 优先级 | 功能 | 预计工时 |
-|--------|------|----------|
-| P0 | 预警规则接入后台任务 | 1-2天 |
-| P0 | DataMonitor整赛季火价同步 | 1天 |
-| P1 | 识图助手开发 | 3-5天 |
-| P1 | 策略管理重新开发 | 2-3天 |
-| P2 | 实时推送通知 | 1天 |
-| P2 | 多赛季数据对比 | 1天 |
+| 优先级 | 功能                 | 预计工时 |
+| --- | ------------------ | ---- |
+| P0  | 预警规则接入后台任务         | 1-2天 |
+| P0  | DataMonitor整赛季火价同步 | 1天   |
+| P1  | 识图助手开发             | 3-5天 |
+| P1  | 策略管理重新开发           | 2-3天 |
+| P2  | 实时推送通知             | 1天   |
+| P2  | 多赛季数据对比            | 1天   |
 
 ### 8.2 中期计划
 
@@ -839,11 +947,12 @@ cd src-tauri && cargo fmt
 - 社区数据共享
 - 移动端适配
 
----
+***
 
 ## 9. 更新日志
 
 ### v2.6 (2026-05-05)
+
 - ✅ 新增 `item_realtime_fire_prices` 表存储近3小时火价变化
 - ✅ 新增 `realtime_fire_task` 后台任务每30秒采集数据
 - ✅ 新增 `get_realtime_fire_changes` API 获取火价变化
@@ -857,6 +966,7 @@ cd src-tauri && cargo fmt
 - ✅ 修复图表容器高度问题
 
 ### v2.5 (2026-05-04)
+
 - ✅ 修复服务器端火价抓取（更新为新的千岛API接口）
 - ✅ 修复火价分析时间轴显示（按小时段/赛季天数对齐）
 - ✅ 修复Y轴显示负值问题
@@ -868,17 +978,19 @@ cd src-tauri && cargo fmt
 - ✅ 添加赛季天数字段到数据库表
 
 ### v2.4 (2026-05-03)
-- ✅ 修复火价普通/专家服隔离（按 season_id + market_mode 查询）
+
+- ✅ 修复火价普通/专家服隔离（按 season\_id + market\_mode 查询）
 - ✅ 修复火价采集后立即入库
 - ✅ 修复上下文切换后自动刷新火价缓存
 - ✅ 修复捡漏出货使用真实历史快照数据
 - ✅ 修复 deal 配置前后端模型一致
-- ✅ 修复命令契约漂移（get_deal_alerts）
-- ✅ 修复 item_history 写错表问题
+- ✅ 修复命令契约漂移（get\_deal\_alerts）
+- ✅ 修复 item\_history 写错表问题
 - ✅ 修复 seasons 表种子数据
 - ✅ 清理所有 Rust warning
 
 ### v2.3 (2026-05-02)
+
 - ✅ 新增物价分析页面（囤货/出货建议）
 - ✅ 新增AI配置页面（支持HERMES/OPENClAW）
 - ✅ 新增捡漏出货页面（价格监控）
@@ -888,13 +1000,14 @@ cd src-tauri && cargo fmt
 - ✅ 修复Tauri命令注册问题
 
 ### v2.2 (2026-04)
+
 - ✅ 新增火价双赛季对比
 - ✅ 新增物品价格历史对比
 - ✅ 新增服务器端采集器
 - ✅ 新增数据监控同步
 - ✅ 重构数据库结构（分表存储）
 
----
+***
 
 ## 13. HERMES Skill 集成
 
@@ -904,16 +1017,17 @@ AI分析页面现在支持通过HERMES Gateway直接调用已安装的Skills，�
 
 ### 13.2 核心组件
 
-| 文件 | 功能 |
-|------|------|
-| `src/lib/hermes.ts` | HermesGateway连接管理器，WebSocket通信 |
-| `src/components/dashboard/SkillSelector.tsx` | Skill选择器UI组件 |
-| `src/components/dashboard/AIAnalysisPage.tsx` | 集成HERMES连接的AI分析页面 |
-| `src-tauri/src/commands/skills.rs` | Rust后端命令，读取本地skills |
+| 文件                                            | 功能                             |
+| --------------------------------------------- | ------------------------------ |
+| `src/lib/hermes.ts`                           | HermesGateway连接管理器，WebSocket通信 |
+| `src/components/dashboard/SkillSelector.tsx`  | Skill选择器UI组件                   |
+| `src/components/dashboard/AIAnalysisPage.tsx` | 集成HERMES连接的AI分析页面              |
+| `src-tauri/src/commands/skills.rs`            | Rust后端命令，读取本地skills            |
 
 ### 13.3 HERMES Gateway API
 
 **连接信息**:
+
 - 地址: `ws://localhost:18789`
 - Token: `clawx-888b6b1f5f407e4598fe7d63c82bc413`
 
@@ -939,6 +1053,7 @@ type ServerMessage =
 ### 13.4 已安装的Skills
 
 #### 系统Skills (`~/.openclaw/skills/`)
+
 - **brave-web-search** - Brave网页搜索
 - **docx** - Word文档处理
 - **find-skills** - 查找和安装新skills
@@ -949,6 +1064,7 @@ type ServerMessage =
 - **xlsx** - Excel处理
 
 #### 工作区Skills (`~/.openclaw/workspace/skills/`)
+
 - **brand-dna** - 品牌DNA分析
 - **copywriting** - 文案撰写
 - **douyin-live** - 抖音直播
@@ -963,12 +1079,10 @@ type ServerMessage =
    - 在AI分析页面点击"配置"
    - 启用"HERMES Gateway"开关
    - 保存配置
-
 2. **选择要使用的Skills**
    - 点击右侧"Skills"面板
    - 从列表中选择需要的Skills
    - 已选Skills会显示在上下文提示中
-
 3. **开始对话**
    - 输入问题，HERMES会自动选择合适的Skill执行
    - 可以实时看到Tool Call的执行过程和结果
@@ -979,3 +1093,4 @@ type ServerMessage =
 - **Skill持久化**: 选择的Skills会保存在localStorage中
 - **自动重连**: 连接断开后自动尝试重连
 - **双模式支持**: 可以切换回传统API模式
+

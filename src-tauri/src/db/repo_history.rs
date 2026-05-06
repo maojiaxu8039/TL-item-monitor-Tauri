@@ -1,7 +1,11 @@
+use crate::core::constants::{
+    calculate_season_day, get_season_start as get_const_season_start, BATCH_SIZE_SMALL,
+    SECONDS_PER_DAY, SECONDS_PER_HOUR,
+};
 use crate::core::errors::AppError;
 use crate::core::state::FirePriceSnapshot;
 use crate::db::models::Item;
-use crate::db::repo_fire::{calculate_season_day, get_season_start};
+use crate::db::repo_fire::get_season_start;
 use crate::db::table_resolver::TableResolver;
 use chrono::Utc;
 use serde::Serialize;
@@ -43,9 +47,7 @@ pub async fn insert_item_price_snapshots(
     let season_day = calculate_season_day(snapshot_at, season_start);
     let mut tx = pool.begin().await?;
     let mut inserted = 0usize;
-
-    const BATCH_SIZE: usize = 200;
-    for chunk in items.chunks(BATCH_SIZE) {
+    for chunk in items.chunks(BATCH_SIZE_SMALL) {
         let mut qb: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
             sqlx::query_builder::QueryBuilder::new(
                 &format!("INSERT OR IGNORE INTO {} (item_id, name, item_type, fire_price, scraped_at, season_day) ", table)
@@ -153,7 +155,7 @@ pub async fn get_item_history(
     .bind(limit)
     .fetch_all(pool)
     .await?;
-    tracing::info!("get_item_history: records count={}", records.len());
+    tracing::debug!("get_item_history: records count={}", records.len());
     Ok(records)
 }
 
@@ -164,7 +166,7 @@ pub async fn get_all_item_history(
     market_mode: &str,
     hours: i64,
 ) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
-    let since = chrono::Utc::now().timestamp() - hours * 3600;
+    let since = chrono::Utc::now().timestamp() - hours * SECONDS_PER_HOUR;
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
     let records = sqlx::query_as::<_, ItemHistoryRecord>(&format!(
         "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at \
@@ -202,8 +204,8 @@ pub async fn get_item_history_by_day(
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
     let season_start = get_season_start(pool, season_id).await?;
 
-    let day_start = season_start + ((season_day - 1) as i64 * 86400);
-    let day_end = day_start + 86400;
+    let day_start = season_start + ((season_day - 1) as i64 * SECONDS_PER_DAY);
+    let day_end = day_start + SECONDS_PER_DAY;
 
     tracing::info!(
         "get_item_history_by_day: table={}, item_id={}, season_day={}, time_range=[{day_start}, {day_end}]",
@@ -221,7 +223,7 @@ pub async fn get_item_history_by_day(
     .fetch_all(pool)
     .await?;
 
-    tracing::info!("get_item_history_by_day: records count={}", records.len());
+    tracing::debug!("get_item_history_by_day: records count={}", records.len());
     Ok(records)
 }
 
@@ -275,22 +277,12 @@ pub async fn get_items_price_compare(
     );
 
     let season_start = |season_id: &str| -> i64 {
-        match season_id {
-            "ss11" => chrono::DateTime::parse_from_rfc3339("2026-01-16T00:00:00+00:00")
-                .unwrap()
-                .timestamp(),
-            "ss12" => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00")
-                .unwrap()
-                .timestamp(),
-            _ => chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00")
-                .unwrap()
-                .timestamp(),
-        }
+        get_const_season_start(season_id).unwrap_or(1776384000)
     };
 
     let (day_start, day_end) = if let Some(day) = day_filter {
-        let start = season_start(history_season) + (((day - 1) as i64) * 86400);
-        (start, start + 86400)
+        let start = season_start(history_season) + (((day - 1) as i64) * SECONDS_PER_DAY);
+        (start, start + SECONDS_PER_DAY)
     } else {
         (0i64, i64::MAX)
     };
@@ -392,7 +384,7 @@ pub async fn get_items_price_compare(
         }
     }
 
-    tracing::info!("get_items_price_compare: result count={}", result.len());
+    tracing::debug!("get_items_price_compare: result count={}", result.len());
 
     Ok(result)
 }
@@ -638,7 +630,7 @@ pub async fn get_season_summary(
     season_id: &str,
     market_mode: &str,
 ) -> Result<SeasonSummary, crate::core::errors::AppError> {
-    let since_24h = Utc::now().timestamp() - 86400;
+    let since_24h = Utc::now().timestamp() - SECONDS_PER_DAY;
     let items_table = TableResolver::items_table(season_id, market_mode);
     let fire_table = TableResolver::fire_price_table(season_id, market_mode);
 
@@ -678,7 +670,7 @@ pub async fn get_season_trends(
     market_mode: &str,
     hours: i64,
 ) -> Result<Vec<SeasonTrendHour>, crate::core::errors::AppError> {
-    let since = Utc::now().timestamp() - hours * 3600;
+    let since = Utc::now().timestamp() - hours * SECONDS_PER_HOUR;
     let fire_table = TableResolver::fire_price_table(season_id, market_mode);
 
     let records = sqlx::query_as::<_, SeasonTrendHour>(&format!(

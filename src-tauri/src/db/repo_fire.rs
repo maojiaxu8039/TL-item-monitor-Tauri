@@ -1,17 +1,11 @@
+use crate::core::constants::get_season_start as get_const_season_start;
 use crate::db::models::{FirePriceRecord, FirePriceSnapshotRecord};
 use crate::db::table_resolver::TableResolver;
 use chrono::Utc;
 use sqlx::SqlitePool;
 
-/// Calculate season day based on scraped_at timestamp.
-/// Season day is the number of days since the season start (day 1, 2, 3, ...)
-pub fn calculate_season_day(scraped_at: i64, season_start: i64) -> i32 {
-    let days_since_start = (scraped_at - season_start) / 86400;
-    std::cmp::max(1, days_since_start as i32 + 1)
-}
-
 /// Fetch season start timestamp from database.
-/// Falls back to a default date if season not found.
+/// Falls back to constant mapping if season not found in DB.
 pub async fn get_season_start(
     pool: &SqlitePool,
     season_id: &str,
@@ -21,22 +15,23 @@ pub async fn get_season_start(
         .fetch_optional(pool)
         .await?;
 
-    Ok(started_at.map(|(ts,)| ts).unwrap_or_else(|| {
-        // Fallback: parse from season_id if it contains a number
-        // e.g., "ss12" -> use a reasonable default
-        tracing::warn!(
-            "Season {} not found in seasons table, using fallback start date",
-            season_id
-        );
-        chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00")
-            .unwrap()
-            .timestamp()
-    }))
+    match started_at.map(|(ts,)| ts) {
+        Some(ts) => Ok(ts),
+        None => {
+            tracing::warn!(
+                "Season {} not found in seasons table, using fallback from constants",
+                season_id
+            );
+            get_const_season_start(season_id)
+                .ok_or_else(|| crate::core::errors::AppError::NotFound(format!("Unknown season: {}", season_id)))
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::constants::calculate_season_day;
 
     #[test]
     fn test_calculate_season_day_ss12() {

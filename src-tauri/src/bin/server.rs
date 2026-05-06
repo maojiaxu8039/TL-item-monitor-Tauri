@@ -1,4 +1,4 @@
-//! TL Monitor Server - 独立数据采集服务器 v3.1
+//! TL Monitor Server - 独立数据采集服务器 v3.2
 //!
 //! 支持同时采集普通服和专家服数据
 //! 支持管理员操作（需要密码验证）
@@ -6,11 +6,11 @@
 //! 运行方式：
 //!   cargo run --bin server
 
+use tl_monitor::core::constants::{SECONDS_PER_HOUR, SERVER_VERSION};
 use chrono::{Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use std::sync::Arc;
-use tokio::io::AsyncWriteExt;
 use tokio::sync::{broadcast, RwLock};
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
@@ -27,6 +27,7 @@ struct ServerState {
     config: ServerConfig,
     db: SqlitePool,
     last_collection: Arc<RwLock<CollectionStatus>>,
+    cors_allowed_origins: Vec<String>,
 }
 
 #[derive(Clone, Default, Serialize)]
@@ -96,7 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start_time = Utc::now().timestamp();
 
     info!("==============================================");
-    info!("TL Monitor Server v3.1 - 支持普通服+专家服+管理员API");
+    info!("TL Monitor Server v{} - 支持普通服+专家服+管理员API", SERVER_VERSION);
     info!("==============================================");
 
     let config = match tl_monitor::server::config::load_config(CONFIG_PATH) {
@@ -137,6 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config: config.clone(),
         db: pool,
         last_collection: Arc::new(RwLock::new(CollectionStatus::default())),
+        cors_allowed_origins: config.cors_allowed_origins.clone(),
     });
 
     let http_state = state.clone();
@@ -199,10 +201,21 @@ fn verify_admin(request_body: &str, password: &str) -> Result<(), String> {
     if request_body.is_empty() {
         return Err("缺少密码字段".to_string());
     }
-    if request_body != password {
+    if !constant_time_eq(request_body.as_bytes(), password.as_bytes()) {
         return Err("密码错误".to_string());
     }
     Ok(())
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut result = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        result |= x ^ y;
+    }
+    result == 0
 }
 
 async fn handle_request(
@@ -273,7 +286,7 @@ async fn handle_request(
 
             let status = ApiStatus {
                 server: "TL Monitor Server".to_string(),
-                version: "3.1.0".to_string(),
+                version: SERVER_VERSION.to_string(),
                 uptime_seconds: Utc::now().timestamp() - start_time,
                 season_id: state.config.season_id.clone(),
                 last_collection,
@@ -573,25 +586,77 @@ async fn handle_request(
         }
     };
 
-    send_response(stream, status, &body).await;
+    let origin = get_origin_header(&request);
+    send_response(stream, status, &body, &origin, &state.cors_allowed_origins).await;
 }
 
-async fn send_response(mut stream: tokio::net::TcpStream, status: u16, body: &str) {
+fn get_origin_header(request: &str) -> Option<String> {
+    for line in request.lines() {
+        if line.len() > 7 && (&line[..7]).eq_ignore_ascii_case("origin:") {
+            return Some(line[7..].trim().to_string());
+        }
+    }
+    None
+}
+
+async fn send_response(
+    stream: tokio::net::TcpStream,
+    status: u16,
+    body: &str,
+    origin: &Option<String>,
+    allowed_origins: &[String],
+) {
+    let cors_header = if let Some(ref orig) = origin {
+        if allowed_origins.is_empty() || allowed_origins.iter().any(|o| o == orig) {
+            orig.clone()
+        } else {
+            warn!("CORS origin rejected: {}", orig);
+            return send_error_response(stream, status, "CORS origin not allowed").await;
+        }
+    } else {
+        return send_error_response(stream, status, "Missing origin header").await;
+    };
+
     let response = format!(
         "HTTP/1.1 {} {}\r\n\
         Content-Type: application/json\r\n\
         Content-Length: {}\r\n\
-        Access-Control-Allow-Origin: *\r\n\
+        Access-Control-Allow-Origin: {}\r\n\
+        Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
+        Access-Control-Allow-Headers: Content-Type, Authorization\r\n\
         \r\n\
         {}",
         status,
         if status == 200 { "OK" } else { "Error" },
         body.len(),
+        cors_header,
         body
     );
 
-    if let Err(e) = stream.write_all(response.as_bytes()).await {
+    if let Err(e) = tokio::io::AsyncWriteExt::write_all(&mut tokio::io::BufWriter::new(stream), response.as_bytes()).await {
         warn!("发送响应失败: {}", e);
+    }
+}
+
+async fn send_error_response(
+    stream: tokio::net::TcpStream,
+    status: u16,
+    message: &str,
+) {
+    let response = format!(
+        "HTTP/1.1 {} {}\r\n\
+        Content-Type: text/plain\r\n\
+        Content-Length: {}\r\n\
+        \r\n\
+        {}",
+        status,
+        if status == 200 { "OK" } else { "Error" },
+        message.len(),
+        message
+    );
+
+    if let Err(e) = tokio::io::AsyncWriteExt::write_all(&mut tokio::io::BufWriter::new(stream), response.as_bytes()).await {
+        warn!("发送错误响应失败: {}", e);
     }
 }
 
@@ -685,7 +750,7 @@ async fn run_collector(state: Arc<ServerState>, mut abort_rx: broadcast::Receive
                 info!("收到关闭信号，退出采集循环");
                 break;
             }
-            _ = tokio::time::sleep(std::time::Duration::from_secs(3600)) => {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(SECONDS_PER_HOUR as u64)) => {
                 collect_all_modes(&state).await;
             }
         }

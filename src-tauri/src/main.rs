@@ -18,7 +18,7 @@ fn main() {
 }
 
 fn run_app() -> Result<(), Box<dyn std::error::Error>> {
-    info!("TL Monitor v1.0.0 starting...");
+    info!("TL Monitor v{} starting...", tl_monitor::core::constants::APP_VERSION);
 
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| format!("Failed to create Tokio runtime: {}", e))?;

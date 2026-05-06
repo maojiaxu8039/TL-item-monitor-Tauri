@@ -382,49 +382,6 @@ pub async fn list_seasons(state: State<'_, Arc<AppState>>) -> Result<Vec<SeasonI
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-#[allow(dead_code)]
-async fn create_archive_items_table(pool: &SqlitePool, table: &str) -> Result<(), String> {
-    sqlx::query(&format!(
-        "CREATE TABLE IF NOT EXISTS {} (
-            item_id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            item_type TEXT NOT NULL DEFAULT '',
-            source TEXT NOT NULL DEFAULT '',
-            price REAL NOT NULL DEFAULT 0,
-            last_time INTEGER,
-            updated_at INTEGER NOT NULL
-        )",
-        table
-    ))
-    .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[allow(dead_code)]
-async fn create_archive_fire_table(pool: &SqlitePool, table: &str) -> Result<(), String> {
-    sqlx::query(&format!(
-        "CREATE TABLE IF NOT EXISTS {} (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            rmb_per_10k_fire REAL NOT NULL,
-            fire_per_rmb REAL NOT NULL DEFAULT 0,
-            increase_ratio REAL,
-            trading_volume TEXT,
-            source TEXT NOT NULL DEFAULT '',
-            source_time TEXT,
-            scraped_at INTEGER NOT NULL,
-            created_at INTEGER NOT NULL,
-            UNIQUE(scraped_at)
-        )",
-        table
-    ))
-    .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
 async fn create_archive_snapshots_table(pool: &SqlitePool, table: &str) -> Result<(), String> {
     sqlx::query(&format!(
         "CREATE TABLE IF NOT EXISTS {} (

@@ -21,7 +21,7 @@ pub async fn search_items(
     #[allow(non_snake_case)] typeFilter: Option<String>,
 ) -> Result<SearchResult, String> {
     let ctx = state.active_context.read().clone();
-    tracing::info!(
+    tracing::debug!(
         "search_items called: keyword={:?}, season_id={:?}, market_mode={:?}, day_filter={:?}, type_filter={:?}",
         keyword, ctx.season_id, ctx.market_mode, dayFilter, typeFilter
     );
@@ -36,7 +36,7 @@ pub async fn search_items(
         typeFilter.as_deref(),
     )
     .await?;
-    tracing::info!(
+    tracing::debug!(
         "search_items result: {} items, total={}",
         items.len(),
         total
@@ -480,7 +480,7 @@ pub async fn get_items_price_compare(
     #[allow(non_snake_case)] dayFilter: Option<i32>,
 ) -> Result<Vec<repo_history::ItemPriceCompare>, String> {
     let ctx = state.active_context.read().clone();
-    tracing::info!(
+    tracing::debug!(
         "get_items_price_compare called: current_season={}, history_season={}, market_mode={}, day_filter={:?}",
         ctx.season_id, historySeason, ctx.market_mode.as_str(), dayFilter
     );
@@ -493,7 +493,7 @@ pub async fn get_items_price_compare(
     )
     .await
     .map_err(|e| e.to_string())?;
-    tracing::info!("get_items_price_compare result: {} items", result.len());
+    tracing::debug!("get_items_price_compare result: {} items", result.len());
     Ok(result)
 }
 
@@ -501,7 +501,7 @@ pub async fn get_items_price_compare(
 pub async fn get_realtime_fire_changes(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<repo_realtime_fire::FirePriceChangeItem>, String> {
-    tracing::info!("get_realtime_fire_changes called");
+    tracing::debug!("get_realtime_fire_changes called");
     repo_realtime_fire::get_realtime_fire_changes(&state.db)
         .await
         .map_err(|e| e.to_string())
