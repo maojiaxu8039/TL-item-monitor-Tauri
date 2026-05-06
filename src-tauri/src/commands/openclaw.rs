@@ -907,10 +907,13 @@ pub async fn openclaw_chat(
 
         let send_start = Instant::now();
         let mut send_ok = false;
+        let mut pending_chunks: Vec<String> = Vec::new();
+
         while send_start.elapsed() < Duration::from_secs(15) {
-            match tokio::time::timeout(Duration::from_secs(2), read.next()).await {
+            match tokio::time::timeout(Duration::from_millis(500), read.next()).await {
                 Ok(Some(Ok(tokio_tungstenite::tungstenite::Message::Text(text)))) => {
                     println!("[OpenClaw] Gateway v3 received: {}", text);
+
                     if let Ok(value) = serde_json::from_str::<Value>(&text) {
                         if is_gateway_response_for(&value, &send_id) {
                             if gateway_response_ok(&value) {
@@ -929,16 +932,19 @@ pub async fn openclaw_chat(
 
                         if let Some(chunk) = text_from_json(&value) {
                             if !chunk.trim().is_empty() {
-                                return Ok(OpenClawResponse {
-                                    success: true,
-                                    message: "Success".to_string(),
-                                    response: Some(chunk),
-                                });
+                                pending_chunks.push(chunk.to_string());
                             }
                         }
                     }
                 }
                 Ok(Some(Ok(tokio_tungstenite::tungstenite::Message::Close(_)))) => {
+                    if !pending_chunks.is_empty() {
+                        return Ok(OpenClawResponse {
+                            success: true,
+                            message: "Success".to_string(),
+                            response: Some(pending_chunks.join("")),
+                        });
+                    }
                     return Ok(OpenClawResponse {
                         success: false,
                         message: "Gateway在发送AI请求后关闭连接".to_string(),
@@ -958,6 +964,14 @@ pub async fn openclaw_chat(
                 Err(_) => {}
                 _ => {}
             }
+        }
+
+        if send_ok && !pending_chunks.is_empty() {
+            return Ok(OpenClawResponse {
+                success: true,
+                message: "Success".to_string(),
+                response: Some(pending_chunks.join("")),
+            });
         }
 
         if !send_ok {
