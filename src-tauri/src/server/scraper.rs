@@ -1,5 +1,13 @@
 //! 数据抓取模块
 
+fn safe_truncate(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len])
+    }
+}
+
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -157,15 +165,15 @@ impl Scraper {
         }
 
         let text = resp
-            .text()
-            .await
-            .map_err(|e| format!("读取响应失败: {}", e))?;
+        .text()
+        .await
+        .map_err(|e| format!("读取响应失败: {}", e))?;
 
-        info!("火价API响应: {}", &text[..text.len().min(500)]);
+        info!("火价API响应: {}", safe_truncate(&text, 500));
 
         // 解析 JSON 响应
         let json: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| format!("JSON 解析失败: {} | body: {}", e, &text[..200]))?;
+            .map_err(|e| format!("JSON 解析失败: {} | body: {}", e, safe_truncate(&text, 200)))?;
 
         let code = json["code"].as_str().unwrap_or("");
         if code != "0" {
