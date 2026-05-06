@@ -122,50 +122,27 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppErro
         ]
     };
 
-    let possible_script = std::path::PathBuf::from(option_env!("CARGO_MANIFEST_DIR").unwrap_or("."))
-        .join("resources/qiandao_fire.mjs");
+    let script_path = possible_executables
+        .iter()
+        .find(|p| p.exists())
+        .cloned()
+        .ok_or_else(|| {
+            let paths_str = possible_executables
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            AppError::Scrape(format!(
+                "Node.js script not found. Tried: {}",
+                paths_str
+            ))
+        })?;
 
-    let script_path = {
-        let mut paths = possible_executables.clone();
-        if possible_script.exists() {
-            paths.push(possible_script);
-        }
-
-        paths
-            .iter()
-            .find(|p| p.exists())
-            .cloned()
-            .ok_or_else(|| {
-                let paths_str = possible_executables
-                    .iter()
-                    .map(|p| p.display().to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                AppError::Scrape(format!(
-                    "Node.js script not found. Tried: {}",
-                    paths_str
-                ))
-            })?
-    };
-
-    let use_executable = script_path.extension().is_none()
-        || script_path.to_string_lossy().ends_with(".exe")
-        || script_path.to_string_lossy().ends_with("_fire");
-
-    let output = if use_executable {
-        tokio::process::Command::new(&script_path)
-            .arg(if mode == "专家" { "pro" } else { "normal" })
-            .output()
-            .await
-            .map_err(|e| AppError::Scrape(format!("Script execution failed: {}", e)))?
-    } else {
-        tokio::process::Command::new("node")
-            .arg(&script_path)
-            .arg(if mode == "专家" { "pro" } else { "normal" })
-            .output()
-            .await
-            .map_err(|e| AppError::Scrape(format!("Node.js execution failed: {}", e)))?
-    };
+    let output = tokio::process::Command::new(&script_path)
+        .arg(if mode == "专家" { "pro" } else { "normal" })
+        .output()
+        .await
+        .map_err(|e| AppError::Scrape(format!("Script execution failed: {}", e)))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
