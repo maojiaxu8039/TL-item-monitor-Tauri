@@ -33,8 +33,9 @@ interface ServerStatus {
 }
 
 interface FireHistoryRecord {
-  id: string;
+  id?: string;
   season_id: string;
+  market_mode?: string;
   rmb_per_10k_fire: number;
   fire_per_rmb: number;
   increase_ratio: number | null;
@@ -46,14 +47,17 @@ interface FireHistoryRecord {
 }
 
 interface ItemsHistoryRecord {
-  id: string;
+  id?: string;
   item_id: string;
   season_id: string;
-  name: string;
-  item_type: string | null;
-  price: number;
+  market_mode?: string;
+  name?: string | null;
+  item_type?: string | null;
+  price?: number;
+  fire_price?: number;
   last_time: number | null;
   scraped_at: number;
+  season_day?: number;
   created_at?: number;
 }
 
@@ -154,9 +158,8 @@ export default function DataMonitorPage() {
         }
         return { synced, type: "fire" };
       } else {
-        const url = hours === 99999
-          ? `${serverUrl}/items-history-all?mode=${modeParam}&limit=99999`
-          : `${serverUrl}/items-history?mode=${modeParam}&limit=${hours}`;
+        // Always use /items-history-all for bulk sync, /items-history requires item_id
+        const url = `${serverUrl}/items-history-all?mode=${modeParam}&limit=${hours === 99999 ? 99999 : hours * 10}`;
         
         const response = await fetch(url);
         if (!response.ok) throw new Error("Failed to fetch items data");
@@ -172,13 +175,13 @@ export default function DataMonitorPage() {
         for (const record of records) {
           try {
             await cmd.syncItemsRecord({
-              season_id: record.season_id,
+              season_id: record.season_id || marketContext.seasonId,
               market_mode: marketMode,
               item_id: record.item_id,
-              name: record.name,
-              item_type: record.item_type,
-              price: record.price,
-              last_time: record.last_time,
+              name: record.name || record.item_id,
+              item_type: record.item_type ?? null,
+              price: record.price ?? record.fire_price ?? 0,
+              last_time: record.last_time ?? record.scraped_at,
               recorded_at: record.scraped_at,
             });
             synced++;

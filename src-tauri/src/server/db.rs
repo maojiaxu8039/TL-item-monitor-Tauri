@@ -1,12 +1,12 @@
 //! 数据库操作模块 - 与客户端一致的表结构
-//! 
+//!
 //! 表结构设计：
 //! - fire_price_snapshots_{season}_{mode}: 火价快照，按赛季和模式分表
 //! - item_snapshots_{season}_{mode}: 物品价格快照，按赛季和模式分表
 
-use sqlx::{SqlitePool, Row};
 use serde::Serialize;
-use tracing::{info, error};
+use sqlx::{Row, SqlitePool};
+use tracing::{error, info};
 
 use super::scraper::{FirePriceSnapshot, Item};
 
@@ -16,8 +16,20 @@ pub enum MarketMode {
     Expert,
 }
 
+impl std::str::FromStr for MarketMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "season_expert" | "expert" => Ok(MarketMode::Expert),
+            "season_normal" | "normal" => Ok(MarketMode::Normal),
+            _ => Err(format!("Unknown market mode: {}", s)),
+        }
+    }
+}
+
 impl MarketMode {
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s {
             "season_expert" | "expert" => MarketMode::Expert,
             _ => MarketMode::Normal,
@@ -47,23 +59,65 @@ fn calculate_season_day(season_start: i64, recorded_at: i64) -> i32 {
     (days + 1) as i32
 }
 
+async fn table_exists(pool: &SqlitePool, table: &str) -> Result<bool, String> {
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?")
+            .bind(table)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| format!("检查表 {} 失败: {}", table, e))?;
+    Ok(count > 0)
+}
+
+async fn column_exists(pool: &SqlitePool, table: &str, column: &str) -> Result<bool, String> {
+    if !table_exists(pool, table).await? {
+        return Ok(false);
+    }
+
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pragma_table_info(?) WHERE name=?")
+        .bind(table)
+        .bind(column)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("检查字段 {}.{} 失败: {}", table, column, e))?;
+    Ok(count > 0)
+}
+
+async fn add_column_if_missing(
+    pool: &SqlitePool,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> Result<(), String> {
+    if !table_exists(pool, table).await? || column_exists(pool, table, column).await? {
+        return Ok(());
+    }
+
+    sqlx::query(&format!(
+        "ALTER TABLE {} ADD COLUMN {} {}",
+        table, column, definition
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| format!("补充字段 {}.{} 失败: {}", table, column, e))?;
+    Ok(())
+}
+
 /// 获取赛季开始时间戳（从数据库查询，失败时回退到硬编码）
 async fn get_season_start(pool: &SqlitePool, season_id: &str) -> i64 {
-    let started_at: Option<(i64,)> = sqlx::query_as(
-        "SELECT started_at FROM seasons WHERE id = ?"
-    )
-    .bind(season_id)
-    .fetch_optional(pool)
-    .await
-    .unwrap_or(None);
+    let started_at: Option<(i64,)> = sqlx::query_as("SELECT started_at FROM seasons WHERE id = ?")
+        .bind(season_id)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
 
-    started_at.map(|(ts,)| ts).unwrap_or_else(|| {
-        match season_id {
+    started_at
+        .map(|(ts,)| ts)
+        .unwrap_or_else(|| match season_id {
             "ss12" => 1776384000,
             "ss11" => 1768521600,
             _ => 1776384000,
-        }
-    })
+        })
 }
 
 /// 运行数据库迁移
@@ -98,12 +152,14 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         let items_table = format!("item_snapshots_{}_normal", season);
         sqlx::query(&format!(
             r#"
-            CREATE TABLE IF NOT EXISTS {} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_id TEXT NOT NULL,
-                fire_price REAL NOT NULL,
-                scraped_at INTEGER NOT NULL,
-                season_day INTEGER NOT NULL DEFAULT 1,
+	            CREATE TABLE IF NOT EXISTS {} (
+	                id INTEGER PRIMARY KEY AUTOINCREMENT,
+	                item_id TEXT NOT NULL,
+	                name TEXT NOT NULL DEFAULT '',
+	                item_type TEXT NOT NULL DEFAULT '',
+	                fire_price REAL NOT NULL,
+	                scraped_at INTEGER NOT NULL,
+	                season_day INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(item_id, scraped_at)
             )
             "#,
@@ -112,6 +168,15 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", items_table, e))?;
+        add_column_if_missing(pool, &items_table, "name", "TEXT NOT NULL DEFAULT ''").await?;
+        add_column_if_missing(pool, &items_table, "item_type", "TEXT NOT NULL DEFAULT ''").await?;
+        add_column_if_missing(
+            pool,
+            &items_table,
+            "season_day",
+            "INTEGER NOT NULL DEFAULT 1",
+        )
+        .await?;
 
         // 火价快照表（专家）
         let expert_table = format!("fire_price_snapshots_{}_expert", season);
@@ -140,12 +205,14 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         let expert_items_table = format!("item_snapshots_{}_expert", season);
         sqlx::query(&format!(
             r#"
-            CREATE TABLE IF NOT EXISTS {} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_id TEXT NOT NULL,
-                fire_price REAL NOT NULL,
-                scraped_at INTEGER NOT NULL,
-                season_day INTEGER NOT NULL DEFAULT 1,
+	            CREATE TABLE IF NOT EXISTS {} (
+	                id INTEGER PRIMARY KEY AUTOINCREMENT,
+	                item_id TEXT NOT NULL,
+	                name TEXT NOT NULL DEFAULT '',
+	                item_type TEXT NOT NULL DEFAULT '',
+	                fire_price REAL NOT NULL,
+	                scraped_at INTEGER NOT NULL,
+	                season_day INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(item_id, scraped_at)
             )
             "#,
@@ -154,28 +221,61 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", expert_items_table, e))?;
+        add_column_if_missing(
+            pool,
+            &expert_items_table,
+            "name",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+        .await?;
+        add_column_if_missing(
+            pool,
+            &expert_items_table,
+            "item_type",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+        .await?;
+        add_column_if_missing(
+            pool,
+            &expert_items_table,
+            "season_day",
+            "INTEGER NOT NULL DEFAULT 1",
+        )
+        .await?;
 
         // 创建索引
         sqlx::query(&format!(
             "CREATE INDEX IF NOT EXISTS idx_{}_scraped ON {}(scraped_at)",
-            table.replace("-", "_"), table
+            table.replace("-", "_"),
+            table
         ))
-        .execute(pool).await.ok();
+        .execute(pool)
+        .await
+        .ok();
         sqlx::query(&format!(
             "CREATE INDEX IF NOT EXISTS idx_{}_item_scraped ON {}(item_id, scraped_at)",
-            items_table.replace("-", "_"), items_table
+            items_table.replace("-", "_"),
+            items_table
         ))
-        .execute(pool).await.ok();
+        .execute(pool)
+        .await
+        .ok();
         sqlx::query(&format!(
             "CREATE INDEX IF NOT EXISTS idx_{}_scraped ON {}(scraped_at)",
-            expert_table.replace("-", "_"), expert_table
+            expert_table.replace("-", "_"),
+            expert_table
         ))
-        .execute(pool).await.ok();
+        .execute(pool)
+        .await
+        .ok();
         sqlx::query(&format!(
             "CREATE INDEX IF NOT EXISTS idx_{}_item_scraped ON {}(item_id, scraped_at)",
-            expert_items_table.replace("-", "_"), expert_items_table
+            expert_items_table.replace("-", "_"),
+            expert_items_table
         ))
-        .execute(pool).await.ok();
+        .execute(pool)
+        .await
+        .ok();
 
         info!("已创建/验证赛季 {} 的表结构", season);
     }
@@ -192,7 +292,7 @@ pub async fn insert_fire_snapshot(
     fire: &FirePriceSnapshot,
     scraped_at: i64,
 ) -> Result<(), String> {
-    let mode = MarketMode::from_str(market_mode);
+    let mode = MarketMode::parse(market_mode);
     let table = mode.fire_table(season_id);
     let season_start = get_season_start(pool, season_id).await;
     let season_day = calculate_season_day(season_start, scraped_at);
@@ -217,7 +317,10 @@ pub async fn insert_fire_snapshot(
     .await
     .map_err(|e| format!("插入火价快照失败: {}", e))?;
 
-    info!("火价快照已保存: {} (scraped_at: {}, season_day: {})", fire.rmb_per_10k_fire, scraped_at, season_day);
+    info!(
+        "火价快照已保存: {} (scraped_at: {}, season_day: {})",
+        fire.rmb_per_10k_fire, scraped_at, season_day
+    );
     Ok(())
 }
 
@@ -230,7 +333,7 @@ pub async fn insert_items_snapshots(
     items: &[Item],
     scraped_at: i64,
 ) -> Result<usize, String> {
-    let mode = MarketMode::from_str(market_mode);
+    let mode = MarketMode::parse(market_mode);
     let table = mode.items_table(season_id);
     let season_start = get_season_start(pool, season_id).await;
     let season_day = calculate_season_day(season_start, scraped_at);
@@ -244,12 +347,14 @@ pub async fn insert_items_snapshots(
         if let Err(e) = sqlx::query(&format!(
             r#"
             INSERT OR IGNORE INTO {}
-            (item_id, fire_price, scraped_at, season_day)
-            VALUES (?, ?, ?, ?)
+            (item_id, name, item_type, fire_price, scraped_at, season_day)
+            VALUES (?, ?, ?, ?, ?, ?)
             "#,
             table
         ))
         .bind(&item.item_id)
+        .bind(&item.name)
+        .bind(&item.item_type)
         .bind(fire_price)
         .bind(scraped_at)
         .bind(season_day)
@@ -264,12 +369,17 @@ pub async fn insert_items_snapshots(
 
     tx.commit().await.map_err(|e| e.to_string())?;
 
-    info!("已保存 {} 个物品价格快照 (scraped_at: {}, season_day: {})", count, scraped_at, season_day);
+    info!(
+        "已保存 {} 个物品价格快照 (scraped_at: {}, season_day: {})",
+        count, scraped_at, season_day
+    );
     Ok(count)
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct FireSnapshotRecord {
+    pub season_id: String,
+    pub market_mode: String,
     pub rmb_per_10k_fire: f64,
     pub fire_per_rmb: f64,
     pub increase_ratio: f64,
@@ -283,6 +393,10 @@ pub struct FireSnapshotRecord {
 #[derive(Debug, Clone, Serialize)]
 pub struct ItemSnapshotRecord {
     pub item_id: String,
+    pub season_id: String,
+    pub market_mode: String,
+    pub name: String,
+    pub item_type: String,
     pub fire_price: f64,
     pub scraped_at: i64,
     pub season_day: i32,
@@ -295,7 +409,7 @@ pub async fn get_fire_history(
     market_mode: &str,
     limit: i32,
 ) -> Result<Vec<FireSnapshotRecord>, String> {
-    let mode = MarketMode::from_str(market_mode);
+    let mode = MarketMode::parse(market_mode);
     let table = mode.fire_table(season_id);
 
     let query = format!(
@@ -317,12 +431,18 @@ pub async fn get_fire_history(
     let records: Vec<FireSnapshotRecord> = rows
         .into_iter()
         .map(|row| FireSnapshotRecord {
+            season_id: season_id.to_string(),
+            market_mode: market_mode.to_string(),
             rmb_per_10k_fire: row.get("rmb_per_10k_fire"),
             fire_per_rmb: row.get("fire_per_rmb"),
             increase_ratio: row.get::<Option<f64>, _>("increase_ratio").unwrap_or(0.0),
-            trading_volume: row.get::<Option<String>, _>("trading_volume").unwrap_or_default(),
+            trading_volume: row
+                .get::<Option<String>, _>("trading_volume")
+                .unwrap_or_default(),
             source: row.get("source"),
-            source_time: row.get::<Option<String>, _>("source_time").unwrap_or_default(),
+            source_time: row
+                .get::<Option<String>, _>("source_time")
+                .unwrap_or_default(),
             scraped_at: row.get("scraped_at"),
             season_day: row.get("season_day"),
         })
@@ -335,7 +455,7 @@ pub async fn get_fire_history(
 pub async fn init_new_season(
     pool: &SqlitePool,
     season_id: &str,
-    season_name: Option<&str>,
+    _season_name: Option<&str>,
 ) -> Result<Vec<String>, String> {
     let mut created_tables = Vec::new();
 
@@ -370,6 +490,8 @@ pub async fn init_new_season(
             CREATE TABLE IF NOT EXISTS {} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 item_id TEXT NOT NULL,
+                name TEXT NOT NULL DEFAULT '',
+                item_type TEXT NOT NULL DEFAULT '',
                 fire_price REAL NOT NULL,
                 scraped_at INTEGER NOT NULL,
                 season_day INTEGER NOT NULL DEFAULT 1,
@@ -384,7 +506,11 @@ pub async fn init_new_season(
         created_tables.push(items_table);
     }
 
-    info!("新赛季 {} 已初始化，创建了 {} 张表", season_id, created_tables.len());
+    info!(
+        "新赛季 {} 已初始化，创建了 {} 张表",
+        season_id,
+        created_tables.len()
+    );
     Ok(created_tables)
 }
 
@@ -395,7 +521,7 @@ pub async fn get_fire_history_all(
     market_mode: &str,
     _limit: i32,
 ) -> Result<Vec<FireSnapshotRecord>, String> {
-    let mode = MarketMode::from_str(market_mode);
+    let mode = MarketMode::parse(market_mode);
     let table = mode.fire_table(season_id);
 
     let query = format!(
@@ -415,12 +541,18 @@ pub async fn get_fire_history_all(
     let records: Vec<FireSnapshotRecord> = rows
         .into_iter()
         .map(|row| FireSnapshotRecord {
+            season_id: season_id.to_string(),
+            market_mode: market_mode.to_string(),
             rmb_per_10k_fire: row.get("rmb_per_10k_fire"),
             fire_per_rmb: row.get("fire_per_rmb"),
             increase_ratio: row.get::<Option<f64>, _>("increase_ratio").unwrap_or(0.0),
-            trading_volume: row.get::<Option<String>, _>("trading_volume").unwrap_or_default(),
+            trading_volume: row
+                .get::<Option<String>, _>("trading_volume")
+                .unwrap_or_default(),
             source: row.get("source"),
-            source_time: row.get::<Option<String>, _>("source_time").unwrap_or_default(),
+            source_time: row
+                .get::<Option<String>, _>("source_time")
+                .unwrap_or_default(),
             scraped_at: row.get("scraped_at"),
             season_day: row.get("season_day"),
         })
@@ -437,12 +569,12 @@ pub async fn get_items_history(
     market_mode: &str,
     limit: i32,
 ) -> Result<Vec<ItemSnapshotRecord>, String> {
-    let mode = MarketMode::from_str(market_mode);
+    let mode = MarketMode::parse(market_mode);
     let table = mode.items_table(season_id);
 
     let query = format!(
         r#"
-        SELECT item_id, fire_price, scraped_at, season_day
+        SELECT item_id, name, item_type, fire_price, scraped_at, season_day
         FROM {}
         WHERE item_id = ?
         ORDER BY scraped_at DESC
@@ -462,6 +594,15 @@ pub async fn get_items_history(
         .into_iter()
         .map(|row| ItemSnapshotRecord {
             item_id: row.get("item_id"),
+            season_id: season_id.to_string(),
+            market_mode: market_mode.to_string(),
+            name: row
+                .get::<Option<String>, _>("name")
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| row.get("item_id")),
+            item_type: row
+                .get::<Option<String>, _>("item_type")
+                .unwrap_or_default(),
             fire_price: row.get("fire_price"),
             scraped_at: row.get("scraped_at"),
             season_day: row.get("season_day"),
@@ -475,10 +616,13 @@ pub async fn get_items_history(
 #[derive(Debug, Clone, Serialize)]
 pub struct ItemSnapshotWithInfo {
     pub item_id: String,
+    pub season_id: String,
+    pub market_mode: String,
     pub fire_price: f64,
     pub scraped_at: i64,
     pub season_day: i32,
     pub name: Option<String>,
+    pub item_type: Option<String>,
 }
 
 pub async fn get_items_history_all(
@@ -487,12 +631,12 @@ pub async fn get_items_history_all(
     market_mode: &str,
     limit: i32,
 ) -> Result<Vec<ItemSnapshotWithInfo>, String> {
-    let mode = MarketMode::from_str(market_mode);
+    let mode = MarketMode::parse(market_mode);
     let table = mode.items_table(season_id);
 
     let query = format!(
         r#"
-        SELECT item_id, fire_price, scraped_at, season_day
+        SELECT item_id, name, item_type, fire_price, scraped_at, season_day
         FROM {}
         ORDER BY scraped_at DESC
         LIMIT ?
@@ -510,10 +654,17 @@ pub async fn get_items_history_all(
         .into_iter()
         .map(|row| ItemSnapshotWithInfo {
             item_id: row.get("item_id"),
+            season_id: season_id.to_string(),
+            market_mode: market_mode.to_string(),
             fire_price: row.get("fire_price"),
             scraped_at: row.get("scraped_at"),
             season_day: row.get("season_day"),
-            name: None,
+            name: row
+                .get::<Option<String>, _>("name")
+                .filter(|name| !name.is_empty()),
+            item_type: row
+                .get::<Option<String>, _>("item_type")
+                .filter(|item_type| !item_type.is_empty()),
         })
         .collect();
 

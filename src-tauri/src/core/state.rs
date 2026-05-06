@@ -1,6 +1,6 @@
 // core/state.rs — Application state using sqlx
-use sqlx::SqlitePool;
 use parking_lot::RwLock;
+use sqlx::SqlitePool;
 
 pub struct AppState {
     pub db: SqlitePool,
@@ -55,7 +55,7 @@ pub struct ScrapeSettings {
     pub auto_reload: bool,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct DesktopSettings {
     pub auto_start: bool,
@@ -145,17 +145,6 @@ impl Default for ScrapeSettings {
             items_json_path: String::new(),
             items_reload_interval: 300,
             auto_reload: true,
-        }
-    }
-}
-
-impl Default for DesktopSettings {
-    fn default() -> Self {
-        Self {
-            auto_start: false,
-            tray_on_close: false,
-            mini_mode: false,
-            free_layout: false,
         }
     }
 }

@@ -68,17 +68,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
     ? (currentDayQuery.error || historyDayQuery.error)
     : (currentSeasonQuery.error || historySeasonQuery.error);
 
-  console.log("[ItemPriceTrendModal] viewMode:", viewMode);
-  console.log("[ItemPriceTrendModal] currentSeason:", currentSeason, "historySeason:", historySeason);
-  console.log("[ItemPriceTrendModal] currentDay:", currentDay);
-  console.log("[ItemPriceTrendModal] currentData length:", currentData?.length);
-  console.log("[ItemPriceTrendModal] historyData length:", historyData?.length);
-  if (currentData?.length > 0) {
-    console.log("[ItemPriceTrendModal] first current record:", currentData[0]);
-  }
-  if (historyData?.length > 0) {
-    console.log("[ItemPriceTrendModal] first history record:", historyData[0]);
-  }
+
 
   const getCurrentSeasonStart = () => {
     if (currentSeason === "ss12") return 1776384000;
@@ -141,8 +131,6 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
       return Array.from(dataMap.values()).sort((a, b) => a.day - b.day) as (HourData | DayData)[];
     }
   }, [viewMode, currentData, historyData, currentSeasonStart, historySeasonStart]);
-
-  console.log("[ItemPriceTrendModal] chartData:", chartData);
 
   const stats = useMemo(() => {
     if (currentData.length === 0) return null;

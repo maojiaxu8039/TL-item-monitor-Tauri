@@ -8,6 +8,6 @@ pub mod core;
 pub mod db;
 pub mod scheduler;
 pub mod scraper;
+pub mod server;
 pub mod services;
 pub mod tray;
-pub mod server;

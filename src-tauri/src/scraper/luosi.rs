@@ -62,7 +62,11 @@ pub async fn scrape_items(season_id: &str, market_mode: &str) -> Result<Vec<Item
     scrape_by_season_id(api_season_id, &target_season_id, &target_market_mode).await
 }
 
-async fn scrape_by_season_id(api_season_id: i32, season_id: &str, market_mode: &str) -> Result<Vec<Item>, AppError> {
+async fn scrape_by_season_id(
+    api_season_id: i32,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<Vec<Item>, AppError> {
     let url = format!("{}?season_id={}", LUOSI_BASE_URL, api_season_id);
 
     let client = reqwest::Client::builder()
@@ -77,7 +81,10 @@ async fn scrape_by_season_id(api_season_id: i32, season_id: &str, market_mode: &
         .map_err(|e| AppError::Scrape(format!("request failed: {}", e)))?;
 
     if !resp.status().is_success() {
-        return Err(AppError::Scrape(format!("API returned status: {}", resp.status())));
+        return Err(AppError::Scrape(format!(
+            "API returned status: {}",
+            resp.status()
+        )));
     }
 
     let map: HashMap<String, LuosiItem> = resp
@@ -101,6 +108,11 @@ async fn scrape_by_season_id(api_season_id: i32, season_id: &str, market_mode: &
         })
         .collect();
 
-    tracing::info!("Scraped {} items from Luosi API for {}/{}", items.len(), season_id, market_mode);
+    tracing::info!(
+        "Scraped {} items from Luosi API for {}/{}",
+        items.len(),
+        season_id,
+        market_mode
+    );
     Ok(items)
 }

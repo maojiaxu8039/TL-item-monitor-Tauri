@@ -116,25 +116,23 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let _tray = TrayIconBuilder::new()
         .menu(&menu)
         .tooltip(&initial_tooltip)
-        .on_menu_event(move |app, event| {
-            match event.id().as_ref() {
-                "show" => {
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
+        .on_menu_event(move |app, event| match event.id().as_ref() {
+            "show" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
                 }
-                "refresh" => {
-                    let app = app.clone();
-                    tauri::async_runtime::spawn(async move {
-                        refresh_and_sync_fire_price(app).await;
-                    });
-                }
-                "quit" => {
-                    app.exit(0);
-                }
-                _ => {}
             }
+            "refresh" => {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    refresh_and_sync_fire_price(app).await;
+                });
+            }
+            "quit" => {
+                app.exit(0);
+            }
+            _ => {}
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {

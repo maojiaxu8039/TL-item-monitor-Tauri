@@ -32,7 +32,8 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppErro
     // Try multiple possible paths for the Node.js script
     let possible_paths = [
         // Development path (when running from cargo)
-        std::path::PathBuf::from(option_env!("CARGO_MANIFEST_DIR").unwrap_or(".")).join("resources/qiandao_fire.mjs"),
+        std::path::PathBuf::from(option_env!("CARGO_MANIFEST_DIR").unwrap_or("."))
+            .join("resources/qiandao_fire.mjs"),
         // Production path (when running from installed app)
         std::env::current_exe()
             .ok()
@@ -41,7 +42,11 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppErro
         // Alternative production path
         std::env::current_exe()
             .ok()
-            .and_then(|exe| exe.parent().and_then(|p| p.parent()).map(|p| p.join("resources/qiandao_fire.mjs")))
+            .and_then(|exe| {
+                exe.parent()
+                    .and_then(|p| p.parent())
+                    .map(|p| p.join("resources/qiandao_fire.mjs"))
+            })
             .unwrap_or_default(),
     ];
 
@@ -50,7 +55,8 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppErro
         .find(|p| p.exists())
         .cloned()
         .ok_or_else(|| {
-            let paths_str = possible_paths.iter()
+            let paths_str = possible_paths
+                .iter()
                 .map(|p| p.display().to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
@@ -84,14 +90,19 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppErro
 
     // Parse the new output format: {"code":"0","data":{...}}
     let result: NodeJsOutput = serde_json::from_str(&stdout).map_err(|e| {
-        AppError::Scrape(format!("Node.js output parse error: {} | output: {}", e, stdout))
+        AppError::Scrape(format!(
+            "Node.js output parse error: {} | output: {}",
+            e, stdout
+        ))
     })?;
 
     if let Some(error) = result.error {
         return Err(AppError::Scrape(format!("Node.js script error: {}", error)));
     }
 
-    let data = result.data.ok_or_else(|| AppError::Scrape("No data in Node.js output".to_string()))?;
+    let data = result
+        .data
+        .ok_or_else(|| AppError::Scrape("No data in Node.js output".to_string()))?;
 
     tracing::info!(
         "Fire price scraped via Node.js: fire_per_rmb={}, rmb_per_fire={}",
@@ -160,9 +171,16 @@ async fn scrape_via_rust(mode: &str) -> Result<FirePriceSnapshot, AppError> {
         .map_err(|e| AppError::Scrape(format!("HTTP request failed: {}", e)))?;
 
     let status = resp.status();
-    let text: String = resp.text().await.map_err(|e| AppError::Scrape(e.to_string()))?;
+    let text: String = resp
+        .text()
+        .await
+        .map_err(|e| AppError::Scrape(e.to_string()))?;
 
-    tracing::debug!("Response: status={}, body={}", status, &text[..text.len().min(500)]);
+    tracing::debug!(
+        "Response: status={}, body={}",
+        status,
+        &text[..text.len().min(500)]
+    );
 
     let data: QiandaoResponse = serde_json::from_str(&text).map_err(|e| {
         AppError::Scrape(format!("JSON parse error: {} | body: {}", e, &text[..200]))
@@ -215,7 +233,11 @@ fn parse_qiandao_response(
         trading_volume: None,
         source: format!(
             "千岛API-{}",
-            if mode == "专家" { "赛季专家" } else { "赛季普通" }
+            if mode == "专家" {
+                "赛季专家"
+            } else {
+                "赛季普通"
+            }
         ),
         source_time: None,
         scraped_at: Utc::now().timestamp(),

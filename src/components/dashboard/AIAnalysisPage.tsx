@@ -165,8 +165,6 @@ export default function AIAnalysisPage() {
     setConnectionStatus('connecting');
 
     try {
-      console.log('[OpenClaw] Testing connection via Tauri backend...');
-
       const result = await cmd.openclawChat(
         settings.gatewayUrl,
         settings.gatewayToken,
@@ -174,19 +172,14 @@ export default function AIAnalysisPage() {
         "Just testing connection"
       );
 
-      console.log('[OpenClaw] Connection test result:', result);
-
       if (result.success) {
-        console.log('[OpenClaw] Gateway is reachable');
         setConnectionStatus('connected');
         addToast("success", "OpenClaw Gateway已连接");
       } else {
-        console.error('[OpenClaw] Connection failed:', result.message);
         setConnectionStatus('error');
         addToast("error", `连接失败: ${result.message}`);
       }
     } catch (error) {
-      console.error('[OpenClaw] Connection error:', error);
       setConnectionStatus('error');
       addToast("error", "无法连接到OpenClaw Gateway");
     }
@@ -218,16 +211,12 @@ export default function AIAnalysisPage() {
 
       const systemPrompt = `你是TL（火炬之光）游戏的经济分析专家。请基于提供的火价和物品数据，给出专业的交易建议。回答要求简洁专业，使用中文。`;
 
-      console.log('[OpenClaw] Sending via Tauri backend...');
-
       const result = await cmd.openclawChat(
         settings.gatewayUrl,
         settings.gatewayToken,
         input,
         `${systemPrompt}\n\n${contextData}`
       );
-
-      console.log('[OpenClaw] Response:', result);
 
       if (result.success && result.response) {
         const assistantMessage: ChatMessage = {

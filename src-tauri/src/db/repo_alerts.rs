@@ -56,6 +56,7 @@ pub async fn create_alert_rule(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn update_alert_rule(
     pool: &SqlitePool,
     id: &str,
@@ -72,7 +73,7 @@ pub async fn update_alert_rule(
         r#"UPDATE alert_rules SET
            strategy_id = ?, section_id = ?, item_id = ?, rule_type = ?,
            threshold = ?, enabled = ?, cooldown_seconds = ?, updated_at = ?
-           WHERE id = ?"#
+           WHERE id = ?"#,
     )
     .bind(strategy_id)
     .bind(section_id)
@@ -152,13 +153,10 @@ pub async fn mark_alert_seen(pool: &SqlitePool, id: &str) -> Result<(), AppError
     Ok(())
 }
 
-pub async fn get_alert_events(
-    pool: &SqlitePool,
-    limit: i64,
-) -> Result<Vec<AlertEvent>, AppError> {
+pub async fn get_alert_events(pool: &SqlitePool, limit: i64) -> Result<Vec<AlertEvent>, AppError> {
     let rows: Vec<AlertEvent> = sqlx::query_as(
         r#"SELECT id, rule_id, section_item_id, triggered_at, message, seen, created_at
-           FROM alert_events ORDER BY triggered_at DESC LIMIT ?"#
+           FROM alert_events ORDER BY triggered_at DESC LIMIT ?"#,
     )
     .bind(limit)
     .fetch_all(pool)

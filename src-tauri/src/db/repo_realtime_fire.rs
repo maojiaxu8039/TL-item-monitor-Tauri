@@ -1,9 +1,9 @@
-use crate::db::table_resolver::TableResolver;
 use crate::core::errors::AppError;
-use sqlx::SqlitePool;
-use serde::{Serialize, Deserialize};
+use crate::db::table_resolver::TableResolver;
 use chrono::Utc;
-use rand::{SeedableRng, Rng};
+use rand::{Rng, SeedableRng};
+use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct RealtimeFirePriceRecord {
@@ -81,10 +81,10 @@ pub async fn batch_insert_realtime_fire_prices(
 
     let table = TableResolver::realtime_fire_prices_table();
     let now = Utc::now().timestamp();
-    
+
     let mut count = 0;
     let mut tx = pool.begin().await?;
-    
+
     for (item_id, item_name, fire_price, scraped_at) in records {
         sqlx::query(
             &format!(
@@ -101,7 +101,7 @@ pub async fn batch_insert_realtime_fire_prices(
         .await?;
         count += 1;
     }
-    
+
     tx.commit().await?;
     Ok(count)
 }
@@ -111,21 +111,19 @@ pub async fn get_realtime_fire_changes(
 ) -> Result<Vec<FirePriceChangeItem>, AppError> {
     let table = TableResolver::realtime_fire_prices_table();
     let now = Utc::now().timestamp();
-    
-    let three_hours_ago = now - 3 * 3600;
-    let one_hour_ago = now - 3600;
-    let thirty_min_ago = now - 1800;
 
-    let records: Vec<RealtimeFirePriceRecord> = sqlx::query_as(
-        &format!(
-            r#"
+    let three_hours_ago = now - 3 * 3600;
+    let _one_hour_ago = now - 3600;
+    let _thirty_min_ago = now - 1800;
+
+    let records: Vec<RealtimeFirePriceRecord> = sqlx::query_as(&format!(
+        r#"
             SELECT * FROM {} 
             WHERE scraped_at > {}
             ORDER BY scraped_at DESC
             "#,
-            table, three_hours_ago
-        )
-    )
+        table, three_hours_ago
+    ))
     .fetch_all(pool)
     .await?;
 
@@ -133,7 +131,8 @@ pub async fn get_realtime_fire_changes(
         return Ok(Vec::new());
     }
 
-    let mut latest_by_item: std::collections::HashMap<String, &RealtimeFirePriceRecord> = std::collections::HashMap::new();
+    let mut latest_by_item: std::collections::HashMap<String, &RealtimeFirePriceRecord> =
+        std::collections::HashMap::new();
     let mut price_3h: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
     let mut price_1h: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
     let mut price_30m: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
@@ -141,11 +140,11 @@ pub async fn get_realtime_fire_changes(
 
     for record in &records {
         let item_id = &record.item_id;
-        
+
         if !latest_by_item.contains_key(item_id) {
             latest_by_item.insert(item_id.clone(), record);
         }
-        
+
         let age_minutes = (now - record.scraped_at) / 60;
         if age_minutes >= 150 && !price_3h.contains_key(item_id) {
             price_3h.insert(item_id.clone(), record.fire_price);
@@ -164,22 +163,24 @@ pub async fn get_realtime_fire_changes(
     let mut result = Vec::new();
     for (item_id, latest) in latest_by_item {
         let current_price = latest.fire_price;
-        
+
         let price_3h_ago = price_3h.get(&item_id).copied();
         let price_1h_ago = price_1h.get(&item_id).copied();
         let price_30m_ago = price_30m.get(&item_id).copied();
         let price_5m_ago = price_5m.get(&item_id).copied();
-        
+
         let change_amount_3h = price_3h_ago.map(|p| current_price - p);
-        let change_rate_3h = change_amount_3h.zip(price_3h_ago).map(|(change, base)| (change / base) * 100.0);
-        
+        let change_rate_3h = change_amount_3h
+            .zip(price_3h_ago)
+            .map(|(change, base)| (change / base) * 100.0);
+
         let change_rate_5m = price_5m_ago.map(|p| {
             let change = current_price - p;
             (change / p) * 100.0
         });
-        
+
         let change_rate_for_trend = change_rate_5m.or(change_rate_3h);
-        
+
         let trend = if let Some(rate) = change_rate_for_trend {
             if rate > 5.0 {
                 "sharp_rise".to_string()
@@ -214,7 +215,9 @@ pub async fn get_realtime_fire_changes(
     result.sort_by(|a, b| {
         let rate_a = a.change_rate_5m.or(a.change_rate_3h).unwrap_or(0.0).abs();
         let rate_b = b.change_rate_5m.or(b.change_rate_3h).unwrap_or(0.0).abs();
-        rate_b.partial_cmp(&rate_a).unwrap_or(std::cmp::Ordering::Equal)
+        rate_b
+            .partial_cmp(&rate_a)
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
 
     Ok(result)
@@ -237,25 +240,24 @@ pub async fn cleanup_old_records(pool: &SqlitePool) -> Result<usize, AppError> {
 pub async fn seed_test_data(pool: &SqlitePool) -> Result<usize, AppError> {
     let table = TableResolver::realtime_fire_prices_table();
     let now = Utc::now().timestamp();
-    
-    let items: Vec<(String, String, f64)> = sqlx::query_as(
-        "SELECT item_id, name, price FROM items_normal LIMIT 100"
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|e| AppError::Db(e.to_string()))?;
-    
+
+    let items: Vec<(String, String, f64)> =
+        sqlx::query_as("SELECT item_id, name, price FROM items_normal LIMIT 100")
+            .fetch_all(pool)
+            .await
+            .map_err(|e| AppError::Db(e.to_string()))?;
+
     if items.is_empty() {
         return Ok(0);
     }
-    
+
     let mut rng = rand::rngs::StdRng::seed_from_u64(now as u64);
     let mut count = 0;
-    
+
     for (item_id, item_name, base_price) in &items {
         for minutes_ago in [180, 150, 120, 90, 60, 45, 30, 20, 15, 10, 8, 5, 4, 3, 2, 1] {
             let scraped_at = now - (minutes_ago * 60);
-            
+
             let variation = if minutes_ago > 120 {
                 rng.gen_range(-0.15..0.20)
             } else if minutes_ago > 60 {
@@ -265,9 +267,9 @@ pub async fn seed_test_data(pool: &SqlitePool) -> Result<usize, AppError> {
             } else {
                 rng.gen_range(-0.05..0.08)
             };
-            
+
             let fire_price = base_price * (1.0 + variation);
-            
+
             sqlx::query(
                 &format!(
                     "INSERT INTO {} (item_id, item_name, fire_price, scraped_at, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -282,11 +284,11 @@ pub async fn seed_test_data(pool: &SqlitePool) -> Result<usize, AppError> {
             .execute(pool)
             .await
             .map_err(|e| AppError::Db(e.to_string()))?;
-            
+
             count += 1;
         }
     }
-    
+
     tracing::info!("Seeded {} realtime fire price records", count);
     Ok(count)
 }

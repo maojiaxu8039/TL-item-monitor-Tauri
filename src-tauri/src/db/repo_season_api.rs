@@ -1,6 +1,6 @@
 use crate::core::state::SeasonApiConfig;
-use sqlx::SqlitePool;
 use chrono::Utc;
+use sqlx::SqlitePool;
 
 /// Get API config for a season. Returns default if not found.
 pub async fn get_season_api_config(

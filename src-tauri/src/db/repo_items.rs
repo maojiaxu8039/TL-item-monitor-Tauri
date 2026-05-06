@@ -4,6 +4,7 @@ use sqlx::SqlitePool;
 
 /// Search items from real-time table.
 /// Returns current season items with real-time prices.
+#[allow(clippy::too_many_arguments)]
 pub async fn search_items(
     pool: &SqlitePool,
     season_id: &str,
@@ -40,9 +41,8 @@ pub async fn search_items(
     }
     let (total,): (i64,) = count_query.fetch_one(pool).await?;
 
-    let items: Vec<Item> = sqlx::query_as(
-        &format!(
-            r#"
+    let items_sql = format!(
+        r#"
             SELECT 
                 item_id, 
                 '{}' as season_id, 
@@ -58,30 +58,36 @@ pub async fn search_items(
             ORDER BY name
             LIMIT ? OFFSET ?
             "#,
-            season_id, market_mode, items_table, where_clause
-        ),
-    )
-    .bind(&pattern)
-    .bind(day_filter)
-    .bind(type_filter)
-    .bind(page_size)
-    .bind(offset)
-    .fetch_all(pool)
-    .await?;
+        season_id, market_mode, items_table, where_clause
+    );
+    let mut items_query = sqlx::query_as(&items_sql).bind(&pattern);
+    if let Some(day) = day_filter {
+        items_query = items_query.bind(day);
+    }
+    if let Some(t) = type_filter {
+        items_query = items_query.bind(t);
+    }
+    let items: Vec<Item> = items_query
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(pool)
+        .await?;
 
     Ok((items, total))
 }
 
 /// Count items in the real-time table (items_normal/expert).
 /// Used by dashboard to show current season's monitored item count.
-pub async fn get_items_count(pool: &SqlitePool, _season_id: &str, market_mode: &str) -> Result<i64, crate::core::errors::AppError> {
-    let items_table = TableResolver::items_table("ss12", market_mode);
-    let (count,): (i64,) = sqlx::query_as(
-        &format!(
-            "SELECT COUNT(DISTINCT item_id) FROM {}",
-            items_table
-        )
-    )
+pub async fn get_items_count(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<i64, crate::core::errors::AppError> {
+    let items_table = TableResolver::items_table(season_id, market_mode);
+    let (count,): (i64,) = sqlx::query_as(&format!(
+        "SELECT COUNT(DISTINCT item_id) FROM {}",
+        items_table
+    ))
     .fetch_one(pool)
     .await?;
     Ok(count)
@@ -91,19 +97,19 @@ pub async fn get_items_count(pool: &SqlitePool, _season_id: &str, market_mode: &
 /// This updates the real-time items_normal/expert tables.
 pub async fn bulk_insert_items(
     pool: &SqlitePool,
-    _season_id: &str,
+    season_id: &str,
     market_mode: &str,
     items: &[Item],
 ) -> Result<(), crate::core::errors::AppError> {
     if items.is_empty() {
         return Ok(());
     }
-    
-    // Real-time tables don't have season suffix
-    let table = TableResolver::items_table("ss12", market_mode);
+
+    // Real-time tables don't have season suffix, but we pass season_id for consistency
+    let table = TableResolver::items_table(season_id, market_mode);
     let mut tx = pool.begin().await?;
     const BATCH_SIZE: usize = 100;
-    
+
     for chunk in items.chunks(BATCH_SIZE) {
         let mut qb: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
             sqlx::query_builder::QueryBuilder::new(
@@ -130,13 +136,11 @@ pub async fn get_db_record_count(pool: &SqlitePool) -> Result<i64, crate::core::
     for (season, mode) in TableResolver::supported_combinations() {
         let snapshots_table = TableResolver::item_snapshots_table(season, mode);
         let fire_snapshots_table = TableResolver::fire_price_snapshots_table(season, mode);
-        
-        let count: (i64,) = sqlx::query_as(
-            &format!(
-                "SELECT (SELECT COUNT(DISTINCT item_id) FROM {}) + (SELECT COUNT(*) FROM {})",
-                snapshots_table, fire_snapshots_table
-            )
-        )
+
+        let count: (i64,) = sqlx::query_as(&format!(
+            "SELECT (SELECT COUNT(DISTINCT item_id) FROM {}) + (SELECT COUNT(*) FROM {})",
+            snapshots_table, fire_snapshots_table
+        ))
         .fetch_one(pool)
         .await?;
         total += count.0;
@@ -169,9 +173,8 @@ pub async fn get_items_by_season(
     market_mode: &str,
 ) -> Result<Vec<Item>, crate::core::errors::AppError> {
     let snapshots_table = TableResolver::item_snapshots_table(season_id, market_mode);
-    let items: Vec<Item> = sqlx::query_as(
-        &format!(
-            r#"
+    let items: Vec<Item> = sqlx::query_as(&format!(
+        r#"
             SELECT 
                 s.item_id, 
                 '{}' as season_id, 
@@ -191,9 +194,8 @@ pub async fn get_items_by_season(
             ) latest ON s.item_id = latest.item_id AND s.scraped_at = latest.max_scraped_at
             ORDER BY s.name
             "#,
-            season_id, market_mode, snapshots_table, snapshots_table
-        )
-    )
+        season_id, market_mode, snapshots_table, snapshots_table
+    ))
     .fetch_all(pool)
     .await?;
     Ok(items)
@@ -215,9 +217,8 @@ pub async fn get_items_from_realtime_table(
     market_mode: &str,
 ) -> Result<Vec<Item>, crate::core::errors::AppError> {
     let items_table = TableResolver::items_table(season_id, market_mode);
-    let items: Vec<Item> = sqlx::query_as(
-        &format!(
-            r#"
+    let items: Vec<Item> = sqlx::query_as(&format!(
+        r#"
             SELECT
                 item_id,
                 '{}' as season_id,
@@ -231,9 +232,8 @@ pub async fn get_items_from_realtime_table(
             FROM {}
             ORDER BY name
             "#,
-            season_id, market_mode, items_table
-        )
-    )
+        season_id, market_mode, items_table
+    ))
     .fetch_all(pool)
     .await?;
     Ok(items)

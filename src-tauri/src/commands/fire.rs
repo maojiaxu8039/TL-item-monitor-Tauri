@@ -1,15 +1,17 @@
-use crate::commands::types::{FirePriceUI, OkResponse, DashboardSummary};
-use crate::core::state::{AppState, MarketMode, FirePriceSnapshot};
+use crate::commands::types::{DashboardSummary, FirePriceUI, OkResponse};
+use crate::core::state::{AppState, FirePriceSnapshot, MarketMode};
 use crate::db::repo_fire;
+use crate::db::repo_history;
 use crate::db::repo_items;
 use crate::db::repo_sections;
-use crate::db::repo_history;
 use crate::scraper;
 use std::sync::Arc;
 use tauri::State;
 
 #[tauri::command]
-pub async fn get_dashboard_summary(state: State<'_, Arc<AppState>>) -> Result<DashboardSummary, String> {
+pub async fn get_dashboard_summary(
+    state: State<'_, Arc<AppState>>,
+) -> Result<DashboardSummary, String> {
     let ctx = state.active_context.read().clone();
     let fire = state.fire_price.read().clone();
     let status = state.task_status.read().clone();
@@ -21,11 +23,13 @@ pub async fn get_dashboard_summary(state: State<'_, Arc<AppState>>) -> Result<Da
 
     let (total_fire, total_rmb) = totals.unwrap_or((0.0, 0.0));
 
-    let last_fire_at = status.last_fire_scrape
+    let last_fire_at = status
+        .last_fire_scrape
         .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
         .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string());
 
-    let last_items_at = status.last_items_reload
+    let last_items_at = status
+        .last_items_reload
         .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
         .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string());
 
@@ -53,7 +57,8 @@ pub async fn set_active_market_context(
 ) -> Result<OkResponse, String> {
     tracing::info!(
         "set_active_market_context called with: seasonId={:?}, marketMode={:?}",
-        seasonId, marketMode
+        seasonId,
+        marketMode
     );
 
     let mode = match marketMode.as_str() {
@@ -125,7 +130,8 @@ pub async fn refresh_fire_price(state: State<'_, Arc<AppState>>) -> Result<FireP
         &ctx.season_id,
         ctx.market_mode.as_str(),
         &snapshot,
-    ).await;
+    )
+    .await;
 
     {
         let mut fire = state.fire_price.write();
@@ -144,9 +150,14 @@ pub async fn refresh_items(state: State<'_, Arc<AppState>>) -> Result<OkResponse
     let count = items.len() as i64;
 
     let ctx = state.active_context.read().clone();
-    crate::db::repo_items::bulk_insert_items(&state.db, &ctx.season_id, ctx.market_mode.as_str(), &items)
-        .await
-        .map_err(|e| format!("Bulk insert failed: {}", e))?;
+    crate::db::repo_items::bulk_insert_items(
+        &state.db,
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
+        &items,
+    )
+    .await
+    .map_err(|e| format!("Bulk insert failed: {}", e))?;
 
     {
         let mut cache = state.items_cache.write();
@@ -157,7 +168,10 @@ pub async fn refresh_items(state: State<'_, Arc<AppState>>) -> Result<OkResponse
         status.last_items_reload = Some(chrono::Utc::now().timestamp());
     }
 
-    Ok(OkResponse::success(&format!("Items refreshed: {} items", count)))
+    Ok(OkResponse::success(&format!(
+        "Items refreshed: {} items",
+        count
+    )))
 }
 
 #[tauri::command]
@@ -166,10 +180,15 @@ pub async fn get_fire_history(
     hours: i64,
 ) -> Result<Vec<serde_json::Value>, String> {
     let ctx = state.active_context.read().clone();
-    let result = repo_fire::get_fire_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), hours).await?;
+    let result =
+        repo_fire::get_fire_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), hours)
+            .await?;
     // If no data found in time range, return all data for the season
     if result.is_empty() {
-        Ok(repo_fire::get_fire_history_all(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await?)
+        Ok(
+            repo_fire::get_fire_history_all(&state.db, &ctx.season_id, ctx.market_mode.as_str())
+                .await?,
+        )
     } else {
         Ok(result)
     }
@@ -188,15 +207,31 @@ pub async fn get_fire_history_by_season(
 }
 
 #[tauri::command]
-pub async fn export_fire_history_csv(state: State<'_, Arc<AppState>>, hours: i64) -> Result<String, String> {
+pub async fn export_fire_history_csv(
+    state: State<'_, Arc<AppState>>,
+    hours: i64,
+) -> Result<String, String> {
     let ctx = state.active_context.read().clone();
-    let records = repo_fire::get_fire_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), hours).await?;
+    let records =
+        repo_fire::get_fire_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), hours)
+            .await?;
     let mut wtr = csv::Writer::from_writer(vec![]);
-    wtr.write_record(["rmb_per_10k_fire", "fire_per_rmb", "increase_ratio", "scraped_at"])
-        .map_err(|e| e.to_string())?;
+    wtr.write_record([
+        "rmb_per_10k_fire",
+        "fire_per_rmb",
+        "increase_ratio",
+        "scraped_at",
+    ])
+    .map_err(|e| e.to_string())?;
     for r in records {
-        let rmb_per_10k_fire = r.get("rmb_per_10k_fire").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let fire_per_rmb = r.get("fire_per_rmb").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let rmb_per_10k_fire = r
+            .get("rmb_per_10k_fire")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let fire_per_rmb = r
+            .get("fire_per_rmb")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
         let increase_ratio = r.get("increase_ratio").and_then(|v| v.as_f64());
         let scraped_at = r.get("scraped_at").and_then(|v| v.as_i64()).unwrap_or(0);
         wtr.write_record([
@@ -204,7 +239,8 @@ pub async fn export_fire_history_csv(state: State<'_, Arc<AppState>>, hours: i64
             fire_per_rmb.to_string(),
             increase_ratio.map(|v| v.to_string()).unwrap_or_default(),
             scraped_at.to_string(),
-        ]).map_err(|e| e.to_string())?;
+        ])
+        .map_err(|e| e.to_string())?;
     }
     let data = wtr.into_inner().map_err(|e| e.to_string())?;
     String::from_utf8(data).map_err(|e| e.to_string())
@@ -226,9 +262,14 @@ pub async fn get_season_trends(
     hours: Option<i64>,
 ) -> Result<Vec<repo_history::SeasonTrendHour>, String> {
     let ctx = state.active_context.read().clone();
-    repo_history::get_season_trends(&state.db, &ctx.season_id, ctx.market_mode.as_str(), hours.unwrap_or(24))
-        .await
-        .map_err(|e| e.to_string())
+    repo_history::get_season_trends(
+        &state.db,
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
+        hours.unwrap_or(24),
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -267,7 +308,7 @@ pub async fn sync_fire_record(
     )
     .await
     .map_err(|e| e.to_string())?;
-    
+
     Ok(OkResponse::success("Fire record synced"))
 }
 
@@ -292,8 +333,10 @@ pub async fn get_fire_price_insight(
     state: State<'_, Arc<AppState>>,
 ) -> Result<serde_json::Value, String> {
     let ctx = state.active_context.read().clone();
-    let history = repo_fire::get_fire_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), 168).await?;
-    
+    let history =
+        repo_fire::get_fire_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), 168)
+            .await?;
+
     if history.is_empty() {
         return Ok(serde_json::json!({
             "current_fire_price": 0.0,
@@ -305,8 +348,13 @@ pub async fn get_fire_price_insight(
         }));
     }
 
-    let prices: Vec<f64> = history.iter()
-        .map(|r| r.get("rmb_per_10k_fire").and_then(|v| v.as_f64()).unwrap_or(0.0))
+    let prices: Vec<f64> = history
+        .iter()
+        .map(|r| {
+            r.get("rmb_per_10k_fire")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0)
+        })
         .filter(|&p| p > 0.0)
         .collect();
 
@@ -314,8 +362,18 @@ pub async fn get_fire_price_insight(
     let avg = prices.iter().sum::<f64>() / prices.len() as f64;
     let min = prices.iter().copied().fold(f64::INFINITY, f64::min);
     let max = prices.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    let trend_percent = if avg > 0.0 { ((current - avg) / avg) * 100.0 } else { 0.0 };
-    let trend = if trend_percent > 5.0 { "up" } else if trend_percent < -5.0 { "down" } else { "stable" };
+    let trend_percent = if avg > 0.0 {
+        ((current - avg) / avg) * 100.0
+    } else {
+        0.0
+    };
+    let trend = if trend_percent > 5.0 {
+        "up"
+    } else if trend_percent < -5.0 {
+        "down"
+    } else {
+        "stable"
+    };
 
     let best_buy_time = if current > avg * 1.1 {
         "火价处于高位，建议等待火价回落至均价附近再购入"
@@ -350,13 +408,34 @@ pub async fn get_item_price_insights(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<serde_json::Value>, String> {
     let ctx = state.active_context.read().clone();
-    let items = repo_items::search_items(&state.db, &ctx.season_id, ctx.market_mode.as_str(), "", 1, 100, None, None).await?;
-    let item_history = repo_history::get_all_item_history(&state.db, &ctx.season_id, ctx.market_mode.as_str(), 168).await?;
+    let items = repo_items::search_items(
+        &state.db,
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
+        "",
+        1,
+        100,
+        None,
+        None,
+    )
+    .await?;
+    let item_history = repo_history::get_all_item_history(
+        &state.db,
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
+        168,
+    )
+    .await?;
 
     let mut insights = Vec::new();
 
-    for (item_id, name, current_price) in items.0.iter().map(|i| (i.item_id.clone(), i.name.clone(), i.price)) {
-        let history: Vec<f64> = item_history.iter()
+    for (item_id, name, current_price) in items
+        .0
+        .iter()
+        .map(|i| (i.item_id.clone(), i.name.clone(), i.price))
+    {
+        let history: Vec<f64> = item_history
+            .iter()
             .filter(|h| h.item_id == item_id)
             .map(|h| h.fire_price)
             .collect();
@@ -368,13 +447,35 @@ pub async fn get_item_price_insights(
         let avg = history.iter().sum::<f64>() / history.len() as f64;
         let min = history.iter().copied().fold(f64::INFINITY, f64::min);
         let max = history.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-        let trend_percent = if avg > 0.0 { ((current_price - avg) / avg) * 100.0 } else { 0.0 };
-        let trend = if trend_percent > 5.0 { "up" } else if trend_percent < -5.0 { "down" } else { "stable" };
+        let trend_percent = if avg > 0.0 {
+            ((current_price - avg) / avg) * 100.0
+        } else {
+            0.0
+        };
+        let trend = if trend_percent > 5.0 {
+            "up"
+        } else if trend_percent < -5.0 {
+            "down"
+        } else {
+            "stable"
+        };
 
         let (recommendation, reason) = if current_price < avg * 0.85 {
-            ("buy", format!("价格低于均价{}%，处于低位", ((1.0 - current_price / avg) * 100.0).round()))
+            (
+                "buy",
+                format!(
+                    "价格低于均价{}%，处于低位",
+                    ((1.0 - current_price / avg) * 100.0).round()
+                ),
+            )
         } else if current_price > avg * 1.15 {
-            ("sell", format!("价格高于均价{}%，处于高位", ((current_price / avg - 1.0) * 100.0).round()))
+            (
+                "sell",
+                format!(
+                    "价格高于均价{}%，处于高位",
+                    ((current_price / avg - 1.0) * 100.0).round()
+                ),
+            )
         } else {
             ("wait", "价格处于正常区间，建议观望".to_string())
         };
@@ -396,8 +497,14 @@ pub async fn get_item_price_insights(
 
     // 按推荐排序：buy > wait > sell
     insights.sort_by(|a, b| {
-        let a_rec = a.get("recommendation").and_then(|v| v.as_str()).unwrap_or("wait");
-        let b_rec = b.get("recommendation").and_then(|v| v.as_str()).unwrap_or("wait");
+        let a_rec = a
+            .get("recommendation")
+            .and_then(|v| v.as_str())
+            .unwrap_or("wait");
+        let b_rec = b
+            .get("recommendation")
+            .and_then(|v| v.as_str())
+            .unwrap_or("wait");
         let order = |rec: &str| match rec {
             "buy" => 0,
             "wait" => 1,

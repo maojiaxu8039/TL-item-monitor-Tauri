@@ -9,3 +9,23 @@ src/package-lock.json
 src/tsconfig.tsbuildinfo
 web-server/target/
 *.local
+
+# Development data
+dev_data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Build artifacts
+*.exe
+*.dll
+*.zip
+
+# Test files
+test_*.rs
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -45,13 +45,17 @@ pub struct Scraper;
 
 impl Scraper {
     /// 从刷图小助手 API 抓取物品数据
-    pub async fn scrape_items(season_id: &str, market_mode: &str, config: &ApiConfig) -> Result<Vec<Item>, String> {
+    pub async fn scrape_items(
+        _season_id: &str,
+        market_mode: &str,
+        config: &ApiConfig,
+    ) -> Result<Vec<Item>, String> {
         let luosi_season_id = if market_mode.contains("expert") {
             config.luosi_season_id_expert
         } else {
             config.luosi_season_id_normal
         };
-        
+
         let url = format!("{}?season_id={}", LUOSI_API, luosi_season_id);
         info!("抓取物品: {}", url);
 
@@ -92,12 +96,21 @@ impl Scraper {
     }
 
     /// 从千岛 API 抓取火价数据
-    pub async fn scrape_fire_price(market_mode: &str, config: &ApiConfig) -> Result<FirePriceSnapshot, String> {
+    pub async fn scrape_fire_price(
+        market_mode: &str,
+        config: &ApiConfig,
+    ) -> Result<FirePriceSnapshot, String> {
         let is_expert = market_mode.contains("expert");
         let (tag_id, spec_id) = if is_expert {
-            (config.qiandao_tag_id_expert.as_str(), config.qiandao_spec_id_expert.as_str())
+            (
+                config.qiandao_tag_id_expert.as_str(),
+                config.qiandao_spec_id_expert.as_str(),
+            )
         } else {
-            (config.qiandao_tag_id_normal.as_str(), config.qiandao_spec_id_normal.as_str())
+            (
+                config.qiandao_tag_id_normal.as_str(),
+                config.qiandao_spec_id_normal.as_str(),
+            )
         };
 
         let timestamp = chrono::Utc::now().timestamp_millis().to_string();
@@ -189,7 +202,11 @@ impl Scraper {
             trading_volume: "".to_string(),
             source: format!(
                 "千岛API-{}",
-                if is_expert { "赛季专家" } else { "赛季普通" }
+                if is_expert {
+                    "赛季专家"
+                } else {
+                    "赛季普通"
+                }
             ),
             source_time: chrono::Utc::now().to_rfc3339(),
             scraped_at: now,

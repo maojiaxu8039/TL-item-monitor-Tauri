@@ -10,6 +10,7 @@ fn success_failure_times(success: bool, now: i64) -> (Option<i64>, Option<i64>) 
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn upsert_diagnostic(
     pool: &SqlitePool,
     source: &str,
@@ -25,12 +26,11 @@ pub async fn upsert_diagnostic(
     let now = chrono::Utc::now().timestamp();
     let (last_success_at, last_failure_at) = success_failure_times(success, now);
 
-    let existing: Option<(i64,)> = sqlx::query_as(
-        "SELECT updated_at FROM source_diagnostics WHERE source = ?"
-    )
-    .bind(source)
-    .fetch_optional(pool)
-    .await?;
+    let existing: Option<(i64,)> =
+        sqlx::query_as("SELECT updated_at FROM source_diagnostics WHERE source = ?")
+            .bind(source)
+            .fetch_optional(pool)
+            .await?;
 
     if existing.is_some() {
         sqlx::query(
@@ -39,7 +39,7 @@ pub async fn upsert_diagnostic(
                last_success_at = COALESCE(?, last_success_at),
                last_failure_at = COALESCE(?, last_failure_at),
                last_duration_ms = ?, last_item_count = ?, last_error = ?, updated_at = ?
-               WHERE source = ?"#
+               WHERE source = ?"#,
         )
         .bind(source_type)
         .bind(enabled)
@@ -88,7 +88,10 @@ pub async fn get_diagnostics(pool: &SqlitePool) -> Result<Vec<SourceDiagnostic>,
 }
 
 #[allow(dead_code)]
-pub async fn get_diagnostic(pool: &SqlitePool, source: &str) -> Result<Option<SourceDiagnostic>, AppError> {
+pub async fn get_diagnostic(
+    pool: &SqlitePool,
+    source: &str,
+) -> Result<Option<SourceDiagnostic>, AppError> {
     let row: Option<SourceDiagnostic> = sqlx::query_as(
         "SELECT source, source_type, enabled, market_mode, local_path, last_success_at, last_failure_at, last_duration_ms, last_item_count, last_error, updated_at FROM source_diagnostics WHERE source = ?"
     )

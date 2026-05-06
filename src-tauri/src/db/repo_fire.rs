@@ -1,7 +1,7 @@
 use crate::db::models::{FirePriceRecord, FirePriceSnapshotRecord};
 use crate::db::table_resolver::TableResolver;
-use sqlx::SqlitePool;
 use chrono::Utc;
+use sqlx::SqlitePool;
 
 /// Calculate season day based on scraped_at timestamp.
 /// Season day is the number of days since the season start (day 1, 2, 3, ...)
@@ -12,19 +12,25 @@ pub fn calculate_season_day(scraped_at: i64, season_start: i64) -> i32 {
 
 /// Fetch season start timestamp from database.
 /// Falls back to a default date if season not found.
-pub async fn get_season_start(pool: &SqlitePool, season_id: &str) -> Result<i64, crate::core::errors::AppError> {
-    let started_at: Option<(i64,)> = sqlx::query_as(
-        "SELECT started_at FROM seasons WHERE id = ?"
-    )
-    .bind(season_id)
-    .fetch_optional(pool)
-    .await?;
+pub async fn get_season_start(
+    pool: &SqlitePool,
+    season_id: &str,
+) -> Result<i64, crate::core::errors::AppError> {
+    let started_at: Option<(i64,)> = sqlx::query_as("SELECT started_at FROM seasons WHERE id = ?")
+        .bind(season_id)
+        .fetch_optional(pool)
+        .await?;
 
     Ok(started_at.map(|(ts,)| ts).unwrap_or_else(|| {
         // Fallback: parse from season_id if it contains a number
         // e.g., "ss12" -> use a reasonable default
-        tracing::warn!("Season {} not found in seasons table, using fallback start date", season_id);
-        chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00").unwrap().timestamp()
+        tracing::warn!(
+            "Season {} not found in seasons table, using fallback start date",
+            season_id
+        );
+        chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00+00:00")
+            .unwrap()
+            .timestamp()
     }))
 }
 
@@ -53,7 +59,9 @@ mod tests {
     #[test]
     fn test_calculate_season_day_ss11() {
         // SS11 start: 2026-01-16 00:00:00 UTC
-        let ss11_start = chrono::DateTime::parse_from_rfc3339("2026-01-16T00:00:00+00:00").unwrap().timestamp();
+        let ss11_start = chrono::DateTime::parse_from_rfc3339("2026-01-16T00:00:00+00:00")
+            .unwrap()
+            .timestamp();
 
         // Day 1
         let day1 = ss11_start + 12 * 3600;

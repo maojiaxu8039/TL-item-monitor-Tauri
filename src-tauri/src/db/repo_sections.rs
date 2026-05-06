@@ -1,9 +1,11 @@
 use crate::db::models::{Section, SectionItem};
 use crate::db::table_resolver::TableResolver;
-use sqlx::SqlitePool;
 use chrono::Utc;
+use sqlx::SqlitePool;
 
-pub async fn get_sections(pool: &SqlitePool) -> Result<Vec<Section>, crate::core::errors::AppError> {
+pub async fn get_sections(
+    pool: &SqlitePool,
+) -> Result<Vec<Section>, crate::core::errors::AppError> {
     let sections: Vec<Section> = sqlx::query_as(
         "SELECT id, name, strategy_id, sort_order, collapsed, created_at, updated_at FROM sections ORDER BY sort_order"
     )
@@ -12,15 +14,17 @@ pub async fn get_sections(pool: &SqlitePool) -> Result<Vec<Section>, crate::core
     Ok(sections)
 }
 
-pub async fn create_section(pool: &SqlitePool, name: &str) -> Result<Section, crate::core::errors::AppError> {
+pub async fn create_section(
+    pool: &SqlitePool,
+    name: &str,
+) -> Result<Section, crate::core::errors::AppError> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().timestamp();
 
-    let max_order: Option<(i32,)> = sqlx::query_as(
-        "SELECT COALESCE(MAX(sort_order), 0) FROM sections"
-    )
-    .fetch_optional(pool)
-    .await?;
+    let max_order: Option<(i32,)> =
+        sqlx::query_as("SELECT COALESCE(MAX(sort_order), 0) FROM sections")
+            .fetch_optional(pool)
+            .await?;
     let sort_order = max_order.map(|r| r.0 + 1).unwrap_or(0);
 
     sqlx::query(
@@ -34,10 +38,22 @@ pub async fn create_section(pool: &SqlitePool, name: &str) -> Result<Section, cr
     .execute(pool)
     .await?;
 
-    Ok(Section { id, name: name.to_string(), strategy_id: None, sort_order, collapsed: 0, created_at: now, updated_at: now })
+    Ok(Section {
+        id,
+        name: name.to_string(),
+        strategy_id: None,
+        sort_order,
+        collapsed: 0,
+        created_at: now,
+        updated_at: now,
+    })
 }
 
-pub async fn update_section(pool: &SqlitePool, id: &str, name: &str) -> Result<(), crate::core::errors::AppError> {
+pub async fn update_section(
+    pool: &SqlitePool,
+    id: &str,
+    name: &str,
+) -> Result<(), crate::core::errors::AppError> {
     let now = Utc::now().timestamp();
     sqlx::query("UPDATE sections SET name = ?, updated_at = ? WHERE id = ?")
         .bind(name)
@@ -48,7 +64,10 @@ pub async fn update_section(pool: &SqlitePool, id: &str, name: &str) -> Result<(
     Ok(())
 }
 
-pub async fn delete_section(pool: &SqlitePool, id: &str) -> Result<(), crate::core::errors::AppError> {
+pub async fn delete_section(
+    pool: &SqlitePool,
+    id: &str,
+) -> Result<(), crate::core::errors::AppError> {
     sqlx::query("DELETE FROM sections WHERE id = ?")
         .bind(id)
         .execute(pool)
@@ -56,7 +75,10 @@ pub async fn delete_section(pool: &SqlitePool, id: &str) -> Result<(), crate::co
     Ok(())
 }
 
-pub async fn reorder_sections(pool: &SqlitePool, ids: &[String]) -> Result<(), crate::core::errors::AppError> {
+pub async fn reorder_sections(
+    pool: &SqlitePool,
+    ids: &[String],
+) -> Result<(), crate::core::errors::AppError> {
     let mut tx = pool.begin().await?;
     let now = Utc::now().timestamp();
     for (i, id) in ids.iter().enumerate() {
@@ -71,7 +93,10 @@ pub async fn reorder_sections(pool: &SqlitePool, ids: &[String]) -> Result<(), c
     Ok(())
 }
 
-pub async fn get_section_items(pool: &SqlitePool, section_id: &str) -> Result<Vec<SectionItem>, crate::core::errors::AppError> {
+pub async fn get_section_items(
+    pool: &SqlitePool,
+    section_id: &str,
+) -> Result<Vec<SectionItem>, crate::core::errors::AppError> {
     // Need to LEFT JOIN with season/mode specific items table
     // Since section_items can contain items from different seasons/modes,
     // we use a UNION approach to query all possible items tables
@@ -107,13 +132,15 @@ pub async fn get_section_items(pool: &SqlitePool, section_id: &str) -> Result<Ve
 
     // Sort by sort_order then created_at
     items.sort_by(|a, b| {
-        a.sort_order.cmp(&b.sort_order)
+        a.sort_order
+            .cmp(&b.sort_order)
             .then_with(|| a.created_at.cmp(&b.created_at))
     });
 
     Ok(items)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn add_section_item(
     pool: &SqlitePool,
     section_id: &str,
@@ -137,7 +164,7 @@ pub async fn add_section_item(
 
     if existing.is_some() {
         return Err(crate::core::errors::AppError::Validation(
-            format!("物品已存在于该分组中")
+            "物品已存在于该分组中".to_string(),
         ));
     }
 
@@ -145,9 +172,10 @@ pub async fn add_section_item(
     let now = Utc::now().timestamp();
 
     let items_table = TableResolver::items_table(season_id, market_mode);
-    let last_time: Option<String> = sqlx::query_scalar::<_, Option<i64>>(
-        &format!("SELECT last_time FROM {} WHERE item_id = ?", items_table)
-    )
+    let last_time: Option<String> = sqlx::query_scalar::<_, Option<i64>>(&format!(
+        "SELECT last_time FROM {} WHERE item_id = ?",
+        items_table
+    ))
     .bind(item_id)
     .fetch_optional(pool)
     .await?
@@ -228,7 +256,11 @@ pub async fn update_section_item(
     Ok(())
 }
 
-pub async fn remove_section_item(pool: &SqlitePool, section_id: &str, item_id: &str) -> Result<(), crate::core::errors::AppError> {
+pub async fn remove_section_item(
+    pool: &SqlitePool,
+    section_id: &str,
+    item_id: &str,
+) -> Result<(), crate::core::errors::AppError> {
     sqlx::query("DELETE FROM section_items WHERE section_id = ? AND item_id = ?")
         .bind(section_id)
         .bind(item_id)
@@ -244,17 +276,15 @@ pub async fn get_totals(
     market_mode: &str,
 ) -> Result<(f64, f64), crate::core::errors::AppError> {
     let items_table = TableResolver::items_table(season_id, market_mode);
-    let rows: Vec<(f64, i32, Option<f64>)> = sqlx::query_as(
-        &format!(
-            r#"
+    let rows: Vec<(f64, i32, Option<f64>)> = sqlx::query_as(&format!(
+        r#"
             SELECT si.purchase_fire_price, si.count, i.price as current_price
             FROM section_items si
             LEFT JOIN {} i ON si.item_id = i.item_id
             WHERE si.season_id = ? AND si.market_mode = ?
             "#,
-            items_table
-        )
-    )
+        items_table
+    ))
     .bind(season_id)
     .bind(market_mode)
     .fetch_all(pool)

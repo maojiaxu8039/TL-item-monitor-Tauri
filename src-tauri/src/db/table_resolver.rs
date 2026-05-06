@@ -1,6 +1,6 @@
 /// Table resolver for season/mode split tables.
 /// Maps season_id + market_mode to specific table names.
-/// 
+///
 /// Table naming convention:
 /// - Real-time tables (no season suffix): items_normal, items_expert, fire_price_normal, fire_price_expert
 /// - Snapshot tables (with season suffix): item_snapshots_ss{season}_{mode}, fire_price_snapshots_ss{season}_{mode}
@@ -66,7 +66,10 @@ impl TableResolver {
     /// and a valid market_mode (season_normal, normal, season_expert, expert).
     pub fn is_supported(season_id: &str, market_mode: &str) -> bool {
         // Check market_mode is valid
-        let is_valid_mode = matches!(market_mode, "season_normal" | "normal" | "season_expert" | "expert");
+        let is_valid_mode = matches!(
+            market_mode,
+            "season_normal" | "normal" | "season_expert" | "expert"
+        );
         // Support any season_id matching "ss" + digits pattern (e.g., ss11, ss12, ss13)
         let is_valid_season = season_id.len() >= 3
             && &season_id[..2] == "ss"
@@ -90,10 +93,7 @@ mod tests {
             TableResolver::items_table("ss12", "season_expert"),
             "items_expert"
         );
-        assert_eq!(
-            TableResolver::items_table("ss11", "normal"),
-            "items_normal"
-        );
+        assert_eq!(TableResolver::items_table("ss11", "normal"), "items_normal");
     }
 
     #[test]

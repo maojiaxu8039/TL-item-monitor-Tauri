@@ -1,14 +1,14 @@
-use crate::commands::types::{DbStats, ItemsStats, SearchResult, OkResponse};
+use crate::commands::types::{DbStats, ItemsStats, OkResponse, SearchResult};
 use crate::core::state::AppState;
-use crate::db::repo_items;
 use crate::db::repo_history;
+use crate::db::repo_items;
 use crate::db::repo_realtime_fire;
 use crate::scraper;
 use crate::services::send_notification;
-use std::sync::Arc;
 use std::process::Command;
-use tauri::{State, AppHandle};
-use tauri_plugin_notification::{PermissionState, NotificationExt};
+use std::sync::Arc;
+use tauri::{AppHandle, State};
+use tauri_plugin_notification::{NotificationExt, PermissionState};
 
 #[tauri::command]
 #[allow(non_snake_case)]
@@ -34,15 +34,28 @@ pub async fn search_items(
         pageSize,
         dayFilter,
         typeFilter.as_deref(),
-    ).await?;
-    tracing::info!("search_items result: {} items, total={}", items.len(), total);
-    Ok(SearchResult { items, total, page, page_size: pageSize })
+    )
+    .await?;
+    tracing::info!(
+        "search_items result: {} items, total={}",
+        items.len(),
+        total
+    );
+    Ok(SearchResult {
+        items,
+        total,
+        page,
+        page_size: pageSize,
+    })
 }
 
 #[tauri::command]
 pub async fn get_items_stats(state: State<'_, Arc<AppState>>) -> Result<ItemsStats, String> {
     let ctx = state.active_context.read().clone();
-    let total_items = repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await.unwrap_or(0);
+    let total_items =
+        repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str())
+            .await
+            .unwrap_or(0);
     let status = state.task_status.read().clone();
     Ok(ItemsStats {
         total_items,
@@ -63,7 +76,7 @@ pub struct JsonFileValidationResult {
 #[tauri::command]
 pub async fn validate_json_file(json_path: String) -> Result<JsonFileValidationResult, String> {
     let path = std::path::Path::new(&json_path);
-    
+
     if !path.exists() {
         return Ok(JsonFileValidationResult {
             valid: false,
@@ -74,7 +87,7 @@ pub async fn validate_json_file(json_path: String) -> Result<JsonFileValidationR
             error_message: Some("文件不存在".to_string()),
         });
     }
-    
+
     if !path.is_file() {
         return Ok(JsonFileValidationResult {
             valid: false,
@@ -85,7 +98,7 @@ pub async fn validate_json_file(json_path: String) -> Result<JsonFileValidationR
             error_message: Some("路径不是文件".to_string()),
         });
     }
-    
+
     let content = match std::fs::read_to_string(&json_path) {
         Ok(c) => c,
         Err(e) => {
@@ -99,7 +112,7 @@ pub async fn validate_json_file(json_path: String) -> Result<JsonFileValidationR
             });
         }
     };
-    
+
     let data: serde_json::Value = match serde_json::from_str(&content) {
         Ok(v) => v,
         Err(e) => {
@@ -113,13 +126,13 @@ pub async fn validate_json_file(json_path: String) -> Result<JsonFileValidationR
             });
         }
     };
-    
+
     let item_count = match &data {
         serde_json::Value::Object(map) => Some(map.len() as i32),
         serde_json::Value::Array(arr) => Some(arr.len() as i32),
         _ => None,
     };
-    
+
     Ok(JsonFileValidationResult {
         valid: true,
         file_exists: true,
@@ -132,14 +145,17 @@ pub async fn validate_json_file(json_path: String) -> Result<JsonFileValidationR
 
 #[tauri::command]
 pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats, String> {
-    let fresh_config = crate::core::config::load_config()
-        .map_err(|e| format!("Failed to load config: {}", e))?;
+    let fresh_config =
+        crate::core::config::load_config().map_err(|e| format!("Failed to load config: {}", e))?;
     let season_id = fresh_config.app.season_id.clone();
     let items_source = fresh_config.scrape.items_source.clone();
     let json_path = fresh_config.scrape.items_json_path.clone();
 
     let items = if items_source == "api" {
-        tracing::info!("reload_items: fetching from API for season_id={}", season_id);
+        tracing::info!(
+            "reload_items: fetching from API for season_id={}",
+            season_id
+        );
         scraper::scrape_items(&season_id, "season_normal")
             .await
             .map_err(|e| format!("Failed to scrape from API: {}", e))?
@@ -148,13 +164,14 @@ pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats,
         crate::app::load_items_from_json(&season_id, "season_normal", &json_path)
             .map_err(|e| format!("Failed to load JSON: {}", e))?
     };
-    
+
     tracing::info!("reload_items: loaded {} items", items.len());
     let count = items.len() as i64;
 
-    repo_items::bulk_insert_items(&state.db, &season_id, "season_normal", &items).await
+    repo_items::bulk_insert_items(&state.db, &season_id, "season_normal", &items)
+        .await
         .map_err(|e| format!("Failed to bulk-insert items: {}", e))?;
-    
+
     tracing::info!("reload_items: inserted {} items into database", count);
 
     {
@@ -175,8 +192,11 @@ pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats,
 #[tauri::command]
 pub async fn get_db_stats(state: State<'_, Arc<AppState>>) -> Result<DbStats, String> {
     let ctx = state.active_context.read().clone();
-    let item_count = repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await;
-    let db_record_count = repo_items::get_db_record_count(&state.db).await.unwrap_or(0);
+    let item_count =
+        repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await;
+    let db_record_count = repo_items::get_db_record_count(&state.db)
+        .await
+        .unwrap_or(0);
 
     let db_path = crate::core::paths::db_path();
     let db_size_kb = std::fs::metadata(&db_path)
@@ -211,22 +231,26 @@ pub async fn get_item_history(
 #[tauri::command]
 pub async fn clear_items_database(state: State<'_, Arc<AppState>>) -> Result<String, String> {
     let ctx = state.active_context.read().clone();
-    repo_items::clear_items(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await
+    repo_items::clear_items(&state.db, &ctx.season_id, ctx.market_mode.as_str())
+        .await
         .map_err(|e| format!("Failed to clear items: {}", e))?;
-    
+
     {
         let mut cache = state.items_cache.write();
         cache.clear();
     }
-    
+
     Ok("物品数据库已清空".to_string())
 }
 
 #[tauri::command]
-pub async fn trigger_price_alert(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<String, String> {
+pub async fn trigger_price_alert(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
     let ctx = state.active_context.read().clone();
     let config = state.config.read().clone();
-    
+
     let all_section_items = crate::db::repo_sections::get_section_items(&state.db, &ctx.season_id)
         .await
         .map_err(|e| e.to_string())?;
@@ -239,21 +263,21 @@ pub async fn trigger_price_alert(app: AppHandle, state: State<'_, Arc<AppState>>
             purchase_price > 0.0 && current_price > 0.0 && current_price < purchase_price
         })
         .map(|item| {
-             let purchase_price = item.purchase_fire_price;
-             let current_price = item.current_price.unwrap_or(0.0);
-             let savings = purchase_price - current_price;
-             let savings_pct = if purchase_price > 0.0 {
-                 (savings / purchase_price * 100.0).round() as i32
-             } else {
-                 0
-             };
-             serde_json::json!({
-                 "item_name": item.item_name.unwrap_or_else(|| item.item_id.clone()),
-                 "current_price": format!("{:.2}", current_price),
-                 "purchase_price": format!("{:.2}", purchase_price),
-                 "savings": format!("-{:.0} ({:.0}%)", savings, savings_pct),
-             })
-         })
+            let purchase_price = item.purchase_fire_price;
+            let current_price = item.current_price.unwrap_or(0.0);
+            let savings = purchase_price - current_price;
+            let savings_pct = if purchase_price > 0.0 {
+                (savings / purchase_price * 100.0).round() as i32
+            } else {
+                0
+            };
+            serde_json::json!({
+                "item_name": item.item_name.unwrap_or_else(|| item.item_id.clone()),
+                "current_price": format!("{:.2}", current_price),
+                "purchase_price": format!("{:.2}", purchase_price),
+                "savings": format!("-{:.0} ({:.0}%)", savings, savings_pct),
+            })
+        })
         .collect();
 
     if worth_items.is_empty() {
@@ -261,22 +285,33 @@ pub async fn trigger_price_alert(app: AppHandle, state: State<'_, Arc<AppState>>
     }
 
     let count = worth_items.len();
-    
+
     let message = if count <= 3 {
-        worth_items.iter()
+        worth_items
+            .iter()
             .map(|item| {
-                let name = item.get("item_name").and_then(|v| v.as_str()).unwrap_or("未知");
-                let current = item.get("current_price").and_then(|v| v.as_str()).unwrap_or("-");
+                let name = item
+                    .get("item_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("未知");
+                let current = item
+                    .get("current_price")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("-");
                 let savings = item.get("savings").and_then(|v| v.as_str()).unwrap_or("-");
                 format!("• {} | 当前: {} | 节省: {}\n", name, current, savings)
             })
             .collect::<Vec<_>>()
             .join("")
     } else {
-        let top_items: Vec<String> = worth_items.iter()
+        let top_items: Vec<String> = worth_items
+            .iter()
             .take(3)
             .map(|item| {
-                let name = item.get("item_name").and_then(|v| v.as_str()).unwrap_or("未知");
+                let name = item
+                    .get("item_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("未知");
                 let savings = item.get("savings").and_then(|v| v.as_str()).unwrap_or("-");
                 format!("• {} ({})", name, savings)
             })
@@ -287,23 +322,20 @@ pub async fn trigger_price_alert(app: AppHandle, state: State<'_, Arc<AppState>>
             top_items.join("\n")
         )
     };
-    
+
     let title = format!("🔥 发现 {} 件值得购买的物品！", count);
-    
+
     if config.notification.system_notifications {
-        send_notification(&app, &title, &message)
-            .map_err(|e| e.to_string())?;
+        send_notification(&app, &title, &message).map_err(|e| e.to_string())?;
     }
-    
+
     if config.notification.voice_alert_enabled && !config.notification.voice_alert_path.is_empty() {
         let voice_path = config.notification.voice_alert_path.clone();
         if std::path::Path::new(&voice_path).exists() {
             std::thread::spawn(move || {
                 #[cfg(target_os = "macos")]
                 {
-                    let _ = Command::new("afplay")
-                        .arg(&voice_path)
-                        .spawn();
+                    let _ = Command::new("afplay").arg(&voice_path).spawn();
                 }
                 #[cfg(target_os = "windows")]
                 {
@@ -317,7 +349,7 @@ pub async fn trigger_price_alert(app: AppHandle, state: State<'_, Arc<AppState>>
             tracing::warn!("Voice file not found: {}", voice_path);
         }
     }
-    
+
     if config.notification.system_notifications {
         Ok(format!("发现 {} 件值得购买的物品，已发送通知", count))
     } else {
@@ -342,17 +374,17 @@ pub struct NotificationPermissionStatus {
 }
 
 #[tauri::command]
-pub async fn get_notification_permission_status(app: AppHandle) -> Result<NotificationPermissionStatus, String> {
+pub async fn get_notification_permission_status(
+    app: AppHandle,
+) -> Result<NotificationPermissionStatus, String> {
     let notification = app.notification();
     match notification.permission_state() {
-        Ok(state) => {
-            Ok(NotificationPermissionStatus {
-                granted: state == PermissionState::Granted,
-                denied: state == PermissionState::Denied,
-                prompt: state == PermissionState::Prompt,
-                unknown: false,
-            })
-        }
+        Ok(state) => Ok(NotificationPermissionStatus {
+            granted: state == PermissionState::Granted,
+            denied: state == PermissionState::Denied,
+            prompt: state == PermissionState::Prompt,
+            unknown: false,
+        }),
         Err(e) => Err(format!("获取权限状态失败: {}", e)),
     }
 }
@@ -361,9 +393,7 @@ pub async fn get_notification_permission_status(app: AppHandle) -> Result<Notifi
 pub async fn request_notification_permission(app: AppHandle) -> Result<bool, String> {
     let notification = app.notification();
     match notification.request_permission() {
-        Ok(state) => {
-            Ok(state == PermissionState::Granted)
-        }
+        Ok(state) => Ok(state == PermissionState::Granted),
         Err(e) => Err(format!("请求权限失败: {}", e)),
     }
 }
@@ -398,7 +428,7 @@ pub async fn sync_items_record(
     )
     .await
     .map_err(|e| e.to_string())?;
-    
+
     Ok(OkResponse::success("Item record synced"))
 }
 
@@ -478,9 +508,7 @@ pub async fn get_realtime_fire_changes(
 }
 
 #[tauri::command]
-pub async fn seed_realtime_fire_data(
-    state: State<'_, Arc<AppState>>,
-) -> Result<usize, String> {
+pub async fn seed_realtime_fire_data(state: State<'_, Arc<AppState>>) -> Result<usize, String> {
     tracing::info!("seed_realtime_fire_data called");
     repo_realtime_fire::seed_test_data(&state.db)
         .await

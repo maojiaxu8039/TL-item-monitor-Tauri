@@ -60,7 +60,8 @@ pub async fn archive_season(
         .join("com.tlmonitor.app")
         .join("archives");
 
-    std::fs::create_dir_all(&archive_dir).map_err(|e| format!("Failed to create archive dir: {}", e))?;
+    std::fs::create_dir_all(&archive_dir)
+        .map_err(|e| format!("Failed to create archive dir: {}", e))?;
 
     let archive_path = archive_dir.join(&archive_file_name);
     let archive_url = format!("sqlite:{}?mode=rwc", archive_path.display());
@@ -82,7 +83,7 @@ pub async fn archive_season(
 
         // Check if item snapshot table exists
         let snapshots_exists: bool = sqlx::query_scalar(
-            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?"
+            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?",
         )
         .bind(&item_snapshots_table)
         .fetch_one(&state.db)
@@ -90,7 +91,10 @@ pub async fn archive_season(
         .unwrap_or(false);
 
         if !snapshots_exists {
-            tracing::warn!("Snapshot table {} does not exist, skipping", item_snapshots_table);
+            tracing::warn!(
+                "Snapshot table {} does not exist, skipping",
+                item_snapshots_table
+            );
             continue;
         }
 
@@ -99,15 +103,25 @@ pub async fn archive_season(
         create_archive_fire_snapshots_table(&archive_pool, &fire_snapshots_table).await?;
 
         // Copy item snapshots data
-        let snapshots_copied: i64 = copy_table_data(&state.db, &archive_pool, &item_snapshots_table, &item_snapshots_table)
-            .await
-            .map_err(|e| format!("Failed to copy item snapshots: {}", e))?;
+        let snapshots_copied: i64 = copy_table_data(
+            &state.db,
+            &archive_pool,
+            &item_snapshots_table,
+            &item_snapshots_table,
+        )
+        .await
+        .map_err(|e| format!("Failed to copy item snapshots: {}", e))?;
         total_snapshots += snapshots_copied;
 
         // Copy fire price snapshots data
-        let fire_snapshots_copied: i64 = copy_table_data(&state.db, &archive_pool, &fire_snapshots_table, &fire_snapshots_table)
-            .await
-            .map_err(|e| format!("Failed to copy fire price snapshots: {}", e))?;
+        let fire_snapshots_copied: i64 = copy_table_data(
+            &state.db,
+            &archive_pool,
+            &fire_snapshots_table,
+            &fire_snapshots_table,
+        )
+        .await
+        .map_err(|e| format!("Failed to copy fire price snapshots: {}", e))?;
         total_fire_snapshots += fire_snapshots_copied;
     }
 
@@ -115,19 +129,17 @@ pub async fn archive_season(
 
     // Update season record to mark as ended
     let now = chrono::Utc::now().timestamp();
-    let _ = sqlx::query(
-        "UPDATE seasons SET is_current = 0, ended_at = ? WHERE id = ?"
-    )
-    .bind(now)
-    .bind(&season_id)
-    .execute(&state.db)
-    .await;
+    let _ = sqlx::query("UPDATE seasons SET is_current = 0, ended_at = ? WHERE id = ?")
+        .bind(now)
+        .bind(&season_id)
+        .execute(&state.db)
+        .await;
 
     Ok(ArchiveResult {
         success: true,
         season_id,
         message: "赛季快照数据归档完成".to_string(),
-        items_archived: 0, // Real-time tables are not archived
+        items_archived: 0,        // Real-time tables are not archived
         fire_records_archived: 0, // Real-time tables are not archived
         snapshot_records_archived: total_snapshots + total_fire_snapshots,
         archive_path: Some(archive_path.to_string_lossy().to_string()),
@@ -144,19 +156,15 @@ pub async fn init_new_season(
     season_name: Option<String>,
 ) -> Result<NewSeasonResult, String> {
     // Check if current season exists and is not archived
-    let current_season: Option<(String, i32)> = sqlx::query_as(
-        "SELECT id, is_current FROM seasons WHERE is_current = 1 LIMIT 1"
-    )
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| format!("Failed to check current season: {}", e))?;
+    let current_season: Option<(String, i32)> =
+        sqlx::query_as("SELECT id, is_current FROM seasons WHERE is_current = 1 LIMIT 1")
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| format!("Failed to check current season: {}", e))?;
 
     if let Some((id, is_current)) = current_season {
         if is_current == 1 {
-            return Err(format!(
-                "请先归档当前赛季 '{}' 后再初始化新赛季",
-                id
-            ));
+            return Err(format!("请先归档当前赛季 '{}' 后再初始化新赛季", id));
         }
     }
 
@@ -173,6 +181,8 @@ pub async fn init_new_season(
             "CREATE TABLE IF NOT EXISTS {} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 item_id TEXT NOT NULL,
+                name TEXT NOT NULL DEFAULT '',
+                item_type TEXT NOT NULL DEFAULT '',
                 fire_price REAL NOT NULL,
                 scraped_at INTEGER NOT NULL,
                 season_day INTEGER NOT NULL DEFAULT 1,
@@ -294,6 +304,7 @@ pub async fn get_season_api_config_cmd(
 
 /// Set API config for a season.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn set_season_api_config_cmd(
     state: State<'_, Arc<AppState>>,
     season_id: String,
@@ -323,8 +334,9 @@ pub async fn set_season_api_config_cmd(
 /// List all seasons with basic stats.
 #[tauri::command]
 pub async fn list_seasons(state: State<'_, Arc<AppState>>) -> Result<Vec<SeasonInfo>, String> {
+    #[allow(clippy::type_complexity)]
     let rows: Vec<(String, String, i32, Option<i64>, Option<i64>)> = sqlx::query_as(
-        "SELECT id, name, is_current, started_at, ended_at FROM seasons ORDER BY started_at DESC"
+        "SELECT id, name, is_current, started_at, ended_at FROM seasons ORDER BY started_at DESC",
     )
     .fetch_all(&state.db)
     .await
@@ -370,6 +382,7 @@ pub async fn list_seasons(state: State<'_, Arc<AppState>>) -> Result<Vec<SeasonI
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 async fn create_archive_items_table(pool: &SqlitePool, table: &str) -> Result<(), String> {
     sqlx::query(&format!(
         "CREATE TABLE IF NOT EXISTS {} (
@@ -389,6 +402,7 @@ async fn create_archive_items_table(pool: &SqlitePool, table: &str) -> Result<()
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn create_archive_fire_table(pool: &SqlitePool, table: &str) -> Result<(), String> {
     sqlx::query(&format!(
         "CREATE TABLE IF NOT EXISTS {} (
@@ -460,12 +474,10 @@ async fn copy_table_data(
     target_table: &str,
 ) -> Result<i64, sqlx::Error> {
     // Get column names from source table
-    let columns: Vec<(String,)> = sqlx::query_as(
-        "SELECT name FROM pragma_table_info(?)"
-    )
-    .bind(source_table)
-    .fetch_all(source)
-    .await?;
+    let columns: Vec<(String,)> = sqlx::query_as("SELECT name FROM pragma_table_info(?)")
+        .bind(source_table)
+        .fetch_all(source)
+        .await?;
 
     if columns.is_empty() {
         return Ok(0);
@@ -476,9 +488,10 @@ async fn copy_table_data(
     let placeholders = col_names.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
 
     // Fetch all data from source
-    let data: Vec<sqlx::sqlite::SqliteRow> = sqlx::query(&format!("SELECT {} FROM {}", col_list, source_table))
-        .fetch_all(source)
-        .await?;
+    let data: Vec<sqlx::sqlite::SqliteRow> =
+        sqlx::query(&format!("SELECT {} FROM {}", col_list, source_table))
+            .fetch_all(source)
+            .await?;
 
     let mut inserted = 0i64;
 

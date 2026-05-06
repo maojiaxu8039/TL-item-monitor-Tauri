@@ -1,6 +1,6 @@
+use chrono::Timelike;
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use chrono::Timelike;
 use tracing::{error, info, warn};
 
 use crate::core::state::AppState;
@@ -19,16 +19,22 @@ pub async fn run_hourly_snapshot_task(
     let next_hour = match (now + chrono::Duration::hours(1))
         .with_minute(0)
         .and_then(|t| t.with_second(0))
-        .and_then(|t| t.with_nanosecond(0)) {
+        .and_then(|t| t.with_nanosecond(0))
+    {
         Some(t) => t,
         None => {
             error!("Failed to calculate next hour timestamp");
             return;
         }
     };
-    let initial_sleep = (next_hour - now).to_std().unwrap_or(std::time::Duration::from_secs(0));
+    let initial_sleep = (next_hour - now)
+        .to_std()
+        .unwrap_or(std::time::Duration::from_secs(0));
 
-    info!("Hourly snapshot waiting until: {}", next_hour.format("%Y-%m-%d %H:%M:%S UTC"));
+    info!(
+        "Hourly snapshot waiting until: {}",
+        next_hour.format("%Y-%m-%d %H:%M:%S UTC")
+    );
 
     tokio::select! {
         result = abort.recv() => {

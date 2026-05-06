@@ -20,7 +20,7 @@ pub async fn run_price_alert_task(
     mut abort: broadcast::Receiver<()>,
 ) {
     info!("Price alert task started - checking for worth items");
-    
+
     loop {
         tokio::select! {
             result = abort.recv() => {
@@ -57,8 +57,8 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
 
     let ctx = state.active_context.read().clone();
 
-    let all_section_items = crate::db::repo_sections::get_section_items(&state.db, &ctx.season_id)
-        .await;
+    let all_section_items =
+        crate::db::repo_sections::get_section_items(&state.db, &ctx.season_id).await;
 
     match all_section_items {
         Ok(items) => {
@@ -67,7 +67,7 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
                 .filter(|item| {
                     let purchase_price = item.purchase_fire_price;
                     let current_price = item.current_price.unwrap_or(0.0);
-                    
+
                     purchase_price > 0.0 && current_price > 0.0 && current_price < purchase_price
                 })
                 .map(|item| WorthItem {
@@ -87,8 +87,9 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
             info!("Found {} worth items", worth_items.len());
 
             let message = format_worth_notification(&worth_items);
-            
-            if let Err(e) = send_notification(app, "🔥 发现值得购买的物品！", &message) {
+
+            if let Err(e) = send_notification(app, "🔥 发现值得购买的物品！", &message)
+            {
                 warn!("Failed to send notification: {}", e);
             }
         }
@@ -104,15 +105,12 @@ fn format_worth_notification(items: &[WorthItem]) -> String {
         let savings = (item.purchase_fire_price - item.current_price) * item.count as f64;
         return format!(
             "{} 当前价格: {:.1}火\n购买价格: {:.1}火\n可节省约 {:.1}火",
-            item.item_name,
-            item.current_price,
-            item.purchase_fire_price,
-            savings
+            item.item_name, item.current_price, item.purchase_fire_price, savings
         );
     }
 
     let mut message = format!("共发现 {} 件值得购买的物品:\n\n", items.len());
-    
+
     for (i, item) in items.iter().take(5).enumerate() {
         let savings = (item.purchase_fire_price - item.current_price) * item.count as f64;
         message.push_str(&format!(

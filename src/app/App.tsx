@@ -10,7 +10,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary"
 import type { PageId } from "@/types"
 
 const DashboardContent = lazy(() => import("@/components/dashboard/DashboardContent"))
-const SeasonPage = lazy(() => import("@/components/dashboard/SeasonPage"))
 const StrategiesPage = lazy(() => import("@/components/dashboard/StrategiesPage"))
 const SettingsPage = lazy(() => import("@/components/dashboard/SettingsPage"))
 const ImportExportPage = lazy(() => import("@/components/dashboard/ImportExportPage"))

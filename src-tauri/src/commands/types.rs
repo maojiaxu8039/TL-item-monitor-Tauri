@@ -51,7 +51,10 @@ pub struct OkResponse {
 
 impl OkResponse {
     pub fn success(msg: &str) -> Self {
-        Self { ok: true, message: msg.to_string() }
+        Self {
+            ok: true,
+            message: msg.to_string(),
+        }
     }
 }
 

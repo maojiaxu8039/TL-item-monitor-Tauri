@@ -7,8 +7,8 @@ use tauri::{Manager, WindowEvent};
 use tracing::{error, info};
 
 use tl_monitor::app::{init_app, start_background_tasks};
-use tl_monitor::tray::setup_tray;
 use tl_monitor::commands::*;
+use tl_monitor::tray::setup_tray;
 
 fn main() {
     if let Err(e) = run_app() {
@@ -19,7 +19,7 @@ fn main() {
 
 fn run_app() -> Result<(), Box<dyn std::error::Error>> {
     info!("TL Monitor v1.0.0 starting...");
-    
+
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| format!("Failed to create Tokio runtime: {}", e))?;
     let rt_handle = rt.handle().clone();
@@ -106,7 +106,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
-            
+
             let state: Arc<tl_monitor::core::state::AppState> = rt_handle.block_on(async {
                 match init_app(&handle).await {
                     Ok(state) => Ok(Arc::new(state)),
@@ -116,9 +116,9 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             })?;
-            
+
             app.manage(state.clone());
-            
+
             let app_handle = handle.clone();
             let rt_handle_clone = rt.handle().clone();
             let state_for_tasks = state.clone();
@@ -126,9 +126,9 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
                 let handle = start_background_tasks(rt_handle_clone, app_handle, state_for_tasks);
                 state.scheduler_handle.write().replace(handle);
             });
-            
+
             setup_tray(app)?;
-            
+
             Ok(())
         })
         .on_window_event(|window, event| {

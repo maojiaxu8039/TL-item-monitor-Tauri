@@ -210,14 +210,16 @@ export default function DealsPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => seedMutation.mutate()}
-              disabled={seedMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors"
-            >
-              <Database className="w-4 h-4" />
-              {seedMutation.isPending ? "生成中..." : "生成测试数据"}
-            </button>
+            {import.meta.env.DEV && (
+              <button
+                onClick={() => seedMutation.mutate()}
+                disabled={seedMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors"
+              >
+                <Database className="w-4 h-4" />
+                {seedMutation.isPending ? "生成中..." : "生成测试数据"}
+              </button>
+            )}
             <button
               onClick={() => refetch()}
               className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-sm rounded-lg hover:bg-slate-50 transition-colors"
@@ -249,7 +251,9 @@ export default function DealsPage() {
           <div className="flex flex-col items-center justify-center h-full text-slate-400">
             <Package className="w-12 h-12 text-slate-200 mb-4" />
             <p className="text-lg font-medium">暂无数据</p>
-            <p className="text-sm mt-2">点击"生成测试数据"按钮初始化数据</p>
+            {import.meta.env.DEV && (
+              <p className="text-sm mt-2">点击"生成测试数据"按钮初始化数据</p>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-6 h-full">

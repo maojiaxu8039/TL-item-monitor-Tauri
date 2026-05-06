@@ -1,5 +1,8 @@
 use crate::core::paths::config_path;
-use crate::core::state::{AppConfig, AppSettings, DataSettings, DealSettings, DesktopSettings, NotificationSettings, ScrapeSettings};
+use crate::core::state::{
+    AppConfig, AppSettings, DataSettings, DealSettings, DesktopSettings, NotificationSettings,
+    ScrapeSettings,
+};
 
 /// Legacy flat config for migration from pre-nested schema.
 #[derive(Debug, serde::Deserialize)]
@@ -43,15 +46,14 @@ pub fn load_config() -> Result<AppConfig, String> {
         return Ok(config);
     }
 
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read config file: {}", e))?;
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read config file: {}", e))?;
 
     let value: serde_yaml::Value = serde_yaml::from_str(&content)
         .map_err(|e| format!("Failed to parse config YAML: {}", e))?;
 
     // Detect old flat format by checking for legacy top-level keys
-    let is_flat = value.get("fire_price_mode").is_some()
-        || value.get("items_source").is_some();
+    let is_flat = value.get("fire_price_mode").is_some() || value.get("items_source").is_some();
 
     let config = if is_flat {
         let flat: LegacyAppConfig = serde_yaml::from_value(value)
@@ -79,8 +81,7 @@ pub fn load_config() -> Result<AppConfig, String> {
         save_config(&migrated)?;
         migrated
     } else {
-        serde_yaml::from_value(value)
-            .map_err(|e| format!("Failed to parse config YAML: {}", e))?
+        serde_yaml::from_value(value).map_err(|e| format!("Failed to parse config YAML: {}", e))?
     };
 
     Ok(config)
@@ -93,11 +94,10 @@ pub fn save_config(config: &AppConfig) -> Result<(), String> {
         std::fs::create_dir_all(parent).ok();
     }
 
-    let yaml = serde_yaml::to_string(config)
-        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    let yaml =
+        serde_yaml::to_string(config).map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-    std::fs::write(&path, yaml)
-        .map_err(|e| format!("Failed to write config file: {}", e))?;
+    std::fs::write(&path, yaml).map_err(|e| format!("Failed to write config file: {}", e))?;
 
     Ok(())
 }
