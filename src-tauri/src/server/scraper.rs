@@ -187,24 +187,20 @@ async fn scrape_via_rust(mode: &str) -> Result<FirePriceSnapshot, String> {
 }
 
 async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String> {
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_default();
-
-    let possible_executables = vec![
-        exe_dir.join("resources/qiandao_fire"),
-        exe_dir.join("qiandao_fire"),
-        exe_dir.join("../../../resources/qiandao_fire"),
-        std::path::PathBuf::from("/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src-tauri/target/debug/resources/qiandao_fire"),
+    let possible_scripts = vec![
+        std::path::PathBuf::from("/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src-tauri/resources/qiandao_fire.cjs"),
+        std::path::PathBuf::from("/app/resources/qiandao_fire.cjs"),
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|p| p.join("resources/qiandao_fire.cjs"))).unwrap_or_default(),
     ];
 
-    let script_path = possible_executables
+    let script_path = possible_scripts
         .iter()
         .find(|p| p.exists())
         .cloned()
         .ok_or_else(|| {
-            let paths_str = possible_executables
+            let paths_str = possible_scripts
                 .iter()
                 .map(|p| p.display().to_string())
                 .collect::<Vec<_>>()
@@ -214,62 +210,84 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
 
     info!("使用 Node 脚本抓取火价: {}", script_path.display());
 
-    let output = tokio::process::Command::new(&script_path)
-        .arg(if mode == "专家" { "pro" } else { "normal" })
+    let mut cmd = tokio::process::Command::new("node");
+    cmd.arg(&script_path)
+        .arg(if mode == "专家" { "pro" } else { "normal" });
+
+    info!("执行命令: node {} {}", script_path.display(), if mode == "专家" { "pro" } else { "normal" });
+
+    let output = cmd
         .output()
         .await
-        .map_err(|e| format!("Script execution failed: {}", e))?;
+        .map_err(|e| format!("Node execution failed: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout_str = stdout.trim();
+    let stderr_str = stderr.trim();
 
-    if !stderr.is_empty() {
-        info!("Node.js stderr: {}", stderr);
-    }
+    info!("Node stdout: {}", stdout_str);
+    info!("Node stderr: {}", stderr_str);
+    info!("Node exit code: {:?}", output.status.code());
 
     if !output.status.success() {
         return Err(format!(
             "Node.js script exited with code {:?}: {}",
             output.status.code(),
-            stderr
+            stderr_str
         ));
     }
 
-    #[derive(Deserialize)]
-    struct NodeJsOutput {
-        error: Option<String>,
-        data: Option<NodeJsData>,
+    let mut json_str = stdout_str.to_string();
+
+    if json_str.starts_with("{\"error\"") || json_str.is_empty() || json_str == "null" {
+        if stderr_str.contains("fire_per_rmb") {
+            let lines: Vec<&str> = stderr_str.lines().collect();
+            for line in lines.iter().rev() {
+                if line.starts_with('{') && line.contains("fire_per_rmb") {
+                    json_str = line.to_string();
+                    break;
+                }
+            }
+        }
     }
 
+    if !json_str.starts_with('{') || json_str.starts_with("{\"error\"") {
+        return Err("No fire price data in Node output".to_string());
+    }
+
+    info!("使用 JSON: {}", json_str);
+    info!("解析 Node 输出...");
+
     #[derive(Deserialize)]
-    struct NodeJsData {
+    struct NodeFireResult {
+        error: Option<String>,
         fire_per_rmb: f64,
+        #[serde(default)]
         rmb_per_fire: f64,
         ten_k: f64,
+        #[serde(default)]
         increase_ratio: f64,
+        #[serde(default)]
         trading_volume: String,
         source: String,
         ts: String,
     }
 
-    let result: NodeJsOutput = serde_json::from_str(&stdout)
-        .map_err(|e| format!("Node.js output parse error: {} | output: {}", e, stdout))?;
+    let result: NodeFireResult = serde_json::from_str(&json_str)
+        .map_err(|e| format!("JSON parse error: {} | input: {}", e, json_str))?;
 
     if let Some(error) = result.error {
-        return Err(format!("Node.js script error: {}", error));
+        return Err(format!("Node error: {}", error));
     }
 
-    let data = result
-        .data
-        .ok_or_else(|| "No data in Node.js output".to_string())?;
-
     Ok(FirePriceSnapshot {
-        rmb_per_10k_fire: data.ten_k,
-        fire_per_rmb: data.fire_per_rmb,
-        increase_ratio: data.increase_ratio,
-        trading_volume: data.trading_volume,
-        source: data.source,
-        source_time: data.ts,
+        rmb_per_10k_fire: result.ten_k,
+        fire_per_rmb: result.fire_per_rmb,
+        increase_ratio: result.increase_ratio,
+        trading_volume: result.trading_volume,
+        source: result.source,
+        source_time: result.ts,
         scraped_at: chrono::Utc::now().timestamp(),
     })
 }
