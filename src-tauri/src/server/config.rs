@@ -102,7 +102,7 @@ impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             season_id: "ss12".to_string(),
-            http_port: 8080,
+            http_port: 38457,
             scrape_modes: vec![
                 ScrapeMode {
                     mode: "normal".to_string(),

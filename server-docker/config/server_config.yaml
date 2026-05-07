@@ -1,5 +1,5 @@
 season_id: "ss12"
-http_port: 8080
+http_port: 38457
 scrape_modes:
   - mode: "normal"
     enabled: true
