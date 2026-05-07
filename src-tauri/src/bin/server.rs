@@ -1010,43 +1010,40 @@ async fn collect_all_modes(state: &Arc<ServerState>) {
             }
         }
 
-        if fire_per_rmb > 0.0 {
-            match Scraper::scrape_items(
-                &state.config.season_id,
-                market_mode,
-                &state.config.api_config,
-                &state.config.api_endpoints,
-            )
-            .await
-            {
-                Ok(items) => {
-                    mode_status.items_success = true;
-                    mode_status.items_count = items.len();
+        let items_result = Scraper::scrape_items(
+            &state.config.season_id,
+            market_mode,
+            &state.config.api_config,
+            &state.config.api_endpoints,
+        )
+        .await;
 
-                    if let Err(e) = db::insert_items_snapshots(
-                        &state.db,
-                        &state.config.season_id,
-                        market_mode,
-                        fire_per_rmb,
-                        &items,
-                        timestamp,
-                    )
-                    .await
-                    {
-                        if mode_status.error.is_none() {
-                            mode_status.error = Some(format!("Items DB error: {}", e));
-                        }
-                    }
-                }
-                Err(e) => {
+        match items_result {
+            Ok(items) => {
+                mode_status.items_success = true;
+                mode_status.items_count = items.len();
+
+                let price_for_calc = if fire_per_rmb > 0.0 { fire_per_rmb } else { 1.0 };
+
+                if let Err(e) = db::insert_items_snapshots(
+                    &state.db,
+                    &state.config.season_id,
+                    market_mode,
+                    price_for_calc,
+                    &items,
+                    timestamp,
+                )
+                .await
+                {
                     if mode_status.error.is_none() {
-                        mode_status.error = Some(format!("Items scrape error: {}", e));
+                        mode_status.error = Some(format!("Items DB error: {}", e));
                     }
                 }
             }
-        } else {
-            if mode_status.error.is_none() {
-                mode_status.error = Some("Skip items: no fire price".to_string());
+            Err(e) => {
+                if mode_status.error.is_none() {
+                    mode_status.error = Some(format!("Items scrape error: {}", e));
+                }
             }
         }
 

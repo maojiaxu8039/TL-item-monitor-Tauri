@@ -4,8 +4,10 @@ use once_cell::sync::Lazy;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::time::Duration;
-use tracing::info;
+use tokio::process::Command;
+use tracing::{error, info, warn};
 
 use super::config::{ApiConfig, ApiEndpoints};
 
@@ -111,6 +113,24 @@ impl Scraper {
         endpoints: &ApiEndpoints,
     ) -> Result<FirePriceSnapshot, String> {
         let is_expert = market_mode.contains("expert");
+
+        match scrape_fire_via_node(is_expert).await {
+            Ok(snapshot) => {
+                info!("通过 Node 脚本成功获取火价: {}", snapshot.rmb_per_10k_fire);
+                Ok(snapshot)
+            }
+            Err(e) => {
+                warn!("Node 脚本获取火价失败: {}，尝试 HTTP API", e);
+                Self::scrape_fire_via_http(is_expert, config, endpoints).await
+            }
+        }
+    }
+
+    async fn scrape_fire_via_http(
+        is_expert: bool,
+        config: &ApiConfig,
+        endpoints: &ApiEndpoints,
+    ) -> Result<FirePriceSnapshot, String> {
         let (tag_id, spec_id) = if is_expert {
             (
                 config.qiandao_tag_id_expert.as_str(),
@@ -123,26 +143,17 @@ impl Scraper {
             )
         };
 
-        let timestamp = chrono::Utc::now().timestamp_millis().to_string();
-        let body = serde_json::json!({
-            "tagId": tag_id,
-            "offset": 0,
-            "limit": 20,
-            "specIds": [spec_id]
-        });
-
-        let api_url = format!("{}{}", endpoints.qiandao, endpoints.qiandao_fire_endpoint);
-        info!("抓取火价: {}", mask_url_for_log(&api_url));
+        let api_url = format!("{}{}?tagId={}&specIds={}",
+            endpoints.qiandao,
+            endpoints.qiandao_fire_endpoint,
+            tag_id,
+            spec_id
+        );
+        info!("抓取火价(HTTP): {}", mask_url_for_log(&api_url));
 
         let resp = HTTP_CLIENT
-            .post(&api_url)
-            .header("content-type", "application/json")
+            .get(&api_url)
             .header("authorization", "Bearer undefined")
-            .header("x-request-timestamp", &timestamp)
-            .header("x-request-sign-type", "HMAC_SHA256")
-            .header("x-request-sign-version", "v1")
-            .header("x-request-package-id", "1044")
-            .header("x-request-package-sign-version", "0.0.1")
             .header("origin", "https://qiandao.com")
             .header("referer", "https://qiandao.com/")
             .header(
@@ -152,14 +163,15 @@ impl Scraper {
             .header("x-echo-region", "CN")
             .header("accept", "application/json, text/plain, */*")
             .header("accept-language", "zh-CN,zh;q=0.9")
-            .json(&body)
             .timeout(Duration::from_secs(15))
             .send()
             .await
             .map_err(|e| format!("请求失败: {}", e))?;
 
+        info!("火价API状态: {}", resp.status().as_u16());
+
         if !resp.status().is_success() {
-            return Err(format!("API 返回错误状态: {}", resp.status()));
+            return Err(format!("API返回错误状态: {}", resp.status()));
         }
 
         let text = resp
@@ -167,10 +179,10 @@ impl Scraper {
             .await
             .map_err(|e| format!("读取响应失败: {}", e))?;
 
-        info!("火价API响应: {}", safe_truncate(&text, 200));
+        info!("火价API响应: {}", safe_truncate(&text, 500));
 
         let json: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| format!("JSON 解析失败: {}", e))?;
+            .map_err(|e| format!("JSON解析失败: {}", e))?;
 
         let code = json["code"].as_str().unwrap_or("");
         if code != "0" {
@@ -211,6 +223,93 @@ impl Scraper {
             scraped_at: chrono::Utc::now().timestamp(),
         })
     }
+}
+
+async fn scrape_fire_via_node(is_expert: bool) -> Result<FirePriceSnapshot, String> {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_default();
+
+    let possible_scripts = vec![
+        exe_dir.join("resources/qiandao_fire.mjs"),
+        exe_dir.join("../../../resources/qiandao_fire.mjs"),
+        PathBuf::from("/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src-tauri/resources/qiandao_fire.mjs"),
+    ];
+
+    let script_path = possible_scripts
+        .iter()
+        .find(|p| p.exists())
+        .cloned()
+        .ok_or_else(|| {
+            let paths_str = possible_scripts
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("Node.js script not found. Tried: {}", paths_str)
+        })?;
+
+    info!("使用 Node 脚本抓取火价: {}", script_path.display());
+
+    let mode_arg = if is_expert { "pro" } else { "normal" };
+
+    let output = Command::new("node")
+        .arg(script_path)
+        .arg(mode_arg)
+        .output()
+        .await
+        .map_err(|e| format!("Node execution failed: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    if !stderr.is_empty() {
+        warn!("Node.js stderr: {}", stderr);
+    }
+
+    if !output.status.success() {
+        return Err(format!(
+            "Node.js script exited with code {:?}: {}",
+            output.status.code(),
+            stderr
+        ));
+    }
+
+    #[derive(Deserialize)]
+    struct NodeOutput {
+        error: Option<String>,
+        data: Option<NodeData>,
+    }
+
+    #[derive(Deserialize)]
+    struct NodeData {
+        ten_k: f64,
+        rmb_per_fire: f64,
+        change_pct: Option<f64>,
+        trading_volume: Option<String>,
+        update_time: Option<String>,
+    }
+
+    let result: NodeOutput = serde_json::from_str(&stdout).map_err(|e| {
+        format!("Node.js output parse error: {} | output: {}", e, stdout)
+    })?;
+
+    if let Some(error) = result.error {
+        return Err(format!("Node.js script error: {}", error));
+    }
+
+    let data = result.data.ok_or("No data in Node.js output")?;
+
+    Ok(FirePriceSnapshot {
+        rmb_per_10k_fire: data.ten_k,
+        fire_per_rmb: data.rmb_per_fire,
+        increase_ratio: data.change_pct.unwrap_or(0.0),
+        trading_volume: data.trading_volume.unwrap_or_default(),
+        source: format!("Node脚本-{}", if is_expert { "赛季专家" } else { "赛季普通" }),
+        source_time: data.update_time.unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+        scraped_at: chrono::Utc::now().timestamp(),
+    })
 }
 
 fn mask_url_for_log(url: &str) -> String {
