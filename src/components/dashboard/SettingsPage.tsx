@@ -513,10 +513,10 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* Luosi API */}
+                {/* 物品火价 API */}
                 <div>
                   <div className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">
-                    小助手 API 参数 (刷图助手)
+                    物品火价 API 参数
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>

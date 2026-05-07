@@ -217,7 +217,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">刷图小助手SeasonID (普通服)</label>
+                      <label className="block text-xs text-slate-500 mb-1">赛季 ID (普通服)</label>
                       <input
                         type="number"
                         value={editedConfig.luosi_season_id_normal}
@@ -226,7 +226,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">刷图小助手SeasonID (专家服)</label>
+                      <label className="block text-xs text-slate-500 mb-1">赛季 ID (专家服)</label>
                       <input
                         type="number"
                         value={editedConfig.luosi_season_id_expert}
