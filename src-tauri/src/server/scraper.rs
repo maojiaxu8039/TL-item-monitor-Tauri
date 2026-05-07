@@ -1,7 +1,7 @@
 //! 数据抓取模块
 //!
 //! 使用客户端的 scraper::qiandao 模块进行火价采集
-//! 物品采集使用裸丝 API
+//! 物品火价采集
 
 use once_cell::sync::Lazy;
 use reqwest::Client;
