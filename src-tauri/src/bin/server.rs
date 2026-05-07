@@ -1,7 +1,13 @@
-//! TL Monitor Server - 独立数据采集服务器 v3.2
+//! TL Monitor Server - 独立数据采集服务器 v3.3
 //!
 //! 支持同时采集普通服和专家服数据
 //! 支持管理员操作（需要密码验证）
+//!
+//! 优化特性：
+//! - HTTP Client 连接复用
+//! - API 端点可配置
+//! - 请求限流保护
+//! - 日志脱敏
 //!
 //! 运行方式：
 //!   cargo run --bin server
@@ -9,13 +15,15 @@
 use chrono::{Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tl_monitor::core::constants::{SECONDS_PER_HOUR, SERVER_VERSION};
 use tokio::sync::{broadcast, RwLock};
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
-use tl_monitor::server::config::{ApiConfig, ServerConfig};
+use tl_monitor::server::config::{ApiConfig, RateLimitConfig, ServerConfig};
 use tl_monitor::server::db;
 use tl_monitor::server::scraper::Scraper;
 
@@ -27,7 +35,41 @@ struct ServerState {
     config: ServerConfig,
     db: SqlitePool,
     last_collection: Arc<RwLock<CollectionStatus>>,
-    cors_allowed_origins: Vec<String>,
+    rate_limiter: Arc<RwLock<RateLimiter>>,
+}
+
+struct RateLimiter {
+    requests: HashMap<String, Vec<Instant>>,
+    config: RateLimitConfig,
+}
+
+impl RateLimiter {
+    fn new(config: RateLimitConfig) -> Self {
+        Self {
+            requests: HashMap::new(),
+            config,
+        }
+    }
+
+    fn is_allowed(&mut self, client_ip: &str) -> bool {
+        if !self.config.enabled {
+            return true;
+        }
+
+        let now = Instant::now();
+        let window = Duration::from_secs(60);
+
+        let requests = self.requests.entry(client_ip.to_string()).or_insert_with(Vec::new);
+
+        requests.retain(|t| now.duration_since(*t) < window);
+
+        if requests.len() >= self.config.requests_per_minute as usize {
+            return false;
+        }
+
+        requests.push(now);
+        true
+    }
 }
 
 #[derive(Clone, Default, Serialize)]
@@ -115,6 +157,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "API配置: qiandao_normal={}, luosi_normal={}",
                 cfg.api_config.qiandao_tag_id_normal, cfg.api_config.luosi_season_id_normal
             );
+            info!(
+                "限流配置: enabled={}, requests_per_minute={}",
+                cfg.rate_limit.enabled, cfg.rate_limit.requests_per_minute
+            );
+            info!(
+                "API端点: luosi={}, qiandao={}",
+                mask_url_for_log(&cfg.api_endpoints.luosi),
+                mask_url_for_log(&cfg.api_endpoints.qiandao)
+            );
             cfg
         }
         Err(e) => {
@@ -141,7 +192,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config: config.clone(),
         db: pool,
         last_collection: Arc::new(RwLock::new(CollectionStatus::default())),
-        cors_allowed_origins: config.cors_allowed_origins.clone(),
+        rate_limiter: Arc::new(RwLock::new(RateLimiter::new(config.rate_limit.clone()))),
     });
 
     let http_state = state.clone();
@@ -229,6 +280,18 @@ async fn handle_request(
 ) {
     use tokio::io::AsyncReadExt;
 
+    let client_ip = client_addr.ip().to_string();
+
+    {
+        let mut limiter = state.rate_limiter.write().await;
+        if !limiter.is_allowed(&client_ip) {
+            warn!("客户端 {} 请求过于频繁，已限流", client_ip);
+            let response = "HTTP/1.1 429 Too Many Requests\r\nContent-Type: text/plain\r\nContent-Length: 29\r\n\r\nRate limit exceeded, try again";
+            let _ = tokio::io::AsyncWriteExt::write_all(&mut tokio::io::BufWriter::new(stream), response.as_bytes()).await;
+            return;
+        }
+    }
+
     let mut buffer = [0u8; 65536];
     let mut stream = stream;
 
@@ -254,7 +317,7 @@ async fn handle_request(
     let method = parts[0];
     let path = parts[1];
 
-    info!("HTTP {} {} from {}", method, path, client_addr);
+    info!("HTTP {} {} from {}", method, path, client_ip);
 
     let mut request_body = String::new();
     let mut content_length = 0usize;
@@ -590,7 +653,7 @@ async fn handle_request(
     };
 
     let origin = get_origin_header(&request);
-    send_response(stream, status, &body, &origin, &state.cors_allowed_origins).await;
+    send_response(stream, status, &body, &origin, &state.config.cors_allowed_origins).await;
 }
 
 fn get_origin_header(request: &str) -> Option<String> {
@@ -809,7 +872,13 @@ async fn collect_all_modes(state: &Arc<ServerState>) {
 
         let mut fire_per_rmb = 0.0;
 
-        match Scraper::scrape_fire_price(market_mode, &state.config.api_config).await {
+        match Scraper::scrape_fire_price(
+            market_mode,
+            &state.config.api_config,
+            &state.config.api_endpoints,
+        )
+        .await
+        {
             Ok(fire) => {
                 mode_status.fire_success = true;
                 mode_status.fire_price = Some(fire.rmb_per_10k_fire);
@@ -837,6 +906,7 @@ async fn collect_all_modes(state: &Arc<ServerState>) {
                 &state.config.season_id,
                 market_mode,
                 &state.config.api_config,
+                &state.config.api_endpoints,
             )
             .await
             {
@@ -898,4 +968,9 @@ async fn collect_all_modes(state: &Arc<ServerState>) {
         "[{}] 本次采集完成",
         Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
     );
+}
+
+fn mask_url_for_log(url: &str) -> String {
+    url.replace("api.qiandao.com", "***")
+        .replace("115.231.176.101", "***")
 }

@@ -1,0 +1,29 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -u 1000 appuser
+
+WORKDIR /app
+
+COPY --from=ghcr.io/maojiaxu8039/tl-monitor-server:latest /app/server /app/
+COPY --from=ghcr.io/maojiaxu8039/tl-monitor-server:latest /app/resources /app/resources
+
+RUN chown -R appuser:appuser /app
+
+USER appuser
+ENV RUST_LOG=info
+ENV TL_DB_PATH=/data/tl_monitor.db
+ENV TL_CONFIG_PATH=/config/server_config.yaml
+
+EXPOSE 8080
+
+VOLUME ["/data", "/config"]
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+CMD ["/app/server"]

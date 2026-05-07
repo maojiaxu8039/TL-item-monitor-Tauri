@@ -1,5 +1,14 @@
 //! 数据抓取模块
 
+use once_cell::sync::Lazy;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::time::Duration;
+use tracing::info;
+
+use super::config::{ApiConfig, ApiEndpoints};
+
 fn safe_truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
@@ -8,16 +17,13 @@ fn safe_truncate(s: &str, max_len: usize) -> String {
     }
 }
 
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use tracing::info;
-
-use super::config::ApiConfig;
-
-const LUOSI_API: &str = "http://115.231.176.101:8080/get";
-const QIANDAO_API: &str = "https://api.qiandao.com";
-const QIANDAO_FIRE_PRICE_ENDPOINT: &str = "/c2c-web/v1/common/currency-spu-price-list";
+static HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
+    Client::builder()
+        .timeout(Duration::from_secs(30))
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("Failed to create HTTP client")
+});
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FirePriceSnapshot {
@@ -52,11 +58,11 @@ pub struct Item {
 pub struct Scraper;
 
 impl Scraper {
-    /// 从刷图小助手 API 抓取物品数据
     pub async fn scrape_items(
         _season_id: &str,
         market_mode: &str,
         config: &ApiConfig,
+        endpoints: &ApiEndpoints,
     ) -> Result<Vec<Item>, String> {
         let luosi_season_id = if market_mode.contains("expert") {
             config.luosi_season_id_expert
@@ -64,16 +70,12 @@ impl Scraper {
             config.luosi_season_id_normal
         };
 
-        let url = format!("{}?season_id={}", LUOSI_API, luosi_season_id);
-        info!("抓取物品: {}", url);
+        let url = format!("{}/get?season_id={}", endpoints.luosi, luosi_season_id);
+        info!("抓取物品: {}", mask_url_for_log(&url));
 
-        let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .map_err(|e| format!("HTTP client 创建失败: {}", e))?;
-
-        let resp = client
+        let resp = HTTP_CLIENT
             .get(&url)
+            .timeout(Duration::from_secs(30))
             .send()
             .await
             .map_err(|e| format!("请求失败: {}", e))?;
@@ -103,10 +105,10 @@ impl Scraper {
         Ok(items)
     }
 
-    /// 从千岛 API 抓取火价数据
     pub async fn scrape_fire_price(
         market_mode: &str,
         config: &ApiConfig,
+        endpoints: &ApiEndpoints,
     ) -> Result<FirePriceSnapshot, String> {
         let is_expert = market_mode.contains("expert");
         let (tag_id, spec_id) = if is_expert {
@@ -129,16 +131,11 @@ impl Scraper {
             "specIds": [spec_id]
         });
 
-        info!("抓取火价: {}{}", QIANDAO_API, QIANDAO_FIRE_PRICE_ENDPOINT);
+        let api_url = format!("{}{}", endpoints.qiandao, endpoints.qiandao_fire_endpoint);
+        info!("抓取火价: {}", mask_url_for_log(&api_url));
 
-        let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(15))
-            .danger_accept_invalid_certs(true)
-            .build()
-            .map_err(|e| format!("HTTP client 创建失败: {}", e))?;
-
-        let resp = client
-            .post(format!("{}{}", QIANDAO_API, QIANDAO_FIRE_PRICE_ENDPOINT))
+        let resp = HTTP_CLIENT
+            .post(&api_url)
             .header("content-type", "application/json")
             .header("authorization", "Bearer undefined")
             .header("x-request-timestamp", &timestamp)
@@ -156,6 +153,7 @@ impl Scraper {
             .header("accept", "application/json, text/plain, */*")
             .header("accept-language", "zh-CN,zh;q=0.9")
             .json(&body)
+            .timeout(Duration::from_secs(15))
             .send()
             .await
             .map_err(|e| format!("请求失败: {}", e))?;
@@ -165,23 +163,22 @@ impl Scraper {
         }
 
         let text = resp
-        .text()
-        .await
-        .map_err(|e| format!("读取响应失败: {}", e))?;
+            .text()
+            .await
+            .map_err(|e| format!("读取响应失败: {}", e))?;
 
-        info!("火价API响应: {}", safe_truncate(&text, 500));
+        info!("火价API响应: {}", safe_truncate(&text, 200));
 
-        // 解析 JSON 响应
         let json: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| format!("JSON 解析失败: {} | body: {}", e, safe_truncate(&text, 200)))?;
+            .map_err(|e| format!("JSON 解析失败: {}", e))?;
 
         let code = json["code"].as_str().unwrap_or("");
         if code != "0" {
+            let err_code = json["errCode"].as_str().unwrap_or("");
+            let msg = json["message"].as_str().unwrap_or("");
             return Err(format!(
                 "千岛API返回错误: code={}, errCode={}, msg={}",
-                code,
-                json["errCode"].as_str().unwrap_or(""),
-                json["message"].as_str().unwrap_or("")
+                code, err_code, msg
             ));
         }
 
@@ -201,8 +198,6 @@ impl Scraper {
 
         let increase_ratio = item["changePct"].as_f64().unwrap_or(0.0);
 
-        let now = chrono::Utc::now().timestamp();
-
         Ok(FirePriceSnapshot {
             rmb_per_10k_fire,
             fire_per_rmb,
@@ -210,14 +205,15 @@ impl Scraper {
             trading_volume: "".to_string(),
             source: format!(
                 "千岛API-{}",
-                if is_expert {
-                    "赛季专家"
-                } else {
-                    "赛季普通"
-                }
+                if is_expert { "赛季专家" } else { "赛季普通" }
             ),
             source_time: chrono::Utc::now().to_rfc3339(),
-            scraped_at: now,
+            scraped_at: chrono::Utc::now().timestamp(),
         })
     }
+}
+
+fn mask_url_for_log(url: &str) -> String {
+    url.replace("api.qiandao.com", "***")
+        .replace("115.231.176.101", "***")
 }

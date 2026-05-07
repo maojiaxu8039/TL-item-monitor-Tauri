@@ -111,19 +111,19 @@ async fn get_all_seasons(pool: &SqlitePool) -> Result<Vec<String>, String> {
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
-/// 获取赛季开始时间戳（从数据库查询，失败时回退到硬编码）
-async fn get_season_start(pool: &SqlitePool, season_id: &str) -> i64 {
+/// 获取赛季开始时间戳（从数据库查询，必须存在）
+async fn get_season_start(pool: &SqlitePool, season_id: &str) -> Result<i64, String> {
     let started_at: Option<i64> = sqlx::query_scalar("SELECT started_at FROM seasons WHERE id = ?")
         .bind(season_id)
         .fetch_optional(pool)
         .await
-        .ok()
-        .flatten();
+        .map_err(|e| format!("查询赛季开始时间失败: {}", e))?;
 
-    started_at.unwrap_or(match season_id {
-        "ss12" => 1776384000,
-        "ss11" => 1768521600,
-        _ => 1776384000,
+    started_at.ok_or_else(|| {
+        format!(
+            "赛季 {} 不存在，请先调用 /admin/init-season 初始化",
+            season_id
+        )
     })
 }
 
@@ -304,7 +304,7 @@ pub async fn insert_fire_snapshot(
 ) -> Result<(), String> {
     let mode = MarketMode::parse(market_mode);
     let table = mode.fire_table(season_id);
-    let season_start = get_season_start(pool, season_id).await;
+    let season_start = get_season_start(pool, season_id).await?;
     let season_day = calculate_season_day(season_start, scraped_at);
 
     sqlx::query(&format!(
@@ -345,7 +345,7 @@ pub async fn insert_items_snapshots(
 ) -> Result<usize, String> {
     let mode = MarketMode::parse(market_mode);
     let table = mode.items_table(season_id);
-    let season_start = get_season_start(pool, season_id).await;
+    let season_start = get_season_start(pool, season_id).await?;
     let season_day = calculate_season_day(season_start, scraped_at);
     let mut count = 0;
 
