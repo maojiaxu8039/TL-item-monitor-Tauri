@@ -368,6 +368,115 @@ async fn handle_request(
 
             (200, body)
         }
+        ("GET", "/admin.html") | ("GET", "/admin") => {
+            let html = include_str!("../server/admin.html");
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}",
+                html.len(),
+                html
+            );
+            let _ = tokio::io::AsyncWriteExt::write_all(&mut tokio::io::BufWriter::new(stream), response.as_bytes()).await;
+            return;
+        }
+        ("GET", "/api/admin/status") => {
+            let last_collection = state.last_collection.read().await.clone();
+            let body = serde_json::to_string_pretty(&ApiResponse {
+                success: true,
+                data: Some(serde_json::json!({
+                    "version": SERVER_VERSION,
+                    "uptime_seconds": Utc::now().timestamp() - start_time,
+                    "season_id": state.config.season_id,
+                    "last_collection": last_collection,
+                    "next_collection": get_next_collection_time(),
+                    "config": {
+                        "season_id": state.config.season_id,
+                        "http_port": state.config.http_port,
+                        "cors_allowed_origins": state.config.cors_allowed_origins,
+                        "rate_limit": state.config.rate_limit,
+                        "api_config": state.config.api_config,
+                    }
+                })),
+                error: None,
+            })
+            .unwrap_or_default();
+            (200, body)
+        }
+        ("GET", "/api/admin/config") => {
+            let body = serde_json::to_string_pretty(&ApiResponse {
+                success: true,
+                data: Some(serde_json::json!({
+                    "season_id": state.config.season_id,
+                    "http_port": state.config.http_port,
+                    "cors_allowed_origins": state.config.cors_allowed_origins,
+                    "rate_limit": state.config.rate_limit,
+                    "api_config": state.config.api_config,
+                    "scrape_modes": state.config.scrape_modes,
+                })),
+                error: None,
+            })
+            .unwrap_or_default();
+            (200, body)
+        }
+        ("POST", "/api/admin/update-config") => {
+            #[derive(serde::Deserialize)]
+            struct UpdateConfigRequest {
+                password: Option<String>,
+                cors_allowed_origins: Option<Vec<String>>,
+                rate_limit_enabled: Option<bool>,
+            }
+            match serde_json::from_str::<UpdateConfigRequest>(&request_body) {
+                Ok(req) => {
+                    if let Some(password) = &req.password {
+                        if let Err(e) = verify_admin(password, &state.config.admin_password) {
+                            let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                success: false,
+                                data: None,
+                                error: Some(e),
+                            }).unwrap_or_default();
+                            (401, body)
+                        } else {
+                            let mut new_config = state.config.clone();
+                            if let Some(cors) = req.cors_allowed_origins {
+                                new_config.cors_allowed_origins = cors;
+                            }
+                            if let Some(enabled) = req.rate_limit_enabled {
+                                new_config.rate_limit.enabled = enabled;
+                            }
+                            if let Err(e) = tl_monitor::server::config::save_config(CONFIG_PATH, &new_config) {
+                                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                    success: false,
+                                    data: None,
+                                    error: Some(format!("保存配置失败: {}", e)),
+                                }).unwrap_or_default();
+                                (500, body)
+                            } else {
+                                let body = serde_json::to_string_pretty(&ApiResponse {
+                                    success: true,
+                                    data: Some("配置已保存".to_string()),
+                                    error: None,
+                                }).unwrap_or_default();
+                                (200, body)
+                            }
+                        }
+                    } else {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some("缺少密码".to_string()),
+                        }).unwrap_or_default();
+                        (400, body)
+                    }
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("请求格式错误: {}", e)),
+                    }).unwrap_or_default();
+                    (400, body)
+                }
+            }
+        }
         ("GET", "/fire-history") => {
             let mode = get_query_param(&request, "mode").unwrap_or_else(|| "normal".to_string());
             let limit: i32 = get_query_param(&request, "limit")

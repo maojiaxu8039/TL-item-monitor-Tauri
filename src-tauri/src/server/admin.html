@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TL Monitor Server - 管理面板</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        .header .version {
+            opacity: 0.8;
+            font-size: 14px;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .card h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .stat {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+        }
+        .stat-value.success { color: #52c41a; }
+        .stat-value.error { color: #ff4d4f; }
+        .stat-value.warning { color: #faad14; }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .table th, .table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #666;
+        }
+        .table tr:hover {
+            background: #f8f9fa;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #5a6fd6;
+        }
+        .btn-success {
+            background: #52c41a;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #3d9a15;
+        }
+        .btn-danger {
+            background: #ff4d4f;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #d93636;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #666;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            background: #eee;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .tab.active {
+            background: #667eea;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+        .alert-success {
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+            color: #52c41a;
+        }
+        .alert-error {
+            background: #fff2f0;
+            border: 1px solid #ffccc7;
+            color: #ff4d4f;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .badge-success {
+            background: #f6ffed;
+            color: #52c41a;
+        }
+        .badge-error {
+            background: #fff2f0;
+            color: #ff4d4f;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .refresh-time {
+            font-size: 12px;
+            color: #999;
+            margin-top: 10px;
+        }
+        .uptime {
+            font-size: 12px;
+            color: rgba(255,255,255,0.7);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>TL Monitor Server</h1>
+            <div class="version">v<span id="version">-</span></div>
+            <div class="uptime">运行时间: <span id="uptime">-</span></div>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('status')">状态</button>
+            <button class="tab" onclick="showTab('config')">配置</button>
+            <button class="tab" onclick="showTab('export')">导出</button>
+        </div>
+
+        <div id="tab-status" class="tab-content active">
+            <div class="card">
+                <h2>服务器状态</h2>
+                <div class="grid" id="stats-grid">
+                    <div class="stat">
+                        <div class="stat-label">赛季</div>
+                        <div class="stat-value" id="stat-season">-</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">下次采集</div>
+                        <div class="stat-value" id="stat-next">-</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">普通服状态</div>
+                        <div class="stat-value" id="stat-normal">-</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">专家服状态</div>
+                        <div class="stat-value" id="stat-expert">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>采集详情</h2>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>模式</th>
+                            <th>火价</th>
+                            <th>物品数</th>
+                            <th>采集时间</th>
+                            <th>状态</th>
+                            <th>错误信息</th>
+                        </tr>
+                    </thead>
+                    <tbody id="collection-tbody">
+                        <tr><td colspan="6" class="loading">加载中...</td></tr>
+                    </tbody>
+                </table>
+                <div class="refresh-time">最后更新: <span id="last-update">-</span></div>
+            </div>
+        </div>
+
+        <div id="tab-config" class="tab-content">
+            <div class="card">
+                <h2>服务器配置</h2>
+                <form id="config-form">
+                    <div class="form-group">
+                        <label>赛季 ID</label>
+                        <input type="text" id="cfg-season" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>HTTP 端口</label>
+                        <input type="number" id="cfg-port" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>管理员密码</label>
+                        <input type="password" id="cfg-password" placeholder="输入新密码留空则不修改">
+                    </div>
+                    <div class="form-group">
+                        <label>CORS 允许的源 (逗号分隔)</label>
+                        <input type="text" id="cfg-cors">
+                    </div>
+                    <div class="form-group">
+                        <label>限流配置</label>
+                        <select id="cfg-rate-limit">
+                            <option value="true">启用</option>
+                            <option value="false">禁用</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">保存配置</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>API 配置</h2>
+                <form id="api-config-form">
+                    <div class="grid">
+                        <div class="form-group">
+                            <label>千岛 Tag ID (普通)</label>
+                            <input type="text" id="api-qiandao-tag-normal">
+                        </div>
+                        <div class="form-group">
+                            <label>千岛 Spec ID (普通)</label>
+                            <input type="text" id="api-qiandao-spec-normal">
+                        </div>
+                        <div class="form-group">
+                            <label>千岛 Tag ID (专家)</label>
+                            <input type="text" id="api-qiandao-tag-expert">
+                        </div>
+                        <div class="form-group">
+                            <label>千岛 Spec ID (专家)</label>
+                            <input type="text" id="api-qiandao-spec-expert">
+                        </div>
+                        <div class="form-group">
+                            <label>裸丝赛季 ID (普通)</label>
+                            <input type="number" id="api-luosi-normal">
+                        </div>
+                        <div class="form-group">
+                            <label>裸丝赛季 ID (专家)</label>
+                            <input type="number" id="api-luosi-expert">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">保存 API 配置</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="tab-export" class="tab-content">
+            <div class="card">
+                <h2>数据导出</h2>
+                <form id="export-form">
+                    <div class="grid">
+                        <div class="form-group">
+                            <label>数据类型</label>
+                            <select id="export-type">
+                                <option value="fire-history">火价历史</option>
+                                <option value="items-history">物品历史</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>服务器模式</label>
+                            <select id="export-mode">
+                                <option value="normal">普通服</option>
+                                <option value="expert">专家服</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>数据条数</label>
+                            <input type="number" id="export-limit" value="100" min="1" max="10000">
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-success" onclick="exportData()">导出 JSON</button>
+                    <button type="button" class="btn btn-primary" onclick="exportCSV()">导出 CSV</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>导出预览</h2>
+                <div id="export-preview" style="max-height: 400px; overflow-y: auto; background: #f8f9fa; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let serverConfig = null;
+        let apiPassword = '';
+
+        function showAlert(type, message) {
+            const container = document.getElementById('alert-container');
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => container.innerHTML = '', 5000);
+        }
+
+        function showTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
+            document.getElementById('tab-' + tabId).classList.add('active');
+        }
+
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            if (days > 0) return `${days}天 ${hours}小时`;
+            if (hours > 0) return `${hours}小时 ${mins}分钟`;
+            return `${mins}分钟`;
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return '-';
+            return new Date(timestamp * 1000).toLocaleString('zh-CN');
+        }
+
+        async function loadStatus() {
+            try {
+                const resp = await fetch('/api/admin/status');
+                const data = await resp.json();
+                
+                if (data.success) {
+                    const info = data.data;
+                    document.getElementById('version').textContent = info.version;
+                    document.getElementById('uptime').textContent = formatUptime(info.uptime_seconds);
+                    document.getElementById('stat-season').textContent = info.season_id;
+                    document.getElementById('stat-next').textContent = info.next_collection ? formatTime(info.next_collection) : '-';
+
+                    const normal = info.last_collection.normal;
+                    const expert = info.last_collection.expert;
+
+                    document.getElementById('stat-normal').innerHTML = normal 
+                        ? (normal.success 
+                            ? `<span class="badge badge-success">成功</span> ${normal.fire_price?.toFixed(2) || '-'} 火`
+                            : `<span class="badge badge-error">失败</span>`)
+                        : '<span class="badge badge-error">未采集</span>';
+
+                    document.getElementById('stat-expert').innerHTML = expert
+                        ? (expert.success
+                            ? `<span class="badge badge-success">成功</span> ${expert.fire_price?.toFixed(2) || '-'} 火`
+                            : `<span class="badge badge-error">失败</span>`)
+                        : '<span class="badge badge-error">未采集</span>';
+
+                    const tbody = document.getElementById('collection-tbody');
+                    tbody.innerHTML = '';
+
+                    [normal, expert].forEach((mode, idx) => {
+                        const modeName = idx === 0 ? '普通服' : '专家服';
+                        if (mode) {
+                            tbody.innerHTML += `
+                                <tr>
+                                    <td>${modeName}</td>
+                                    <td>${mode.fire_price?.toFixed(2) || '-'}</td>
+                                    <td>${mode.items_count || 0}</td>
+                                    <td>${formatTime(mode.timestamp)}</td>
+                                    <td><span class="badge ${mode.success ? 'badge-success' : 'badge-error'}">${mode.success ? '成功' : '失败'}</span></td>
+                                    <td>${mode.error || '-'}</td>
+                                </tr>
+                            `;
+                        }
+                    });
+
+                    if (!normal && !expert) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="loading">暂无采集记录</td></tr>';
+                    }
+
+                    document.getElementById('last-update').textContent = new Date().toLocaleString('zh-CN');
+                }
+            } catch (e) {
+                console.error('Load status error:', e);
+            }
+        }
+
+        async function loadConfig() {
+            try {
+                const resp = await fetch('/api/admin/config');
+                const data = await resp.json();
+                
+                if (data.success) {
+                    serverConfig = data.data;
+                    document.getElementById('cfg-season').value = serverConfig.season_id;
+                    document.getElementById('cfg-port').value = serverConfig.http_port;
+                    document.getElementById('cfg-cors').value = serverConfig.cors_allowed_origins.join(', ');
+                    document.getElementById('cfg-rate-limit').value = serverConfig.rate_limit.enabled.toString();
+
+                    document.getElementById('api-qiandao-tag-normal').value = serverConfig.api_config.qiandao_tag_id_normal;
+                    document.getElementById('api-qiandao-spec-normal').value = serverConfig.api_config.qiandao_spec_id_normal;
+                    document.getElementById('api-qiandao-tag-expert').value = serverConfig.api_config.qiandao_tag_id_expert;
+                    document.getElementById('api-qiandao-spec-expert').value = serverConfig.api_config.qiandao_spec_id_expert;
+                    document.getElementById('api-luosi-normal').value = serverConfig.api_config.luosi_season_id_normal;
+                    document.getElementById('api-luosi-expert').value = serverConfig.api_config.luosi_season_id_expert;
+                }
+            } catch (e) {
+                console.error('Load config error:', e);
+            }
+        }
+
+        async function exportData(format = 'json') {
+            const type = document.getElementById('export-type').value;
+            const mode = document.getElementById('export-mode').value;
+            const limit = document.getElementById('export-limit').value || 100;
+
+            try {
+                const endpoint = type === 'fire-history' ? '/fire-history' : '/items-history-all';
+                const resp = await fetch(`/fire-history-all?mode=${mode}&limit=${limit}`);
+                const data = await resp.json();
+                
+                if (data.success) {
+                    let content, filename, mimeType;
+
+                    if (format === 'csv') {
+                        const items = data.data;
+                        if (items.length === 0) {
+                            showAlert('error', '没有数据可导出');
+                            return;
+                        }
+                        const headers = Object.keys(items[0]);
+                        const rows = items.map(item => headers.map(h => JSON.stringify(item[h] ?? '')).join(','));
+                        content = [headers.join(','), ...rows].join('\n');
+                        filename = `tl_${mode}_${type}_${new Date().toISOString().slice(0,10)}.csv`;
+                        mimeType = 'text/csv';
+                    } else {
+                        content = JSON.stringify(data.data, null, 2);
+                        filename = `tl_${mode}_${type}_${new Date().toISOString().slice(0,10)}.json`;
+                        mimeType = 'application/json';
+                    }
+
+                    document.getElementById('export-preview').textContent = content.slice(0, 2000) + (content.length > 2000 ? '\n...' : '');
+
+                    const blob = new Blob([content], { type: mimeType });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    a.click();
+                    URL.revokeObjectURL(url);
+
+                    showAlert('success', `已导出 ${data.data.length} 条数据`);
+                } else {
+                    showAlert('error', data.error || '导出失败');
+                }
+            } catch (e) {
+                showAlert('error', '导出失败: ' + e.message);
+            }
+        }
+
+        function exportCSV() {
+            exportData('csv');
+        }
+
+        document.getElementById('config-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = document.getElementById('cfg-password').value;
+            const config = {
+                password: password,
+                cors_allowed_origins: document.getElementById('cfg-cors').value.split(',').map(s => s.trim()).filter(s => s),
+                rate_limit_enabled: document.getElementById('cfg-rate-limit').value === 'true'
+            };
+
+            try {
+                const resp = await fetch('/api/admin/update-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                const data = await resp.json();
+                
+                if (data.success) {
+                    showAlert('success', '配置已保存');
+                } else {
+                    showAlert('error', data.error || '保存失败');
+                }
+            } catch (e) {
+                showAlert('error', '保存失败: ' + e.message);
+            }
+        });
+
+        document.getElementById('api-config-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const api_config = {
+                qiandao_tag_id_normal: document.getElementById('api-qiandao-tag-normal').value,
+                qiandao_spec_id_normal: document.getElementById('api-qiandao-spec-normal').value,
+                qiandao_tag_id_expert: document.getElementById('api-qiandao-tag-expert').value,
+                qiandao_spec_id_expert: document.getElementById('api-qiandao-spec-expert').value,
+                luosi_season_id_normal: parseInt(document.getElementById('api-luosi-normal').value),
+                luosi_season_id_expert: parseInt(document.getElementById('api-luosi-expert').value)
+            };
+
+            try {
+                const resp = await fetch('/api/admin/update-api-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(api_config)
+                });
+                const data = await resp.json();
+                
+                if (data.success) {
+                    showAlert('success', 'API 配置已保存');
+                } else {
+                    showAlert('error', data.error || '保存失败');
+                }
+            } catch (e) {
+                showAlert('error', '保存失败: ' + e.message);
+            }
+        });
+
+        loadStatus();
+        loadConfig();
+        setInterval(loadStatus, 30000);
+    </script>
+</body>
+</html>
