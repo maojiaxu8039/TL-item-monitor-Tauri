@@ -136,11 +136,19 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
                 warn!("Failed to send notification: {}", e);
             }
 
-            if let Err(e) = repo_alerts::update_rule_last_triggered(&state.db, &rule.id, now).await {
+            if let Err(e) = repo_alerts::update_rule_last_triggered(&state.db, &rule.id, now).await
+            {
                 error!("Failed to update rule last_triggered_at: {}", e);
             }
 
-            if let Err(e) = repo_alerts::create_alert_event(&state.db, &rule.id, rule.item_id.as_deref(), &message).await {
+            if let Err(e) = repo_alerts::create_alert_event(
+                &state.db,
+                &rule.id,
+                rule.item_id.as_deref(),
+                &message,
+            )
+            .await
+            {
                 error!("Failed to create alert event: {}", e);
             }
 
@@ -151,7 +159,11 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
     }
 }
 
-async fn evaluate_rule(db: &sqlx::SqlitePool, season_id: &str, rule: &crate::db::models::AlertRule) -> bool {
+async fn evaluate_rule(
+    db: &sqlx::SqlitePool,
+    season_id: &str,
+    rule: &crate::db::models::AlertRule,
+) -> bool {
     match rule.rule_type.as_str() {
         "price_below" | "price_above" => {
             if let Some(item_id) = &rule.item_id {
@@ -160,9 +172,7 @@ async fn evaluate_rule(db: &sqlx::SqlitePool, season_id: &str, rule: &crate::db:
                 false
             }
         }
-        "profit_ratio_above" => {
-            false
-        }
+        "profit_ratio_above" => false,
         "price_drop_percent" => false,
         _ => {
             warn!("Unknown rule type: {}", rule.rule_type);
@@ -181,11 +191,10 @@ async fn evaluate_item_rule(
     let market_mode = "season_normal";
 
     let latest_price = match repo_items::get_all_items(db, season_id, market_mode).await {
-        Ok(items) => {
-            items.into_iter()
-                .find(|i| i.item_id == item_id)
-                .map(|i| i.price)
-        }
+        Ok(items) => items
+            .into_iter()
+            .find(|i| i.item_id == item_id)
+            .map(|i| i.price),
         Err(e) => {
             warn!("Failed to get items: {}", e);
             None
@@ -246,18 +255,11 @@ fn format_rule_notification(rule: &crate::db::models::AlertRule) -> String {
     };
 
     if let Some(item_id) = &rule.item_id {
-        format!(
-            "{} {} {}火",
-            item_id,
-            rule_type_label,
-            rule.threshold
-        )
+        format!("{} {} {}火", item_id, rule_type_label, rule.threshold)
     } else if let Some(strategy_id) = &rule.strategy_id {
         format!(
             "策略 {} {} {}",
-            strategy_id,
-            rule_type_label,
-            rule.threshold
+            strategy_id, rule_type_label, rule.threshold
         )
     } else {
         format!("{} {} (阈值: {})", rule.id, rule_type_label, rule.threshold)

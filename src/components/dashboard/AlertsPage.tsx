@@ -22,8 +22,6 @@ type RuleType = "price_below" | "price_above" | "profit_ratio_above" | "price_dr
 const RULE_TYPES: { value: RuleType; label: string; description: string }[] = [
   { value: "price_below", label: "价格低于", description: "物品价格低于设定值时触发" },
   { value: "price_above", label: "价格高于", description: "物品价格高于设定值时触发" },
-  { value: "profit_ratio_above", label: "收益率高于", description: "策略收益率高于设定值时触发" },
-  { value: "price_drop_percent", label: "价格跌幅超过", description: "物品价格跌幅超过设定百分比时触发" },
 ];
 
 interface CreateRuleForm {

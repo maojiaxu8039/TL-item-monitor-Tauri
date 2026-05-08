@@ -10,6 +10,20 @@ use tracing::{error, info};
 
 use super::scraper::{FirePriceSnapshot, Item};
 
+/// 校验 season_id 是否安全（只允许 ss + 数字格式）
+fn validate_season_id(season_id: &str) -> Result<(), String> {
+    if season_id.len() < 3
+        || &season_id[..2] != "ss"
+        || !season_id[2..].chars().all(|c| c.is_ascii_digit())
+    {
+        return Err(format!(
+            "无效的 season_id: {}，只允许 ss + 数字格式（如 ss12, ss13）",
+            season_id
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub enum MarketMode {
     Normal,
@@ -545,6 +559,7 @@ pub async fn archive_season(pool: &SqlitePool, season_id: &str) -> Result<(), St
     if season_id.is_empty() {
         return Err("赛季 ID 不能为空".to_string());
     }
+    validate_season_id(season_id)?;
 
     info!("开始归档赛季: {}", season_id);
 
@@ -582,6 +597,8 @@ pub struct SeasonStats {
 }
 
 pub async fn get_season_stats(pool: &SqlitePool, season_id: &str) -> Result<SeasonStats, String> {
+    validate_season_id(season_id)?;
+
     let table_normal_fire = format!("fire_price_snapshots_{}_normal", season_id);
     let table_normal_items = format!("item_snapshots_{}_normal", season_id);
     let table_expert_fire = format!("fire_price_snapshots_{}_expert", season_id);
@@ -626,6 +643,8 @@ pub async fn init_new_season(
     season_name: Option<&str>,
     started_at: Option<i64>,
 ) -> Result<Vec<String>, String> {
+    validate_season_id(season_id)?;
+
     let season_name = season_name.unwrap_or(season_id);
     let started_at = started_at.unwrap_or(0);
 
@@ -707,6 +726,7 @@ pub async fn get_fire_history_all(
     season_id: &str,
     market_mode: &str,
     limit: i32,
+    offset: i32,
 ) -> Result<Vec<FireSnapshotRecord>, String> {
     let mode = MarketMode::parse(market_mode);
     let table = mode.fire_table(season_id);
@@ -717,12 +737,14 @@ pub async fn get_fire_history_all(
         FROM {}
         ORDER BY scraped_at DESC
         LIMIT ?
+        OFFSET ?
         "#,
         table
     );
 
     let rows = sqlx::query(&query)
         .bind(limit)
+        .bind(offset)
         .fetch_all(pool)
         .await
         .map_err(|e| format!("查询火价快照失败: {}", e))?;
@@ -819,6 +841,7 @@ pub async fn get_items_history_all(
     season_id: &str,
     market_mode: &str,
     limit: i32,
+    offset: i32,
 ) -> Result<Vec<ItemSnapshotWithInfo>, String> {
     let mode = MarketMode::parse(market_mode);
     let table = mode.items_table(season_id);
@@ -829,12 +852,14 @@ pub async fn get_items_history_all(
         FROM {}
         ORDER BY scraped_at DESC
         LIMIT ?
+        OFFSET ?
         "#,
         table
     );
 
     let rows = sqlx::query(&query)
         .bind(limit)
+        .bind(offset)
         .fetch_all(pool)
         .await
         .map_err(|e| format!("查询所有物品快照失败: {}", e))?;

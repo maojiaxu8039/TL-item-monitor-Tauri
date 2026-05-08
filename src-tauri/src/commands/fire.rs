@@ -186,10 +186,14 @@ pub async fn get_fire_history(
             .await?;
     // If no data found in time range, return all data for the season
     if result.is_empty() {
-        Ok(
-            repo_fire::get_fire_history_all(&state.db, &ctx.season_id, ctx.market_mode.as_str())
-                .await?,
+        Ok(repo_fire::get_fire_history_all(
+            &state.db,
+            &ctx.season_id,
+            ctx.market_mode.as_str(),
+            10000,
+            0,
         )
+        .await?)
     } else {
         Ok(result)
     }
@@ -204,7 +208,7 @@ pub async fn get_fire_history_by_season(
 ) -> Result<Vec<serde_json::Value>, String> {
     // Always return all data for the season
     // Time filtering is done on the frontend based on user's selected range
-    Ok(repo_fire::get_fire_history_all(&state.db, &season_id, &market_mode).await?)
+    Ok(repo_fire::get_fire_history_all(&state.db, &season_id, &market_mode, 10000, 0).await?)
 }
 
 #[tauri::command]

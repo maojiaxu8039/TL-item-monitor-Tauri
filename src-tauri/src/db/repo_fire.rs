@@ -98,7 +98,7 @@ pub async fn get_latest_fire(
     let record: Option<FirePriceRecord> = sqlx::query_as(
         &format!(
             r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, created_at
-           FROM {} 
+           FROM {}
            ORDER BY scraped_at DESC LIMIT 1"#,
             season_id, market_mode, table
         )
@@ -120,8 +120,8 @@ pub async fn get_fire_history(
     let records: Vec<FirePriceSnapshotRecord> = sqlx::query_as(
         &format!(
             r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, scraped_at as created_at
-           FROM {} 
-           WHERE scraped_at >= ? 
+           FROM {}
+           WHERE scraped_at >= ?
            ORDER BY scraped_at DESC"#,
             season_id, market_mode, table
         )
@@ -153,17 +153,23 @@ pub async fn get_fire_history_all(
     pool: &SqlitePool,
     season_id: &str,
     market_mode: &str,
+    limit: i32,
+    offset: i32,
 ) -> Result<Vec<serde_json::Value>, crate::core::errors::AppError> {
     let table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
 
     let records: Vec<FirePriceSnapshotRecord> = sqlx::query_as(
         &format!(
             r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, scraped_at as created_at
-           FROM {} 
-           ORDER BY scraped_at DESC"#,
+           FROM {}
+           ORDER BY scraped_at DESC
+           LIMIT ?
+           OFFSET ?"#,
             season_id, market_mode, table
         )
     )
+    .bind(limit)
+    .bind(offset)
     .fetch_all(pool)
     .await?;
 

@@ -758,6 +758,9 @@ async fn handle_request(
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(99999);
+            let offset: i32 = get_query_param(query_string, "offset")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
 
             let market_mode = if mode == "expert" {
                 "season_expert"
@@ -765,8 +768,14 @@ async fn handle_request(
                 "season_normal"
             };
 
-            match db::get_items_history_all(&state.db, &state.config.season_id, market_mode, limit)
-                .await
+            match db::get_items_history_all(
+                &state.db,
+                &state.config.season_id,
+                market_mode,
+                limit,
+                offset,
+            )
+            .await
             {
                 Ok(records) => {
                     let body = serde_json::to_string_pretty(&ApiResponse {
@@ -794,6 +803,9 @@ async fn handle_request(
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(99999);
+            let offset: i32 = get_query_param(query_string, "offset")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
 
             let market_mode = if mode == "expert" {
                 "season_expert"
@@ -801,8 +813,14 @@ async fn handle_request(
                 "season_normal"
             };
 
-            match db::get_fire_history_all(&state.db, &state.config.season_id, market_mode, limit)
-                .await
+            match db::get_fire_history_all(
+                &state.db,
+                &state.config.season_id,
+                market_mode,
+                limit,
+                offset,
+            )
+            .await
             {
                 Ok(records) => {
                     let body = serde_json::to_string_pretty(&ApiResponse {
