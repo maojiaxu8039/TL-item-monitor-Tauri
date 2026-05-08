@@ -383,14 +383,26 @@ pub async fn get_all_strategies_with_costs(
     pool: &SqlitePool,
 ) -> Result<Vec<StrategyWithCosts>, crate::core::errors::AppError> {
     let strategies = get_strategy_details(pool).await?;
+    let total_count = strategies.len();
     let mut result = Vec::new();
 
     for strategy in strategies {
         match get_strategy_with_costs(pool, &strategy.id).await {
             Ok(Some(s)) => result.push(s),
             Ok(None) => continue,
-            Err(_) => continue,
+            Err(e) => {
+                tracing::warn!("Failed to load strategy {} costs: {}", strategy.id, e);
+                continue;
+            }
         }
+    }
+
+    if result.len() < total_count {
+        tracing::warn!(
+            "Partial load: {}/{} strategies loaded successfully",
+            result.len(),
+            total_count
+        );
     }
 
     Ok(result)

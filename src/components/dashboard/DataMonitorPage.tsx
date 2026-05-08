@@ -736,15 +736,16 @@ export default function DataMonitorPage() {
 
           {/* Pagination Option */}
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+            <label className={`flex items-center gap-2 text-xs cursor-pointer ${timeRange !== "season" ? "text-slate-400" : "text-slate-500"}`}>
               <input
                 type="checkbox"
                 checked={isPaginatedSync}
                 onChange={(e) => setIsPaginatedSync(e.target.checked)}
-                disabled={isSyncing}
+                disabled={isSyncing || timeRange !== "season"}
                 className="rounded border-slate-300 text-blue-500 focus:ring-blue-500 disabled:opacity-50"
               />
               分页同步（大数据量推荐，每页 {PAGE_SIZE} 条）
+              {timeRange !== "season" && <span className="text-amber-500">（仅整赛季）</span>}
             </label>
           </div>
 

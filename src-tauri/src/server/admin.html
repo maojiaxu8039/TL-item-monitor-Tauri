@@ -642,7 +642,9 @@
                     const now = Math.floor(Date.now() / 1000);
                     const cutoff = now - (days * 86400);
                     limit = 99999;
-                    await fetch(`/season-start`).then(r => r.json()).then(data => {
+                    const exportSeason = document.getElementById('export-season').value;
+                    const seasonParam = exportSeason ? `&season=${exportSeason}` : '';
+                    await fetch(`/season-start${seasonParam ? '?season=' + exportSeason : ''}`).then(r => r.json()).then(data => {
                         if (data.success && data.data.started_at > 0) {
                             const seasonStart = data.data.started_at;
                             const effectiveCutoff = Math.max(cutoff, seasonStart);

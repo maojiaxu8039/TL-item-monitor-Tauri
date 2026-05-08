@@ -6,7 +6,7 @@
 
 use serde::Serialize;
 use sqlx::{Row, SqlitePool};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use super::scraper::{FirePriceSnapshot, Item};
 
@@ -578,11 +578,25 @@ pub async fn archive_season(pool: &SqlitePool, season_id: &str) -> Result<(), St
         info!("已删除表: {}", table);
     }
 
-    sqlx::query("DELETE FROM seasons WHERE id = ? AND started_at = 0")
+    let now = chrono::Utc::now().timestamp();
+    let update_result = sqlx::query("UPDATE seasons SET ended_at = ?, is_current = 0 WHERE id = ?")
+        .bind(now)
         .bind(season_id)
         .execute(pool)
-        .await
-        .map_err(|e| format!("删除赛季记录失败: {}", e))?;
+        .await;
+
+    match update_result {
+        Ok(result) => {
+            if result.rows_affected() == 0 {
+                info!("赛季 {} 在 seasons 表中不存在或已归档", season_id);
+            } else {
+                info!("已标记赛季 {} 的归档时间", season_id);
+            }
+        }
+        Err(e) => {
+            warn!("标记赛季 {} 归档时间失败: {}", season_id, e);
+        }
+    }
 
     info!("赛季 {} 归档完成", season_id);
     Ok(())

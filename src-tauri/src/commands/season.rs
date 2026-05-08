@@ -156,7 +156,29 @@ pub async fn init_new_season(
     season_name: Option<String>,
     started_at: Option<i64>,
 ) -> Result<NewSeasonResult, String> {
-    let started_at = started_at.unwrap_or_else(|| chrono::Utc::now().timestamp());
+    // Validate season_id format
+    if !TableResolver::is_supported(&season_id, "season_normal") {
+        return Err(format!(
+            "无效的赛季ID格式: {}，请使用 ss + 数字格式（如 ss12, ss13）",
+            season_id
+        ));
+    }
+
+    // Validate started_at
+    let started_at = started_at.ok_or_else(|| {
+        "开服时间不能为空，请输入正确的开服时间（如 2026-04-01 00:00:00）".to_string()
+    })?;
+
+    if started_at <= 0 {
+        return Err("开服时间必须是正整数时间戳".to_string());
+    }
+
+    // Check if started_at is not too far in the future (within 1 year)
+    let now = chrono::Utc::now().timestamp();
+    if started_at > now + 365 * 24 * 3600 {
+        return Err("开服时间不能超过当前时间1年以后".to_string());
+    }
+
     // Check if current season exists and is not archived
     let current_season: Option<(String, i32)> =
         sqlx::query_as("SELECT id, is_current FROM seasons WHERE is_current = 1 LIMIT 1")

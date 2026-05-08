@@ -112,7 +112,13 @@ export default function SettingsPage() {
 
   const initNewSeasonMutation = useMutation({
     mutationFn: () => {
-      const startedAt = newSeasonStartedAt ? Math.floor(new Date(newSeasonStartedAt).getTime() / 1000) : undefined;
+      if (!newSeasonStartedAt) {
+        return Promise.reject(new Error("请输入开服时间"));
+      }
+      const startedAt = Math.floor(new Date(newSeasonStartedAt).getTime() / 1000);
+      if (startedAt <= 0) {
+        return Promise.reject(new Error("开服时间格式不正确"));
+      }
       return cmd.initNewSeason(newSeasonId, newSeasonName || undefined, startedAt);
     },
     onSuccess: (result) => {
@@ -446,14 +452,14 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 block mb-1">开服时间</label>
+                    <label className="text-xs text-slate-500 block mb-1">开服时间 *</label>
                     <input
                       type="datetime-local"
                       value={newSeasonStartedAt}
                       onChange={(e) => setNewSeasonStartedAt(e.target.value)}
                       className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                     />
-                    <p className="text-xs text-slate-400 mt-0.5">留空则使用当前时间</p>
+                    <p className="text-xs text-slate-400 mt-0.5">必填，请输入正确的开服时间</p>
                   </div>
                 </div>
 
