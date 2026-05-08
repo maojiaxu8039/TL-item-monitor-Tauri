@@ -154,7 +154,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
 export default function DealsPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState({ rise_threshold: 1, fall_threshold: 1 });
-  const { marketContext } = useSectionRefresh();
+  useSectionRefresh();
   const queryClient = useQueryClient();
 
   useEffect(() => {

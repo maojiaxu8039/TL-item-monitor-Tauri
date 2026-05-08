@@ -2,8 +2,8 @@ FROM rust:1.85-bookworm-slim AS builder
 
 WORKDIR /build
 
-COPY Cargo.toml Cargo.lock* ./
-COPY src/ ./src/
+COPY src-tauri/Cargo.toml src-tauri/Cargo.lock* ./
+COPY src-tauri/src ./src/
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
@@ -18,12 +18,12 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3 \
+    curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 1000 appuser
 
 WORKDIR /app
 COPY --from=builder /target/release/server /app/server
-COPY --from=builder /build/resources /app/resources
 
 RUN chown -R appuser:appuser /app
 

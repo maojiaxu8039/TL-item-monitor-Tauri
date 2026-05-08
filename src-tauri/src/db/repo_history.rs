@@ -1,11 +1,12 @@
 use crate::core::constants::{
-    calculate_season_day, get_season_start as get_const_season_start, BATCH_SIZE_SMALL,
-    SECONDS_PER_DAY, SECONDS_PER_HOUR,
+    calculate_season_day, BATCH_SIZE_SMALL, SECONDS_PER_DAY, SECONDS_PER_HOUR,
 };
 use crate::core::errors::AppError;
 use crate::core::state::FirePriceSnapshot;
 use crate::db::models::Item;
-use crate::db::repo_fire::get_season_start;
+use crate::db::repo_fire::{
+    get_season_start as get_season_start_from_db, get_season_start_from_db as get_season_start,
+};
 use crate::db::table_resolver::TableResolver;
 use chrono::Utc;
 use serde::Serialize;
@@ -276,19 +277,18 @@ pub async fn get_items_price_compare(
         day_filter
     );
 
-    let season_start =
-        |season_id: &str| -> i64 { get_const_season_start(season_id).unwrap_or(1776384000) };
+    let history_season_start = get_season_start_from_db(pool, history_season).await?;
+    let current_season_start = get_season_start_from_db(pool, current_season).await?;
 
     let (day_start, day_end) = if let Some(day) = day_filter {
-        let start = season_start(history_season) + (((day - 1) as i64) * SECONDS_PER_DAY);
+        let start = history_season_start + (((day - 1) as i64) * SECONDS_PER_DAY);
         (start, start + SECONDS_PER_DAY)
     } else {
         (0i64, i64::MAX)
     };
 
     let current_items: Vec<CurrentItemRow> = if let Some(day) = day_filter {
-        let cs = season_start(current_season);
-        let cs_day_start = cs + (((day - 1) as i64) * 86400);
+        let cs_day_start = current_season_start + (((day - 1) as i64) * 86400);
         let cs_day_end = cs_day_start + 86400;
 
         sqlx::query_as::<_, CurrentItemRow>(
@@ -393,6 +393,8 @@ pub struct FirePriceCompareResult {
     pub current_price: f64,
     pub current_day: i64,
     pub current_hour: i64,
+    pub is_stale: bool,
+    pub age_seconds: i64,
     pub history_avg: f64,
     pub history_high: f64,
     pub history_low: f64,
@@ -426,22 +428,23 @@ pub async fn get_fire_price_compare(
 
     let current_record: Option<(f64, i64, i64)> = sqlx::query_as(&format!(
         "SELECT rmb_per_10k_fire, scraped_at, season_day FROM {} \
-             WHERE scraped_at >= ? \
              ORDER BY scraped_at DESC LIMIT 1",
         current_snapshots_table
     ))
-    .bind(now - 3600)
     .fetch_optional(pool)
     .await?;
 
-    let (current_price, current_scraped_at, current_season_day) =
+    let (current_price, current_scraped_at, current_season_day, age_seconds) =
         if let Some((price, scraped, day)) = current_record {
-            (price, scraped, day)
+            let age = now - scraped;
+            (price, scraped, day, age)
         } else {
             return Ok(FirePriceCompareResult {
                 current_price: 0.0,
                 current_day: 0,
                 current_hour: 0,
+                is_stale: true,
+                age_seconds: 0,
                 history_avg: 0.0,
                 history_high: 0.0,
                 history_low: 0.0,
@@ -454,6 +457,7 @@ pub async fn get_fire_price_compare(
             });
         };
 
+    let is_stale = age_seconds > 3600;
     let current_hour = (current_scraped_at % 86400) / 3600;
 
     let history_records: Vec<(f64, i64, i64)> = sqlx::query_as(&format!(
@@ -469,6 +473,8 @@ pub async fn get_fire_price_compare(
             current_price,
             current_day: current_season_day,
             current_hour,
+            is_stale,
+            age_seconds,
             history_avg: 0.0,
             history_high: 0.0,
             history_low: 0.0,
@@ -579,6 +585,8 @@ pub async fn get_fire_price_compare(
         current_price,
         current_day: current_season_day,
         current_hour,
+        is_stale,
+        age_seconds,
         history_avg,
         history_high,
         history_low,

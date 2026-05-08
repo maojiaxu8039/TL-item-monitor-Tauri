@@ -119,27 +119,6 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
     }
   }
 
-  const localEditsRef = useRef<Record<string, Record<string, string>>>({})
-
-  const handleItemFieldBlur = (itemId: string, field: string) => {
-    const value = localEditsRef.current[itemId]?.[field]
-    if (localEditsRef.current[itemId]) {
-      delete localEditsRef.current[itemId][field]
-    }
-    if (value !== undefined && value !== "") {
-      const num = parseFloat(value)
-      if (!isNaN(num)) {
-        updateItemMutation.mutate({ itemId, updates: { [field]: num } })
-      }
-    }
-  }
-
-  const handleItemFieldKeyDown = (e: React.KeyboardEvent, itemId: string, field: string) => {
-    if (e.key === "Enter") {
-      handleItemFieldBlur(itemId, field)
-    }
-  }
-
   const calculateMorePerFire = (item: SectionItem) => {
     const moreValue = item.more_value ?? 0
     const currentPrice = item.current_price ?? 0

@@ -3,10 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { cmd } from "@/lib/commands";
 import {
-  TrendingUp,
-  TrendingDown,
   BarChart3,
-  Package,
   ShoppingCart,
   DollarSign,
   Clock,
@@ -408,8 +405,7 @@ export default function PriceAnalysisPage() {
         })
         .catch(() => addToast("error", "添加失败"));
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [marketContext.seasonId, marketContext.marketMode]
   );
 
   // 统计

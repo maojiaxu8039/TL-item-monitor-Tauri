@@ -132,10 +132,7 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppErro
                 .map(|p| p.display().to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
-            AppError::Scrape(format!(
-                "Node.js script not found. Tried: {}",
-                paths_str
-            ))
+            AppError::Scrape(format!("Node.js script not found. Tried: {}", paths_str))
         })?;
 
     let output = tokio::process::Command::new(&script_path)

@@ -3,6 +3,15 @@ use crate::db::models::Item;
 use crate::db::table_resolver::TableResolver;
 use sqlx::SqlitePool;
 
+async fn get_all_season_ids(
+    pool: &SqlitePool,
+) -> Result<Vec<String>, crate::core::errors::AppError> {
+    let seasons: Vec<(String,)> = sqlx::query_as("SELECT id FROM seasons ORDER BY started_at DESC")
+        .fetch_all(pool)
+        .await?;
+    Ok(seasons.into_iter().map(|(s,)| s).collect())
+}
+
 /// Search items from real-time table.
 /// Returns current season items with real-time prices.
 #[allow(clippy::too_many_arguments)]
@@ -131,19 +140,22 @@ pub async fn bulk_insert_items(
 }
 
 pub async fn get_db_record_count(pool: &SqlitePool) -> Result<i64, crate::core::errors::AppError> {
-    // Count from snapshot tables only (real-time tables are not season-specific)
     let mut total = 0i64;
-    for (season, mode) in TableResolver::supported_combinations() {
-        let snapshots_table = TableResolver::item_snapshots_table(season, mode);
-        let fire_snapshots_table = TableResolver::fire_price_snapshots_table(season, mode);
+    let season_ids = get_all_season_ids(pool).await?;
 
-        let count: (i64,) = sqlx::query_as(&format!(
-            "SELECT (SELECT COUNT(DISTINCT item_id) FROM {}) + (SELECT COUNT(*) FROM {})",
-            snapshots_table, fire_snapshots_table
-        ))
-        .fetch_one(pool)
-        .await?;
-        total += count.0;
+    for season in &season_ids {
+        for mode in ["season_normal", "season_expert"] {
+            let snapshots_table = TableResolver::item_snapshots_table(season, mode);
+            let fire_snapshots_table = TableResolver::fire_price_snapshots_table(season, mode);
+
+            let count: (i64,) = sqlx::query_as(&format!(
+                "SELECT (SELECT COUNT(DISTINCT item_id) FROM {}) + (SELECT COUNT(*) FROM {})",
+                snapshots_table, fire_snapshots_table
+            ))
+            .fetch_one(pool)
+            .await?;
+            total += count.0;
+        }
     }
     Ok(total)
 }

@@ -102,7 +102,7 @@ impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             season_id: "ss12".to_string(),
-            http_port: 38457,
+            http_port: 8080,
             scrape_modes: vec![
                 ScrapeMode {
                     mode: "normal".to_string(),
@@ -113,11 +113,12 @@ impl Default for ServerConfig {
                     enabled: true,
                 },
             ],
-            admin_password: String::new(),
+            admin_password: "".to_string(),
             api_config: ApiConfig::default(),
             cors_allowed_origins: vec![
                 "http://localhost:5173".to_string(),
                 "http://localhost:8080".to_string(),
+                "http://localhost:38457".to_string(),
             ],
             environment: "development".to_string(),
             rate_limit: RateLimitConfig::default(),

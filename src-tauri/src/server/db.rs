@@ -103,15 +103,7 @@ async fn add_column_if_missing(
     Ok(())
 }
 
-async fn get_all_seasons(pool: &SqlitePool) -> Result<Vec<String>, String> {
-    let rows: Vec<(String,)> = sqlx::query_as("SELECT id FROM seasons ORDER BY started_at DESC")
-        .fetch_all(pool)
-        .await
-        .map_err(|e| format!("查询赛季列表失败: {}", e))?;
-    Ok(rows.into_iter().map(|(id,)| id).collect())
-}
-
-/// 获取赛季开始时间戳（从数据库查询，必须存在）
+/// 获取赛季开始时间戳（从数据库查询，必须存在且 > 0）
 async fn get_season_start(pool: &SqlitePool, season_id: &str) -> Result<i64, String> {
     let started_at: Option<i64> = sqlx::query_scalar("SELECT started_at FROM seasons WHERE id = ?")
         .bind(season_id)
@@ -119,23 +111,111 @@ async fn get_season_start(pool: &SqlitePool, season_id: &str) -> Result<i64, Str
         .await
         .map_err(|e| format!("查询赛季开始时间失败: {}", e))?;
 
-    started_at.ok_or_else(|| {
-        format!(
-            "赛季 {} 不存在，请先调用 /admin/init-season 初始化",
-            season_id
-        )
-    })
+    match started_at {
+        Some(ts) if ts > 0 => Ok(ts),
+        _ => {
+            let fallback = get_fallback_season_start(season_id);
+            if let Some(fallback_ts) = fallback {
+                tracing::warn!(
+                    "赛季 {} 的 started_at 为 {} 或不存在，使用常量表兜底: {}",
+                    season_id,
+                    started_at.unwrap_or(0),
+                    fallback_ts
+                );
+                Ok(fallback_ts)
+            } else {
+                Err(format!(
+                    "赛季 {} 不存在或未设置有效的 started_at，请先调用 /admin/init-season 初始化并设置开服时间",
+                    season_id
+                ))
+            }
+        }
+    }
+}
+
+fn get_fallback_season_start(season_id: &str) -> Option<i64> {
+    match season_id {
+        "ss12" => Some(1776384000),
+        "ss11" => Some(1768521600),
+        "ss10" => Some(1760140800),
+        _ => None,
+    }
+}
+
+/// 公开函数：获取赛季开始时间戳（供 API 使用）
+pub async fn get_season_start_time(pool: &SqlitePool, season_id: &str) -> Option<i64> {
+    sqlx::query_scalar("SELECT started_at FROM seasons WHERE id = ?")
+        .bind(season_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+}
+
+/// 获取所有赛季列表
+pub async fn get_all_seasons_list(pool: &SqlitePool) -> Vec<String> {
+    let rows: Vec<(String,)> = sqlx::query_as("SELECT id FROM seasons ORDER BY started_at DESC")
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+    rows.into_iter().map(|(id,)| id).collect()
+}
+
+fn get_migration_started_at(season_id: &str) -> i64 {
+    match season_id {
+        "ss12" => 1776384000,
+        "ss11" => 1768521600,
+        "ss10" => 1760140800,
+        _ => 0,
+    }
+}
+
+async fn migrate_season_record(pool: &SqlitePool, season: &str) -> Result<(), String> {
+    let started_at = get_migration_started_at(season);
+    sqlx::query("INSERT OR IGNORE INTO seasons (id, started_at) VALUES (?, ?)")
+        .bind(season)
+        .bind(started_at)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("插入赛季记录失败: {}", e))?;
+    Ok(())
 }
 
 /// 运行数据库迁移
 pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
     info!("执行数据库迁移...");
 
-    let seasons = get_all_seasons(pool)
-        .await
-        .unwrap_or_else(|_| vec!["ss12".to_string(), "ss11".to_string()]);
+    // 首先创建 seasons 表（如果不存在）
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS seasons (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL DEFAULT '',
+            started_at INTEGER NOT NULL,
+            ended_at INTEGER
+        )
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| format!("创建 seasons 表失败: {}", e))?;
 
-    for season in &seasons {
+    // 从数据库获取已有的赛季，如果为空则使用默认赛季列表
+    let seasons = get_all_seasons_list(pool).await;
+
+    let seasons_to_migrate = if seasons.is_empty() {
+        info!("seasons 表为空，使用默认赛季列表: ss12, ss11");
+        vec!["ss12".to_string(), "ss11".to_string()]
+    } else {
+        seasons
+    };
+
+    // 确保赛季记录存在（插入或忽略）
+    for season in &seasons_to_migrate {
+        migrate_season_record(pool, season).await?;
+    }
+
+    for season in &seasons_to_migrate {
         let table = format!("fire_price_snapshots_{}_normal", season);
         sqlx::query(&format!(
             r#"
@@ -461,12 +541,109 @@ pub async fn get_fire_history(
     Ok(records)
 }
 
+pub async fn archive_season(pool: &SqlitePool, season_id: &str) -> Result<(), String> {
+    if season_id.is_empty() {
+        return Err("赛季 ID 不能为空".to_string());
+    }
+
+    info!("开始归档赛季: {}", season_id);
+
+    let tables = vec![
+        format!("fire_price_snapshots_{}_normal", season_id),
+        format!("fire_price_snapshots_{}_expert", season_id),
+        format!("item_snapshots_{}_normal", season_id),
+        format!("item_snapshots_{}_expert", season_id),
+    ];
+
+    for table in &tables {
+        sqlx::query(&format!("DROP TABLE IF EXISTS {}", table))
+            .execute(pool)
+            .await
+            .map_err(|e| format!("删除表 {} 失败: {}", table, e))?;
+        info!("已删除表: {}", table);
+    }
+
+    sqlx::query("DELETE FROM seasons WHERE id = ? AND started_at = 0")
+        .bind(season_id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("删除赛季记录失败: {}", e))?;
+
+    info!("赛季 {} 归档完成", season_id);
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+pub struct SeasonStats {
+    pub normal_fire_count: i64,
+    pub normal_items_count: i64,
+    pub expert_fire_count: i64,
+    pub expert_items_count: i64,
+}
+
+pub async fn get_season_stats(pool: &SqlitePool, season_id: &str) -> Result<SeasonStats, String> {
+    let table_normal_fire = format!("fire_price_snapshots_{}_normal", season_id);
+    let table_normal_items = format!("item_snapshots_{}_normal", season_id);
+    let table_expert_fire = format!("fire_price_snapshots_{}_expert", season_id);
+    let table_expert_items = format!("item_snapshots_{}_expert", season_id);
+
+    let normal_fire_count: i64 =
+        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table_normal_fire))
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
+
+    let normal_items_count: i64 =
+        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table_normal_items))
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
+
+    let expert_fire_count: i64 =
+        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table_expert_fire))
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
+
+    let expert_items_count: i64 =
+        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table_expert_items))
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
+
+    Ok(SeasonStats {
+        normal_fire_count,
+        normal_items_count,
+        expert_fire_count,
+        expert_items_count,
+    })
+}
+
 /// 初始化新赛季的数据库表
 pub async fn init_new_season(
     pool: &SqlitePool,
     season_id: &str,
-    _season_name: Option<&str>,
+    season_name: Option<&str>,
+    started_at: Option<i64>,
 ) -> Result<Vec<String>, String> {
+    let season_name = season_name.unwrap_or(season_id);
+    let started_at = started_at.unwrap_or(0);
+
+    if started_at <= 0 {
+        return Err(format!(
+            "赛季 {} 的开服时间必须为正整数，请通过管理页面正确设置 started_at 参数",
+            season_id
+        ));
+    }
+
+    sqlx::query("INSERT OR IGNORE INTO seasons (id, name, started_at) VALUES (?, ?, ?)")
+        .bind(season_id)
+        .bind(season_name)
+        .bind(started_at)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("插入赛季记录失败: {}", e))?;
+
     let mut created_tables = Vec::new();
 
     for mode in ["normal", "expert"] {
@@ -529,7 +706,7 @@ pub async fn get_fire_history_all(
     pool: &SqlitePool,
     season_id: &str,
     market_mode: &str,
-    _limit: i32,
+    limit: i32,
 ) -> Result<Vec<FireSnapshotRecord>, String> {
     let mode = MarketMode::parse(market_mode);
     let table = mode.fire_table(season_id);
@@ -539,11 +716,13 @@ pub async fn get_fire_history_all(
         SELECT rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day
         FROM {}
         ORDER BY scraped_at DESC
+        LIMIT ?
         "#,
         table
     );
 
     let rows = sqlx::query(&query)
+        .bind(limit)
         .fetch_all(pool)
         .await
         .map_err(|e| format!("查询火价快照失败: {}", e))?;

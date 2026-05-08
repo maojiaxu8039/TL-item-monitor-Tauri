@@ -97,13 +97,35 @@ pub async fn get_section_items(
     pool: &SqlitePool,
     section_id: &str,
 ) -> Result<Vec<SectionItem>, crate::core::errors::AppError> {
-    // Need to LEFT JOIN with season/mode specific items table
-    // Since section_items can contain items from different seasons/modes,
-    // we use a UNION approach to query all possible items tables
-    let mut items = Vec::new();
+    let section_item_rows: Vec<(String, String, String)> = sqlx::query_as(
+        r#"
+        SELECT id, season_id, market_mode 
+        FROM section_items 
+        WHERE section_id = ?
+        ORDER BY sort_order, created_at
+        "#,
+    )
+    .bind(section_id)
+    .fetch_all(pool)
+    .await?;
 
-    for (season, mode) in TableResolver::supported_combinations() {
-        let items_table = TableResolver::items_table(season, mode);
+    if section_item_rows.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut items = Vec::new();
+    let mut processed_keys = std::collections::HashSet::new();
+
+    for (_item_id, season_id, market_mode) in section_item_rows {
+        let key = format!("{}:{}", season_id, market_mode);
+
+        if processed_keys.contains(&key) {
+            continue;
+        }
+        processed_keys.insert(key);
+
+        let items_table = TableResolver::items_table(&season_id, &market_mode);
+
         let rows: Vec<SectionItem> = sqlx::query_as(
             &format!(
                 r#"
@@ -122,20 +144,13 @@ pub async fn get_section_items(
             )
         )
         .bind(section_id)
-        .bind(season)
-        .bind(mode)
+        .bind(&season_id)
+        .bind(&market_mode)
         .fetch_all(pool)
         .await?;
 
         items.extend(rows);
     }
-
-    // Sort by sort_order then created_at
-    items.sort_by(|a, b| {
-        a.sort_order
-            .cmp(&b.sort_order)
-            .then_with(|| a.created_at.cmp(&b.created_at))
-    });
 
     Ok(items)
 }

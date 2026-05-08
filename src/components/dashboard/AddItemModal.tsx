@@ -9,7 +9,7 @@ interface AddItemModalProps {
   onAdded: () => void;
 }
 
-export function AddItemModal({ sections, onClose, onAdded }: AddItemModalProps) {
+export function AddItemModal({ sections, onClose }: AddItemModalProps) {
   const [selectedSectionId, setSelectedSectionId] = useState(sections[0]?.id ?? "");
   const [searchKeyword, setSearchKeyword] = useState("");
   const [searchResults, setSearchResults] = useState<ItemData[]>([]);

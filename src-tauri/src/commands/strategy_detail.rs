@@ -165,14 +165,16 @@ pub async fn refresh_strategy_fire_prices(
                 .unwrap_or(cost.fire_price);
             let total_fire = cost.count * fire_price;
 
-            sqlx::query("UPDATE strategy_costs SET fire_price=?, total_fire=?, updated_at=? WHERE id=?")
-                .bind(fire_price)
-                .bind(total_fire)
-                .bind(chrono::Utc::now().timestamp())
-                .bind(&cost.id)
-                .execute(&state.db)
-                .await
-                .map_err(|e| e.to_string())?;
+            sqlx::query(
+                "UPDATE strategy_costs SET fire_price=?, total_fire=?, updated_at=? WHERE id=?",
+            )
+            .bind(fire_price)
+            .bind(total_fire)
+            .bind(chrono::Utc::now().timestamp())
+            .bind(&cost.id)
+            .execute(&state.db)
+            .await
+            .map_err(|e| e.to_string())?;
         }
     }
 

@@ -277,6 +277,22 @@
                         <div class="stat-label">专家服状态</div>
                         <div class="stat-value" id="stat-expert">-</div>
                     </div>
+                    <div class="stat">
+                        <div class="stat-label">普通服火价记录</div>
+                        <div class="stat-value" id="stat-normal-fire">-</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">普通服物品记录</div>
+                        <div class="stat-value" id="stat-normal-items">-</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">专家服火价记录</div>
+                        <div class="stat-value" id="stat-expert-fire">-</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">专家服物品记录</div>
+                        <div class="stat-value" id="stat-expert-items">-</div>
+                    </div>
                 </div>
             </div>
 
@@ -304,19 +320,19 @@
         <div id="tab-config" class="tab-content">
             <div class="card">
                 <h2>服务器配置</h2>
+                <div class="form-group">
+                    <label>管理员密码 (用于加载和保存配置)</label>
+                    <input type="password" id="cfg-password" placeholder="输入管理员密码">
+                </div>
+                <div class="form-group">
+                    <label>season_id</label>
+                    <input type="text" id="cfg-season" readonly>
+                </div>
+                <div class="form-group">
+                    <label>HTTP 端口 (重启后生效)</label>
+                    <input type="number" id="cfg-port" min="1024" max="65535" readonly>
+                </div>
                 <form id="config-form">
-                    <div class="form-group">
-                        <label>赛季 ID</label>
-                        <input type="text" id="cfg-season" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label>HTTP 端口</label>
-                        <input type="number" id="cfg-port" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label>管理员密码</label>
-                        <input type="password" id="cfg-password" placeholder="输入新密码留空则不修改">
-                    </div>
                     <div class="form-group">
                         <label>CORS 允许的源 (逗号分隔)</label>
                         <input type="text" id="cfg-cors">
@@ -328,40 +344,52 @@
                             <option value="false">禁用</option>
                         </select>
                     </div>
-                    <button type="submit" class="btn btn-primary">保存配置</button>
+                    <div style="margin-top: 15px;">
+                        <button type="button" class="btn btn-secondary" onclick="loadConfig()">加载当前配置</button>
+                        <button type="submit" class="btn btn-primary">保存配置</button>
+                    </div>
                 </form>
             </div>
 
             <div class="card">
                 <h2>API 配置</h2>
-                <form id="api-config-form">
+                <form id="qiandao-config-form">
                     <div class="grid">
                         <div class="form-group">
-                            <label>千岛 Tag ID (普通)</label>
+                            <label>普通服 Tag ID</label>
                             <input type="text" id="api-qiandao-tag-normal">
                         </div>
                         <div class="form-group">
-                            <label>千岛 Spec ID (普通)</label>
+                            <label>普通服 Spec ID</label>
                             <input type="text" id="api-qiandao-spec-normal">
                         </div>
                         <div class="form-group">
-                            <label>千岛 Tag ID (专家)</label>
+                            <label>专家服 Tag ID</label>
                             <input type="text" id="api-qiandao-tag-expert">
                         </div>
                         <div class="form-group">
-                            <label>千岛 Spec ID (专家)</label>
+                            <label>专家服 Spec ID</label>
                             <input type="text" id="api-qiandao-spec-expert">
-                        </div>
-                        <div class="form-group">
-                            <label>赛季 ID (普通)</label>
-                            <input type="number" id="api-luosi-normal">
-                        </div>
-                        <div class="form-group">
-                            <label>赛季 ID (专家)</label>
-                            <input type="number" id="api-luosi-expert">
                         </div>
                     </div>
                     <button type="submit" class="btn btn-primary">保存 API 配置</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>物品 API 配置</h2>
+                <form id="luosi-config-form">
+                    <div class="grid">
+                        <div class="form-group">
+                            <label>普通服 season_id</label>
+                            <input type="number" id="api-luosi-season-normal">
+                        </div>
+                        <div class="form-group">
+                            <label>专家服 season_id</label>
+                            <input type="number" id="api-luosi-season-expert">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">保存物品配置</button>
                 </form>
             </div>
         </div>
@@ -371,6 +399,12 @@
                 <h2>数据导出</h2>
                 <form id="export-form">
                     <div class="grid">
+                        <div class="form-group">
+                            <label>season_id</label>
+                            <select id="export-season">
+                                <option value="">当前赛季</option>
+                            </select>
+                        </div>
                         <div class="form-group">
                             <label>数据类型</label>
                             <select id="export-type">
@@ -386,21 +420,48 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label>数据条数</label>
-                            <input type="number" id="export-limit" value="100" min="1" max="10000">
+                            <label>时间范围</label>
+                            <select id="export-range">
+                                <option value="1">最近 1 天</option>
+                                <option value="3">最近 3 天</option>
+                                <option value="7" selected>最近 7 天</option>
+                                <option value="30">最近 30 天</option>
+                                <option value="season">整个赛季</option>
+                            </select>
                         </div>
                     </div>
-                    <button type="button" class="btn btn-success" onclick="exportData()">导出 JSON</button>
-                    <button type="button" class="btn btn-primary" onclick="exportCSV()">导出 CSV</button>
-                </form>
-            </div>
+                    </form>
+                    <div style="margin-top: 15px;">
+                        <button type="button" class="btn btn-success" id="btn-export-json">导出 JSON</button>
+                        <button type="button" class="btn btn-primary" id="btn-export-csv">导出 CSV</button>
+                    </div>
+                </div>
 
-            <div class="card">
-                <h2>导出预览</h2>
-                <div id="export-preview" style="max-height: 400px; overflow-y: auto; background: #f8f9fa; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all;"></div>
+                <div class="card">
+                    <h2>赛季管理</h2>
+                    <div class="form-group">
+                        <label>管理员密码</label>
+                        <input type="password" id="admin-password" placeholder="输入管理员密码">
+                    </div>
+                    <div class="form-group">
+                        <label>season_id</label>
+                        <input type="text" id="season-input" placeholder="例如: ss12">
+                    </div>
+                    <div class="form-group">
+                        <label>赛季名称 (可选)</label>
+                        <input type="text" id="season-name-input" placeholder="例如: SS12 赛季">
+                    </div>
+                    <div class="form-group">
+                        <label>开服时间戳 (必填，Unix秒)</label>
+                        <input type="number" id="season-started-at" placeholder="例如: 1735689600">
+                        <small style="color:#999">请输入正确的开服时间戳，用于计算赛季天数</small>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <button type="button" class="btn btn-primary" id="btn-init-season">初始化赛季</button>
+                        <button type="button" class="btn btn-danger" id="btn-archive-season">归档赛季</button>
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
 
     <script>
         let serverConfig = null;
@@ -448,17 +509,25 @@
                     const normal = info.last_collection.normal;
                     const expert = info.last_collection.expert;
 
-                    document.getElementById('stat-normal').innerHTML = normal 
-                        ? (normal.success 
-                            ? `<span class="badge badge-success">成功</span> ${normal.fire_price?.toFixed(2) || '-'} 火`
-                            : `<span class="badge badge-error">失败</span>`)
-                        : '<span class="badge badge-error">未采集</span>';
+                    console.log('normal:', normal);
+                    console.log('expert:', expert);
+                    console.log('normal.success:', normal?.success);
 
-                    document.getElementById('stat-expert').innerHTML = expert
-                        ? (expert.success
-                            ? `<span class="badge badge-success">成功</span> ${expert.fire_price?.toFixed(2) || '-'} 火`
-                            : `<span class="badge badge-error">失败</span>`)
-                        : '<span class="badge badge-error">未采集</span>';
+                    document.getElementById('stat-normal').innerHTML = normal && normal.is_success
+                        ? `<span class="badge badge-success">成功</span>`
+                        : `<span class="badge badge-error">失败</span>`;
+
+                    document.getElementById('stat-expert').innerHTML = expert && expert.is_success
+                        ? `<span class="badge badge-success">成功</span>`
+                        : `<span class="badge badge-error">失败</span>`;
+
+                    const getDisplayError = (mode) => {
+                        if (!mode || !mode.error) return '-';
+                        const err = mode.error;
+                        if (err.includes('No fire price data')) return '赛季还没开始';
+                        if (err.includes('Fire scrape error')) return '火价采集失败';
+                        return err;
+                    };
 
                     const tbody = document.getElementById('collection-tbody');
                     tbody.innerHTML = '';
@@ -472,8 +541,8 @@
                                     <td>${mode.fire_price?.toFixed(2) || '-'}</td>
                                     <td>${mode.items_count || 0}</td>
                                     <td>${formatTime(mode.timestamp)}</td>
-                                    <td><span class="badge ${mode.success ? 'badge-success' : 'badge-error'}">${mode.success ? '成功' : '失败'}</span></td>
-                                    <td>${mode.error || '-'}</td>
+                                    <td><span class="badge ${mode.is_success ? 'badge-success' : 'badge-error'}">${mode.is_success ? '成功' : '失败'}</span></td>
+                                    <td>${getDisplayError(mode)}</td>
                                 </tr>
                             `;
                         }
@@ -488,40 +557,104 @@
             } catch (e) {
                 console.error('Load status error:', e);
             }
+
+            try {
+                const resp = await fetch('/stats');
+                const data = await resp.json();
+                if (data.success) {
+                    const stats = data.data;
+                    document.getElementById('stat-normal-fire').textContent = (stats.normal_fire_count || 0) + ' 条';
+                    document.getElementById('stat-normal-items').textContent = (stats.normal_items_count || 0) + ' 条';
+                    document.getElementById('stat-expert-fire').textContent = (stats.expert_fire_count || 0) + ' 条';
+                    document.getElementById('stat-expert-items').textContent = (stats.expert_items_count || 0) + ' 条';
+                }
+            } catch (e) {
+                console.error('Load stats error:', e);
+            }
         }
 
         async function loadConfig() {
+            const password = document.getElementById('cfg-password').value;
+            if (!password) {
+                showAlert('error', '请输入管理员密码');
+                return;
+            }
             try {
-                const resp = await fetch('/api/admin/config');
+                const resp = await fetch('/api/admin/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
                 const data = await resp.json();
                 
                 if (data.success) {
                     serverConfig = data.data;
                     document.getElementById('cfg-season').value = serverConfig.season_id;
                     document.getElementById('cfg-port').value = serverConfig.http_port;
-                    document.getElementById('cfg-cors').value = serverConfig.cors_allowed_origins.join(', ');
-                    document.getElementById('cfg-rate-limit').value = serverConfig.rate_limit.enabled.toString();
+                    document.getElementById('cfg-cors').value = (serverConfig.cors_allowed_origins || []).join(', ');
+                    document.getElementById('cfg-rate-limit').value = (serverConfig.rate_limit ? serverConfig.rate_limit.enabled : true).toString();
 
-                    document.getElementById('api-qiandao-tag-normal').value = serverConfig.api_config.qiandao_tag_id_normal;
-                    document.getElementById('api-qiandao-spec-normal').value = serverConfig.api_config.qiandao_spec_id_normal;
-                    document.getElementById('api-qiandao-tag-expert').value = serverConfig.api_config.qiandao_tag_id_expert;
-                    document.getElementById('api-qiandao-spec-expert').value = serverConfig.api_config.qiandao_spec_id_expert;
-                    document.getElementById('api-luosi-normal').value = serverConfig.api_config.luosi_season_id_normal;
-                    document.getElementById('api-luosi-expert').value = serverConfig.api_config.luosi_season_id_expert;
+                    if (serverConfig.api_config) {
+                        document.getElementById('api-qiandao-tag-normal').value = serverConfig.api_config.qiandao_tag_id_normal || '';
+                        document.getElementById('api-qiandao-spec-normal').value = serverConfig.api_config.qiandao_spec_id_normal || '';
+                        document.getElementById('api-qiandao-tag-expert').value = serverConfig.api_config.qiandao_tag_id_expert || '';
+                        document.getElementById('api-qiandao-spec-expert').value = serverConfig.api_config.qiandao_spec_id_expert || '';
+                        document.getElementById('api-luosi-season-normal').value = serverConfig.api_config.luosi_season_id_normal || '';
+                        document.getElementById('api-luosi-season-expert').value = serverConfig.api_config.luosi_season_id_expert || '';
+                    }
+                    showAlert('success', '配置已加载');
+                } else {
+                    showAlert('error', data.error || '加载配置失败');
                 }
             } catch (e) {
-                console.error('Load config error:', e);
+                showAlert('error', '加载配置失败: ' + e.message);
+            }
+        }
+
+        async function loadSeasons() {
+            try {
+                const resp = await fetch('/seasons');
+                const data = await resp.json();
+                if (data.success && data.data) {
+                    const select = document.getElementById('export-season');
+                    data.data.forEach(season => {
+                        const opt = document.createElement('option');
+                        opt.value = season;
+                        opt.textContent = season;
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (e) {
+                console.error('Load seasons error:', e);
             }
         }
 
         async function exportData(format = 'json') {
             const type = document.getElementById('export-type').value;
             const mode = document.getElementById('export-mode').value;
-            const limit = document.getElementById('export-limit').value || 100;
+            const rangeSelect = document.getElementById('export-range').value;
 
             try {
+                let limit = 99999;
+
+                if (rangeSelect !== 'season') {
+                    const days = parseInt(rangeSelect);
+                    const now = Math.floor(Date.now() / 1000);
+                    const cutoff = now - (days * 86400);
+                    limit = 99999;
+                    await fetch(`/season-start`).then(r => r.json()).then(data => {
+                        if (data.success && data.data.started_at > 0) {
+                            const seasonStart = data.data.started_at;
+                            const effectiveCutoff = Math.max(cutoff, seasonStart);
+                            const hours = Math.ceil((now - effectiveCutoff) / 3600);
+                            limit = Math.min(hours + 5, 99999);
+                        }
+                    }).catch(() => {});
+                }
+
                 const endpoint = type === 'fire-history' ? '/fire-history' : '/items-history-all';
-                const resp = await fetch(`/fire-history-all?mode=${mode}&limit=${limit}`);
+                const seasonParam = document.getElementById('export-season').value ? `&season=${document.getElementById('export-season').value}` : '';
+                const resp = await fetch(`/fire-history-all?mode=${mode}&limit=${limit}${seasonParam}`);
                 const data = await resp.json();
                 
                 if (data.success) {
@@ -544,8 +677,6 @@
                         mimeType = 'application/json';
                     }
 
-                    document.getElementById('export-preview').textContent = content.slice(0, 2000) + (content.length > 2000 ? '\n...' : '');
-
                     const blob = new Blob([content], { type: mimeType });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -567,65 +698,173 @@
             exportData('csv');
         }
 
-        document.getElementById('config-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const password = document.getElementById('cfg-password').value;
-            const config = {
-                password: password,
-                cors_allowed_origins: document.getElementById('cfg-cors').value.split(',').map(s => s.trim()).filter(s => s),
-                rate_limit_enabled: document.getElementById('cfg-rate-limit').value === 'true'
-            };
+        async function initSeason() {
+            const season_id = document.getElementById('season-input').value.trim();
+            if (!season_id) {
+                showAlert('error', '请输入 season_id');
+                return;
+            }
+            const season_name = document.getElementById('season-name-input').value.trim();
+            const password = document.getElementById('admin-password').value;
+            if (!password) {
+                showAlert('error', '请输入管理员密码');
+                return;
+            }
+            const started_at_input = document.getElementById('season-started-at').value.trim();
+            
+            if (!started_at_input) {
+                showAlert('error', '请输入开服时间戳（必填）');
+                return;
+            }
+            
+            const started_at = parseInt(started_at_input, 10);
+            if (isNaN(started_at) || started_at <= 0) {
+                showAlert('error', '开服时间戳必须是正整数');
+                return;
+            }
+
+            const requestBody = { password, season_id, started_at, season_name };
 
             try {
-                const resp = await fetch('/api/admin/update-config', {
+                const resp = await fetch('/admin/init-season', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(config)
+                    body: JSON.stringify(requestBody)
                 });
                 const data = await resp.json();
-                
                 if (data.success) {
-                    showAlert('success', '配置已保存');
+                    showAlert('success', `赛季 ${season_id} 初始化成功`);
+                    loadSeasons();
                 } else {
-                    showAlert('error', data.error || '保存失败');
+                    showAlert('error', data.error || '初始化失败');
                 }
             } catch (e) {
-                showAlert('error', '保存失败: ' + e.message);
+                showAlert('error', '初始化失败: ' + e.message);
             }
-        });
+        }
 
-        document.getElementById('api-config-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
+        async function archiveSeason() {
+            const season_id = document.getElementById('season-input').value.trim();
+            if (!season_id) {
+                showAlert('error', '请输入 season_id');
+                return;
+            }
+            const password = document.getElementById('admin-password').value;
+            if (!password) {
+                showAlert('error', '请输入管理员密码');
+                return;
+            }
+            if (!confirm(`确定要归档赛季 ${season_id} 吗？`)) return;
+
+            try {
+                const resp = await fetch('/admin/archive-season', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password, season_id })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showAlert('success', `赛季 ${season_id} 已归档`);
+                } else {
+                    showAlert('error', data.error || '归档失败');
+                }
+            } catch (e) {
+                showAlert('error', '归档失败: ' + e.message);
+            }
+        }
+
+        function addListeners() {
+            document.getElementById('btn-export-json').addEventListener('click', () => exportData('json'));
+            document.getElementById('btn-export-csv').addEventListener('click', () => exportData('csv'));
+            document.getElementById('btn-init-season').addEventListener('click', initSeason);
+            document.getElementById('btn-archive-season').addEventListener('click', archiveSeason);
+
+            document.getElementById('config-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const password = document.getElementById('cfg-password').value;
+                const config = {
+                    password: password,
+                    cors_allowed_origins: document.getElementById('cfg-cors').value.split(',').map(s => s.trim()).filter(s => s),
+                    rate_limit_enabled: document.getElementById('cfg-rate-limit').value === 'true'
+                };
+
+                try {
+                    const resp = await fetch('/api/admin/update-config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(config)
+                    });
+                    const data = await resp.json();
+                    
+                    if (data.success) {
+                        showAlert('success', '配置已保存，重启后生效');
+                    } else {
+                        showAlert('error', data.error || '保存失败');
+                    }
+                } catch (e) {
+                    showAlert('error', '保存失败: ' + e.message);
+                }
+            });
+
+            async function saveApiConfig() {
+            const password = document.getElementById('admin-password').value;
+            if (!password) {
+                showAlert('error', '请输入管理员密码');
+                return;
+            }
             const api_config = {
                 qiandao_tag_id_normal: document.getElementById('api-qiandao-tag-normal').value,
                 qiandao_spec_id_normal: document.getElementById('api-qiandao-spec-normal').value,
                 qiandao_tag_id_expert: document.getElementById('api-qiandao-tag-expert').value,
                 qiandao_spec_id_expert: document.getElementById('api-qiandao-spec-expert').value,
-                luosi_season_id_normal: parseInt(document.getElementById('api-luosi-normal').value),
-                luosi_season_id_expert: parseInt(document.getElementById('api-luosi-expert').value)
+                luosi_season_id_normal: parseInt(document.getElementById('api-luosi-season-normal').value) || 0,
+                luosi_season_id_expert: parseInt(document.getElementById('api-luosi-season-expert').value) || 0
             };
 
             try {
-                const resp = await fetch('/api/admin/update-api-config', {
+                const resp = await fetch('/admin/update-api-config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(api_config)
+                    body: JSON.stringify({ password, api_config })
                 });
                 const data = await resp.json();
                 
                 if (data.success) {
-                    showAlert('success', 'API 配置已保存');
+                    showAlert('success', 'API配置已保存，重启后生效');
                 } else {
                     showAlert('error', data.error || '保存失败');
                 }
             } catch (e) {
                 showAlert('error', '保存失败: ' + e.message);
             }
+        }
+
+        document.getElementById('qiandao-config-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await saveApiConfig();
         });
 
-        loadStatus();
-        loadConfig();
-        setInterval(loadStatus, 30000);
+        document.getElementById('luosi-config-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await saveApiConfig();
+        });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                loadStatus();
+                loadConfig();
+                loadSeasons();
+                setInterval(loadStatus, 30000);
+                addListeners();
+            });
+        } else {
+            loadStatus();
+            loadConfig();
+            loadSeasons();
+            setInterval(loadStatus, 30000);
+            addListeners();
+        }
     </script>
 </body>
 </html>

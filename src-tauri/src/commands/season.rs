@@ -344,10 +344,26 @@ pub async fn list_seasons(state: State<'_, Arc<AppState>>) -> Result<Vec<SeasonI
 
     let mut seasons = Vec::new();
     for (id, name, is_current, started_at, ended_at) in rows {
-        // Count items across both modes
+        let is_current_season = is_current == 1;
+        let item_table_normal;
+        let item_table_expert;
+        let fire_table_normal;
+        let fire_table_expert;
+
+        if is_current_season {
+            item_table_normal = TableResolver::items_table(&id, "season_normal");
+            item_table_expert = TableResolver::items_table(&id, "season_expert");
+            fire_table_normal = TableResolver::fire_price_table(&id, "season_normal");
+            fire_table_expert = TableResolver::fire_price_table(&id, "season_expert");
+        } else {
+            item_table_normal = TableResolver::item_snapshots_table(&id, "season_normal");
+            item_table_expert = TableResolver::item_snapshots_table(&id, "season_expert");
+            fire_table_normal = TableResolver::fire_price_snapshots_table(&id, "season_normal");
+            fire_table_expert = TableResolver::fire_price_snapshots_table(&id, "season_expert");
+        }
+
         let mut item_count = 0i64;
-        for mode in ["season_normal", "season_expert"] {
-            let table = TableResolver::items_table(&id, mode);
+        for table in [&item_table_normal, &item_table_expert] {
             let count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", table))
                 .fetch_one(&state.db)
                 .await
@@ -355,10 +371,8 @@ pub async fn list_seasons(state: State<'_, Arc<AppState>>) -> Result<Vec<SeasonI
             item_count += count.0;
         }
 
-        // Count fire records across both modes
         let mut fire_count = 0i64;
-        for mode in ["season_normal", "season_expert"] {
-            let table = TableResolver::fire_price_table(&id, mode);
+        for table in [&fire_table_normal, &fire_table_expert] {
             let count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {}", table))
                 .fetch_one(&state.db)
                 .await
@@ -369,7 +383,7 @@ pub async fn list_seasons(state: State<'_, Arc<AppState>>) -> Result<Vec<SeasonI
         seasons.push(SeasonInfo {
             season_id: id,
             name,
-            is_current: is_current == 1,
+            is_current: is_current_season,
             started_at,
             ended_at,
             item_count,

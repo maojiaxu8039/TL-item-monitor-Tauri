@@ -3,7 +3,9 @@ use crate::db::repo_realtime_fire;
 use chrono::Utc;
 use sqlx::SqlitePool;
 
-pub async fn get_strategy_details(pool: &SqlitePool) -> Result<Vec<StrategyDetail>, crate::core::errors::AppError> {
+pub async fn get_strategy_details(
+    pool: &SqlitePool,
+) -> Result<Vec<StrategyDetail>, crate::core::errors::AppError> {
     let strategies = sqlx::query_as::<_, StrategyDetail>(
         "SELECT id, name, label, difficulty, output_value, defense_value, remark, created_at, updated_at 
          FROM strategy_details ORDER BY created_at DESC"
@@ -13,7 +15,10 @@ pub async fn get_strategy_details(pool: &SqlitePool) -> Result<Vec<StrategyDetai
     Ok(strategies)
 }
 
-pub async fn get_strategy_detail(pool: &SqlitePool, id: &str) -> Result<Option<StrategyDetail>, crate::core::errors::AppError> {
+pub async fn get_strategy_detail(
+    pool: &SqlitePool,
+    id: &str,
+) -> Result<Option<StrategyDetail>, crate::core::errors::AppError> {
     let strategy = sqlx::query_as::<_, StrategyDetail>(
         "SELECT id, name, label, difficulty, output_value, defense_value, remark, created_at, updated_at 
          FROM strategy_details WHERE id = ?"
@@ -156,13 +161,11 @@ pub async fn update_strategy_cost(
 ) -> Result<(), crate::core::errors::AppError> {
     let now = Utc::now().timestamp();
 
-    let cost = sqlx::query_as::<_, StrategyCost>(
-        "SELECT * FROM strategy_costs WHERE id = ?"
-    )
-    .bind(&req.id)
-    .fetch_optional(pool)
-    .await?
-    .ok_or_else(|| crate::core::errors::AppError::Db("Cost not found".to_string()))?;
+    let cost = sqlx::query_as::<_, StrategyCost>("SELECT * FROM strategy_costs WHERE id = ?")
+        .bind(&req.id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| crate::core::errors::AppError::Db("Cost not found".to_string()))?;
 
     let fire_price = if req.is_realtime {
         repo_realtime_fire::get_current_fire_price(pool)
@@ -207,7 +210,7 @@ pub async fn get_strategy_outputs(
     let outputs = sqlx::query_as::<_, StrategyOutput>(
         "SELECT id, strategy_id, item_name, item_type, count, estimated_value,
          COALESCE(realtime_value, 0) as realtime_value, remark, created_at, updated_at
-         FROM strategy_outputs WHERE strategy_id = ? ORDER BY created_at"
+         FROM strategy_outputs WHERE strategy_id = ? ORDER BY created_at",
     )
     .bind(strategy_id)
     .fetch_all(pool)
@@ -248,7 +251,7 @@ pub async fn update_strategy_output(
     let now = Utc::now().timestamp();
 
     sqlx::query(
-        "UPDATE strategy_outputs SET count=?, estimated_value=?, remark=?, updated_at=? WHERE id=?"
+        "UPDATE strategy_outputs SET count=?, estimated_value=?, remark=?, updated_at=? WHERE id=?",
     )
     .bind(req.count)
     .bind(req.estimated_value)
@@ -287,7 +290,9 @@ pub async fn get_strategy_with_costs(
 
     let mut total_cost_fire = 0.0;
     for cost in &mut costs {
-        let current_price = get_item_fire_price(pool, &cost.item_id).await.unwrap_or(0.0);
+        let current_price = get_item_fire_price(pool, &cost.item_id)
+            .await
+            .unwrap_or(0.0);
         if cost.is_realtime {
             cost.fire_price = current_price;
             cost.total_fire = cost.count * current_price;
@@ -297,7 +302,9 @@ pub async fn get_strategy_with_costs(
 
     let mut total_output_value = 0.0;
     for output in &mut outputs {
-        let current_price = get_item_fire_price_by_name(pool, &output.item_name).await.unwrap_or(0.0);
+        let current_price = get_item_fire_price_by_name(pool, &output.item_name)
+            .await
+            .unwrap_or(0.0);
         output.realtime_value = current_price;
         total_output_value += current_price * output.count;
     }
@@ -318,24 +325,25 @@ pub async fn get_strategy_with_costs(
     }))
 }
 
-async fn get_item_fire_price(pool: &SqlitePool, item_id: &str) -> Result<f64, crate::core::errors::AppError> {
-    let normal_price: Option<(f64,)> = sqlx::query_as(
-        "SELECT price FROM items_normal WHERE item_id = ?"
-    )
-    .bind(item_id)
-    .fetch_optional(pool)
-    .await?;
+async fn get_item_fire_price(
+    pool: &SqlitePool,
+    item_id: &str,
+) -> Result<f64, crate::core::errors::AppError> {
+    let normal_price: Option<(f64,)> =
+        sqlx::query_as("SELECT price FROM items_normal WHERE item_id = ?")
+            .bind(item_id)
+            .fetch_optional(pool)
+            .await?;
 
     if let Some((price,)) = normal_price {
         return Ok(price);
     }
 
-    let expert_price: Option<(f64,)> = sqlx::query_as(
-        "SELECT price FROM items_expert WHERE item_id = ?"
-    )
-    .bind(item_id)
-    .fetch_optional(pool)
-    .await?;
+    let expert_price: Option<(f64,)> =
+        sqlx::query_as("SELECT price FROM items_expert WHERE item_id = ?")
+            .bind(item_id)
+            .fetch_optional(pool)
+            .await?;
 
     if let Some((price,)) = expert_price {
         return Ok(price);
@@ -344,24 +352,25 @@ async fn get_item_fire_price(pool: &SqlitePool, item_id: &str) -> Result<f64, cr
     Ok(0.0)
 }
 
-async fn get_item_fire_price_by_name(pool: &SqlitePool, item_name: &str) -> Result<f64, crate::core::errors::AppError> {
-    let normal_price: Option<(f64,)> = sqlx::query_as(
-        "SELECT price FROM items_normal WHERE name = ?"
-    )
-    .bind(item_name)
-    .fetch_optional(pool)
-    .await?;
+async fn get_item_fire_price_by_name(
+    pool: &SqlitePool,
+    item_name: &str,
+) -> Result<f64, crate::core::errors::AppError> {
+    let normal_price: Option<(f64,)> =
+        sqlx::query_as("SELECT price FROM items_normal WHERE name = ?")
+            .bind(item_name)
+            .fetch_optional(pool)
+            .await?;
 
     if let Some((price,)) = normal_price {
         return Ok(price);
     }
 
-    let expert_price: Option<(f64,)> = sqlx::query_as(
-        "SELECT price FROM items_expert WHERE name = ?"
-    )
-    .bind(item_name)
-    .fetch_optional(pool)
-    .await?;
+    let expert_price: Option<(f64,)> =
+        sqlx::query_as("SELECT price FROM items_expert WHERE name = ?")
+            .bind(item_name)
+            .fetch_optional(pool)
+            .await?;
 
     if let Some((price,)) = expert_price {
         return Ok(price);

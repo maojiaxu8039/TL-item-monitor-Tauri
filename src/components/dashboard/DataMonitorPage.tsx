@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Database, Download, RefreshCw, Server, Wifi, WifiOff, CheckCircle, XCircle, AlertCircle, Clock } from "lucide-react";
+import { Database, Download, RefreshCw, Server, Wifi, WifiOff, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { cmd } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { toast } from "sonner";
 import ServerAdminPanel from "./ServerAdminPanel";
+import type { SyncJobState, SyncFailure } from "@/lib/commands";
 
 interface ServerStatus {
   server: string;
@@ -66,6 +67,26 @@ type DataType = "fire" | "items";
 type SyncMode = "normal" | "expert";
 type TimeRange = "24h" | "3d" | "7d" | "30d" | "season";
 
+const PAGE_SIZE = 500;
+
+function createEmptySyncJob(dataType: DataType, mode: SyncMode, range: TimeRange): SyncJobState {
+  return {
+    id: `sync-${Date.now()}`,
+    dataType,
+    mode,
+    range,
+    status: "idle",
+    total: 0,
+    success: 0,
+    failed: 0,
+    skipped: 0,
+    startedAt: 0,
+    finishedAt: null,
+    firstError: null,
+    failures: [],
+  };
+}
+
 export default function DataMonitorPage() {
   const [serverUrl, setServerUrl] = useState(() => {
     return localStorage.getItem("server_url") || "http://localhost:8080";
@@ -75,12 +96,15 @@ export default function DataMonitorPage() {
   const [dataType, setDataType] = useState<DataType>("fire");
   const [syncMode, setSyncMode] = useState<SyncMode>("normal");
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
+  const [syncJob, setSyncJob] = useState<SyncJobState | null>(null);
+  const [showFailures, setShowFailures] = useState(false);
+  const [isPaginatedSync, setIsPaginatedSync] = useState(false);
   const { marketContext } = useSectionRefresh();
 
   const checkServerStatus = async (): Promise<ServerStatus | null> => {
     try {
-      const response = await fetch(`${serverUrl}/status`, { 
-        signal: AbortSignal.timeout(5000) 
+      const response = await fetch(`${serverUrl}/status`, {
+        signal: AbortSignal.timeout(5000)
       });
       if (!response.ok) throw new Error("Server error");
       const data = await response.json();
@@ -116,80 +140,252 @@ export default function DataMonitorPage() {
     }
   };
 
+  const syncSinglePage = async (
+    records: FireHistoryRecord[] | ItemsHistoryRecord[],
+    dataType: DataType,
+    marketMode: string,
+    marketContext: { seasonId: string }
+  ): Promise<{ success: number; failed: number; skipped: number; failures: SyncFailure[] }> => {
+    let success = 0;
+    let failed = 0;
+    const failures: SyncFailure[] = [];
+    const now = Date.now();
+
+    for (const record of records) {
+      const recordItemId = dataType === "items" ? (record as ItemsHistoryRecord).item_id : undefined;
+      const recordItemName = dataType === "items"
+        ? (record as ItemsHistoryRecord).name ?? (record as ItemsHistoryRecord).item_id
+        : (record as FireHistoryRecord).season_id;
+
+      try {
+        if (dataType === "fire") {
+          const fireRecord = record as FireHistoryRecord;
+          await cmd.syncFireRecord({
+            season_id: fireRecord.season_id,
+            market_mode: marketMode,
+            rmb_per_10k_fire: fireRecord.rmb_per_10k_fire,
+            fire_per_rmb: fireRecord.fire_per_rmb,
+            increase_ratio: fireRecord.increase_ratio ?? 0,
+            trading_volume: fireRecord.trading_volume,
+            source: fireRecord.source,
+            source_time: fireRecord.source_time,
+            recorded_at: fireRecord.scraped_at,
+          });
+          success++;
+        } else {
+          const itemRecord = record as ItemsHistoryRecord;
+          await cmd.syncItemsRecord({
+            season_id: itemRecord.season_id || marketContext.seasonId,
+            market_mode: marketMode,
+            item_id: itemRecord.item_id,
+            name: itemRecord.name || itemRecord.item_id,
+            item_type: itemRecord.item_type ?? null,
+            price: itemRecord.price ?? itemRecord.fire_price ?? 0,
+            last_time: itemRecord.last_time ?? itemRecord.scraped_at,
+            recorded_at: itemRecord.scraped_at,
+          });
+          success++;
+        }
+      } catch (err) {
+        failed++;
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const failure: SyncFailure = {
+          itemId: recordItemId,
+          itemName: recordItemName,
+          recordType: dataType,
+          reason: errorMessage,
+          timestamp: now,
+        };
+        if (failures.length < 10) {
+          failures.push(failure);
+        }
+      }
+    }
+
+    return { success, failed, skipped: 0, failures };
+  };
+
+  const syncPaginated = useCallback(async () => {
+    const modeParam = syncMode === "expert" ? "expert" : "normal";
+    const hours = getTimeRangeHours(timeRange);
+    const marketMode = syncMode === "expert" ? "season_expert" : "season_normal";
+
+    const job = createEmptySyncJob(dataType, syncMode, timeRange);
+    job.status = "running";
+    job.startedAt = Date.now();
+    setSyncJob({ ...job });
+
+    let offset = 0;
+    let totalSuccess = 0;
+    let totalFailed = 0;
+    let allFailures: SyncFailure[] = [];
+    let hasMore = true;
+    let totalRecords = 0;
+
+    try {
+      if (dataType === "fire") {
+        const baseUrl = hours === 99999
+          ? `${serverUrl}/fire-history-all?mode=${modeParam}`
+          : `${serverUrl}/fire-history?mode=${modeParam}`;
+
+        while (hasMore) {
+          const url = `${baseUrl}&limit=${PAGE_SIZE}&offset=${offset}`;
+          const response = await fetch(url);
+
+          if (!response.ok) throw new Error("Failed to fetch fire data");
+
+          const result = await response.json();
+          if (!result.success) throw new Error(result.error || "Unknown error");
+
+          const records = result.data as FireHistoryRecord[];
+
+          if (offset === 0) {
+            totalRecords = records.length;
+            job.total = totalRecords;
+          }
+
+          if (records.length === 0) {
+            hasMore = false;
+            break;
+          }
+
+          const pageResult = await syncSinglePage(records, dataType, marketMode, marketContext);
+          totalSuccess += pageResult.success;
+          totalFailed += pageResult.failed;
+          allFailures = [...allFailures, ...pageResult.failures];
+
+          job.success = totalSuccess;
+          job.failed = totalFailed;
+          job.failures = allFailures.slice(0, 10);
+          setSyncJob({ ...job });
+
+          if (records.length < PAGE_SIZE) {
+            hasMore = false;
+          } else {
+            offset += PAGE_SIZE;
+          }
+        }
+      } else {
+        const baseUrl = `${serverUrl}/items-history-all?mode=${modeParam}`;
+
+        while (hasMore) {
+          const url = `${baseUrl}&limit=${PAGE_SIZE}&offset=${offset}`;
+          const response = await fetch(url);
+
+          if (!response.ok) throw new Error("Failed to fetch items data");
+
+          const result = await response.json();
+          if (!result.success) throw new Error(result.error || "Unknown error");
+
+          const records = result.data as ItemsHistoryRecord[];
+
+          if (offset === 0) {
+            totalRecords = records.length;
+            job.total = totalRecords;
+          }
+
+          if (records.length === 0) {
+            hasMore = false;
+            break;
+          }
+
+          const pageResult = await syncSinglePage(records, dataType, marketMode, marketContext);
+          totalSuccess += pageResult.success;
+          totalFailed += pageResult.failed;
+          allFailures = [...allFailures, ...pageResult.failures];
+
+          job.success = totalSuccess;
+          job.failed = totalFailed;
+          job.failures = allFailures.slice(0, 10);
+          setSyncJob({ ...job });
+
+          if (records.length < PAGE_SIZE) {
+            hasMore = false;
+          } else {
+            offset += PAGE_SIZE;
+          }
+        }
+      }
+
+      job.status = totalFailed > 0 ? (totalSuccess > 0 ? "partial" : "failed") : "success";
+      job.finishedAt = Date.now();
+      job.firstError = allFailures[0]?.reason ?? null;
+      setSyncJob({ ...job });
+
+      if (totalRecords === 0) {
+        toast.info("没有可同步的数据");
+      } else if (job.status === "partial") {
+        toast.error(`部分同步成功: 成功 ${totalSuccess}，失败 ${totalFailed}`);
+      } else if (job.status === "failed") {
+        toast.error(`同步失败: ${allFailures[0]?.reason || "未知错误"}`);
+      } else {
+        toast.success(`同步成功: ${totalSuccess} 条`);
+      }
+    } catch (err) {
+      job.status = "failed";
+      job.finishedAt = Date.now();
+      job.firstError = err instanceof Error ? err.message : "未知错误";
+      setSyncJob({ ...job });
+      toast.error(`同步失败: ${job.firstError}`);
+    }
+
+    refetchStatus();
+  }, [dataType, syncMode, timeRange, serverUrl, marketContext, refetchStatus]);
+
   const syncMutation = useMutation({
     mutationFn: async () => {
       const modeParam = syncMode === "expert" ? "expert" : "normal";
       const hours = getTimeRangeHours(timeRange);
       const marketMode = syncMode === "expert" ? "season_expert" : "season_normal";
-      
+
       if (dataType === "fire") {
         const url = hours === 99999
           ? `${serverUrl}/fire-history-all?mode=${modeParam}&limit=99999`
           : `${serverUrl}/fire-history?mode=${modeParam}&limit=${hours}`;
-        
+
         const response = await fetch(url);
         if (!response.ok) throw new Error("Failed to fetch fire data");
         const data = await response.json();
         if (!data.success) throw new Error(data.error || "Unknown error");
-        
+
         const records = data.data as FireHistoryRecord[];
         if (records.length === 0) {
-          return { synced: 0, message: "没有可同步的火价数据" };
+          return { synced: 0, type: "fire" as const, message: "没有可同步的火价数据" };
         }
-        
-        let synced = 0;
-        for (const record of records) {
-          try {
-            await cmd.syncFireRecord({
-              season_id: record.season_id,
-              market_mode: marketMode,
-              rmb_per_10k_fire: record.rmb_per_10k_fire,
-              fire_per_rmb: record.fire_per_rmb,
-              increase_ratio: record.increase_ratio ?? 0,
-              trading_volume: record.trading_volume,
-              source: record.source,
-              source_time: record.source_time,
-              recorded_at: record.scraped_at,
-            });
-            synced++;
-          } catch (err) {
-            console.error("Fire sync error:", err);
-          }
-        }
-        return { synced, type: "fire" };
+
+        const result = await syncSinglePage(records, dataType, marketMode, marketContext);
+        return {
+          synced: result.success,
+          type: "fire" as const,
+          total: records.length,
+          failed: result.failed,
+          skipped: result.skipped,
+          firstError: result.failures[0]?.reason,
+          failures: result.failures,
+        };
       } else {
-        // Always use /items-history-all for bulk sync, /items-history requires item_id
         const url = `${serverUrl}/items-history-all?mode=${modeParam}&limit=${hours === 99999 ? 99999 : hours * 10}`;
-        
+
         const response = await fetch(url);
         if (!response.ok) throw new Error("Failed to fetch items data");
         const data = await response.json();
         if (!data.success) throw new Error(data.error || "Unknown error");
-        
+
         const records = data.data as ItemsHistoryRecord[];
         if (records.length === 0) {
-          return { synced: 0, message: "没有可同步的物品数据" };
+          return { synced: 0, type: "items" as const, message: "没有可同步的物品数据" };
         }
-        
-        let synced = 0;
-        for (const record of records) {
-          try {
-            await cmd.syncItemsRecord({
-              season_id: record.season_id || marketContext.seasonId,
-              market_mode: marketMode,
-              item_id: record.item_id,
-              name: record.name || record.item_id,
-              item_type: record.item_type ?? null,
-              price: record.price ?? record.fire_price ?? 0,
-              last_time: record.last_time ?? record.scraped_at,
-              recorded_at: record.scraped_at,
-            });
-            synced++;
-          } catch (err) {
-            console.error("Items sync error:", err);
-          }
-        }
-        return { synced, type: "items" };
+
+        const result = await syncSinglePage(records, dataType, marketMode, marketContext);
+        return {
+          synced: result.success,
+          type: "items" as const,
+          total: records.length,
+          failed: result.failed,
+          skipped: result.skipped,
+          firstError: result.failures[0]?.reason,
+          failures: result.failures,
+        };
       }
     },
     onSuccess: (result) => {
@@ -197,7 +393,11 @@ export default function DataMonitorPage() {
         toast.info(result.message);
       } else {
         const typeName = result.type === "fire" ? "火价" : "物品价格";
-        toast.success(`已同步 ${result.synced} 条${typeName}到本地数据库`);
+        if (result.failed && result.failed > 0) {
+          toast.error(`部分同步成功: ${typeName} 成功 ${result.synced}，失败 ${result.failed}`);
+        } else {
+          toast.success(`已同步 ${result.synced} 条${typeName}`);
+        }
       }
       refetchStatus();
     },
@@ -222,6 +422,12 @@ export default function DataMonitorPage() {
     return new Date(ts * 1000).toLocaleString("zh-CN");
   };
 
+  const formatDuration = (ms: number) => {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${(ms / 60000).toFixed(1)}分钟`;
+  };
+
   const getStatusIcon = () => {
     switch (connectionStatus) {
       case "connected":
@@ -244,8 +450,60 @@ export default function DataMonitorPage() {
     }
   };
 
+  const getSyncStatusBadge = () => {
+    if (!syncJob) return null;
+
+    switch (syncJob.status) {
+      case "running":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            同步中
+          </span>
+        );
+      case "success":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
+            <CheckCircle className="w-3 h-3" />
+            成功
+          </span>
+        );
+      case "partial":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">
+            <AlertCircle className="w-3 h-3" />
+            部分成功
+          </span>
+        );
+      case "failed":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded">
+            <XCircle className="w-3 h-3" />
+            失败
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const getSyncProgress = () => {
+    if (!syncJob || syncJob.total === 0) return 0;
+    return Math.round(((syncJob.success + syncJob.failed) / syncJob.total) * 100);
+  };
+
   const normalStatus = serverStatus?.last_collection?.normal;
   const expertStatus = serverStatus?.last_collection?.expert;
+
+  const handleSync = () => {
+    if (isPaginatedSync) {
+      syncPaginated();
+    } else {
+      syncMutation.mutate();
+    }
+  };
+
+  const isSyncing = syncMutation.isPending || (syncJob?.status === "running");
 
   return (
     <div className="p-6 space-y-6">
@@ -404,6 +662,7 @@ export default function DataMonitorPage() {
         <div className="flex items-center gap-2 mb-4">
           <Download className="w-4 h-4 text-green-500" />
           <h2 className="text-sm font-semibold text-slate-700">数据同步</h2>
+          {syncJob && getSyncStatusBadge()}
         </div>
 
         <div className="space-y-4">
@@ -413,21 +672,23 @@ export default function DataMonitorPage() {
             <div className="flex rounded-lg border border-slate-200 overflow-hidden">
               <button
                 onClick={() => setDataType("fire")}
+                disabled={isSyncing}
                 className={`px-3 py-1.5 text-xs ${
-                  dataType === "fire" 
-                    ? "bg-green-500 text-white" 
+                  dataType === "fire"
+                    ? "bg-green-500 text-white"
                     : "bg-white text-slate-600 hover:bg-slate-50"
-                }`}
+                } disabled:opacity-50`}
               >
                 火价
               </button>
               <button
                 onClick={() => setDataType("items")}
+                disabled={isSyncing}
                 className={`px-3 py-1.5 text-xs ${
-                  dataType === "items" 
-                    ? "bg-green-500 text-white" 
+                  dataType === "items"
+                    ? "bg-green-500 text-white"
                     : "bg-white text-slate-600 hover:bg-slate-50"
-                }`}
+                } disabled:opacity-50`}
               >
                 物品价格
               </button>
@@ -440,21 +701,23 @@ export default function DataMonitorPage() {
             <div className="flex rounded-lg border border-slate-200 overflow-hidden">
               <button
                 onClick={() => setSyncMode("normal")}
+                disabled={isSyncing}
                 className={`px-3 py-1.5 text-xs ${
-                  syncMode === "normal" 
-                    ? "bg-blue-500 text-white" 
+                  syncMode === "normal"
+                    ? "bg-blue-500 text-white"
                     : "bg-white text-slate-600 hover:bg-slate-50"
-                }`}
+                } disabled:opacity-50`}
               >
                 普通服
               </button>
               <button
                 onClick={() => setSyncMode("expert")}
+                disabled={isSyncing}
                 className={`px-3 py-1.5 text-xs ${
-                  syncMode === "expert" 
-                    ? "bg-purple-500 text-white" 
+                  syncMode === "expert"
+                    ? "bg-purple-500 text-white"
                     : "bg-white text-slate-600 hover:bg-slate-50"
-                }`}
+                } disabled:opacity-50`}
               >
                 专家服
               </button>
@@ -467,7 +730,8 @@ export default function DataMonitorPage() {
             <select
               value={timeRange}
               onChange={(e) => setTimeRange(e.target.value as TimeRange)}
-              className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              disabled={isSyncing}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50"
             >
               <option value="24h">24小时</option>
               <option value="3d">3天</option>
@@ -477,21 +741,126 @@ export default function DataMonitorPage() {
             </select>
           </div>
 
+          {/* Pagination Option */}
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isPaginatedSync}
+                onChange={(e) => setIsPaginatedSync(e.target.checked)}
+                disabled={isSyncing}
+                className="rounded border-slate-300 text-blue-500 focus:ring-blue-500 disabled:opacity-50"
+              />
+              分页同步（大数据量推荐，每页 {PAGE_SIZE} 条）
+            </label>
+          </div>
+
           {/* Sync Button */}
           <div className="flex items-center gap-4 pt-2">
             <button
-              onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending || connectionStatus !== "connected"}
+              onClick={handleSync}
+              disabled={isSyncing || connectionStatus !== "connected"}
               className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <Download className={`w-4 h-4 ${syncMutation.isPending ? "animate-bounce" : ""}`} />
-              {syncMutation.isPending ? "同步中..." : "同步数据"}
+              {isSyncing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  同步中...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  同步数据
+                </>
+              )}
             </button>
-            
+
             <span className="text-xs text-slate-400">
               同步 {dataType === "fire" ? "火价" : "物品价格"} / {syncMode === "normal" ? "普通服" : "专家服"} / {timeRange === "season" ? "整赛季" : timeRange}
             </span>
           </div>
+
+          {/* Progress Bar */}
+          {syncJob && syncJob.status === "running" && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>进度</span>
+                <span>{getSyncProgress()}%</span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-2">
+                <div
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${getSyncProgress()}%` }}
+                />
+              </div>
+              <div className="flex gap-4 text-xs">
+                <span className="text-green-600">成功: {syncJob.success}</span>
+                <span className="text-red-600">失败: {syncJob.failed}</span>
+                <span className="text-slate-500">总计: {syncJob.total}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Sync Result Summary */}
+          {syncJob && syncJob.status !== "idle" && syncJob.status !== "running" && (
+            <div className={`p-4 rounded-lg border ${
+              syncJob.status === "success" ? "bg-green-50 border-green-200" :
+              syncJob.status === "partial" ? "bg-yellow-50 border-yellow-200" :
+              "bg-red-50 border-red-200"
+            }`}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium">
+                  {syncJob.status === "success" ? "同步完成" :
+                   syncJob.status === "partial" ? "部分同步成功" : "同步失败"}
+                </h3>
+                {syncJob.finishedAt && syncJob.startedAt && (
+                  <span className="text-xs text-slate-400">
+                    耗时: {formatDuration(syncJob.finishedAt - syncJob.startedAt)}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="text-center">
+                  <div className="text-lg font-semibold text-green-600">{syncJob.success}</div>
+                  <div className="text-xs text-slate-500">成功</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-semibold text-red-600">{syncJob.failed}</div>
+                  <div className="text-xs text-slate-500">失败</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-semibold text-slate-600">{syncJob.total}</div>
+                  <div className="text-xs text-slate-500">总计</div>
+                </div>
+              </div>
+              {syncJob.firstError && (
+                <div className="mt-3 text-xs text-red-600">
+                  第一条错误: {syncJob.firstError}
+                </div>
+              )}
+              {syncJob.failures.length > 0 && (
+                <button
+                  onClick={() => setShowFailures(!showFailures)}
+                  className="mt-2 flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700"
+                >
+                  {showFailures ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  查看失败详情 ({syncJob.failures.length})
+                </button>
+              )}
+              {showFailures && syncJob.failures.length > 0 && (
+                <div className="mt-2 space-y-2 text-xs">
+                  {syncJob.failures.map((failure, index) => (
+                    <div key={index} className="p-2 bg-white rounded border border-red-100">
+                      <div className="font-medium text-slate-700">
+                        {failure.itemName || failure.itemId || "记录"}
+                      </div>
+                      <div className="text-red-500">{failure.reason}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

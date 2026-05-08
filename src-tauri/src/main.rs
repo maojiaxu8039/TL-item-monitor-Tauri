@@ -129,6 +129,8 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             test_notification,
             open_log_dir,
             select_local_items_file,
+            get_app_data_dir,
+            get_resource_path,
             import_watchlist_csv,
             export_watchlist_csv,
             get_backup_info,

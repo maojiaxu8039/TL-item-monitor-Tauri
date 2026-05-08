@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus, type JsonFileValidationResult, type SeasonInfo, type SeasonApiConfigResponse } from "@/lib/commands";
+import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus, type JsonFileValidationResult, type SeasonInfo } from "@/lib/commands";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { RefreshCw, Save, Settings, Bell, Database, Globe, AlertTriangle, Trash2, Volume2, Archive, Plus, Calendar, Edit3, Key } from "lucide-react";
+import { RefreshCw, Save, Settings, Bell, Database, Globe, AlertTriangle, Trash2, Archive, Plus, Edit3, Key } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -26,7 +26,11 @@ const SOURCE_OPTIONS = [
   { label: "本地JSON", value: "local" },
 ];
 
-const DEFAULT_JSON_PATH = "/Users/mc/Library/Application Support/com.tlmonitor.app/data/full_table.json";
+const DEFAULT_JSON_FILENAME = "full_table.json";
+
+function getDefaultJsonPath(appDataDir: string): string {
+  return `${appDataDir}/${DEFAULT_JSON_FILENAME}`;
+}
 
 export default function SettingsPage() {
   const [fireEnabled, setFireEnabled] = useState(true);
@@ -34,7 +38,7 @@ export default function SettingsPage() {
   const [itemsEnabled, setItemsEnabled] = useState(false);
   const [itemsInterval, setItemsInterval] = useState(300);
   const [itemsSource, setItemsSource] = useState("api");
-  const [jsonPath, setJsonPath] = useState(DEFAULT_JSON_PATH);
+  const [jsonPath, setJsonPath] = useState("");
   const [jsonPathValidation, setJsonPathValidation] = useState<JsonFileValidationResult | null>(null);
   const [seasonId, setSeasonId] = useState("ss12");
   const [itemCount, setItemCount] = useState(0);
@@ -160,7 +164,7 @@ export default function SettingsPage() {
     }
   };
 
-  const testAlertMutation = useMutation<string, Error, void>({
+  useMutation<string, Error, void>({
     mutationFn: () => cmd.triggerPriceAlert(),
     onSuccess: (result) => {
       toast.success(result);
@@ -186,23 +190,36 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
-    cmd.getConfig().then((cfg) => {
-      setFireEnabled(cfg.scrape.fire_price_scrape_enabled);
-      setFireInterval(cfg.scrape.fire_price_scrape_interval);
-      setItemsEnabled(cfg.scrape.auto_reload);
-      setItemsInterval(cfg.scrape.items_reload_interval);
-      setItemsSource(cfg.scrape.items_source);
-      setJsonPath(cfg.scrape.items_json_path || DEFAULT_JSON_PATH);
-      setSeasonId(cfg.app.season_id);
-      setPriceAlertEnabled(cfg.notification.price_alert_enabled);
-      setPriceAlertCooldown(cfg.notification.price_alert_cooldown_seconds);
-      setSystemNotifications(cfg.notification.system_notifications);
-      setVoiceAlertEnabled(cfg.notification.voice_alert_enabled);
-      setLoaded(true);
-      if (cfg.scrape.items_source === 'local') {
-        cmd.validateJsonFile(cfg.scrape.items_json_path || DEFAULT_JSON_PATH).then(setJsonPathValidation).catch(() => {});
+    const initPaths = async () => {
+      try {
+        const appDataDir = await cmd.getAppDataDir();
+        const defaultPath = getDefaultJsonPath(appDataDir);
+        return appDataDir;
+      } catch {
+        return "";
       }
-    }).catch(() => {});
+    };
+
+    initPaths().then((appDataDir) => {
+      const defaultPath = appDataDir ? getDefaultJsonPath(appDataDir) : "";
+      cmd.getConfig().then((cfg) => {
+        setFireEnabled(cfg.scrape.fire_price_scrape_enabled);
+        setFireInterval(cfg.scrape.fire_price_scrape_interval);
+        setItemsEnabled(cfg.scrape.auto_reload);
+        setItemsInterval(cfg.scrape.items_reload_interval);
+        setItemsSource(cfg.scrape.items_source);
+        setJsonPath(cfg.scrape.items_json_path || defaultPath);
+        setSeasonId(cfg.app.season_id);
+        setPriceAlertEnabled(cfg.notification.price_alert_enabled);
+        setPriceAlertCooldown(cfg.notification.price_alert_cooldown_seconds);
+        setSystemNotifications(cfg.notification.system_notifications);
+        setVoiceAlertEnabled(cfg.notification.voice_alert_enabled);
+        setLoaded(true);
+        if (cfg.scrape.items_source === 'local') {
+          cmd.validateJsonFile(cfg.scrape.items_json_path || defaultPath).then(setJsonPathValidation).catch(() => {});
+        }
+      }).catch(() => {});
+    });
 
     cmd.getDashboardSummary().then((summary) => {
       setItemCount(summary.item_count);
@@ -256,7 +273,7 @@ export default function SettingsPage() {
       notification: {
         system_notifications: systemNotifications,
         voice_alert_enabled: voiceAlertEnabled,
-        voice_alert_path: "/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src-tauri/resources/萝莉音.mp3",
+        voice_alert_path: "",
         price_alert_enabled: priceAlertEnabled,
         price_alert_cooldown_seconds: priceAlertCooldown,
         quiet_start: null,

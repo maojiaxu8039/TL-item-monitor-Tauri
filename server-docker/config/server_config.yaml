@@ -1,11 +1,13 @@
+# 必填：设置强密码
+admin_password: ""
+
 season_id: "ss12"
-http_port: 38457
+http_port: 8080
 scrape_modes:
   - mode: "normal"
     enabled: true
   - mode: "expert"
     enabled: true
-admin_password: "change_this_password"
 api_config:
   qiandao_tag_id_normal: "1560053"
   qiandao_spec_id_normal: "267416"

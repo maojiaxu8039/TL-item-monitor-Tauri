@@ -267,6 +267,7 @@ fn sign_device_payload(private_key_pem: &str, payload: &str) -> Result<String, S
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_device_auth_payload(
     device_id: &str,
     client_id: &str,
@@ -965,7 +966,8 @@ pub async fn openclaw_chat(
                 _ => {}
             }
 
-            if send_ok && !pending_chunks.is_empty() && pending_chunks.iter().any(|c| c.len() > 10) {
+            if send_ok && !pending_chunks.is_empty() && pending_chunks.iter().any(|c| c.len() > 10)
+            {
                 return Ok(OpenClawResponse {
                     success: true,
                     message: "Success".to_string(),
@@ -1039,21 +1041,30 @@ pub async fn openclaw_chat(
                                 .or_else(|| lower_string_at_path(&value, &["type"]));
 
                             if let Some(event) = event_type {
-                                if event.contains("tool_call") || event.contains("message") || event.contains("assistant") {
+                                if event.contains("tool_call")
+                                    || event.contains("message")
+                                    || event.contains("assistant")
+                                {
                                     if let Some(payload) = value.get("payload") {
-                                        if let Some(response) = assistant_text_from_history(&json!({ "messages": [payload] })) {
-                                            if !response.is_empty() && response.trim() != "NO_REPLY" {
+                                        if let Some(response) = assistant_text_from_history(
+                                            &json!({ "messages": [payload] }),
+                                        ) {
+                                            if !response.is_empty() && response.trim() != "NO_REPLY"
+                                            {
                                                 accumulated_text.push_str(&response);
                                             }
                                         }
                                     }
                                 }
 
-                                if event.contains("response") || event.contains("complete") || event.contains("finished") || event.contains("done") {
-                                    if !accumulated_text.is_empty() {
-                                        found_response = true;
-                                        break;
-                                    }
+                                if (event.contains("response")
+                                    || event.contains("complete")
+                                    || event.contains("finished")
+                                    || event.contains("done"))
+                                    && !accumulated_text.is_empty()
+                                {
+                                    found_response = true;
+                                    break;
                                 }
                             }
                         }

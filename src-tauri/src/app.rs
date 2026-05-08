@@ -844,7 +844,7 @@ async fn seed_test_data_for_all_seasons(pool: &SqlitePool) -> Result<(), String>
 
         // Generate snapshots for SS12 (current season, start: 2026-04-17)
         let ss12_start = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
-            .unwrap()
+            .expect("固定日期格式应始终有效")
             .timestamp();
         generate_season_snapshots(
             pool,
@@ -859,7 +859,7 @@ async fn seed_test_data_for_all_seasons(pool: &SqlitePool) -> Result<(), String>
 
         // Generate snapshots for SS11 (history season, start: 2026-01-16)
         let ss11_start = chrono::DateTime::parse_from_rfc3339("2026-01-16T00:00:00Z")
-            .unwrap()
+            .expect("固定日期格式应始终有效")
             .timestamp();
         generate_season_snapshots(
             pool,

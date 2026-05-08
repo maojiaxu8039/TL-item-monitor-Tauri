@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { X, TrendingUp, TrendingDown } from "lucide-react";
+import { X } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
-import { cmd } from "@/lib/commands";
+import { cmd, SeasonInfo } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 
 interface Props {
@@ -20,8 +20,34 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
   const currentSeason = marketContext.seasonId;
   const [viewMode, setViewMode] = useState<ViewMode>("day");
 
+  const seasonsQuery = useQuery<SeasonInfo[]>({
+    queryKey: ["seasons-for-trend"],
+    queryFn: () => cmd.listSeasons(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const getSeasonStartTime = (seasonId: string, seasons: SeasonInfo[]): number => {
+    const season = seasons.find(s => s.season_id === seasonId);
+    if (season && season.started_at && season.started_at > 0) {
+      return season.started_at;
+    }
+    const fallback: Record<string, number> = {
+      ss12: 1776384000,
+      ss11: 1768521600,
+      ss10: 1760140800,
+    };
+    return fallback[seasonId] || 1776384000;
+  };
+
+  const currentSeasonStart = seasonsQuery.data 
+    ? getSeasonStartTime(currentSeason, seasonsQuery.data)
+    : 1776384000;
+  
+  const historySeasonStart = seasonsQuery.data
+    ? getSeasonStartTime(historySeason, seasonsQuery.data)
+    : 1768521600;
+
   useEffect(() => {
-    // modal mounted
   }, [itemId, currentSeason, historySeason, currentDay]);
 
   const currentDayQuery = useQuery({
@@ -67,23 +93,6 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
   const errorMsg = viewMode === "day"
     ? (currentDayQuery.error || historyDayQuery.error)
     : (currentSeasonQuery.error || historySeasonQuery.error);
-
-
-
-  const getCurrentSeasonStart = () => {
-    if (currentSeason === "ss12") return 1776384000;
-    if (currentSeason === "ss11") return 1768521600;
-    return 1776384000;
-  };
-
-  const getHistorySeasonStart = () => {
-    if (historySeason === "ss11") return 1768521600;
-    if (historySeason === "ss12") return 1776384000;
-    return 1768521600;
-  };
-
-  const currentSeasonStart = getCurrentSeasonStart();
-  const historySeasonStart = getHistorySeasonStart();
 
   const chartData = useMemo(() => {
     type HourData = { hour: number; current: number | null; history: number | null };

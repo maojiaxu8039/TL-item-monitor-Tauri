@@ -57,13 +57,16 @@
 | <br />   | 连接测试             | ✅  | 测试AI连接是否成功                        |
 | <br />   | 系统提示词            | ✅  | 可自定义AI角色和分析风格                     |
 | <br />   | 智能上下文            | ✅  | 自动附带当前火价数据和已选Skills               |
+| **策略管理** | 策略收益分析           | ✅  | 创建/编辑/删除策略，按盈亏排序展示                |
+| <br />   | 成本/产出配置          | ✅  | 支持成本物品、产出物品、数量和实时价格刷新             |
+| <br />   | 收益计算             | ✅  | 基于实时物价计算总成本、总产出和收益率               |
 | **数据监控** | 服务器状态            | ✅  | 显示服务器连接状态                         |
 | <br />   | 数据采集状态           | ✅  | 显示采集器工作状态                         |
 | <br />   | 数据同步             | ✅  | 同步服务器数据到本地                        |
 | <br />   | 赛季同步             | ✅  | 同步整个赛季数据                          |
-| **预警规则** | 规则管理             | ✅  | 创建/编辑/删除预警规则                      |
-| <br />   | 事件查看             | ✅  | 查看预警触发事件                          |
-| <br />   | 开关控制             | ✅  | 启用/禁用预警规则                         |
+| **预警规则** | 命令与数据表           | ✅  | alert_rules / alert_events CRUD 已注册 |
+| <br />   | 通知任务             | ✅  | 基于监控列表价格倒挂发送系统通知                  |
+| <br />   | 开关控制             | ✅  | 设置页支持价格预警开关和冷却配置                  |
 | **设置**   | 应用配置             | ✅  | 赛季、模式、数据源等配置                      |
 | <br />   | 通知设置             | ✅  | 系统通知、语音提醒等                        |
 | <br />   | 桌面设置             | ✅  | 启动项、窗口行为等                         |
@@ -77,18 +80,15 @@
 
 ### 2.2 待开发功能 🚧
 
+> 业务调整：识图助手整板块已取消，不再开放入口，也不进入后续规划。
+
 | 模块       | 功能         | 状态 | 说明                          |
 | -------- | ---------- | -- | --------------------------- |
-| **识图助手** | 图片识别       | 🚧 | 通过截图识别交易行物品词条               |
-| <br />   | 价格评估       | 🚧 | 根据词条评估物品价格                  |
-| <br />   | 高价值物品库     | 🚧 | 记录高价值物品                     |
-| **策略管理** | 策略配置       | 🚧 | 游戏打宝策略配置                    |
-| <br />   | 收益计算       | 🚧 | 预计收益计算                      |
-| <br />   | 策略推荐       | 🚧 | 基于数据的策略推荐                   |
-| **预警规则** | 后台任务接入     | 🚧 | alert\_task 读取 alert\_rules |
-| <br />   | Cooldown机制 | 🚧 | 防止重复通知                      |
-| **数据监控** | 整赛季火价同步    | 🚧 | /fire-history-all 路由补齐      |
-| <br />   | 分页同步       | 🚧 | 大数据量分页同步                    |
+| **策略管理** | 策略推荐       | 🚧 | 基于数据的策略推荐                   |
+| <br />   | 策略模板       | 🚧 | 常用打宝策略模板和复用                  |
+| **预警规则** | 独立管理页面     | 🚧 | 暂无侧边栏入口，前端未消费 alert_rules CRUD |
+| <br />   | 规则任务接入     | 🚧 | alert_task 尚未按 alert_rules 逐条判断 |
+| **数据监控** | 分页/增量同步    | 🚧 | 大数据量同步的分批拉取和部分失败明细展示          |
 
 ***
 
@@ -124,8 +124,7 @@ TL-item-monitor-Tauri/
 │   │   │   ├── DealsPage.tsx             # 捡漏出货（实时监控）
 │   │   │   ├── AIAnalysisPage.tsx        # AI分析
 │   │   │   ├── DataMonitorPage.tsx       # 数据监控
-│   │   │   ├── ImageAssistPage.tsx       # 识图助手(占位)
-│   │   │   ├── StrategiesPage.tsx        # 策略管理(占位)
+│   │   │   ├── StrategiesPage.tsx        # 策略收益分析
 │   │   │   ├── SettingsPage.tsx          # 设置
 │   │   │   ├── ImportExportPage.tsx      # 导入导出
 │   │   │   ├── HelpPage.tsx             # 帮助页
@@ -319,7 +318,7 @@ TableResolver::realtime_fire_prices_table()  // => "item_realtime_fire_prices"
 | `fire_task`          | 30秒  | 采集火价数据   |
 | `items_task`         | 60秒  | 采集物品数据   |
 | `history_task`       | 60分钟 | 保存每小时快照  |
-| `alert_task`         | 60秒  | 检查预警规则   |
+| `alert_task`         | 60秒  | 检查监控列表价格倒挂 |
 | `realtime_fire_task` | 30秒  | 采集实时火价变化 |
 
 ### 5.2 RealtimeFireTask 逻辑
@@ -422,7 +421,8 @@ loop {
 | `GET /items-history` | 物品历史（需item_id） | ✅ |
 | `GET /items-history-all` | 所有物品历史（批量同步） | ✅ |
 | `GET /health` | 健康检查 | ✅ |
-| `GET /api-config` | 获取 API 配置 | ✅ |
+| `POST /api/admin/config` | 获取服务器/API 配置（需密码） | ✅ |
+| `POST /api/admin/update-config` | 更新基础配置（需密码） | ✅ |
 | `POST /admin/init-season` | 初始化新赛季（需密码） | ✅ |
 | `POST /admin/update-api-config` | 更新 API 配置（需密码） | ✅ |
 
@@ -446,9 +446,10 @@ loop {
 │  ├── GET /fire-history     - 火价历史                        │
 │  ├── GET /items-history    - 单个物品历史                    │
 │  ├── GET /items-history-all - 所有物品历史(批量同步)          │
-│  ├── GET /api-config       - 获取 API 配置                    │
 │  └── GET /health           - 健康检查                        │
 │  管理员 API (需密码):                                      │
+│  ├── POST /api/admin/config        - 获取服务器/API 配置      │
+│  ├── POST /api/admin/update-config - 更新基础配置             │
 │  ├── POST /admin/init-season       - 初始化新赛季         │
 │  └── POST /admin/update-api-config  - 更新 API 配置         │
 ├─────────────────────────────────────────────────────────────┤
@@ -856,7 +857,7 @@ let trend = if change_rate > 5.0 "暴涨"
 - ✅ 服务器端添加 `api_config` 配置项（千岛/刷图小助手 API 参数）
 - ✅ 新增管理员 API：`POST /admin/init-season` 初始化新赛季
 - ✅ 新增管理员 API：`POST /admin/update-api-config` 更新 API 配置
-- ✅ 新增公开 API：`GET /api-config` 获取当前 API 配置
+- ✅ 新增管理员 API：`POST /api/admin/config` 获取当前 API 配置
 - ✅ 客户端数据监控页面添加"服务器管理"面板
 - ✅ 支持在 UI 上修改服务器 API 配置
 - ✅ 支持在 UI 上初始化新赛季
@@ -934,9 +935,9 @@ cd src-tauri && cargo fmt
 | 优先级 | 功能                 | 预计工时 |
 | --- | ------------------ | ---- |
 | P0  | 预警规则接入后台任务         | 1-2天 |
-| P0  | DataMonitor整赛季火价同步 | 1天   |
-| P1  | 识图助手开发             | 3-5天 |
-| P1  | 策略管理重新开发           | 2-3天 |
+| P1  | 预警规则独立管理页面         | 1-2天 |
+| P1  | 策略推荐/模板化            | 2-3天 |
+| P2  | DataMonitor分页/增量同步 | 1天   |
 | P2  | 实时推送通知             | 1天   |
 | P2  | 多赛季数据对比            | 1天   |
 
@@ -1093,4 +1094,3 @@ type ServerMessage =
 - **Skill持久化**: 选择的Skills会保存在localStorage中
 - **自动重连**: 连接断开后自动尝试重连
 - **双模式支持**: 可以切换回传统API模式
-

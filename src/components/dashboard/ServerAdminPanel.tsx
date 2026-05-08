@@ -17,9 +17,10 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
   
   // Init Season
   const [newSeasonId, setNewSeasonId] = useState("");
+  const [newSeasonStartedAt, setNewSeasonStartedAt] = useState("");
   
   // API Config
-  const [apiConfig, setApiConfig] = useState<ServerApiConfig | null>(null);
+  const [, setApiConfig] = useState<ServerApiConfig | null>(null);
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
   const [editedConfig, setEditedConfig] = useState<ServerApiConfig | null>(null);
 
@@ -30,7 +31,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
     }
     setIsLoading(true);
     try {
-      const config = await serverAdmin.getApiConfig(serverUrl);
+      const config = await serverAdmin.getApiConfig(serverUrl, password);
       setApiConfig(config);
       setEditedConfig(config);
       setIsConfigLoaded(true);
@@ -52,11 +53,18 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
       return;
     }
     
+    const startedAt = parseInt(newSeasonStartedAt, 10);
+    if (isNaN(startedAt) || startedAt <= 0) {
+      toast.error("请输入正确的开服时间戳（正整数Unix秒）");
+      return;
+    }
+    
     setIsLoading(true);
     try {
-      const result = await serverAdmin.initSeason(serverUrl, password, newSeasonId);
+      await serverAdmin.initSeason(serverUrl, password, newSeasonId, startedAt);
       toast.success(`新赛季 ${newSeasonId} 初始化成功`);
       setNewSeasonId("");
+      setNewSeasonStartedAt("");
     } catch (err) {
       toast.error(`初始化失败: ${err}`);
     } finally {
@@ -273,6 +281,18 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
                 <p className="text-xs text-slate-400 mt-1">新赛季ID格式：ss13, ss14 等</p>
               </div>
 
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">开服时间戳 (Unix秒)</label>
+                <input
+                  type="number"
+                  value={newSeasonStartedAt}
+                  onChange={(e) => setNewSeasonStartedAt(e.target.value)}
+                  placeholder="例如: 1735689600"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                />
+                <p className="text-xs text-slate-400 mt-1">必填：用于计算赛季天数</p>
+              </div>
+
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                 <p className="text-xs text-amber-700">
                   初始化新赛季会创建新的数据库表，请确保先归档当前赛季数据。
@@ -282,7 +302,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
 
               <button
                 onClick={handleInitSeason}
-                disabled={isLoading || !password || !newSeasonId}
+                disabled={isLoading || !password || !newSeasonId || !newSeasonStartedAt}
                 className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-sm rounded-lg hover:bg-amber-600 disabled:opacity-50"
               >
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}

@@ -3,7 +3,7 @@ use crate::core::state::AppState;
 use crate::services::worth_service::WorthResult;
 use crate::services::{evaluate_worth, send_notification};
 use std::sync::Arc;
-use tauri::State;
+use tauri::{Manager, State};
 
 #[tauri::command]
 pub async fn get_config(
@@ -84,4 +84,20 @@ pub async fn select_local_items_file(app: tauri::AppHandle) -> Result<Option<Str
         .add_filter("JSON", &["json"])
         .blocking_pick_file();
     Ok(path.map(|p| p.to_string()))
+}
+
+#[tauri::command]
+pub fn get_app_data_dir(app: tauri::AppHandle) -> Result<String, String> {
+    app.path()
+        .app_data_dir()
+        .map(|p: std::path::PathBuf| p.to_string_lossy().to_string())
+        .map_err(|e| format!("Failed to get app data dir: {}", e))
+}
+
+#[tauri::command]
+pub fn get_resource_path(app: tauri::AppHandle, resource_name: &str) -> Result<String, String> {
+    app.path()
+        .resource_dir()
+        .map(|p: std::path::PathBuf| p.join(resource_name).to_string_lossy().to_string())
+        .map_err(|e| format!("Failed to get resource path: {}", e))
 }

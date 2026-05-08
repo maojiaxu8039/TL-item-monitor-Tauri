@@ -16,7 +16,11 @@ fn safe_truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
     } else {
-        format!("{}...", &s[..max_len])
+        let mut end = max_len;
+        while end > 0 && !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}...", &s[..end])
     }
 }
 
@@ -46,6 +50,9 @@ struct LuosiItem {
     item_price: Option<f64>,
     #[serde(rename = "type")]
     item_type: Option<String>,
+    #[serde(rename = "is_placeholder")]
+    #[allow(dead_code)]
+    is_placeholder: Option<bool>,
     last_time: Option<i64>,
 }
 
@@ -92,6 +99,8 @@ impl Scraper {
             .await
             .map_err(|e| format!("JSON 解析失败: {}", e))?;
 
+        let raw_count = map.len();
+
         let now = chrono::Utc::now().timestamp();
         let items: Vec<Item> = map
             .into_iter()
@@ -104,20 +113,23 @@ impl Scraper {
             })
             .collect();
 
-        info!("成功抓取 {} 个物品", items.len());
+        info!("抓取物品: 总数={}", raw_count);
         Ok(items)
     }
 
     pub async fn scrape_fire_price(
         market_mode: &str,
-        _config: &ApiConfig,
-        _endpoints: &ApiEndpoints,
+        config: &ApiConfig,
+        endpoints: &ApiEndpoints,
     ) -> Result<FirePriceSnapshot, String> {
-        let mode = if market_mode.contains("expert") { "专家" } else { "普通" };
-
+        let mode = if market_mode.contains("expert") {
+            "专家"
+        } else {
+            "普通"
+        };
         info!("抓取火价 (模式: {})", mode);
 
-        match scrape_via_rust(mode).await {
+        match scrape_via_rust(mode, config, endpoints).await {
             Ok(snapshot) => {
                 info!("火价获取成功: {} 火/元", snapshot.fire_per_rmb);
                 Ok(snapshot)
@@ -130,13 +142,24 @@ impl Scraper {
     }
 }
 
-async fn scrape_via_rust(mode: &str) -> Result<FirePriceSnapshot, String> {
+async fn scrape_via_rust(
+    mode: &str,
+    config: &ApiConfig,
+    endpoints: &ApiEndpoints,
+) -> Result<FirePriceSnapshot, String> {
     let (tag_id, spec_id) = if mode == "专家" {
-        ("1560055", "267417")
+        (
+            config.qiandao_tag_id_expert.as_str(),
+            config.qiandao_spec_id_expert.to_string(),
+        )
     } else {
-        ("1560053", "267416")
+        (
+            config.qiandao_tag_id_normal.as_str(),
+            config.qiandao_spec_id_normal.to_string(),
+        )
     };
 
+    let qiandao_url = format!("{}{}", endpoints.qiandao, endpoints.qiandao_fire_endpoint);
     let timestamp = chrono::Utc::now().timestamp_millis().to_string();
     let body = serde_json::json!({
         "tagId": tag_id,
@@ -152,7 +175,7 @@ async fn scrape_via_rust(mode: &str) -> Result<FirePriceSnapshot, String> {
         .map_err(|e| format!("reqwest build failed: {}", e))?;
 
     let resp = client
-        .post("https://api.qiandao.com/c2c-web/v1/common/currency-spu-price-list")
+        .post(&qiandao_url)
         .header("content-type", "application/json")
         .header("authorization", "Bearer undefined")
         .header("x-request-timestamp", &timestamp)
@@ -174,26 +197,42 @@ async fn scrape_via_rust(mode: &str) -> Result<FirePriceSnapshot, String> {
         .await
         .map_err(|e| format!("HTTP response read failed: {}", e))?;
 
-    info!("火价API响应: status={}, body={}", status, safe_truncate(&text, 300));
+    info!(
+        "火价API响应: status={}, body={}",
+        status,
+        safe_truncate(&text, 300)
+    );
 
     if !status.is_success() {
-        return Err(format!("Qiandao HTTP status error: {} | body: {}", status, safe_truncate(&text, 200)));
+        return Err(format!(
+            "Qiandao HTTP status error: {} | body: {}",
+            status,
+            safe_truncate(&text, 200)
+        ));
     }
 
-    let data: QiandaoResponse = serde_json::from_str(&text)
-        .map_err(|e| format!("JSON parse error: {} | body: {}", e, safe_truncate(&text, 200)))?;
+    let data: QiandaoResponse = serde_json::from_str(&text).map_err(|e| {
+        format!(
+            "JSON parse error: {} | body: {}",
+            e,
+            safe_truncate(&text, 200)
+        )
+    })?;
 
     parse_qiandao_response(data, mode)
 }
 
 async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String> {
-    let possible_scripts = vec![
-        std::path::PathBuf::from("/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src-tauri/resources/qiandao_fire.cjs"),
-        std::path::PathBuf::from("/app/resources/qiandao_fire.cjs"),
+    let mut possible_scripts = vec![
         std::env::current_exe()
             .ok()
-            .and_then(|exe| exe.parent().map(|p| p.join("resources/qiandao_fire.cjs"))).unwrap_or_default(),
+            .and_then(|exe| exe.parent().map(|p| p.join("resources/qiandao_fire.cjs")))
+            .unwrap_or_default(),
+        std::path::PathBuf::from("resources/qiandao_fire.cjs"),
     ];
+    if let Ok(dir) = std::env::var("TL_RESOURCES_DIR") {
+        possible_scripts.push(std::path::PathBuf::from(dir).join("qiandao_fire.cjs"));
+    }
 
     let script_path = possible_scripts
         .iter()
@@ -214,7 +253,11 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
     cmd.arg(&script_path)
         .arg(if mode == "专家" { "pro" } else { "normal" });
 
-    info!("执行命令: node {} {}", script_path.display(), if mode == "专家" { "pro" } else { "normal" });
+    info!(
+        "执行命令: node {} {}",
+        script_path.display(),
+        if mode == "专家" { "pro" } else { "normal" }
+    );
 
     let output = cmd
         .output()
@@ -240,14 +283,14 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
 
     let mut json_str = stdout_str.to_string();
 
-    if json_str.starts_with("{\"error\"") || json_str.is_empty() || json_str == "null" {
-        if stderr_str.contains("fire_per_rmb") {
-            let lines: Vec<&str> = stderr_str.lines().collect();
-            for line in lines.iter().rev() {
-                if line.starts_with('{') && line.contains("fire_per_rmb") {
-                    json_str = line.to_string();
-                    break;
-                }
+    if (json_str.starts_with("{\"error\"") || json_str.is_empty() || json_str == "null")
+        && stderr_str.contains("fire_per_rmb")
+    {
+        let lines: Vec<&str> = stderr_str.lines().collect();
+        for line in lines.iter().rev() {
+            if line.starts_with('{') && line.contains("fire_per_rmb") {
+                json_str = line.to_string();
+                break;
             }
         }
     }
@@ -264,6 +307,7 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
         error: Option<String>,
         fire_per_rmb: f64,
         #[serde(default)]
+        #[allow(dead_code)]
         rmb_per_fire: f64,
         ten_k: f64,
         #[serde(default)]
@@ -320,7 +364,11 @@ fn parse_qiandao_response(data: QiandaoResponse, mode: &str) -> Result<FirePrice
         trading_volume: item.change_24h.unwrap_or_default(),
         source: format!(
             "千岛API-{}",
-            if mode == "专家" { "赛季专家" } else { "赛季普通" }
+            if mode == "专家" {
+                "赛季专家"
+            } else {
+                "赛季普通"
+            }
         ),
         source_time: chrono::Utc::now().format("%Y-%m-%d %H:%M").to_string(),
         scraped_at: chrono::Utc::now().timestamp(),

@@ -8,21 +8,33 @@ pub async fn get_season_start(
     pool: &SqlitePool,
     season_id: &str,
 ) -> Result<i64, crate::core::errors::AppError> {
+    get_season_start_from_db(pool, season_id).await
+}
+
+pub async fn get_season_start_from_db(
+    pool: &SqlitePool,
+    season_id: &str,
+) -> Result<i64, crate::core::errors::AppError> {
     let started_at: Option<(i64,)> = sqlx::query_as("SELECT started_at FROM seasons WHERE id = ?")
         .bind(season_id)
         .fetch_optional(pool)
         .await?;
 
     match started_at.map(|(ts,)| ts) {
-        Some(ts) => Ok(ts),
-        None => {
-            tracing::warn!(
-                "Season {} not found in seasons table, using fallback from constants",
-                season_id
-            );
-            get_const_season_start(season_id).ok_or_else(|| {
-                crate::core::errors::AppError::NotFound(format!("Unknown season: {}", season_id))
-            })
+        Some(ts) if ts > 0 => Ok(ts),
+        _ => {
+            if let Some(fallback) = get_const_season_start(season_id) {
+                tracing::warn!(
+                    "Season {} has no valid started_at in DB (using fallback from constants)",
+                    season_id
+                );
+                Ok(fallback)
+            } else {
+                Err(crate::core::errors::AppError::NotFound(format!(
+                    "Unknown season: {}",
+                    season_id
+                )))
+            }
         }
     }
 }

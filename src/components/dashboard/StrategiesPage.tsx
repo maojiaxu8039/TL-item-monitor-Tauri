@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Shield,
   Plus,
@@ -15,20 +15,21 @@ import {
   Search,
   ChevronDown,
   ChevronRight,
+  BookOpen,
+  Award,
+  Star,
+  ThumbsUp,
+  AlertTriangle,
+  Info,
 } from "lucide-react";
 import { cmd, StrategyWithCosts, ItemData } from "@/lib/commands";
 import { useToast } from "@/components/ui/Toast";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { strategyTemplates, type StrategyTemplate } from "@/lib/strategyTemplates";
 
-const COST_TYPES = [
-  { value: "回响", label: "回响" },
-  { value: "信标", label: "信标" },
-  { value: "探针", label: "探针" },
-  { value: "罗盘", label: "罗盘" },
-  { value: "材料", label: "其他材料" },
-];
+
 
 const LABELS = [
   { value: "K8", label: "K8" },
@@ -71,8 +72,23 @@ interface OutputForm {
   count: number;
 }
 
+type StrategyTab = "strategies" | "templates" | "recommendations";
+
+export interface StrategyRecommendation {
+  strategy_id: string;
+  strategy_name: string;
+  score: number;
+  level: "strong" | "good" | "watch" | "avoid";
+  expected_profit_fire: number;
+  profit_ratio: number;
+  risk_level: "low" | "medium" | "high";
+  reasons: string[];
+  warnings: string[];
+}
+
 export default function StrategiesPage() {
   const { addToast } = useToast();
+  const [activeTab, setActiveTab] = useState<StrategyTab>("strategies");
   const [strategies, setStrategies] = useState<StrategyWithCosts[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -82,8 +98,8 @@ export default function StrategiesPage() {
   const [showOutputDialog, setShowOutputDialog] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [itemSearchResults, setItemSearchResults] = useState<ItemData[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [currentFirePrice, setCurrentFirePrice] = useState<number>(0);
+  const [, setSearchLoading] = useState(false);
+
 
   const [editForm, setEditForm] = useState<EditStrategyForm>({
     name: "",
@@ -415,6 +431,119 @@ export default function StrategiesPage() {
     return "text-gray-600";
   };
 
+  const getRecommendationLevelColor = (level: StrategyRecommendation["level"]) => {
+    switch (level) {
+      case "strong": return "bg-green-100 text-green-700 border-green-200";
+      case "good": return "bg-blue-100 text-blue-700 border-blue-200";
+      case "watch": return "bg-yellow-100 text-yellow-700 border-yellow-200";
+      case "avoid": return "bg-red-100 text-red-700 border-red-200";
+    }
+  };
+
+  const getRecommendationLevelText = (level: StrategyRecommendation["level"]) => {
+    switch (level) {
+      case "strong": return "强烈推荐";
+      case "good": return "可跑";
+      case "watch": return "观望";
+      case "avoid": return "不建议";
+    }
+  };
+
+  const getRiskColor = (risk: StrategyRecommendation["risk_level"]) => {
+    switch (risk) {
+      case "low": return "text-green-600 bg-green-50";
+      case "medium": return "text-yellow-600 bg-yellow-50";
+      case "high": return "text-red-600 bg-red-50";
+    }
+  };
+
+  const calculateRecommendations = useMemo((): StrategyRecommendation[] => {
+    if (strategies.length === 0) return [];
+
+    const now = Date.now();
+
+    return strategies.map(strategy => {
+      const reasons: string[] = [];
+      const warnings: string[] = [];
+      let score = 50;
+
+      const profitRatio = strategy.profit_ratio;
+      const netProfit = strategy.total_output_value - strategy.total_cost_fire;
+      const hasCosts = strategy.costs.length > 0;
+      const hasOutputs = strategy.outputs.length > 0;
+
+      if (!hasCosts || !hasOutputs) {
+        warnings.push("成本或产出数据不完整");
+      }
+
+      if (profitRatio > 20) {
+        score += 30;
+        reasons.push(`收益率极高 (+${profitRatio.toFixed(1)}%)`);
+      } else if (profitRatio > 10) {
+        score += 20;
+        reasons.push(`收益率较高 (+${profitRatio.toFixed(1)}%)`);
+      } else if (profitRatio > 0) {
+        score += 10;
+        reasons.push(`收益率正向 (+${profitRatio.toFixed(1)}%)`);
+      } else if (profitRatio < -10) {
+        score -= 30;
+        warnings.push(`收益率过低 (${profitRatio.toFixed(1)}%)`);
+      } else if (profitRatio < 0) {
+        score -= 15;
+        warnings.push(`收益为负 (${profitRatio.toFixed(1)}%)`);
+      }
+
+      if (netProfit > 100) {
+        score += 15;
+        reasons.push(`净收益较高 (+${netProfit.toFixed(0)}火)`);
+      } else if (netProfit < -100) {
+        score -= 20;
+        warnings.push(`净收益为负 (${netProfit.toFixed(0)}火)`);
+      }
+
+      const hasRealtimeCosts = strategy.costs.some(c => c.is_realtime);
+      if (hasRealtimeCosts) {
+        score += 5;
+        reasons.push("使用实时火价计算");
+      }
+
+      const difficulty = strategy.difficulty;
+      if (difficulty === "地狱" || difficulty === "噩梦") {
+        score -= 5;
+        warnings.push("高难度策略，风险较高");
+      }
+
+      score = Math.max(0, Math.min(100, score));
+
+      let level: StrategyRecommendation["level"];
+      if (score >= 80) level = "strong";
+      else if (score >= 60) level = "good";
+      else if (score >= 40) level = "watch";
+      else level = "avoid";
+
+      let risk: StrategyRecommendation["risk_level"];
+      if (difficulty === "地狱" || difficulty === "噩梦" || profitRatio < -10) {
+        risk = "high";
+      } else if (difficulty === "困难" || profitRatio < 0) {
+        risk = "medium";
+      } else {
+        risk = "low";
+      }
+
+      return {
+        strategy_id: strategy.id,
+        strategy_name: strategy.name,
+        score,
+        level,
+        expected_profit_fire: netProfit,
+        profit_ratio: profitRatio,
+        risk_level: risk,
+        reasons,
+        warnings,
+      };
+    }).sort((a, b) => b.score - a.score);
+  }, [strategies]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -429,26 +558,254 @@ export default function StrategiesPage() {
         <div>
           <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
             <Shield className="w-5 h-5 text-blue-500" />
-            策略收益分析
+            策略管理
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">按盈亏排序 · 点击展开详情</p>
         </div>
+        {activeTab === "strategies" && (
+          <button
+            onClick={() => { resetForm(); setShowCreateDialog(true); }}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            新建策略
+          </button>
+        )}
+      </div>
+
+      <div className="flex border-b border-slate-200">
         <button
-          onClick={() => { resetForm(); setShowCreateDialog(true); }}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+          onClick={() => setActiveTab("strategies")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            activeTab === "strategies"
+              ? "border-blue-500 text-blue-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
         >
-          <Plus className="w-4 h-4" />
-          新建策略
+          我的策略
+        </button>
+        <button
+          onClick={() => setActiveTab("templates")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            activeTab === "templates"
+              ? "border-blue-500 text-blue-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          模板库
+        </button>
+        <button
+          onClick={() => setActiveTab("recommendations")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            activeTab === "recommendations"
+              ? "border-blue-500 text-blue-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          推荐榜
         </button>
       </div>
 
-      {strategies.length === 0 ? (
-        <div className="bg-white rounded-lg border border-slate-200 py-16 text-center">
-          <Target className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-          <div className="text-sm text-slate-500 mb-2">暂无策略</div>
-          <div className="text-xs text-slate-400">点击右上角"新建策略"开始分析</div>
+      {activeTab === "templates" && (
+        <div className="space-y-4">
+          <p className="text-xs text-slate-500">选择模板快速创建策略，降低录入成本</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {strategyTemplates.map((template) => (
+              <div
+                key={template.id}
+                className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="font-medium text-slate-900">{template.name}</h3>
+                    <p className="text-xs text-slate-500 mt-1">{template.description}</p>
+                  </div>
+                  <span className={`px-2 py-0.5 text-xs rounded ${
+                    template.label === "K8" ? "bg-orange-100 text-orange-600" :
+                    template.label === "U8" ? "bg-purple-100 text-purple-600" :
+                    template.label === "深空" ? "bg-blue-100 text-blue-600" :
+                    "bg-gray-100 text-gray-600"
+                  }`}>
+                    {template.label}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-slate-500 mb-3">
+                  <span>难度: {template.difficulty}</span>
+                  <span>输出: {template.output_value}</span>
+                  <span>防御: {template.defense_value}</span>
+                </div>
+                <div className="text-xs text-slate-400 mb-3">
+                  {template.remark}
+                </div>
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {template.costs.slice(0, 3).map((cost, i) => (
+                    <span key={i} className="px-1.5 py-0.5 bg-red-50 text-red-600 text-xs rounded">
+                      {cost.cost_type}
+                    </span>
+                  ))}
+                  {template.costs.length > 3 && (
+                    <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-xs rounded">
+                      +{template.costs.length - 3}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      const result = await cmd.createStrategyDetail({
+                        name: template.name,
+                        label: template.label,
+                        difficulty: template.difficulty,
+                        output_value: template.output_value,
+                        defense_value: template.defense_value,
+                        remark: template.remark,
+                      });
+                      const strategyId = result;
+                      for (const cost of template.costs) {
+                        await cmd.addStrategyCost({
+                          strategy_id: strategyId,
+                          cost_type: cost.cost_type,
+                          item_id: cost.item_keyword,
+                          item_name: null,
+                          count: cost.default_count,
+                          is_realtime: cost.is_realtime,
+                        });
+                      }
+                      for (const output of template.outputs) {
+                        await cmd.addStrategyOutput({
+                          strategy_id: strategyId,
+                          item_name: output.item_keyword,
+                          item_type: output.item_type,
+                          count: output.default_count,
+                          estimated_value: 0,
+                          remark: null,
+                        });
+                      }
+                      addToast("success", `已从模板 "${template.name}" 创建策略`);
+                      setActiveTab("strategies");
+                      loadStrategies();
+                    } catch (e) {
+                      console.error("Failed to create from template:", e);
+                      addToast("error", `从模板创建失败: ${e}`);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  一键创建
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
-      ) : (
+      )}
+
+      {activeTab === "recommendations" && (
+        <div className="space-y-4">
+          {strategies.length === 0 ? (
+            <div className="bg-white rounded-lg border border-slate-200 py-12 text-center">
+              <Award className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+              <div className="text-sm text-slate-500">暂无策略</div>
+              <div className="text-xs text-slate-400 mt-1">请先创建策略后查看推荐</div>
+            </div>
+          ) : calculateRecommendations.length === 0 ? (
+            <div className="bg-white rounded-lg border border-slate-200 py-12 text-center">
+              <Info className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+              <div className="text-sm text-slate-500">策略数据不足</div>
+              <div className="text-xs text-slate-400 mt-1">请添加成本和产出后查看推荐</div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {calculateRecommendations.map((rec, index) => {
+                const strategy = strategies.find(s => s.id === rec.strategy_id);
+                return (
+                  <div
+                    key={rec.strategy_id}
+                    className="bg-white rounded-lg border border-slate-200 p-4"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+                        index === 0 ? "bg-yellow-100 text-yellow-600" :
+                        index === 1 ? "bg-slate-100 text-slate-500" :
+                        index === 2 ? "bg-orange-100 text-orange-500" :
+                        "bg-slate-50 text-slate-400"
+                      }`}>
+                        {index + 1}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-900">{rec.strategy_name}</span>
+                          <span className={`px-2 py-0.5 text-xs rounded border ${getRecommendationLevelColor(rec.level)}`}>
+                            {getRecommendationLevelText(rec.level)}
+                          </span>
+                          <span className={`px-2 py-0.5 text-xs rounded ${getRiskColor(rec.risk_level)}`}>
+                            {rec.risk_level === "low" ? "低风险" : rec.risk_level === "medium" ? "中风险" : "高风险"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
+                          <span>评分: <span className="font-medium">{rec.score}</span></span>
+                          <span>收益率: <span className={`font-medium ${rec.profit_ratio >= 0 ? "text-green-600" : "text-red-600"}`}>
+                            {rec.profit_ratio >= 0 ? "+" : ""}{rec.profit_ratio.toFixed(1)}%
+                          </span></span>
+                          <span>预计收益: <span className={`font-medium ${rec.expected_profit_fire >= 0 ? "text-green-600" : "text-red-600"}`}>
+                            {rec.expected_profit_fire >= 0 ? "+" : ""}{rec.expected_profit_fire.toFixed(0)}火
+                          </span></span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-2xl font-bold ${
+                          rec.score >= 80 ? "text-green-600" :
+                          rec.score >= 60 ? "text-blue-600" :
+                          rec.score >= 40 ? "text-yellow-600" :
+                          "text-red-600"
+                        }`}>
+                          {rec.score}
+                        </div>
+                        <div className="text-xs text-slate-400">分</div>
+                      </div>
+                    </div>
+                    {rec.reasons.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-1">
+                        {rec.reasons.map((reason, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded">
+                            <ThumbsUp className="w-3 h-3" />
+                            {reason}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {rec.warnings.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {rec.warnings.map((warning, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-50 text-yellow-700 text-xs rounded">
+                            <AlertTriangle className="w-3 h-3" />
+                            {warning}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {strategy && (
+                      <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-4 text-xs text-slate-500">
+                        <span>成本: <span className="text-red-500">{strategy.total_cost_fire.toFixed(0)}火</span></span>
+                        <span>产出: <span className="text-green-500">{strategy.total_output_value.toFixed(0)}火</span></span>
+                        <span>难度: {strategy.difficulty}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "strategies" && (
+        <>
+          {strategies.length === 0 ? (
+            <div className="bg-white rounded-lg border border-slate-200 py-16 text-center">
+              <Target className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+              <div className="text-sm text-slate-500 mb-2">暂无策略</div>
+              <div className="text-xs text-slate-400">点击右上角"新建策略"开始分析</div>
+            </div>
+          ) : (
         <div className="space-y-2">
           {strategies.map((strategy) => {
             const isExpanded = expandedIds.has(strategy.id);
@@ -904,6 +1261,8 @@ export default function StrategiesPage() {
           </div>
         </div>
       </Dialog>
+        </>
+      )}
     </div>
   );
 }

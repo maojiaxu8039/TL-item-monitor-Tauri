@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 // Types (mirror Rust structs)
 // ============================================================================
 
-export type PageId = "dashboard" | "firecompare" | "items" | "deals" | "imageassist" | "records" | "strategies" | "priceanalysis" | "aianalysis" | "import_export" | "settings" | "help";
+export type PageId = "dashboard" | "firecompare" | "items" | "deals" | "records" | "strategies" | "priceanalysis" | "aianalysis" | "import_export" | "settings" | "help" | "alerts";
 
 export interface FirePriceUI {
   price_per_wan: number;
@@ -130,6 +130,8 @@ export interface FirePriceCompareResult {
   current_price: number;
   current_day: number;
   current_hour: number;
+  is_stale: boolean;
+  age_seconds: number;
   history_avg: number;
   history_high: number;
   history_low: number;
@@ -237,6 +239,41 @@ export interface NotificationPermissionStatus {
   denied: boolean;
   prompt: boolean;
   unknown: boolean;
+}
+
+export interface SyncFailure {
+  itemId?: string;
+  itemName?: string;
+  recordType: "fire" | "items";
+  reason: string;
+  timestamp: number;
+}
+
+export interface SyncJobState {
+  id: string;
+  dataType: "fire" | "items";
+  mode: "normal" | "expert";
+  range: "24h" | "3d" | "7d" | "30d" | "season";
+  status: "idle" | "running" | "success" | "partial" | "failed";
+  total: number;
+  success: number;
+  failed: number;
+  skipped: number;
+  startedAt: number;
+  finishedAt: number | null;
+  firstError: string | null;
+  failures: SyncFailure[];
+}
+
+export interface SyncResult {
+  synced: number;
+  type: "fire" | "items";
+  message?: string;
+  total?: number;
+  failed?: number;
+  skipped?: number;
+  firstError?: string;
+  failures?: SyncFailure[];
 }
 
 export interface DataSettings {
@@ -531,6 +568,10 @@ export const cmd = {
     invoke<SeasonTrendHour[]>("get_season_trends", { hours }),
   selectLocalItemsFile: () =>
     invoke<string | null>("select_local_items_file"),
+  getAppDataDir: () =>
+    invoke<string>("get_app_data_dir"),
+  getResourcePath: (resourceName: string) =>
+    invoke<string>("get_resource_path", { resourceName }),
 
   getDealAlerts: () =>
     invoke<{ bargains: DealAlert[]; sells: DealAlert[] }>("get_deal_alerts"),
@@ -783,19 +824,23 @@ export interface ServerAdminResponse {
 }
 
 export const serverAdmin = {
-  getApiConfig: (serverUrl: string) =>
-    fetch(`${serverUrl}/api-config`)
+  getApiConfig: (serverUrl: string, password: string) =>
+    fetch(`${serverUrl}/api/admin/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    })
       .then(res => res.json())
       .then((data: ServerAdminResponse) => {
         if (!data.success) throw new Error(data.error || "获取配置失败");
-        return data.data as ServerApiConfig;
+        return data.data?.api_config as ServerApiConfig;
       }),
 
-  initSeason: (serverUrl: string, password: string, seasonId: string, seasonName?: string) =>
+  initSeason: (serverUrl: string, password: string, seasonId: string, startedAt: number, seasonName?: string) =>
     fetch(`${serverUrl}/admin/init-season`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password, season_id: seasonId, season_name: seasonName }),
+      body: JSON.stringify({ password, season_id: seasonId, started_at: startedAt, season_name: seasonName }),
     })
       .then(res => res.json())
       .then((data: ServerAdminResponse) => {

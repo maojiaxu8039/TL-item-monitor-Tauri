@@ -26,12 +26,9 @@ import {
   Package,
   CalendarDays,
   GitCompare,
-  Layers,
   ArrowUpDown,
   Tag,
   Database,
-  ShoppingCart,
-  ArrowRight,
 } from "lucide-react";
 import { ItemPriceTrendModal } from "./ItemPriceTrendModal";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
@@ -189,7 +186,7 @@ export default function ItemsPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [page, setPage] = useState(1);
   const { toasts, addToast, dismissToast } = useToast();
-  const [dataSource, setDataSource] = useState<"api" | "local">("api");
+  const [, setDataSource] = useState<"api" | "local">("api");
   const [historySeason, setHistorySeason] = useState("ss11");
   const [trendItem, setTrendItem] = useState<{ itemId: string; name: string } | null>(null);
   const [dayFilter, setDayFilter] = useState("all");

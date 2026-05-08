@@ -1,7 +1,9 @@
 version: '3.8'
 services:
   tl-monitor-server:
-    build: ./server-docker
+    build:
+      context: ..
+      dockerfile: server-docker/Dockerfile
     container_name: tl-monitor-server
     restart: unless-stopped
     ports:

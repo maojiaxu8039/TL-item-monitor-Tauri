@@ -4,14 +4,14 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use tower_http::services::ServeDir;
 use chrono::Utc;
-use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
+use tower_http::services::ServeDir;
 use tracing::info;
 
 // ============================================================================
@@ -74,15 +74,15 @@ fn generate_fire_price_data(mode: &str) -> Vec<FirePriceRecord> {
     let season_start = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
         .unwrap()
         .timestamp();
-    
+
     let days_count = 17;
     let mut records = Vec::new();
-    
+
     for day in 0..days_count {
         for hour in 0..24 {
             let scraped_at = season_start + (day as i64 * 24 * 3600) + (hour as i64 * 3600);
             let season_day = day + 1;
-            
+
             let day_factor = if day < 7 {
                 1.0 - (day as f64 * 0.01)
             } else if day < 14 {
@@ -90,14 +90,14 @@ fn generate_fire_price_data(mode: &str) -> Vec<FirePriceRecord> {
             } else {
                 0.965 + ((day - 14) as f64 * 0.008)
             };
-            
+
             let hour_volatility = (hour as f64 - 12.0) / 80.0;
             let random_noise = rng.gen_range(-0.025..0.025);
-            
+
             let rmb_per_10k = base_price * day_factor * (1.0 + hour_volatility + random_noise);
             let fire_per_rmb = 10000.0 / rmb_per_10k;
             let increase_ratio = random_noise * 100.0;
-            
+
             records.push(FirePriceRecord {
                 rmb_per_10k_fire: rmb_per_10k,
                 fire_per_rmb,
@@ -107,14 +107,14 @@ fn generate_fire_price_data(mode: &str) -> Vec<FirePriceRecord> {
             });
         }
     }
-    
+
     records
 }
 
 fn generate_items_data(mode: &str) -> Vec<ItemRecord> {
     let mut rng = StdRng::seed_from_u64(if mode == "expert" { 789 } else { 321 });
     let now = Utc::now().timestamp();
-    
+
     let items = vec![
         ("item_001", "传奇武器", "武器", 180.0),
         ("item_002", "史诗护甲", "护甲", 95.0),
@@ -127,8 +127,9 @@ fn generate_items_data(mode: &str) -> Vec<ItemRecord> {
         ("item_009", "火焰宝石", "材料", 75.0),
         ("item_010", "冰霜法杖", "武器", 320.0),
     ];
-    
-    items.into_iter()
+
+    items
+        .into_iter()
         .map(|(id, name, item_type, base_price)| {
             let price_factor = rng.gen_range(0.95..1.05);
             ItemRecord {
@@ -149,14 +150,20 @@ fn generate_items_data(mode: &str) -> Vec<ItemRecord> {
 async fn get_dashboard(State(state): State<AppState>) -> Json<DashboardData> {
     let fire_prices = state.fire_prices_normal.read().await;
     let items = state.items_normal.read().await;
-    
+
     let latest_fire = fire_prices.last().cloned();
-    
+
     Json(DashboardData {
         season_id: "ss12".to_string(),
         market_mode: "season_normal".to_string(),
-        current_fire_price: latest_fire.as_ref().map(|f| f.rmb_per_10k_fire).unwrap_or(35.0),
-        fire_increase_ratio: latest_fire.as_ref().map(|f| f.increase_ratio).unwrap_or(0.0),
+        current_fire_price: latest_fire
+            .as_ref()
+            .map(|f| f.rmb_per_10k_fire)
+            .unwrap_or(35.0),
+        fire_increase_ratio: latest_fire
+            .as_ref()
+            .map(|f| f.increase_ratio)
+            .unwrap_or(0.0),
         item_count: items.len(),
         last_update: Utc::now().timestamp(),
     })
@@ -174,20 +181,20 @@ async fn get_fire_history(
 ) -> Json<Vec<FirePriceRecord>> {
     let mode = params.mode.as_deref().unwrap_or("normal");
     let hours = params.hours.unwrap_or(24);
-    
+
     let fire_prices = if mode == "expert" {
         state.fire_prices_expert.read().await
     } else {
         state.fire_prices_normal.read().await
     };
-    
+
     let cutoff = Utc::now().timestamp() - (hours * 3600);
     let filtered: Vec<FirePriceRecord> = fire_prices
         .iter()
         .filter(|r| r.scraped_at >= cutoff)
         .cloned()
         .collect();
-    
+
     Json(filtered)
 }
 
@@ -196,13 +203,13 @@ async fn get_fire_history_all(
     Query(params): Query<FireHistoryQuery>,
 ) -> Json<Vec<FirePriceRecord>> {
     let mode = params.mode.as_deref().unwrap_or("normal");
-    
+
     let fire_prices = if mode == "expert" {
         state.fire_prices_expert.read().await
     } else {
         state.fire_prices_normal.read().await
     };
-    
+
     Json(fire_prices.clone())
 }
 
@@ -218,39 +225,44 @@ async fn get_items(
 ) -> Json<Vec<ItemRecord>> {
     let mode = params.mode.as_deref().unwrap_or("normal");
     let keyword = params.keyword.unwrap_or_default().to_lowercase();
-    
+
     let items = if mode == "expert" {
         state.items_expert.read().await
     } else {
         state.items_normal.read().await
     };
-    
+
     let filtered: Vec<ItemRecord> = if keyword.is_empty() {
         items.clone()
     } else {
         items
             .iter()
             .filter(|item| {
-                item.name.to_lowercase().contains(&keyword) ||
-                item.item_type.to_lowercase().contains(&keyword)
+                item.name.to_lowercase().contains(&keyword)
+                    || item.item_type.to_lowercase().contains(&keyword)
             })
             .cloned()
             .collect()
     };
-    
+
     Json(filtered)
 }
 
 async fn refresh_fire_price_handler(State(state): State<AppState>) -> Json<RefreshResponse> {
     info!("Refreshing fire price data...");
-    
+
     let now = Utc::now().timestamp();
-    let season_day = ((now - chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z").unwrap().timestamp()) / 86400) as i32 + 1;
-    
+    let season_day = ((now
+        - chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
+            .unwrap()
+            .timestamp())
+        / 86400) as i32
+        + 1;
+
     let base_price = 35.0;
     let random_noise = rand::random::<f64>() * 0.04 - 0.02;
     let rmb_per_10k = base_price * (1.0 + random_noise);
-    
+
     let new_record = FirePriceRecord {
         rmb_per_10k_fire: rmb_per_10k,
         fire_per_rmb: 10000.0 / rmb_per_10k,
@@ -258,12 +270,12 @@ async fn refresh_fire_price_handler(State(state): State<AppState>) -> Json<Refre
         scraped_at: now,
         season_day,
     };
-    
+
     {
         let mut fire_prices = state.fire_prices_normal.write().await;
         fire_prices.push(new_record);
     }
-    
+
     Json(RefreshResponse {
         success: true,
         message: "Fire price refreshed".to_string(),
@@ -272,14 +284,14 @@ async fn refresh_fire_price_handler(State(state): State<AppState>) -> Json<Refre
 
 async fn refresh_items_handler(State(state): State<AppState>) -> Json<RefreshResponse> {
     info!("Refreshing items data...");
-    
+
     let new_items = generate_items_data("normal");
-    
+
     {
         let mut items = state.items_normal.write().await;
         *items = new_items;
     }
-    
+
     Json(RefreshResponse {
         success: true,
         message: "Items refreshed".to_string(),
@@ -293,16 +305,21 @@ async fn refresh_items_handler(State(state): State<AppState>) -> Json<RefreshRes
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-    
-    info!("Starting TL Monitor Web Server...");
-    
+
+    eprintln!("╔════════════════════════════════════════════════════════════╗");
+    eprintln!("║           TL Monitor Mock Server (开发/测试用)            ║");
+    eprintln!("║                                                            ║");
+    eprintln!("║  ⚠️  此服务返回模拟数据，不连接真实API，不写入数据库！  ║");
+    eprintln!("║  ⚠️  DO NOT USE IN PRODUCTION!                             ║");
+    eprintln!("╚════════════════════════════════════════════════════════════╝");
+
     let state = AppState {
         fire_prices_normal: Arc::new(RwLock::new(generate_fire_price_data("normal"))),
         fire_prices_expert: Arc::new(RwLock::new(generate_fire_price_data("expert"))),
         items_normal: Arc::new(RwLock::new(generate_items_data("normal"))),
         items_expert: Arc::new(RwLock::new(generate_items_data("expert"))),
     };
-    
+
     let app = Router::new()
         .route("/api/dashboard", get(get_dashboard))
         .route("/api/fire/history", get(get_fire_history))
@@ -310,21 +327,29 @@ async fn main() {
         .route("/api/items", get(get_items))
         .route("/api/refresh/fire", post(refresh_fire_price_handler))
         .route("/api/refresh/items", post(refresh_items_handler))
-        .route("/api/health", get(|| async { Json(serde_json::json!({"status": "ok"})) }))
+        .route(
+            "/api/health",
+            get(|| async { Json(serde_json::json!({"status": "ok", "mock": true})) }),
+        )
         .nest_service("/", ServeDir::new("static"))
         .layer(CorsLayer::permissive())
         .with_state(state);
-    
+
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
-    info!("Server running on http://0.0.0.0:8080");
-    info!("API endpoints:");
-    info!("  GET  /api/dashboard       - Dashboard summary");
-    info!("  GET  /api/fire/history    - Fire price history (query: mode, hours)");
-    info!("  GET  /api/fire/history/all - All fire price history (query: mode)");
-    info!("  GET  /api/items           - Items list (query: mode, keyword)");
-    info!("  POST /api/refresh/fire    - Refresh fire price");
-    info!("  POST /api/refresh/items   - Refresh items");
-    info!("  GET  /api/health          - Health check");
-    
+    println!();
+    println!("Mock Server 运行在 http://0.0.0.0:8080");
+    println!();
+    println!("接口列表:");
+    println!("  GET  /api/dashboard        - 仪表盘摘要 (MOCK)");
+    println!("  GET  /api/fire/history    - 火价历史 (MOCK)");
+    println!("  GET  /api/fire/history/all - 所有火价历史 (MOCK)");
+    println!("  GET  /api/items           - 物品列表 (MOCK)");
+    println!("  POST /api/refresh/fire    - 刷新火价 (MOCK)");
+    println!("  POST /api/refresh/items   - 刷新物品 (MOCK)");
+    println!("  GET  /api/health          - 健康检查");
+    println!();
+    println!("注意: 此服务与正式采集 server 接口不兼容！");
+    println!();
+
     axum::serve(listener, app).await.unwrap();
 }
