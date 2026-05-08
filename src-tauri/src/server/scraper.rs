@@ -223,15 +223,21 @@ async fn scrape_via_rust(
 }
 
 async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String> {
-    let mut possible_scripts = vec![
-        std::env::current_exe()
-            .ok()
-            .and_then(|exe| exe.parent().map(|p| p.join("resources/qiandao_fire.cjs")))
-            .unwrap_or_default(),
-        std::path::PathBuf::from("resources/qiandao_fire.cjs"),
-    ];
+    let mut possible_scripts: Vec<std::path::PathBuf> = vec![];
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            possible_scripts.push(parent.join("resources/qiandao_fire.cjs"));
+            possible_scripts.push(parent.join("resources/qiandao_fire.mjs"));
+        }
+    }
+
+    possible_scripts.push(std::path::PathBuf::from("resources/qiandao_fire.cjs"));
+    possible_scripts.push(std::path::PathBuf::from("resources/qiandao_fire.mjs"));
+
     if let Ok(dir) = std::env::var("TL_RESOURCES_DIR") {
-        possible_scripts.push(std::path::PathBuf::from(dir).join("qiandao_fire.cjs"));
+        possible_scripts.push(std::path::PathBuf::from(dir.clone()).join("qiandao_fire.cjs"));
+        possible_scripts.push(std::path::PathBuf::from(dir).join("qiandao_fire.mjs"));
     }
 
     let script_path = possible_scripts
