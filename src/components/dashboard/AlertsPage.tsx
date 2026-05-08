@@ -2,14 +2,12 @@ import { useState, useEffect } from "react";
 import {
   Bell,
   Plus,
-  Trash2,
   X,
   AlertCircle,
   CheckCircle,
   Clock,
   ChevronDown,
   ChevronRight,
-  Settings,
 } from "lucide-react";
 import { cmd, AlertRule, AlertEvent } from "@/lib/commands";
 import { useToast } from "@/components/ui/Toast";
