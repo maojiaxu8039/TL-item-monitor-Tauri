@@ -579,8 +579,8 @@ export const cmd = {
   // Season management
   archiveSeason: (seasonId: string, archiveName?: string) =>
     invoke<ArchiveResult>("archive_season", { seasonId, archiveName }),
-  initNewSeason: (seasonId: string, seasonName?: string) =>
-    invoke<NewSeasonResult>("init_new_season", { seasonId, seasonName }),
+  initNewSeason: (seasonId: string, seasonName?: string, startedAt?: number) =>
+    invoke<NewSeasonResult>("init_new_season", { seasonId, seasonName, startedAt }),
   listSeasons: () =>
     invoke<SeasonInfo[]>("list_seasons"),
   getSeasonApiConfig: (seasonId: string) =>

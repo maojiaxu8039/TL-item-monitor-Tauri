@@ -53,6 +53,7 @@ export default function SettingsPage() {
   const [confirmNewSeasonOpen, setConfirmNewSeasonOpen] = useState(false);
   const [newSeasonId, setNewSeasonId] = useState("");
   const [newSeasonName, setNewSeasonName] = useState("");
+  const [newSeasonStartedAt, setNewSeasonStartedAt] = useState("");
   const [showNewSeasonForm, setShowNewSeasonForm] = useState(false);
 
   // API config editing state
@@ -111,13 +112,15 @@ export default function SettingsPage() {
 
   const initNewSeasonMutation = useMutation({
     mutationFn: () => {
-      return cmd.initNewSeason(newSeasonId, newSeasonName || undefined);
+      const startedAt = newSeasonStartedAt ? Math.floor(new Date(newSeasonStartedAt).getTime() / 1000) : undefined;
+      return cmd.initNewSeason(newSeasonId, newSeasonName || undefined, startedAt);
     },
     onSuccess: (result) => {
       toast.success(`新赛季 ${result.season_id} 初始化完成`);
       setSeasonId(result.season_id);
       setNewSeasonId("");
       setNewSeasonName("");
+      setNewSeasonStartedAt("");
       setShowNewSeasonForm(false);
       seasonsQuery.refetch();
     },
@@ -190,10 +193,10 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
+    let mounted = true;
     const initPaths = async () => {
       try {
         const appDataDir = await cmd.getAppDataDir();
-        const defaultPath = getDefaultJsonPath(appDataDir);
         return appDataDir;
       } catch {
         return "";
@@ -201,8 +204,10 @@ export default function SettingsPage() {
     };
 
     initPaths().then((appDataDir) => {
+      if (!mounted) return;
       const defaultPath = appDataDir ? getDefaultJsonPath(appDataDir) : "";
       cmd.getConfig().then((cfg) => {
+        if (!mounted) return;
         setFireEnabled(cfg.scrape.fire_price_scrape_enabled);
         setFireInterval(cfg.scrape.fire_price_scrape_interval);
         setItemsEnabled(cfg.scrape.auto_reload);
@@ -216,18 +221,23 @@ export default function SettingsPage() {
         setVoiceAlertEnabled(cfg.notification.voice_alert_enabled);
         setLoaded(true);
         if (cfg.scrape.items_source === 'local') {
-          cmd.validateJsonFile(cfg.scrape.items_json_path || defaultPath).then(setJsonPathValidation).catch(() => {});
+          cmd.validateJsonFile(cfg.scrape.items_json_path || defaultPath).then((v) => {
+            if (mounted) setJsonPathValidation(v);
+          }).catch(() => {});
         }
       }).catch(() => {});
     });
 
     cmd.getDashboardSummary().then((summary) => {
+      if (!mounted) return;
       setItemCount(summary.item_count);
     }).catch(() => {});
 
     cmd.getNotificationPermissionStatus().then((status) => {
+      if (!mounted) return;
       setNotificationPermission(status);
     }).catch(() => {});
+    return () => { mounted = false; };
   }, []);
 
   const validateJsonPath = async (path: string) => {
@@ -435,6 +445,16 @@ export default function SettingsPage() {
                       className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                     />
                   </div>
+                  <div>
+                    <label className="text-xs text-slate-500 block mb-1">开服时间</label>
+                    <input
+                      type="datetime-local"
+                      value={newSeasonStartedAt}
+                      onChange={(e) => setNewSeasonStartedAt(e.target.value)}
+                      className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    />
+                    <p className="text-xs text-slate-400 mt-0.5">留空则使用当前时间</p>
+                  </div>
                 </div>
 
                 {/* Actions */}
@@ -444,6 +464,7 @@ export default function SettingsPage() {
                       setShowNewSeasonForm(false);
                       setNewSeasonId("");
                       setNewSeasonName("");
+                      setNewSeasonStartedAt("");
                     }}
                     className="text-sm px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-white transition-colors"
                   >

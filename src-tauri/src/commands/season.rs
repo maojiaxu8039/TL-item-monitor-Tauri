@@ -154,7 +154,9 @@ pub async fn init_new_season(
     state: State<'_, Arc<AppState>>,
     season_id: String,
     season_name: Option<String>,
+    started_at: Option<i64>,
 ) -> Result<NewSeasonResult, String> {
+    let started_at = started_at.unwrap_or_else(|| chrono::Utc::now().timestamp());
     // Check if current season exists and is not archived
     let current_season: Option<(String, i32)> =
         sqlx::query_as("SELECT id, is_current FROM seasons WHERE is_current = 1 LIMIT 1")
@@ -248,7 +250,7 @@ pub async fn init_new_season(
     .bind(&season_id)
     .bind(&name)
     .bind(&season_id)
-    .bind(now)
+    .bind(started_at)
     .bind(now)
     .bind(now)
     .execute(&state.db)

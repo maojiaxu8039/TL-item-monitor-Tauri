@@ -104,6 +104,7 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
 async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>) {
     let ctx = state.active_context.read().clone();
     let season_id = ctx.season_id.clone();
+    let market_mode_str = ctx.market_mode.as_str();
 
     let rules = match repo_alerts::get_alert_rules(&state.db).await {
         Ok(rules) => rules,
@@ -128,7 +129,7 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
             }
         }
 
-        let triggered = evaluate_rule(&state.db, &season_id, &rule).await;
+        let triggered = evaluate_rule(&state.db, &season_id, market_mode_str, &rule).await;
 
         if triggered {
             let message = format_rule_notification(&rule);
@@ -162,12 +163,21 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
 async fn evaluate_rule(
     db: &sqlx::SqlitePool,
     season_id: &str,
+    market_mode: &str,
     rule: &crate::db::models::AlertRule,
 ) -> bool {
     match rule.rule_type.as_str() {
         "price_below" | "price_above" => {
             if let Some(item_id) = &rule.item_id {
-                evaluate_item_rule(db, season_id, &rule.rule_type, item_id, rule.threshold).await
+                evaluate_item_rule(
+                    db,
+                    season_id,
+                    market_mode,
+                    &rule.rule_type,
+                    item_id,
+                    rule.threshold,
+                )
+                .await
             } else {
                 false
             }
@@ -184,12 +194,11 @@ async fn evaluate_rule(
 async fn evaluate_item_rule(
     db: &sqlx::SqlitePool,
     season_id: &str,
+    market_mode: &str,
     rule_type: &str,
     item_id: &str,
     threshold: f64,
 ) -> bool {
-    let market_mode = "season_normal";
-
     let latest_price = match repo_items::get_all_items(db, season_id, market_mode).await {
         Ok(items) => items
             .into_iter()

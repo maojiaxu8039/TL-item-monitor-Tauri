@@ -677,8 +677,10 @@ async fn handle_request(
                 "season_normal"
             };
 
-            match db::get_fire_history(&state.db, &state.config.season_id, market_mode, limit).await
-            {
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+
+            match db::get_fire_history(&state.db, &season_id, market_mode, limit).await {
                 Ok(records) => {
                     let body = serde_json::to_string_pretty(&ApiResponse {
                         success: true,
@@ -713,15 +715,12 @@ async fn handle_request(
                 "season_normal"
             };
 
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+
             if let Some(item_id) = item_id {
-                match db::get_items_history(
-                    &state.db,
-                    &item_id,
-                    &state.config.season_id,
-                    market_mode,
-                    limit,
-                )
-                .await
+                match db::get_items_history(&state.db, &item_id, &season_id, market_mode, limit)
+                    .await
                 {
                     Ok(records) => {
                         let body = serde_json::to_string_pretty(&ApiResponse {
@@ -768,14 +767,10 @@ async fn handle_request(
                 "season_normal"
             };
 
-            match db::get_items_history_all(
-                &state.db,
-                &state.config.season_id,
-                market_mode,
-                limit,
-                offset,
-            )
-            .await
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+
+            match db::get_items_history_all(&state.db, &season_id, market_mode, limit, offset).await
             {
                 Ok(records) => {
                     let body = serde_json::to_string_pretty(&ApiResponse {
@@ -813,14 +808,10 @@ async fn handle_request(
                 "season_normal"
             };
 
-            match db::get_fire_history_all(
-                &state.db,
-                &state.config.season_id,
-                market_mode,
-                limit,
-                offset,
-            )
-            .await
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+
+            match db::get_fire_history_all(&state.db, &season_id, market_mode, limit, offset).await
             {
                 Ok(records) => {
                     let body = serde_json::to_string_pretty(&ApiResponse {
@@ -844,13 +835,14 @@ async fn handle_request(
         }
         ("GET", "/health") => (200, "OK".to_string()),
         ("GET", "/season-start") => {
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
             let season_start =
-                tl_monitor::server::db::get_season_start_time(&state.db, &state.config.season_id)
-                    .await;
+                tl_monitor::server::db::get_season_start_time(&state.db, &season_id).await;
             let body = serde_json::to_string_pretty(&ApiResponse {
                 success: true,
                 data: Some(serde_json::json!({
-                    "season_id": state.config.season_id,
+                    "season_id": season_id,
                     "started_at": season_start
                 })),
                 error: None,
@@ -859,8 +851,9 @@ async fn handle_request(
             (200, body)
         }
         ("GET", "/stats") => {
-            match tl_monitor::server::db::get_season_stats(&state.db, &state.config.season_id).await
-            {
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+            match tl_monitor::server::db::get_season_stats(&state.db, &season_id).await {
                 Ok(stats) => {
                     let body = serde_json::to_string_pretty(&ApiResponse {
                         success: true,

@@ -16,10 +16,13 @@ export function TopBar() {
   const [notificationEnabled, setNotificationEnabled] = useState(true)
 
   useEffect(() => {
+    let mounted = true;
     cmd.getConfig().then((cfg) => {
+      if (!mounted) return;
       setDataSource(cfg.scrape.items_source === "local" ? "local" : "api")
       setNotificationEnabled(cfg.notification.system_notifications)
     }).catch(() => {})
+    return () => { mounted = false; };
   }, [])
 
   const { data: summary } = useQuery({

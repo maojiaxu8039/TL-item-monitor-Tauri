@@ -57,20 +57,20 @@ function fetchPrice(cb) {
 
 fetchPrice(data => {
   if (data.error) {
-    process.stdout.write('{"error":"' + data.error + '"}\n');
+    process.stdout.write(JSON.stringify({ error: data.error }) + '\n');
     return;
   }
 
   const item = data.data && data.data.items ? data.data.items[0] : null;
   if (!item) {
-    process.stdout.write('{"error":"No fire price data"}\n');
+    process.stdout.write(JSON.stringify({ error: 'No fire price data' }) + '\n');
     return;
   }
 
   const ratioPrice = parseFloat(item.ratioPrice) || 0;
   const ten_k = ratioPrice > 0 ? Math.round(10000 / ratioPrice * 10000) / 10000 : 0;
 
-  const result = {
+  const resultData = {
     fire_per_rmb: ratioPrice,
     rmb_per_fire: ratioPrice > 0 ? Math.round(10000 / ratioPrice * 10000) / 10000 : 0,
     ten_k: ten_k,
@@ -78,6 +78,11 @@ fetchPrice(data => {
     trading_volume: item.change24h || '',
     source: '千岛API-' + (mode === '专家' ? '赛季专家' : '赛季普通'),
     ts: new Date().toISOString().replace('T', ' ').substr(0, 16),
+  };
+
+  const result = {
+    ...resultData,
+    data: resultData,
   };
 
   process.stdout.write(JSON.stringify(result) + '\n');

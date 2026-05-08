@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Shield,
   Plus,
@@ -126,16 +126,24 @@ export default function StrategiesPage() {
     count: 1,
   });
 
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const loadStrategies = async () => {
     try {
       const data = await cmd.getAllStrategiesWithCosts();
+      if (!mountedRef.current) return;
       const sorted = [...data].sort((a, b) => b.profit_ratio - a.profit_ratio);
       setStrategies(sorted);
     } catch (e) {
+      if (!mountedRef.current) return;
       console.error("Failed to load strategies:", e);
       addToast("error", "加载策略失败");
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 

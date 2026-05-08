@@ -47,8 +47,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
     ? getSeasonStartTime(historySeason, seasonsQuery.data)
     : 1768521600;
 
-  useEffect(() => {
-  }, [itemId, currentSeason, historySeason, currentDay]);
+
 
   const currentDayQuery = useQuery({
     queryKey: ["item-trend-current-day", itemId, currentSeason, currentDay],

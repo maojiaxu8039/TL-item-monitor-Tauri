@@ -203,9 +203,12 @@ export default function ItemsPage() {
   }, [searchKeyword]);
 
   useEffect(() => {
+    let mounted = true;
     cmd.getConfig().then((cfg) => {
+      if (!mounted) return;
       setDataSource(cfg.scrape.items_source === "local" ? "local" : "api");
     }).catch(() => {});
+    return () => { mounted = false; };
   }, []);
 
   // ─── Data queries ───────────────────────────────────────────────────────

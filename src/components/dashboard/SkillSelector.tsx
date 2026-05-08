@@ -33,7 +33,24 @@ export default function SkillSelector({
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    loadSkills();
+    let mounted = true;
+    const doLoad = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const installedSkills = await cmd.getInstalledSkills();
+        if (!mounted) return;
+        setSkills(installedSkills);
+      } catch (err) {
+        if (!mounted) return;
+        setError("加载失败");
+        console.error("Failed to load skills:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    doLoad();
+    return () => { mounted = false; };
   }, []);
 
   const loadSkills = async () => {

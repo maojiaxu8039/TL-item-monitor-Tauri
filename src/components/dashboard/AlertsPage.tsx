@@ -79,7 +79,26 @@ export default function AlertsPage() {
   };
 
   useEffect(() => {
-    loadData();
+    let mounted = true;
+    const doLoad = async () => {
+      try {
+        const [rulesData, eventsData] = await Promise.all([
+          cmd.getAlertRules(),
+          cmd.getAlertEvents(50),
+        ]);
+        if (!mounted) return;
+        setRules(rulesData);
+        setEvents(eventsData);
+      } catch (e) {
+        if (!mounted) return;
+        console.error("Failed to load alerts:", e);
+        addToast("error", "加载预警规则失败");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    doLoad();
+    return () => { mounted = false; };
   }, []);
 
   const handleCreate = async () => {

@@ -2,6 +2,7 @@ use crate::core::errors::AppError;
 use crate::core::state::FirePriceSnapshot;
 use chrono::Utc;
 use serde::Deserialize;
+use std::path::{Path, PathBuf};
 
 const QIANDAO_API: &str = "https://api.qiandao.com";
 
@@ -105,37 +106,60 @@ async fn scrape_via_rust(mode: &str) -> Result<FirePriceSnapshot, AppError> {
 
 /// Node.js native HTTP/2 implementation.
 async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppError> {
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_default();
+    let candidates = node_fallback_candidates();
+    if candidates.is_empty() {
+        return Err(AppError::Scrape(
+            "Node.js script not found: no candidate paths were generated".to_string(),
+        ));
+    }
 
-    let possible_executables = if cfg!(windows) {
-        vec![
-            exe_dir.join("resources/qiandao_fire.exe"),
-            exe_dir.join("qiandao_fire.exe"),
-        ]
+    let mut errors = Vec::new();
+    for candidate in candidates
+        .iter()
+        .filter(|candidate| candidate.path().exists())
+    {
+        tracing::info!("Trying Qiandao Node fallback: {}", candidate.label());
+        match run_node_fallback(candidate, mode).await {
+            Ok(snapshot) => return Ok(snapshot),
+            Err(err) => {
+                tracing::warn!("Qiandao Node fallback failed: {}", err);
+                errors.push(format!("{}: {}", candidate.label(), err));
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        let paths = candidates
+            .iter()
+            .map(|candidate| candidate.label())
+            .collect::<Vec<_>>()
+            .join(", ");
+        Err(AppError::Scrape(format!(
+            "Node.js script not found. Tried: {}",
+            paths
+        )))
     } else {
-        vec![
-            exe_dir.join("resources/qiandao_fire"),
-            exe_dir.join("qiandao_fire"),
-        ]
+        Err(AppError::Scrape(format!(
+            "All Node.js fire-price fallbacks failed. {}",
+            errors.join(" | ")
+        )))
+    }
+}
+
+async fn run_node_fallback(
+    candidate: &NodeFallbackCandidate,
+    mode: &str,
+) -> Result<FirePriceSnapshot, AppError> {
+    let mut command = match candidate {
+        NodeFallbackCandidate::Script(path) => {
+            let mut command = tokio::process::Command::new("node");
+            command.arg(path);
+            command
+        }
+        NodeFallbackCandidate::Executable(path) => tokio::process::Command::new(path),
     };
 
-    let script_path = possible_executables
-        .iter()
-        .find(|p| p.exists())
-        .cloned()
-        .ok_or_else(|| {
-            let paths_str = possible_executables
-                .iter()
-                .map(|p| p.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
-            AppError::Scrape(format!("Node.js script not found. Tried: {}", paths_str))
-        })?;
-
-    let output = tokio::process::Command::new(&script_path)
+    let output = command
         .arg(if mode == "专家" { "pro" } else { "normal" })
         .output()
         .await
@@ -156,20 +180,7 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppErro
         )));
     }
 
-    let result: NodeJsOutput = serde_json::from_str(&stdout).map_err(|e| {
-        AppError::Scrape(format!(
-            "Node.js output parse error: {} | output: {}",
-            e, stdout
-        ))
-    })?;
-
-    if let Some(error) = result.error {
-        return Err(AppError::Scrape(format!("Node.js script error: {}", error)));
-    }
-
-    let data = result
-        .data
-        .ok_or_else(|| AppError::Scrape("No data in Node.js output".to_string()))?;
+    let data = parse_node_output(&stdout)?;
 
     Ok(FirePriceSnapshot {
         price_per_wan: data.ten_k,
@@ -181,6 +192,100 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppErro
         source_time: Some(data.ts),
         scraped_at: Utc::now().timestamp(),
     })
+}
+
+fn parse_node_output(stdout: &str) -> Result<NodeJsData, AppError> {
+    let trimmed = stdout.trim();
+    let value: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| {
+        AppError::Scrape(format!(
+            "Node.js output parse error: {} | output: {}",
+            e, stdout
+        ))
+    })?;
+
+    if let Some(error) = value.get("error").and_then(|v| v.as_str()) {
+        return Err(AppError::Scrape(format!("Node.js script error: {}", error)));
+    }
+
+    let data_value = value
+        .get("data")
+        .filter(|data| data.is_object())
+        .unwrap_or(&value)
+        .clone();
+
+    serde_json::from_value(data_value).map_err(|e| {
+        AppError::Scrape(format!(
+            "Node.js output data parse error: {} | output: {}",
+            e, stdout
+        ))
+    })
+}
+
+#[derive(Debug, Clone)]
+enum NodeFallbackCandidate {
+    Script(PathBuf),
+    Executable(PathBuf),
+}
+
+impl NodeFallbackCandidate {
+    fn path(&self) -> &Path {
+        match self {
+            Self::Script(path) | Self::Executable(path) => path,
+        }
+    }
+
+    fn label(&self) -> String {
+        match self {
+            Self::Script(path) => format!("node {}", path.display()),
+            Self::Executable(path) => path.display().to_string(),
+        }
+    }
+}
+
+fn node_fallback_candidates() -> Vec<NodeFallbackCandidate> {
+    let mut resource_dirs = Vec::new();
+
+    if let Ok(dir) = std::env::var("TL_RESOURCES_DIR") {
+        push_unique_path(&mut resource_dirs, PathBuf::from(dir));
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            push_unique_path(&mut resource_dirs, exe_dir.join("resources"));
+            push_unique_path(&mut resource_dirs, exe_dir.to_path_buf());
+
+            if let Some(contents_dir) = exe_dir.parent() {
+                push_unique_path(&mut resource_dirs, contents_dir.join("Resources/resources"));
+                push_unique_path(&mut resource_dirs, contents_dir.join("Resources"));
+            }
+        }
+    }
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        push_unique_path(&mut resource_dirs, current_dir.join("resources"));
+        push_unique_path(&mut resource_dirs, current_dir.join("src-tauri/resources"));
+    }
+
+    let mut candidates = Vec::new();
+    for dir in resource_dirs {
+        candidates.push(NodeFallbackCandidate::Script(dir.join("qiandao_fire.cjs")));
+        candidates.push(NodeFallbackCandidate::Script(dir.join("qiandao_fire.mjs")));
+        candidates.push(NodeFallbackCandidate::Executable(dir.join(
+            if cfg!(windows) {
+                "qiandao_fire.exe"
+            } else {
+                "qiandao_fire"
+            },
+        )));
+    }
+
+    candidates
+}
+
+fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
+    if !paths.iter().any(|existing| existing == &path) {
+        paths.push(path);
+    }
 }
 
 fn safe_slice(s: &str, max_len: usize) -> &str {
@@ -271,6 +376,14 @@ where
     Ok(value.and_then(parse_optional_string))
 }
 
+fn deserialize_f64<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.and_then(parse_optional_f64).unwrap_or_default())
+}
+
 fn deserialize_string<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -317,23 +430,20 @@ struct QiandaoItem {
 }
 
 #[derive(Debug, serde::Deserialize)]
-struct NodeJsOutput {
-    #[serde(default)]
-    _code: Option<String>,
-    #[serde(default)]
-    error: Option<String>,
-    #[serde(default)]
-    data: Option<NodeJsData>,
-}
-
-#[derive(Debug, serde::Deserialize)]
 struct NodeJsData {
+    #[serde(default, deserialize_with = "deserialize_f64")]
     fire_per_rmb: f64,
+    #[serde(default, deserialize_with = "deserialize_f64")]
     rmb_per_fire: f64,
+    #[serde(default, deserialize_with = "deserialize_f64")]
     ten_k: f64,
+    #[serde(default, deserialize_with = "deserialize_f64")]
     increase_ratio: f64,
+    #[serde(default, deserialize_with = "deserialize_string")]
     trading_volume: String,
+    #[serde(default, deserialize_with = "deserialize_string")]
     source: String,
+    #[serde(default, deserialize_with = "deserialize_string")]
     ts: String,
 }
 
@@ -376,6 +486,24 @@ mod tests {
         assert_eq!(snapshot.trading_volume.as_deref(), Some("123"));
         assert_eq!(snapshot.source, "千岛API-赛季专家");
         assert!(snapshot.source_time.is_some());
+    }
+
+    #[test]
+    fn parse_node_output_accepts_flat_and_nested_payloads() {
+        let flat = parse_node_output(
+            r#"{"fire_per_rmb":"200.5","rmb_per_fire":49.8753,"ten_k":49.8753,"increase_ratio":"1.25%","trading_volume":42,"source":"千岛API","ts":"2026-05-08 12:00"}"#,
+        )
+        .expect("flat node output should parse");
+        assert_eq!(flat.fire_per_rmb, 200.5);
+        assert_eq!(flat.increase_ratio, 1.25);
+        assert_eq!(flat.trading_volume, "42");
+
+        let nested = parse_node_output(
+            r#"{"data":{"fire_per_rmb":200.5,"rmb_per_fire":49.8753,"ten_k":49.8753,"increase_ratio":1.25,"trading_volume":"42","source":"千岛API","ts":"2026-05-08 12:00"}}"#,
+        )
+        .expect("nested node output should parse");
+        assert_eq!(nested.fire_per_rmb, 200.5);
+        assert_eq!(nested.rmb_per_fire, 49.8753);
     }
 
     #[tokio::test]

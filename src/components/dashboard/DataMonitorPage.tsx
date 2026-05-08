@@ -220,7 +220,6 @@ export default function DataMonitorPage() {
     let totalFailed = 0;
     let allFailures: SyncFailure[] = [];
     let hasMore = true;
-    let totalRecords = 0;
 
     try {
       if (dataType === "fire") {
@@ -239,11 +238,6 @@ export default function DataMonitorPage() {
 
           const records = result.data as FireHistoryRecord[];
 
-          if (offset === 0) {
-            totalRecords = records.length;
-            job.total = totalRecords;
-          }
-
           if (records.length === 0) {
             hasMore = false;
             break;
@@ -254,8 +248,10 @@ export default function DataMonitorPage() {
           totalFailed += pageResult.failed;
           allFailures = [...allFailures, ...pageResult.failures];
 
-          job.success = totalSuccess;
+          const processedCount = totalSuccess + totalFailed;
+          job.success = processedCount;
           job.failed = totalFailed;
+          job.total = records.length < PAGE_SIZE ? processedCount : processedCount + (PAGE_SIZE - records.length);
           job.failures = allFailures.slice(0, 10);
           setSyncJob({ ...job });
 
@@ -279,11 +275,6 @@ export default function DataMonitorPage() {
 
           const records = result.data as ItemsHistoryRecord[];
 
-          if (offset === 0) {
-            totalRecords = records.length;
-            job.total = totalRecords;
-          }
-
           if (records.length === 0) {
             hasMore = false;
             break;
@@ -294,8 +285,10 @@ export default function DataMonitorPage() {
           totalFailed += pageResult.failed;
           allFailures = [...allFailures, ...pageResult.failures];
 
-          job.success = totalSuccess;
+          const processedCount = totalSuccess + totalFailed;
+          job.success = processedCount;
           job.failed = totalFailed;
+          job.total = records.length < PAGE_SIZE ? processedCount : processedCount + (PAGE_SIZE - records.length);
           job.failures = allFailures.slice(0, 10);
           setSyncJob({ ...job });
 
@@ -312,7 +305,7 @@ export default function DataMonitorPage() {
       job.firstError = allFailures[0]?.reason ?? null;
       setSyncJob({ ...job });
 
-      if (totalRecords === 0) {
+      if (totalSuccess + totalFailed === 0) {
         toast.info("没有可同步的数据");
       } else if (job.status === "partial") {
         toast.error(`部分同步成功: 成功 ${totalSuccess}，失败 ${totalFailed}`);
