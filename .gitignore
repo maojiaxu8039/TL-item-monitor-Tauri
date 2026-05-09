@@ -30,3 +30,5 @@ test_*.rs
 .idea/
 *.swp
 *.swo
+server-standalone/target/
+server-standalone/Cargo.lock

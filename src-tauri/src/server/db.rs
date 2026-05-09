@@ -175,6 +175,17 @@ pub async fn get_all_seasons_list(pool: &SqlitePool) -> Vec<String> {
     rows.into_iter().map(|(id,)| id).collect()
 }
 
+/// 获取当前活跃赛季（is_current=1 且 ended_at 为空）
+pub async fn get_current_season(pool: &SqlitePool) -> Option<String> {
+    sqlx::query_scalar(
+        "SELECT id FROM seasons WHERE is_current = 1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1"
+    )
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
+}
+
 fn get_migration_started_at(season_id: &str) -> i64 {
     match season_id {
         "ss12" => 1776384000,
@@ -506,24 +517,41 @@ pub struct ItemSnapshotRecord {
     pub season_day: i32,
 }
 
-/// 查询火价快照历史（按模式）
+/// 查询火价快照历史（按模式，可选赛季天数范围筛选）
 pub async fn get_fire_history(
     pool: &SqlitePool,
     season_id: &str,
     market_mode: &str,
     limit: i32,
+    min_day: Option<i32>,
+    max_day: Option<i32>,
 ) -> Result<Vec<FireSnapshotRecord>, String> {
     let mode = MarketMode::parse(market_mode);
     let table = mode.fire_table(season_id);
+
+    let where_clause = match (min_day, max_day) {
+        (Some(min), Some(max)) if min > 0 && max > 0 => {
+            format!(" WHERE season_day >= {} AND season_day <= {} ", min, max)
+        }
+        (Some(min), _) if min > 0 => {
+            format!(" WHERE season_day >= {} ", min)
+        }
+        (_, Some(max)) if max > 0 => {
+            format!(" WHERE season_day <= {} ", max)
+        }
+        _ => String::new(),
+    };
 
     let query = format!(
         r#"
         SELECT rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day
         FROM {}
+        {}
         ORDER BY scraped_at DESC
         LIMIT ?
         "#,
-        table
+        table,
+        where_clause
     );
 
     let rows = sqlx::query(&query)
@@ -563,21 +591,6 @@ pub async fn archive_season(pool: &SqlitePool, season_id: &str) -> Result<(), St
 
     info!("开始归档赛季: {}", season_id);
 
-    let tables = vec![
-        format!("fire_price_snapshots_{}_normal", season_id),
-        format!("fire_price_snapshots_{}_expert", season_id),
-        format!("item_snapshots_{}_normal", season_id),
-        format!("item_snapshots_{}_expert", season_id),
-    ];
-
-    for table in &tables {
-        sqlx::query(&format!("DROP TABLE IF EXISTS {}", table))
-            .execute(pool)
-            .await
-            .map_err(|e| format!("删除表 {} 失败: {}", table, e))?;
-        info!("已删除表: {}", table);
-    }
-
     let now = chrono::Utc::now().timestamp();
     let update_result = sqlx::query("UPDATE seasons SET ended_at = ?, is_current = 0 WHERE id = ?")
         .bind(now)
@@ -590,7 +603,7 @@ pub async fn archive_season(pool: &SqlitePool, season_id: &str) -> Result<(), St
             if result.rows_affected() == 0 {
                 info!("赛季 {} 在 seasons 表中不存在或已归档", season_id);
             } else {
-                info!("已标记赛季 {} 的归档时间", season_id);
+                info!("已标记赛季 {} 的归档时间 (ended_at={})", season_id, now);
             }
         }
         Err(e) => {
@@ -600,6 +613,69 @@ pub async fn archive_season(pool: &SqlitePool, season_id: &str) -> Result<(), St
 
     info!("赛季 {} 归档完成", season_id);
     Ok(())
+}
+
+/// 重置指定赛季的单个表（清空数据但保留表结构）
+pub async fn reset_table(
+    pool: &SqlitePool,
+    season_id: &str,
+    table_type: &str,
+    market_mode: &str,
+) -> Result<(), String> {
+    validate_season_id(season_id)?;
+    
+    let table = match (table_type, market_mode) {
+        ("fire", "normal") => format!("fire_price_snapshots_{}_normal", season_id),
+        ("fire", "expert") => format!("fire_price_snapshots_{}_expert", season_id),
+        ("items", "normal") => format!("item_snapshots_{}_normal", season_id),
+        ("items", "expert") => format!("item_snapshots_{}_expert", season_id),
+        _ => return Err("无效的表类型".to_string()),
+    };
+    
+    // 检查表是否存在
+    let exists: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?"
+    )
+    .bind(&table)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| format!("检查表失败: {}", e))?;
+    
+    if exists == 0 {
+        return Err(format!("表 {} 不存在", table));
+    }
+    
+    // 清空表数据（使用 DELETE 而不是 DROP，保留表结构）
+    sqlx::query(&format!("DELETE FROM {}", table))
+        .execute(pool)
+        .await
+        .map_err(|e| format!("清空表 {} 失败: {}", table, e))?;
+    
+    info!("已重置表: {}，共删除了 {} 条记录", table, 0);
+    Ok(())
+}
+
+/// 重置指定赛季的所有表
+pub async fn reset_season_tables(
+    pool: &SqlitePool,
+    season_id: &str,
+    tables: &[String],
+) -> Result<Vec<String>, String> {
+    validate_season_id(season_id)?;
+    
+    let mut results = Vec::new();
+    
+    for table_name in tables {
+        match reset_table(pool, season_id, 
+            if table_name.contains("fire") { "fire" } else { "items" },
+            if table_name.contains("expert") { "expert" } else { "normal" }
+        ).await {
+            Ok(_) => results.push(format!("✓ {}", table_name)),
+            Err(e) => results.push(format!("✗ {}: {}", table_name, e)),
+        }
+    }
+    
+    Ok(results)
 }
 
 #[derive(Debug, Serialize)]
@@ -676,6 +752,19 @@ pub async fn init_new_season(
         .execute(pool)
         .await
         .map_err(|e| format!("插入赛季记录失败: {}", e))?;
+
+    // 将新赛季设为当前赛季（is_current=1）
+    sqlx::query("UPDATE seasons SET is_current = 0")
+        .execute(pool)
+        .await
+        .ok();
+    sqlx::query("UPDATE seasons SET is_current = 1, ended_at = NULL WHERE id = ?")
+        .bind(season_id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("设置当前赛季失败: {}", e))?;
+    
+    info!("已设置 {} 为当前赛季", season_id);
 
     let mut created_tables = Vec::new();
 
@@ -856,19 +945,36 @@ pub async fn get_items_history_all(
     market_mode: &str,
     limit: i32,
     offset: i32,
+    min_day: Option<i32>,
+    max_day: Option<i32>,
 ) -> Result<Vec<ItemSnapshotWithInfo>, String> {
     let mode = MarketMode::parse(market_mode);
     let table = mode.items_table(season_id);
+
+    let where_clause = match (min_day, max_day) {
+        (Some(min), Some(max)) if min > 0 && max > 0 => {
+            format!(" WHERE season_day >= {} AND season_day <= {} ", min, max)
+        }
+        (Some(min), _) if min > 0 => {
+            format!(" WHERE season_day >= {} ", min)
+        }
+        (_, Some(max)) if max > 0 => {
+            format!(" WHERE season_day <= {} ", max)
+        }
+        _ => String::new(),
+    };
 
     let query = format!(
         r#"
         SELECT item_id, name, item_type, fire_price, scraped_at, season_day
         FROM {}
+        {}
         ORDER BY scraped_at DESC
         LIMIT ?
         OFFSET ?
         "#,
-        table
+        table,
+        where_clause
     );
 
     let rows = sqlx::query(&query)

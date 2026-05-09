@@ -1,5 +1,5 @@
 # 必填：设置强密码
-admin_password: ""
+admin_password: "8039"
 
 season_id: "ss12"
 http_port: 8080
@@ -26,3 +26,4 @@ rate_limit:
 cors_allowed_origins:
   - "http://localhost:5173"
   - "http://localhost:8080"
+  - "http://localhost:38457"

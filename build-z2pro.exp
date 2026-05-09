@@ -1,0 +1,105 @@
+#!/usr/bin/expect -f
+
+set timeout 60
+set host "100.124.122.65"
+set port "10039"
+set user "15510607744"
+set pass "!Mjx452212889"
+
+spawn ssh -p $port -o StrictHostKeyChecking=no $user@$host
+expect "password:"
+send "$pass\r"
+
+expect "$ "
+puts "Connected!"
+
+# Create home directory and set HOME
+send "mkdir -p /home/15510607744 && export HOME=/home/15510607744 && echo HOME=\$HOME\r"
+expect "$ "
+
+send "export HOME=/home/15510607744 && /root/.cargo/bin/rustc --version 2>/dev/null || echo NO_RUST\r"
+expect {
+    "NO_RUST" {
+        puts "Installing Rust..."
+        send "export HOME=/home/15510607744 && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable 2>&1\r"
+        expect {
+            -re "Finished|complete|installed" {
+                puts "Rust installed!"
+            }
+            timeout {
+                puts "Rust install timed out"
+            }
+        }
+    }
+    -re "rustc.*version" {
+        puts "Rust already installed"
+    }
+    timeout {
+        puts "Timeout checking Rust"
+    }
+}
+
+expect "$ "
+
+send "export HOME=/home/15510607744 && /root/.cargo/bin/cargo --version\r"
+expect "$ "
+puts "Cargo ready!"
+
+send "export HOME=/home/15510607744 && mkdir -p /workspace && chmod 777 /workspace\r"
+expect "$ "
+
+send "test -d /workspace/tl-monitor && echo EXISTS || echo NEED_CLONE\r"
+expect {
+    "EXISTS" {
+        puts "Repo exists, pulling..."
+        send "export HOME=/home/15510607744 && cd /workspace/tl-monitor && git pull 2>&1\r"
+        expect "$ "
+    }
+    "NEED_CLONE" {
+        puts "Cloning repo..."
+        send "export HOME=/home/15510607744 && cd /workspace && git clone https://github.com/maojiaxu8039/TL-item-monitor-Tauri.git tl-monitor 2>&1\r"
+        expect {
+            -re "Cloning|Receiving|Resolving" {
+                exp_continue
+            }
+            "$ " {}
+        }
+    }
+}
+
+expect "$ "
+puts "Building server..."
+
+send "export HOME=/home/15510607744 && cd /workspace/tl-monitor/server-standalone && /root/.cargo/bin/cargo build --release 2>&1\r"
+
+set timeout 1200
+expect {
+    -re "Finished.*release" {
+        puts "BUILD SUCCESSFUL!"
+    }
+    -re "error\\[E" {
+        puts "Build error detected"
+    }
+    timeout {
+        puts "Build timeout"
+    }
+}
+
+expect "$ "
+
+send "ls -la /workspace/tl-monitor/server-standalone/target/release/server 2>&1\r"
+expect "$ "
+
+send "cp /workspace/tl-monitor/server-standalone/target/release/server /workspace/ && chmod +x /workspace/server\r"
+expect "$ "
+
+send "ls -la /workspace/server\r"
+expect "$ "
+
+puts "====================================="
+puts "Server binary ready at /workspace/server"
+puts "====================================="
+
+send "exit\r"
+expect eof
+puts "Done!"

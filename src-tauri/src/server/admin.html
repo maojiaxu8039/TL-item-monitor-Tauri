@@ -239,6 +239,64 @@
             font-size: 12px;
             color: rgba(255,255,255,0.7);
         }
+        .switch-group {
+            display: flex;
+            gap: 20px;
+            margin-top: 8px;
+        }
+        .switch-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 15px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .switch-item:hover {
+            background: #e9ecef;
+        }
+        .switch-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .switch-item span {
+            font-size: 14px;
+            color: #495057;
+        }
+        .reset-table-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 8px;
+        }
+        .reset-table-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .reset-table-item:hover {
+            background: #f5f5f5;
+            border-color: #ccc;
+        }
+        .reset-table-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        .reset-table-item span {
+            font-size: 13px;
+            color: #333;
+        }
     </style>
 </head>
 <body>
@@ -318,11 +376,29 @@
         </div>
 
         <div id="tab-config" class="tab-content">
+            <div class="card" style="border: 2px solid #4CAF50; background: #f9fff9;">
+                <h2>🔐 管理员认证</h2>
+                <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                    <input type="password" id="cfg-password" placeholder="输入管理员密码" style="width: 200px;">
+                    <button type="button" class="btn btn-success" onclick="authenticate()">认证</button>
+                </div>
+                <div id="auth-status" style="margin-top: 10px; font-size: 14px;"></div>
+            </div>
+
             <div class="card">
                 <h2>服务器配置</h2>
                 <div class="form-group">
-                    <label>管理员密码 (用于加载和保存配置)</label>
-                    <input type="password" id="cfg-password" placeholder="输入管理员密码">
+                    <label>采集模式开关</label>
+                    <div class="switch-group">
+                        <label class="switch-item">
+                            <input type="checkbox" id="scrape-normal" checked>
+                            <span>普通服采集</span>
+                        </label>
+                        <label class="switch-item">
+                            <input type="checkbox" id="scrape-expert">
+                            <span>专家服采集</span>
+                        </label>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>season_id</label>
@@ -392,6 +468,45 @@
                     <button type="submit" class="btn btn-primary">保存物品配置</button>
                 </form>
             </div>
+
+            <div class="card" style="border: 2px solid #dc2626; background: #fff5f5;">
+                <h2 style="color: #dc2626;">⚠️ 数据库危险操作</h2>
+                <div class="danger-warning" style="background: #fee2e2; border: 1px solid #fecaca; border-radius: 6px; padding: 12px; margin-bottom: 15px;">
+                    <p style="color: #991b1b; font-size: 13px; margin: 0;">
+                        <strong>⚠️ 警告：此操作不可逆！</strong><br>
+                        重置表将清空所有数据，但保留表结构。此操作主要用于清理错误数据或重新开始采集。
+                    </p>
+                </div>
+                <div class="form-group">
+                    <label>选择赛季</label>
+                    <select id="reset-season" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>选择要重置的表（可多选）</label>
+                    <div class="reset-table-grid">
+                        <label class="reset-table-item">
+                            <input type="checkbox" id="reset-fire-normal" value="fire_price_snapshots">
+                            <span>🔥 火价-普通服</span>
+                        </label>
+                        <label class="reset-table-item">
+                            <input type="checkbox" id="reset-fire-expert" value="fire_price_snapshots">
+                            <span>🔥 火价-专家服</span>
+                        </label>
+                        <label class="reset-table-item">
+                            <input type="checkbox" id="reset-items-normal" value="item_snapshots">
+                            <span>📦 物品-普通服</span>
+                        </label>
+                        <label class="reset-table-item">
+                            <input type="checkbox" id="reset-items-expert" value="item_snapshots">
+                            <span>📦 物品-专家服</span>
+                        </label>
+                    </div>
+                </div>
+                <div style="margin-top: 15px;">
+                    <button type="button" class="btn btn-danger" onclick="resetTables()">⚠️ 确认重置选中表</button>
+                </div>
+            </div>
         </div>
 
         <div id="tab-export" class="tab-content">
@@ -422,10 +537,10 @@
                         <div class="form-group">
                             <label>时间范围</label>
                             <select id="export-range">
-                                <option value="1">最近 1 天</option>
-                                <option value="3">最近 3 天</option>
-                                <option value="7" selected>最近 7 天</option>
-                                <option value="30">最近 30 天</option>
+                                <option value="1">赛季前 1 天</option>
+                                <option value="3">赛季前 3 天</option>
+                                <option value="7" selected>赛季前 7 天</option>
+                                <option value="30">赛季前 30 天</option>
                                 <option value="season">整个赛季</option>
                             </select>
                         </div>
@@ -440,10 +555,6 @@
                 <div class="card">
                     <h2>赛季管理</h2>
                     <div class="form-group">
-                        <label>管理员密码</label>
-                        <input type="password" id="admin-password" placeholder="输入管理员密码">
-                    </div>
-                    <div class="form-group">
                         <label>season_id</label>
                         <input type="text" id="season-input" placeholder="例如: ss12">
                     </div>
@@ -452,9 +563,8 @@
                         <input type="text" id="season-name-input" placeholder="例如: SS12 赛季">
                     </div>
                     <div class="form-group">
-                        <label>开服时间戳 (必填，Unix秒)</label>
-                        <input type="number" id="season-started-at" placeholder="例如: 1735689600">
-                        <small style="color:#999">请输入正确的开服时间戳，用于计算赛季天数</small>
+                        <label>开服日期 (必填)</label>
+                        <input type="datetime-local" id="season-started-at" placeholder="选择开服日期时间">
                     </div>
                     <div style="margin-top: 15px;">
                         <button type="button" class="btn btn-primary" id="btn-init-season">初始化赛季</button>
@@ -466,6 +576,96 @@
     <script>
         let serverConfig = null;
         let apiPassword = '';
+        let isAuthenticated = false;
+
+        function updateAuthStatus(success, message) {
+            const status = document.getElementById('auth-status');
+            if (success) {
+                status.innerHTML = '<span style="color: green;">✓ 已认证</span>';
+                isAuthenticated = true;
+            } else {
+                status.innerHTML = '<span style="color: red;">✗ ' + message + '</span>';
+                isAuthenticated = false;
+            }
+        }
+
+        async function authenticate() {
+            const password = document.getElementById('cfg-password').value;
+            if (!password) {
+                updateAuthStatus(false, '请输入密码');
+                return;
+            }
+            try {
+                const resp = await fetch('/api/admin/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                const data = await resp.json();
+                
+                if (data.success) {
+                    serverConfig = data.data;
+                    apiPassword = password;
+                    updateAuthStatus(true, '');
+                    showAlert('success', '认证成功');
+                    loadConfigFields();
+                } else {
+                    updateAuthStatus(false, data.error || '认证失败');
+                    serverConfig = null;
+                    apiPassword = '';
+                }
+            } catch (e) {
+                updateAuthStatus(false, e.message);
+                serverConfig = null;
+                apiPassword = '';
+            }
+        }
+
+        function loadConfigFields() {
+            if (!serverConfig) return;
+            document.getElementById('cfg-season').value = serverConfig.season_id;
+            document.getElementById('cfg-port').value = serverConfig.http_port;
+            document.getElementById('cfg-cors').value = (serverConfig.cors_allowed_origins || []).join(', ');
+            document.getElementById('cfg-rate-limit').value = (serverConfig.rate_limit ? serverConfig.rate_limit.enabled : true).toString();
+
+            // Load scrape modes
+            if (serverConfig.scrape_modes) {
+                const normalMode = serverConfig.scrape_modes.find(m => m.mode === 'normal');
+                const expertMode = serverConfig.scrape_modes.find(m => m.mode === 'expert');
+                document.getElementById('scrape-normal').checked = normalMode ? normalMode.enabled : true;
+                document.getElementById('scrape-expert').checked = expertMode ? expertMode.enabled : false;
+            }
+
+            if (serverConfig.api_config) {
+                document.getElementById('api-qiandao-tag-normal').value = serverConfig.api_config.qiandao_tag_id_normal || '';
+                document.getElementById('api-qiandao-spec-normal').value = serverConfig.api_config.qiandao_spec_id_normal || '';
+                document.getElementById('api-qiandao-tag-expert').value = serverConfig.api_config.qiandao_tag_id_expert || '';
+                document.getElementById('api-qiandao-spec-expert').value = serverConfig.api_config.qiandao_spec_id_expert || '';
+                document.getElementById('api-luosi-season-normal').value = serverConfig.api_config.luosi_season_id_normal || '';
+                document.getElementById('api-luosi-season-expert').value = serverConfig.api_config.luosi_season_id_expert || '';
+            }
+        }
+
+        async function loadConfig() {
+            if (!isAuthenticated) {
+                showAlert('error', '请先进行管理员认证');
+                return;
+            }
+            if (serverConfig) {
+                loadConfigFields();
+                showAlert('success', '配置已加载');
+            } else {
+                showAlert('error', '请先进行管理员认证');
+            }
+        }
+
+        function getPassword() {
+            if (!isAuthenticated || !apiPassword) {
+                showAlert('error', '请先进行管理员认证');
+                return null;
+            }
+            return apiPassword;
+        }
 
         function showAlert(type, message) {
             const container = document.getElementById('alert-container');
@@ -616,12 +816,27 @@
                 const resp = await fetch('/seasons');
                 const data = await resp.json();
                 if (data.success && data.data) {
-                    const select = document.getElementById('export-season');
+                    const exportSelect = document.getElementById('export-season');
+                    const resetSelect = document.getElementById('reset-season');
+                    
+                    // 清空现有选项（保留第一个"当前赛季"）
+                    while (exportSelect.options.length > 1) {
+                        exportSelect.remove(1);
+                    }
+                    while (resetSelect.options.length > 0) {
+                        resetSelect.remove(0);
+                    }
+                    
                     data.data.forEach(season => {
-                        const opt = document.createElement('option');
-                        opt.value = season;
-                        opt.textContent = season;
-                        select.appendChild(opt);
+                        const opt1 = document.createElement('option');
+                        opt1.value = season;
+                        opt1.textContent = season;
+                        exportSelect.appendChild(opt1);
+                        
+                        const opt2 = document.createElement('option');
+                        opt2.value = season;
+                        opt2.textContent = season;
+                        resetSelect.appendChild(opt2);
                     });
                 }
             } catch (e) {
@@ -635,28 +850,36 @@
             const rangeSelect = document.getElementById('export-range').value;
 
             try {
-                let limit = 99999;
+                let min_day = null;
+                let max_day = null;
 
                 if (rangeSelect !== 'season') {
                     const days = parseInt(rangeSelect);
-                    const now = Math.floor(Date.now() / 1000);
-                    const cutoff = now - (days * 86400);
-                    limit = 99999;
                     const exportSeason = document.getElementById('export-season').value;
-                    const seasonParam = exportSeason ? `&season=${exportSeason}` : '';
-                    await fetch(`/season-start${seasonParam ? '?season=' + exportSeason : ''}`).then(r => r.json()).then(data => {
-                        if (data.success && data.data.started_at > 0) {
-                            const seasonStart = data.data.started_at;
-                            const effectiveCutoff = Math.max(cutoff, seasonStart);
-                            const hours = Math.ceil((now - effectiveCutoff) / 3600);
-                            limit = Math.min(hours + 5, 99999);
-                        }
-                    }).catch(() => {});
+                    
+                    // 获取当前赛季天数
+                    const seasonResp = await fetch(`/season-start${exportSeason ? '?season=' + exportSeason : ''}`);
+                    const seasonData = await seasonResp.json();
+                    
+                    if (seasonData.success && seasonData.data.started_at > 0) {
+                        const seasonStart = seasonData.data.started_at;
+                        const now = Math.floor(Date.now() / 1000);
+                        const currentDay = Math.floor((now - seasonStart) / 86400) + 1;
+                        
+                        max_day = currentDay;
+                        min_day = Math.max(1, currentDay - days + 1);
+                    }
                 }
 
                 const endpoint = type === 'fire-history' ? '/fire-history' : '/items-history-all';
                 const seasonParam = document.getElementById('export-season').value ? `&season=${document.getElementById('export-season').value}` : '';
-                const resp = await fetch(`${endpoint}?mode=${mode}&limit=${limit}${seasonParam}`);
+                
+                let dayParams = '';
+                if (min_day !== null && max_day !== null) {
+                    dayParams = `&min_day=${min_day}&max_day=${max_day}`;
+                }
+                
+                const resp = await fetch(`${endpoint}?mode=${mode}&limit=99999${seasonParam}${dayParams}`);
                 const data = await resp.json();
                 
                 if (data.success) {
@@ -669,10 +892,19 @@
                             return;
                         }
                         const headers = Object.keys(items[0]);
-                        const rows = items.map(item => headers.map(h => JSON.stringify(item[h] ?? '')).join(','));
-                        content = [headers.join(','), ...rows].join('\n');
+                        const escapeCSV = (val) => {
+                            if (val === null || val === undefined) return '';
+                            const str = String(val);
+                            if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+                                return '"' + str.replace(/"/g, '""') + '"';
+                            }
+                            return str;
+                        };
+                        const rows = items.map(item => headers.map(h => escapeCSV(item[h])).join(','));
+                        const BOM = '\uFEFF';
+                        content = BOM + [headers.map(h => escapeCSV(h)).join(','), ...rows].join('\n');
                         filename = `tl_${mode}_${type}_${new Date().toISOString().slice(0,10)}.csv`;
-                        mimeType = 'text/csv';
+                        mimeType = 'text/csv;charset=utf-8';
                     } else {
                         content = JSON.stringify(data.data, null, 2);
                         filename = `tl_${mode}_${type}_${new Date().toISOString().slice(0,10)}.json`;
@@ -700,6 +932,87 @@
             exportData('csv');
         }
 
+        async function resetTables() {
+            const password = getPassword();
+            if (!password) return;
+
+            const season_id = document.getElementById('reset-season').value;
+            const tables = [];
+            const tableTypes = [];
+
+            if (document.getElementById('reset-fire-normal').checked) {
+                tables.push('fire_price_snapshots_ss12_normal');
+                tableTypes.push({ type: 'fire', mode: 'normal' });
+            }
+            if (document.getElementById('reset-fire-expert').checked) {
+                tables.push('fire_price_snapshots_ss12_expert');
+                tableTypes.push({ type: 'fire', mode: 'expert' });
+            }
+            if (document.getElementById('reset-items-normal').checked) {
+                tables.push('item_snapshots_ss12_normal');
+                tableTypes.push({ type: 'items', mode: 'normal' });
+            }
+            if (document.getElementById('reset-items-expert').checked) {
+                tables.push('item_snapshots_ss12_expert');
+                tableTypes.push({ type: 'items', mode: 'expert' });
+            }
+
+            if (tables.length === 0) {
+                showAlert('error', '请至少选择一个要重置的表');
+                return;
+            }
+
+            const tableNames = tables.join(', ');
+            if (!confirm(`⚠️ 危险操作确认\n\n即将重置以下表：\n${tableNames}\n\n此操作将清空所有数据，且无法恢复！\n\n输入"重置"确认：`)) return;
+            
+            const confirmText = prompt('请再次输入"重置"确认此危险操作：');
+            if (confirmText !== '重置') {
+                showAlert('error', '操作已取消');
+                return;
+            }
+
+            showAlert('warning', '正在重置表，请稍候...');
+            
+            let successCount = 0;
+            let failCount = 0;
+            
+            for (const tt of tableTypes) {
+                try {
+                    const resp = await fetch('/admin/reset-table', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            password,
+                            season_id,
+                            table_type: tt.type,
+                            market_mode: tt.mode
+                        })
+                    });
+                    const data = await resp.json();
+                    if (data.success) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                        showAlert('error', data.error || '重置失败');
+                    }
+                } catch (e) {
+                    failCount++;
+                    showAlert('error', '重置失败: ' + e.message);
+                }
+            }
+
+            if (failCount === 0) {
+                showAlert('success', `已成功重置 ${successCount} 个表`);
+                // Clear checkboxes
+                document.getElementById('reset-fire-normal').checked = false;
+                document.getElementById('reset-fire-expert').checked = false;
+                document.getElementById('reset-items-normal').checked = false;
+                document.getElementById('reset-items-expert').checked = false;
+            } else {
+                showAlert('error', `成功: ${successCount}，失败: ${failCount}`);
+            }
+        }
+
         async function initSeason() {
             const season_id = document.getElementById('season-input').value.trim();
             if (!season_id) {
@@ -707,23 +1020,17 @@
                 return;
             }
             const season_name = document.getElementById('season-name-input').value.trim();
-            const password = document.getElementById('admin-password').value;
-            if (!password) {
-                showAlert('error', '请输入管理员密码');
-                return;
-            }
-            const started_at_input = document.getElementById('season-started-at').value.trim();
+            const password = getPassword();
+            if (!password) return;
+            
+            const started_at_input = document.getElementById('season-started-at').value;
             
             if (!started_at_input) {
-                showAlert('error', '请输入开服时间戳（必填）');
+                showAlert('error', '请选择开服日期（必填）');
                 return;
             }
             
-            const started_at = parseInt(started_at_input, 10);
-            if (isNaN(started_at) || started_at <= 0) {
-                showAlert('error', '开服时间戳必须是正整数');
-                return;
-            }
+            const started_at = Math.floor(new Date(started_at_input).getTime() / 1000);
 
             const requestBody = { password, season_id, started_at, season_name };
 
@@ -751,11 +1058,8 @@
                 showAlert('error', '请输入 season_id');
                 return;
             }
-            const password = document.getElementById('admin-password').value;
-            if (!password) {
-                showAlert('error', '请输入管理员密码');
-                return;
-            }
+            const password = getPassword();
+            if (!password) return;
             if (!confirm(`确定要归档赛季 ${season_id} 吗？`)) return;
 
             try {
@@ -783,11 +1087,16 @@
 
             document.getElementById('config-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const password = document.getElementById('cfg-password').value;
+                const password = getPassword();
+                if (!password) return;
                 const config = {
                     password: password,
                     cors_allowed_origins: document.getElementById('cfg-cors').value.split(',').map(s => s.trim()).filter(s => s),
-                    rate_limit_enabled: document.getElementById('cfg-rate-limit').value === 'true'
+                    rate_limit_enabled: document.getElementById('cfg-rate-limit').value === 'true',
+                    scrape_modes: [
+                        { mode: 'normal', enabled: document.getElementById('scrape-normal').checked },
+                        { mode: 'expert', enabled: document.getElementById('scrape-expert').checked }
+                    ]
                 };
 
                 try {
@@ -809,11 +1118,8 @@
             });
 
             async function saveApiConfig() {
-            const password = document.getElementById('admin-password').value;
-            if (!password) {
-                showAlert('error', '请输入管理员密码');
-                return;
-            }
+            const password = getPassword();
+            if (!password) return;
             const api_config = {
                 qiandao_tag_id_normal: document.getElementById('api-qiandao-tag-normal').value,
                 qiandao_spec_id_normal: document.getElementById('api-qiandao-spec-normal').value,
@@ -855,14 +1161,12 @@
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
                 loadStatus();
-                loadConfig();
                 loadSeasons();
                 setInterval(loadStatus, 30000);
                 addListeners();
             });
         } else {
             loadStatus();
-            loadConfig();
             loadSeasons();
             setInterval(loadStatus, 30000);
             addListeners();

@@ -53,9 +53,14 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
       return;
     }
     
-    const startedAt = parseInt(newSeasonStartedAt, 10);
-    if (isNaN(startedAt) || startedAt <= 0) {
-      toast.error("请输入正确的开服时间戳（正整数Unix秒）");
+    if (!newSeasonStartedAt) {
+      toast.error("请选择开服日期");
+      return;
+    }
+    
+    const startedAt = Math.floor(new Date(newSeasonStartedAt).getTime() / 1000);
+    if (startedAt <= 0) {
+      toast.error("开服日期格式不正确");
       return;
     }
     
@@ -282,15 +287,14 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
               </div>
 
               <div>
-                <label className="block text-xs text-slate-500 mb-1">开服时间戳 (Unix秒)</label>
+                <label className="block text-xs text-slate-500 mb-1">开服日期 *</label>
                 <input
-                  type="number"
+                  type="datetime-local"
                   value={newSeasonStartedAt}
                   onChange={(e) => setNewSeasonStartedAt(e.target.value)}
-                  placeholder="例如: 1735689600"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                 />
-                <p className="text-xs text-slate-400 mt-1">必填：用于计算赛季天数</p>
+                <p className="text-xs text-slate-400 mt-1">必填，用于计算赛季天数</p>
               </div>
 
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">

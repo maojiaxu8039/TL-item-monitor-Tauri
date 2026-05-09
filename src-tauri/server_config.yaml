@@ -1,0 +1,28 @@
+season_id: ss12
+http_port: 8080
+scrape_modes:
+- mode: normal
+  enabled: true
+- mode: expert
+  enabled: true
+admin_password: '8039'
+api_config:
+  qiandao_tag_id_normal: '1560053'
+  qiandao_spec_id_normal: '267416'
+  qiandao_tag_id_expert: '1560055'
+  qiandao_spec_id_expert: '267417'
+  luosi_season_id_normal: 1401
+  luosi_season_id_expert: 1431
+cors_allowed_origins:
+  - "http://localhost:5173"
+  - "http://localhost:8080"
+  - "http://localhost:38457"
+environment: ''
+rate_limit:
+  enabled: true
+  requests_per_minute: 60
+  burst_size: 10
+api_endpoints:
+  luosi: http://115.231.176.101:8080
+  qiandao: https://api.qiandao.com
+  qiandao_fire_endpoint: /c2c-web/v1/common/currency-spu-price-list

@@ -89,7 +89,7 @@ function createEmptySyncJob(dataType: DataType, mode: SyncMode, range: TimeRange
 
 export default function DataMonitorPage() {
   const [serverUrl, setServerUrl] = useState(() => {
-    return localStorage.getItem("server_url") || "http://localhost:8080";
+    return localStorage.getItem("server_url") || "http://848zk4ml8421.vicp.fun:26767";
   });
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);

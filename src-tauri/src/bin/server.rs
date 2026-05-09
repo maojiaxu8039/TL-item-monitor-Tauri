@@ -598,10 +598,16 @@ async fn handle_request(
         }
         ("POST", "/api/admin/update-config") => {
             #[derive(serde::Deserialize)]
+            struct ScrapeModeConfig {
+                mode: String,
+                enabled: bool,
+            }
+            #[derive(serde::Deserialize)]
             struct UpdateConfigRequest {
                 password: Option<String>,
                 cors_allowed_origins: Option<Vec<String>>,
                 rate_limit_enabled: Option<bool>,
+                scrape_modes: Option<Vec<ScrapeModeConfig>>,
             }
             match serde_json::from_str::<UpdateConfigRequest>(&request_body) {
                 Ok(req) => {
@@ -621,6 +627,15 @@ async fn handle_request(
                             }
                             if let Some(enabled) = req.rate_limit_enabled {
                                 new_config.rate_limit.enabled = enabled;
+                            }
+                            if let Some(modes) = req.scrape_modes {
+                                new_config.scrape_modes = modes
+                                    .into_iter()
+                                    .map(|m| tl_monitor::server::config::ScrapeMode {
+                                        mode: m.mode,
+                                        enabled: m.enabled,
+                                    })
+                                    .collect();
                             }
                             if let Err(e) = tl_monitor::server::config::save_config(
                                 &*get_config_path(),
@@ -669,7 +684,12 @@ async fn handle_request(
                 get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(24);
+                .unwrap_or(99999);
+
+            let min_day: Option<i32> = get_query_param(query_string, "min_day")
+                .and_then(|s| s.parse().ok());
+            let max_day: Option<i32> = get_query_param(query_string, "max_day")
+                .and_then(|s| s.parse().ok());
 
             let market_mode = if mode == "expert" {
                 "season_expert"
@@ -680,7 +700,7 @@ async fn handle_request(
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
 
-            match db::get_fire_history(&state.db, &season_id, market_mode, limit).await {
+            match db::get_fire_history(&state.db, &season_id, market_mode, limit, min_day, max_day).await {
                 Ok(records) => {
                     let body = serde_json::to_string_pretty(&ApiResponse {
                         success: true,
@@ -761,6 +781,11 @@ async fn handle_request(
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0);
 
+            let min_day: Option<i32> = get_query_param(query_string, "min_day")
+                .and_then(|s| s.parse().ok());
+            let max_day: Option<i32> = get_query_param(query_string, "max_day")
+                .and_then(|s| s.parse().ok());
+
             let market_mode = if mode == "expert" {
                 "season_expert"
             } else {
@@ -770,7 +795,7 @@ async fn handle_request(
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
 
-            match db::get_items_history_all(&state.db, &season_id, market_mode, limit, offset).await
+            match db::get_items_history_all(&state.db, &season_id, market_mode, limit, offset, min_day, max_day).await
             {
                 Ok(records) => {
                     let body = serde_json::to_string_pretty(&ApiResponse {
@@ -907,11 +932,19 @@ async fn handle_request(
                         .await
                         {
                             Ok(tables) => {
+                                // 初始化成功后立即触发一次采集
+                                info!("新赛季 {} 初始化成功，触发首次采集", req.season_id);
+                                let state_clone = state.clone();
+                                tokio::spawn(async move {
+                                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                                    collect_all_modes(&state_clone).await;
+                                });
+
                                 let response = InitSeasonResponse {
                                     success: true,
                                     season_id: req.season_id.clone(),
                                     tables_created: tables,
-                                    message: "新赛季初始化成功".to_string(),
+                                    message: "新赛季初始化成功，已触发首次采集".to_string(),
                                 };
                                 let body = serde_json::to_string_pretty(&ApiResponse {
                                     success: true,
@@ -1025,6 +1058,109 @@ async fn handle_request(
                             })
                             .unwrap_or_default();
                             (200, body)
+                        }
+                    }
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("请求格式错误: {}", e)),
+                    })
+                    .unwrap_or_default();
+                    (400, body)
+                }
+            }
+        }
+        ("POST", "/admin/reset-table") => {
+            #[derive(serde::Deserialize)]
+            struct ResetTableRequest {
+                password: String,
+                season_id: String,
+                table_type: String,
+                market_mode: String,
+            }
+            match serde_json::from_str::<ResetTableRequest>(&request_body) {
+                Ok(req) => {
+                    if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
+                        (401, body)
+                    } else {
+                        match db::reset_table(&state.db, &req.season_id, &req.table_type, &req.market_mode).await {
+                            Ok(_) => {
+                                let body = serde_json::to_string_pretty(&ApiResponse {
+                                    success: true,
+                                    data: Some(format!("表已重置: {}_{}_{}", req.season_id, req.table_type, req.market_mode)),
+                                    error: None,
+                                })
+                                .unwrap_or_default();
+                                (200, body)
+                            }
+                            Err(e) => {
+                                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                    success: false,
+                                    data: None,
+                                    error: Some(e),
+                                })
+                                .unwrap_or_default();
+                                (500, body)
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("请求格式错误: {}", e)),
+                    })
+                    .unwrap_or_default();
+                    (400, body)
+                }
+            }
+        }
+        ("POST", "/admin/reset-season") => {
+            #[derive(serde::Deserialize)]
+            struct ResetSeasonRequest {
+                password: String,
+                season_id: String,
+                tables: Vec<String>,
+            }
+            match serde_json::from_str::<ResetSeasonRequest>(&request_body) {
+                Ok(req) => {
+                    if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
+                        (401, body)
+                    } else {
+                        match db::reset_season_tables(&state.db, &req.season_id, &req.tables).await {
+                            Ok(results) => {
+                                let body = serde_json::to_string_pretty(&ApiResponse {
+                                    success: true,
+                                    data: Some(serde_json::json!({ "results": results })),
+                                    error: None,
+                                })
+                                .unwrap_or_default();
+                                (200, body)
+                            }
+                            Err(e) => {
+                                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                    success: false,
+                                    data: None,
+                                    error: Some(e),
+                                })
+                                .unwrap_or_default();
+                                (500, body)
+                            }
                         }
                     }
                 }
@@ -1263,6 +1399,17 @@ async fn run_collector(state: Arc<ServerState>, mut abort_rx: broadcast::Receive
 }
 
 async fn collect_all_modes(state: &Arc<ServerState>) {
+    // 检查是否有当前活跃赛季
+    match db::get_current_season(&state.db).await {
+        Some(current_season) => {
+            info!("当前活跃赛季: {}，开始采集", current_season);
+        }
+        None => {
+            info!("没有活跃的赛季（已全部归档），采集任务暂停");
+            return;
+        }
+    }
+
     let timestamp = match Utc::now()
         .with_minute(0)
         .and_then(|t| t.with_second(0))
