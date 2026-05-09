@@ -1,0 +1,53 @@
+#!/usr/bin/expect -f
+
+set timeout 30
+set host "100.124.122.65"
+set port "10039"
+set user "15510607744"
+set pass "!Mjx452212889"
+
+spawn ssh -p $port -o StrictHostKeyChecking=no $user@$host
+expect "password:"
+send "$pass\r"
+
+expect "$ "
+puts "Connected!"
+
+# Check Docker
+send "docker --version\r"
+expect "$ "
+puts "Docker is available"
+
+# Check if container is running
+send "docker ps -a | grep tl-build || echo NO_CONTAINER\r"
+expect "$ "
+
+# Create build script
+send "cat > /tmp/build.sh << 'EOF'\r"
+expect "$ "
+
+send "cd /tmp && git clone https://github.com/maojiaxu8039/TL-item-monitor-Tauri.git tl-monitor 2>&1\r"
+expect "$ "
+
+send "docker run --rm -v /tmp/tl-monitor/server-standalone:/app -v /tmp/.cargo:/usr/local/cargo rust:latest bash -c \"cd /app && cargo build --release 2>&1\" 2>&1\r"
+expect "$ "
+
+send "cp /tmp/tl-monitor/server-standalone/target/release/server /tmp/server 2>&1\r"
+expect "$ "
+
+send "chmod +x /tmp/server && ls -la /tmp/server\r"
+expect "$ "
+
+send "EOF\r"
+expect "$ "
+
+send "bash /tmp/build.sh\r"
+expect "$ "
+
+puts "====================================="
+puts "Build process initiated"
+puts "====================================="
+
+send "exit\r"
+expect eof
+puts "Done!"

@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  tl-monitor:
+    image: debian:stable-slim
+    container_name: tl-monitor-server
+    restart: unless-stopped
+    ports:
+      - "38457:8080"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    environment:
+      - TZ=Asia/Shanghai
+    command: >
+      sh -c "
+        cp /backup/tl-monitor-server /app/ &&
+        chmod +x /app/tl-monitor-server &&
+        cd /app &&
+        ./tl-monitor-server
+      "
+    volumes_from:
+      - backup
+
+  backup:
+    image: debian:stable-slim
+    container_name: tl-monitor-backup
+    volumes:
+      - ./tl-monitor-server:/backup/tl-monitor-server:ro
+      - ./tl-monitor-data:/app/data
+      - ./tl-monitor-config:/app/config
