@@ -700,24 +700,34 @@ async fn handle_request(
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
 
-            match db::get_fire_history(&state.db, &season_id, market_mode, limit, min_day, max_day).await {
-                Ok(records) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse {
-                        success: true,
-                        data: Some(records),
-                        error: None,
-                    })
-                    .unwrap_or_default();
-                    (200, body)
-                }
-                Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
-                        success: false,
-                        data: None,
-                        error: Some(e),
-                    })
-                    .unwrap_or_default();
-                    (500, body)
+            if let Err(e) = db::validate_season_id(&season_id) {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+                .unwrap_or_default();
+                (400, body)
+            } else {
+                match db::get_fire_history(&state.db, &season_id, market_mode, limit, min_day, max_day).await {
+                    Ok(records) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse {
+                            success: true,
+                            data: Some(records),
+                            error: None,
+                        })
+                        .unwrap_or_default();
+                        (200, body)
+                    }
+                    Err(e) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
+                        (500, body)
+                    }
                 }
             }
         }
@@ -739,26 +749,36 @@ async fn handle_request(
                 .unwrap_or_else(|| state.config.season_id.clone());
 
             if let Some(item_id) = item_id {
-                match db::get_items_history(&state.db, &item_id, &season_id, market_mode, limit)
-                    .await
-                {
-                    Ok(records) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse {
-                            success: true,
-                            data: Some(records),
-                            error: None,
-                        })
-                        .unwrap_or_default();
-                        (200, body)
-                    }
-                    Err(e) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
-                            success: false,
-                            data: None,
-                            error: Some(e),
-                        })
-                        .unwrap_or_default();
-                        (500, body)
+                if let Err(e) = db::validate_season_id(&season_id) {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(e),
+                    })
+                    .unwrap_or_default();
+                    (400, body)
+                } else {
+                    match db::get_items_history(&state.db, &item_id, &season_id, market_mode, limit)
+                        .await
+                    {
+                        Ok(records) => {
+                            let body = serde_json::to_string_pretty(&ApiResponse {
+                                success: true,
+                                data: Some(records),
+                                error: None,
+                            })
+                            .unwrap_or_default();
+                            (200, body)
+                        }
+                        Err(e) => {
+                            let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                success: false,
+                                data: None,
+                                error: Some(e),
+                            })
+                            .unwrap_or_default();
+                            (500, body)
+                        }
                     }
                 }
             } else {
@@ -795,25 +815,35 @@ async fn handle_request(
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
 
-            match db::get_items_history_all(&state.db, &season_id, market_mode, limit, offset, min_day, max_day).await
-            {
-                Ok(records) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse {
-                        success: true,
-                        data: Some(records),
-                        error: None,
-                    })
-                    .unwrap_or_default();
-                    (200, body)
-                }
-                Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
-                        success: false,
-                        data: None,
-                        error: Some(e),
-                    })
-                    .unwrap_or_default();
-                    (500, body)
+            if let Err(e) = db::validate_season_id(&season_id) {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+                .unwrap_or_default();
+                (400, body)
+            } else {
+                match db::get_items_history_all(&state.db, &season_id, market_mode, limit, offset, min_day, max_day).await
+                {
+                    Ok(records) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse {
+                            success: true,
+                            data: Some(records),
+                            error: None,
+                        })
+                        .unwrap_or_default();
+                        (200, body)
+                    }
+                    Err(e) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
+                        (500, body)
+                    }
                 }
             }
         }
@@ -836,25 +866,35 @@ async fn handle_request(
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
 
-            match db::get_fire_history_all(&state.db, &season_id, market_mode, limit, offset).await
-            {
-                Ok(records) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse {
-                        success: true,
-                        data: Some(records),
-                        error: None,
-                    })
-                    .unwrap_or_default();
-                    (200, body)
-                }
-                Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
-                        success: false,
-                        data: None,
-                        error: Some(e),
-                    })
-                    .unwrap_or_default();
-                    (500, body)
+            if let Err(e) = db::validate_season_id(&season_id) {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+                .unwrap_or_default();
+                (400, body)
+            } else {
+                match db::get_fire_history_all(&state.db, &season_id, market_mode, limit, offset).await
+                {
+                    Ok(records) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse {
+                            success: true,
+                            data: Some(records),
+                            error: None,
+                        })
+                        .unwrap_or_default();
+                        (200, body)
+                    }
+                    Err(e) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
+                        (500, body)
+                    }
                 }
             }
         }

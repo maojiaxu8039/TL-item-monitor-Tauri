@@ -579,14 +579,19 @@ async fn handle_request(
             let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
             let season_id = get_query_param(query_string, "season").unwrap_or_else(|| state.config.season_id.clone());
 
-            match server_db::get_fire_history(&state.db, &season_id, market_mode, limit, min_day, max_day).await {
-                Ok(records) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(records), error: None }).unwrap_or_default();
-                    (200, body)
-                }
-                Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
-                    (500, body)
+            if let Err(e) = server_db::validate_season_id(&season_id) {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                (400, body)
+            } else {
+                match server_db::get_fire_history(&state.db, &season_id, market_mode, limit, min_day, max_day).await {
+                    Ok(records) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(records), error: None }).unwrap_or_default();
+                        (200, body)
+                    }
+                    Err(e) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                        (500, body)
+                    }
                 }
             }
         }
@@ -598,14 +603,19 @@ async fn handle_request(
             let season_id = get_query_param(query_string, "season").unwrap_or_else(|| state.config.season_id.clone());
 
             if let Some(item_id) = item_id {
-                match server_db::get_items_history(&state.db, &item_id, &season_id, market_mode, limit).await {
-                    Ok(records) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(records), error: None }).unwrap_or_default();
-                        (200, body)
-                    }
-                    Err(e) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
-                        (500, body)
+                if let Err(e) = server_db::validate_season_id(&season_id) {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                    (400, body)
+                } else {
+                    match server_db::get_items_history(&state.db, &item_id, &season_id, market_mode, limit).await {
+                        Ok(records) => {
+                            let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(records), error: None }).unwrap_or_default();
+                            (200, body)
+                        }
+                        Err(e) => {
+                            let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                            (500, body)
+                        }
                     }
                 }
             } else {
@@ -622,14 +632,19 @@ async fn handle_request(
             let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
             let season_id = get_query_param(query_string, "season").unwrap_or_else(|| state.config.season_id.clone());
 
-            match server_db::get_items_history_all(&state.db, &season_id, market_mode, limit, offset, min_day, max_day).await {
-                Ok(records) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(records), error: None }).unwrap_or_default();
-                    (200, body)
-                }
-                Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
-                    (500, body)
+            if let Err(e) = server_db::validate_season_id(&season_id) {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                (400, body)
+            } else {
+                match server_db::get_items_history_all(&state.db, &season_id, market_mode, limit, offset, min_day, max_day).await {
+                    Ok(records) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(records), error: None }).unwrap_or_default();
+                        (200, body)
+                    }
+                    Err(e) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                        (500, body)
+                    }
                 }
             }
         }
@@ -640,14 +655,19 @@ async fn handle_request(
             let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
             let season_id = get_query_param(query_string, "season").unwrap_or_else(|| state.config.season_id.clone());
 
-            match server_db::get_fire_history_all(&state.db, &season_id, market_mode, limit, offset).await {
-                Ok(records) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(records), error: None }).unwrap_or_default();
-                    (200, body)
-                }
-                Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
-                    (500, body)
+            if let Err(e) = server_db::validate_season_id(&season_id) {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                (400, body)
+            } else {
+                match server_db::get_fire_history_all(&state.db, &season_id, market_mode, limit, offset).await {
+                    Ok(records) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(records), error: None }).unwrap_or_default();
+                        (200, body)
+                    }
+                    Err(e) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                        (500, body)
+                    }
                 }
             }
         }
@@ -962,10 +982,11 @@ async fn run_collector(state: Arc<ServerState>, mut abort_rx: broadcast::Receive
     info!("数据采集任务启动中...");
 
     let now = Utc::now();
-    let next_hour = match (now + chrono::Duration::hours(1))
+    let next_hour = match now
         .with_minute(0)
         .and_then(|t| t.with_second(0))
         .and_then(|t| t.with_nanosecond(0))
+        .map(|t| t + chrono::Duration::hours(1))
     {
         Some(t) => t,
         None => {
@@ -975,34 +996,68 @@ async fn run_collector(state: Arc<ServerState>, mut abort_rx: broadcast::Receive
     };
     let wait_secs = (next_hour - now).num_seconds();
 
-    info!("下次采集时间: {} ({} 秒后)", next_hour.format("%Y-%m-%d %H:%M:%S UTC"), wait_secs);
+    info!("首次采集后等待到下一个整点: {} ({} 秒后)", next_hour.format("%Y-%m-%d %H:%M:%S UTC"), wait_secs);
 
     info!("启动时执行首次采集...");
     collect_all_modes(&state).await;
 
+    let mut current_next_hour = next_hour;
+
     loop {
-        tokio::select! {
-            _ = abort_rx.recv() => {
-                info!("收到关闭信号，退出采集循环");
-                break;
-            }
-            _ = tokio::time::sleep(std::time::Duration::from_secs(SECONDS_PER_HOUR as u64)) => {
-                collect_all_modes(&state).await;
+        let now = Utc::now();
+        if now >= current_next_hour {
+            collect_all_modes(&state).await;
+            current_next_hour = match now
+                .with_minute(0)
+                .and_then(|t| t.with_second(0))
+                .and_then(|t| t.with_nanosecond(0))
+                .map(|t| t + chrono::Duration::hours(1))
+            {
+                Some(t) => t,
+                None => {
+                    error!("Failed to calculate next hour");
+                    tokio::time::sleep(std::time::Duration::from_secs(SECONDS_PER_HOUR as u64)).await;
+                    continue;
+                }
+            };
+        } else {
+            let sleep_secs = (current_next_hour - now).num_seconds();
+            tokio::select! {
+                _ = abort_rx.recv() => {
+                    info!("收到关闭信号，退出采集循环");
+                    break;
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_secs(sleep_secs as u64)) => {
+                    collect_all_modes(&state).await;
+                    current_next_hour = match Utc::now()
+                        .with_minute(0)
+                        .and_then(|t| t.with_second(0))
+                        .and_then(|t| t.with_nanosecond(0))
+                        .map(|t| t + chrono::Duration::hours(1))
+                    {
+                        Some(t) => t,
+                        None => {
+                            error!("Failed to calculate next hour");
+                            continue;
+                        }
+                    };
+                }
             }
         }
     }
 }
 
 async fn collect_all_modes(state: &Arc<ServerState>) {
-    match server_db::get_current_season(&state.db).await {
-        Some(current_season) => {
-            info!("当前活跃赛季: {}，开始采集", current_season);
+    let current_season = match server_db::get_current_season(&state.db).await {
+        Some(season) => {
+            info!("当前活跃赛季: {}，开始采集", season);
+            season
         }
         None => {
             info!("没有活跃的赛季（已全部归档），采集任务暂停");
             return;
         }
-    }
+    };
 
     let timestamp = match Utc::now()
         .with_minute(0)
@@ -1045,7 +1100,7 @@ async fn collect_all_modes(state: &Arc<ServerState>) {
                 mode_status.fire_price = Some(fire.rmb_per_10k_fire);
                 fire_per_rmb = fire.fire_per_rmb;
 
-                if let Err(e) = server_db::insert_fire_snapshot(&state.db, &state.config.season_id, market_mode, &fire, timestamp).await {
+                if let Err(e) = server_db::insert_fire_snapshot(&state.db, &current_season, market_mode, &fire, timestamp).await {
                     mode_status.error = Some(format!("DB error: {}", e));
                 }
             }
@@ -1054,7 +1109,7 @@ async fn collect_all_modes(state: &Arc<ServerState>) {
             }
         }
 
-        let items_result = scraper::Scraper::scrape_items(&state.config.season_id, market_mode, &state.config.api_config, &state.config.api_endpoints).await;
+        let items_result = scraper::Scraper::scrape_items(&current_season, market_mode, &state.config.api_config, &state.config.api_endpoints).await;
 
         match items_result {
             Ok(items) => {
@@ -1063,7 +1118,7 @@ async fn collect_all_modes(state: &Arc<ServerState>) {
 
                 let price_for_calc = if fire_per_rmb > 0.0 { fire_per_rmb } else { 1.0 };
 
-                if let Err(e) = server_db::insert_items_snapshots(&state.db, &state.config.season_id, market_mode, price_for_calc, &items, timestamp).await {
+                if let Err(e) = server_db::insert_items_snapshots(&state.db, &current_season, market_mode, price_for_calc, &items, timestamp).await {
                     if mode_status.error.is_none() {
                         mode_status.error = Some(format!("Items DB error: {}", e));
                     }

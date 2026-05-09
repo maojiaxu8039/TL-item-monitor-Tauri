@@ -4,7 +4,7 @@ use tracing::{error, info, warn};
 
 use crate::scraper::{FirePriceSnapshot, Item};
 
-fn validate_season_id(season_id: &str) -> Result<(), String> {
+pub fn validate_season_id(season_id: &str) -> Result<(), String> {
     if season_id.len() < 3
         || &season_id[..2] != "ss"
         || !season_id[2..].chars().all(|c| c.is_ascii_digit())

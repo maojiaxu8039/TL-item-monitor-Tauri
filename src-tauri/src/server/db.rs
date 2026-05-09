@@ -11,7 +11,7 @@ use tracing::{error, info, warn};
 use super::scraper::{FirePriceSnapshot, Item};
 
 /// 校验 season_id 是否安全（只允许 ss + 数字格式）
-fn validate_season_id(season_id: &str) -> Result<(), String> {
+pub fn validate_season_id(season_id: &str) -> Result<(), String> {
     if season_id.len() < 3
         || &season_id[..2] != "ss"
         || !season_id[2..].chars().all(|c| c.is_ascii_digit())
@@ -224,6 +224,12 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
     .execute(pool)
     .await
     .map_err(|e| format!("创建 seasons 表失败: {}", e))?;
+
+    // 添加 is_current 字段（如果不存在）
+    sqlx::query("ALTER TABLE seasons ADD COLUMN is_current INTEGER NOT NULL DEFAULT 0")
+        .execute(pool)
+        .await
+        .ok(); // 忽略错误，因为字段可能已存在
 
     // 从数据库获取已有的赛季，如果为空则使用默认赛季列表
     let seasons = get_all_seasons_list(pool).await;
