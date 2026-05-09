@@ -13,21 +13,22 @@ send "$pass\r"
 expect "$ "
 puts "Connected!"
 
-# Create home directory and set HOME
-send "mkdir -p /home/15510607744 && export HOME=/home/15510607744 && echo HOME=\$HOME\r"
+# Check what directories exist
+send "pwd && ls -la / | head -20\r"
 expect "$ "
 
-send "export HOME=/home/15510607744 && /root/.cargo/bin/rustc --version 2>/dev/null || echo NO_RUST\r"
+# Check if Rust is installed
+send "/root/.cargo/bin/rustc --version 2>/dev/null || echo NO_RUST\r"
 expect {
     "NO_RUST" {
-        puts "Installing Rust..."
-        send "export HOME=/home/15510607744 && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable 2>&1\r"
+        puts "Installing Rust to /tmp..."
+        send "export HOME=/tmp && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --path /tmp/rustup 2>&1\r"
         expect {
             -re "Finished|complete|installed" {
                 puts "Rust installed!"
             }
             timeout {
-                puts "Rust install timed out"
+                puts "Checking rustup status..."
             }
         }
     }
@@ -41,23 +42,39 @@ expect {
 
 expect "$ "
 
-send "export HOME=/home/15510607744 && /root/.cargo/bin/cargo --version\r"
-expect "$ "
-puts "Cargo ready!"
-
-send "export HOME=/home/15510607744 && mkdir -p /workspace && chmod 777 /workspace\r"
+send "ls -la /tmp/rustup 2>/dev/null || ls -la /root/.cargo 2>/dev/null || echo NO_RUST_FOUND\r"
 expect "$ "
 
-send "test -d /workspace/tl-monitor && echo EXISTS || echo NEED_CLONE\r"
+# Try to use rustup if it exists
+send "export HOME=/tmp && /tmp/rustup/bin/rustc --version 2>/dev/null || /root/.cargo/bin/rustc --version 2>/dev/null || echo STILL_NO_RUST\r"
+expect {
+    -re "rustc.*version" {
+        puts "Rust found!"
+    }
+    "STILL_NO_RUST" {
+        puts "Rust not available, need to use /tmp installation"
+    }
+    timeout {
+        puts "Timeout"
+    }
+}
+
+expect "$ "
+
+# Use /tmp as working directory
+send "cd /tmp && pwd && ls -la\r"
+expect "$ "
+
+send "test -d /tmp/tl-monitor && echo EXISTS || echo NEED_CLONE\r"
 expect {
     "EXISTS" {
         puts "Repo exists, pulling..."
-        send "export HOME=/home/15510607744 && cd /workspace/tl-monitor && git pull 2>&1\r"
+        send "cd /tmp/tl-monitor && git pull 2>&1\r"
         expect "$ "
     }
     "NEED_CLONE" {
-        puts "Cloning repo..."
-        send "export HOME=/home/15510607744 && cd /workspace && git clone https://github.com/maojiaxu8039/TL-item-monitor-Tauri.git tl-monitor 2>&1\r"
+        puts "Cloning repo to /tmp..."
+        send "cd /tmp && git clone https://github.com/maojiaxu8039/TL-item-monitor-Tauri.git tl-monitor 2>&1\r"
         expect {
             -re "Cloning|Receiving|Resolving" {
                 exp_continue
@@ -70,7 +87,8 @@ expect {
 expect "$ "
 puts "Building server..."
 
-send "export HOME=/home/15510607744 && cd /workspace/tl-monitor/server-standalone && /root/.cargo/bin/cargo build --release 2>&1\r"
+# Build using local Rust if available
+send "export HOME=/tmp && cd /tmp/tl-monitor/server-standalone && /tmp/rustup/bin/cargo build --release 2>&1 || /root/.cargo/bin/cargo build --release 2>&1\r"
 
 set timeout 1200
 expect {
@@ -87,17 +105,18 @@ expect {
 
 expect "$ "
 
-send "ls -la /workspace/tl-monitor/server-standalone/target/release/server 2>&1\r"
+send "ls -la /tmp/tl-monitor/server-standalone/target/release/server 2>&1\r"
 expect "$ "
 
-send "cp /workspace/tl-monitor/server-standalone/target/release/server /workspace/ && chmod +x /workspace/server\r"
+# Copy to accessible location
+send "cp /tmp/tl-monitor/server-standalone/target/release/server /tmp/server && chmod +x /tmp/server\r"
 expect "$ "
 
-send "ls -la /workspace/server\r"
+send "ls -la /tmp/server\r"
 expect "$ "
 
 puts "====================================="
-puts "Server binary ready at /workspace/server"
+puts "Server binary ready at /tmp/server"
 puts "====================================="
 
 send "exit\r"

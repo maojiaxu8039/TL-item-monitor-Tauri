@@ -52,6 +52,7 @@ struct LuosiItem {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Item {
     pub item_id: String,
     pub name: String,
