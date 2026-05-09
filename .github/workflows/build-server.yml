@@ -11,30 +11,28 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-unknown-linux-gnu
+      - name: Install cross and target
+        run: |
+          rustup target add aarch64-unknown-linux-gnu
+          cargo install cross --version 0.2.4
 
-      - name: Add target
-        run: rustup target add aarch64-unknown-linux-gnu
-
-      - name: Build server-standalone
+      - name: Build with cross
         run: |
           cd server-standalone
-          cargo build --release --target aarch64-unknown-linux-gnu
-          ls -lh target/aarch64-unknown-linux-gnu/release/server || target/release/server
+          cross build --release --target aarch64-unknown-linux-gnu
+
+      - name: Check binary
+        run: |
+          ls -lh server-standalone/target/aarch64-unknown-linux-gnu/release/server
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: tl-monitor-server
-          path: |
-            server-standalone/target/aarch64-unknown-linux-gnu/release/server
-            server-standalone/target/release/server
+          path: server-standalone/target/aarch64-unknown-linux-gnu/release/server
           retention-days: 1
