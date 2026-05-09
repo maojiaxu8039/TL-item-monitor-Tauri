@@ -1,0 +1,40 @@
+name: Download Linux ARM64 Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: aarch64-unknown-linux-gnu
+          tools: cargo
+
+      - name: Install cross compilation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross pkg-config libssl-dev
+
+      - name: Build server binary
+        env:
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          SQLITE_LIB_DIR: /usr/lib/aarch64-linux-gnu
+          SQLITE_INCLUDE_DIR: /usr/include
+        run: |
+          cd server-standalone
+          cargo build --release --target aarch64-unknown-linux-gnu
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-server
+          path: |
+            server-standalone/target/aarch64-unknown-linux-gnu/release/server
+          retention-days: 7
