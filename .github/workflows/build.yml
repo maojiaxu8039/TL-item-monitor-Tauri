@@ -126,6 +126,7 @@ jobs:
           name: linux-arm64-server
           path: |
             server-standalone/target/aarch64-unknown-linux-gnu/release/server
+          retention-days: 7
 
   release:
     needs: [build-windows, build-macos, build-linux-arm64]
