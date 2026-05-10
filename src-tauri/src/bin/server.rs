@@ -299,6 +299,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         abort_tx_clone.send(()).ok();
     });
 
+    info!("启动时测试采集（不写入数据库）...");
+    run_test_collection(&state).await;
+
     run_collector(state.clone(), abort_rx).await;
 
     graceful_shutdown(state).await;
@@ -1747,6 +1750,60 @@ async fn collect_single_mode(
     let final_success = mode_status.fire_success == Some(true) && mode_status.items_success == Some(true);
     mode_status.collection_success = Some(final_success);
     Some(mode_status)
+}
+
+async fn run_test_collection(state: &Arc<ServerState>) {
+    let current_season = get_cached_season(state).await;
+
+    match current_season {
+        Some(season) => {
+            info!("测试采集当前赛季: {}", season);
+            
+            let mut last_collection = state.last_collection.write().await;
+
+            for mode_config in state.config.scrape_modes.iter() {
+                if !mode_config.enabled {
+                    info!("[{}] 已禁用，跳过测试采集", mode_config.mode);
+                    continue;
+                }
+
+                let market_mode = if mode_config.mode == "expert" { "expert" } else { "normal" };
+                let mode_name = if mode_config.mode == "expert" { "专家服" } else { "普通服" };
+
+                info!("[{}] 测试采集中...", mode_name);
+
+                let fire_result = scrape_fire_with_retry(state, market_mode).await;
+                let items_result = scrape_items_with_retry(state, &season, market_mode).await;
+
+                let test_status = ModeCollectionStatus {
+                    timestamp: Utc::now().timestamp(),
+                    fire_success: Some(fire_result.is_ok()),
+                    fire_price: fire_result.as_ref().ok().map(|f| f.rmb_per_10k_fire),
+                    items_count: items_result.as_ref().ok().map(|i| i.len()),
+                    items_success: Some(items_result.is_ok()),
+                    error: fire_result.as_ref().err().map(|s| s.clone()).or_else(|| items_result.as_ref().err().map(|s| s.clone())),
+                    collection_success: Some(fire_result.is_ok() && items_result.is_ok()),
+                };
+
+                info!(
+                    "[{}] 测试采集完成: 火价={}, 物品={}, 成功={}",
+                    mode_name,
+                    test_status.fire_price.map(|p| p.to_string()).unwrap_or_else(|| "失败".to_string()),
+                    test_status.items_count.unwrap_or(0),
+                    test_status.collection_success == Some(true)
+                );
+
+                if mode_config.mode == "normal" {
+                    last_collection.normal = Some(test_status);
+                } else {
+                    last_collection.expert = Some(test_status);
+                }
+            }
+        }
+        None => {
+            info!("没有活跃的赛季，跳过测试采集");
+        }
+    }
 }
 
 async fn collect_all_modes(state: &Arc<ServerState>) {
