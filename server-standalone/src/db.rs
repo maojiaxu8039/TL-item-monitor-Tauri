@@ -545,7 +545,7 @@ pub async fn reset_table(
     season_id: &str,
     table_type: &str,
     market_mode: &str,
-) -> Result<(), String> {
+) -> Result<(String, i64), String> {
     validate_season_id(season_id)?;
     
     let table = match (table_type, market_mode) {
@@ -562,7 +562,7 @@ pub async fn reset_table(
     .bind(&table)
     .fetch_one(pool)
     .await
-    .map_err(|e| format!("检查表失败: {}", e))?;
+    .map_err(|e| format!("检查表 {} 失败: {}", table, e))?;
     
     if exists == 0 {
         return Err(format!("表 {} 不存在", table));
@@ -574,7 +574,7 @@ pub async fn reset_table(
         .map_err(|e| format!("清空表 {} 失败: {}", table, e))?;
     
     info!("已重置表: {}", table);
-    Ok(())
+    Ok((table, 0))
 }
 
 pub async fn reset_season_tables(
@@ -597,6 +597,43 @@ pub async fn reset_season_tables(
     }
     
     Ok(results)
+}
+
+pub async fn wal_checkpoint(pool: &SqlitePool) -> Result<WalCheckpointResult, String> {
+    info!("执行 WAL checkpoint...");
+    
+    let page_count: i64 = sqlx::query_scalar("PRAGMA page_count")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("获取页数失败: {}", e))?;
+
+    let freelist_count: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("获取空闲页数失败: {}", e))?;
+
+    let wal_size: i64 = sqlx::query_scalar("PRAGMA wal_checkpoint(PASSIVE)")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("WAL checkpoint 失败: {}", e))?;
+
+    info!(
+        "WAL checkpoint 完成: 数据库页数={}, 空闲页数={}, WAL页数={}",
+        page_count, freelist_count, wal_size
+    );
+
+    Ok(WalCheckpointResult {
+        page_count,
+        freelist_count,
+        wal_pages_checkpointed: wal_size,
+    })
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WalCheckpointResult {
+    pub page_count: i64,
+    pub freelist_count: i64,
+    pub wal_pages_checkpointed: i64,
 }
 
 #[derive(Debug, Serialize)]

@@ -1,11 +1,16 @@
+//! 数据抓取模块
+//!
+//! 使用客户端的 scraper::qiandao 模块进行火价采集
+//! 物品火价采集
+
 use once_cell::sync::Lazy;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use tracing::info;
+use tracing::{debug, info, warn};
 
-use crate::config::{ApiConfig, ApiEndpoints};
+use super::config::{ApiConfig, ApiEndpoints};
 
 fn safe_truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
@@ -22,9 +27,23 @@ fn safe_truncate(s: &str, max_len: usize) -> String {
 static HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
     Client::builder()
         .timeout(Duration::from_secs(30))
+        .pool_max_idle_per_host(1)
+        .tcp_keepalive(Some(Duration::from_secs(60)))
+        .tcp_nodelay(true)
         .danger_accept_invalid_certs(true)
         .build()
         .expect("Failed to create HTTP client")
+});
+
+static QIANDAO_CLIENT: Lazy<Client> = Lazy::new(|| {
+    Client::builder()
+        .timeout(Duration::from_secs(15))
+        .pool_max_idle_per_host(1)
+        .tcp_keepalive(Some(Duration::from_secs(60)))
+        .tcp_nodelay(true)
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("Failed to create Qiandao HTTP client")
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,7 +71,6 @@ struct LuosiItem {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct Item {
     pub item_id: String,
     pub name: String,
@@ -60,6 +78,9 @@ pub struct Item {
     pub price: f64,
     pub last_time: i64,
 }
+
+const SCRAPE_MAX_RETRIES: u32 = 3;
+const SCRAPE_RETRY_DELAY_MS: u64 = 1000;
 
 pub struct Scraper;
 
@@ -109,7 +130,7 @@ impl Scraper {
             })
             .collect();
 
-        info!("抓取物品: 总数={}", raw_count);
+        debug!("抓取物品: 总数={}", raw_count);
         Ok(items)
     }
 
@@ -123,18 +144,38 @@ impl Scraper {
         } else {
             "普通"
         };
-        info!("抓取火价 (模式: {})", mode);
+        debug!("抓取火价 (模式: {})", mode);
 
-        match scrape_via_rust(mode, config, endpoints).await {
-            Ok(snapshot) => {
-                info!("火价获取成功: {} 火/元", snapshot.fire_per_rmb);
-                Ok(snapshot)
-            }
-            Err(e) => {
-                info!("Rust 火价抓取失败: {}，尝试 Node 脚本", e);
-                scrape_via_node_script(mode).await
+        let mut last_error = String::new();
+
+        for attempt in 1..=SCRAPE_MAX_RETRIES {
+            match scrape_via_rust(mode, config, endpoints).await {
+                Ok(snapshot) => {
+                    debug!("火价获取成功: {} 火/元", snapshot.fire_per_rmb);
+                    return Ok(snapshot);
+                }
+                Err(rust_e) => {
+                    last_error = rust_e;
+                    warn!("Rust 火价抓取失败 (尝试 {}/{}): {}，尝试 Node 脚本", attempt, SCRAPE_MAX_RETRIES, last_error);
+
+                    match scrape_via_node_script(mode).await {
+                        Ok(snapshot) => {
+                            debug!("Node 脚本火价获取成功: {} 火/元", snapshot.fire_per_rmb);
+                            return Ok(snapshot);
+                        }
+                        Err(node_e) => {
+                            warn!("Node 脚本火价抓取失败: {}", node_e);
+                            if attempt < SCRAPE_MAX_RETRIES {
+                                info!("{}ms 后重试...", SCRAPE_RETRY_DELAY_MS);
+                                tokio::time::sleep(Duration::from_millis(SCRAPE_RETRY_DELAY_MS)).await;
+                            }
+                        }
+                    }
+                }
             }
         }
+
+        Err(format!("火价抓取在 {} 次尝试后仍失败 (最后 Rust 错误: {})", SCRAPE_MAX_RETRIES, last_error))
     }
 }
 
@@ -164,13 +205,7 @@ async fn scrape_via_rust(
         "specIds": [spec_id]
     });
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .danger_accept_invalid_certs(true)
-        .build()
-        .map_err(|e| format!("reqwest build failed: {}", e))?;
-
-    let resp = client
+    let resp = QIANDAO_CLIENT
         .post(&qiandao_url)
         .header("content-type", "application/json")
         .header("authorization", "Bearer undefined")
@@ -249,13 +284,13 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
             format!("Node.js script not found. Tried: {}", paths_str)
         })?;
 
-    info!("使用 Node 脚本抓取火价: {}", script_path.display());
+    debug!("使用 Node 脚本抓取火价: {}", script_path.display());
 
     let mut cmd = tokio::process::Command::new("node");
     cmd.arg(&script_path)
         .arg(if mode == "专家" { "pro" } else { "normal" });
 
-    info!(
+    debug!(
         "执行命令: node {} {}",
         script_path.display(),
         if mode == "专家" { "pro" } else { "normal" }
@@ -271,9 +306,9 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
     let stdout_str = stdout.trim();
     let stderr_str = stderr.trim();
 
-    info!("Node stdout: {}", stdout_str);
-    info!("Node stderr: {}", stderr_str);
-    info!("Node exit code: {:?}", output.status.code());
+    debug!("Node stdout: {}", stdout_str);
+    debug!("Node stderr: {}", stderr_str);
+    debug!("Node exit code: {:?}", output.status.code());
 
     if !output.status.success() {
         return Err(format!(
@@ -301,8 +336,8 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
         return Err("No fire price data in Node output".to_string());
     }
 
-    info!("使用 JSON: {}", json_str);
-    info!("解析 Node 输出...");
+    debug!("使用 JSON: {}", json_str);
+    debug!("解析 Node 输出...");
 
     #[derive(Deserialize)]
     struct NodeFireResult {

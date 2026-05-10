@@ -1,3 +1,16 @@
+//! TL Monitor Server - 独立数据采集服务器 v3.3
+//!
+//! 支持同时采集普通服和专家服数据
+//! 支持管理员操作（需要密码验证）
+//!
+//! 优化特性：
+//! - HTTP Client 连接复用
+//! - API 端点可配置
+//! - 请求限流保护
+//! - 日志脱敏
+//! - WebSocket 实时推送
+//! - WAL 定期 checkpoint
+
 mod config;
 mod constants;
 mod db;
@@ -9,14 +22,18 @@ use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use constants::{SECONDS_PER_HOUR, SERVER_VERSION};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::{broadcast, RwLock};
-use tracing::{error, info, warn, Level};
+use tokio::sync::Mutex as TokioMutex;
+use tokio::net::TcpStream;
+use tokio_tungstenite::{accept_async, tungstenite::Message};
+use futures_util::{SinkExt, StreamExt};
+use tracing::{debug, error, info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use config::{ApiConfig, RateLimitConfig, ServerConfig};
-use constants::{SECONDS_PER_HOUR, SERVER_VERSION};
-use db as server_db;
+use scraper::Scraper;
 
 const DB_PATH: &str = "/data/tl_monitor.db";
 
@@ -32,6 +49,53 @@ struct ServerState {
     db: SqlitePool,
     last_collection: Arc<RwLock<CollectionStatus>>,
     rate_limiter: Arc<RwLock<RateLimiter>>,
+    season_cache: Arc<RwLock<Option<SeasonCache>>>,
+    dynamic_config: Arc<RwLock<DynamicConfig>>,
+    ws_broadcaster: Arc<RwLock<WsBroadcaster>>,
+}
+
+struct WsBroadcaster {
+    sender: broadcast::Sender<String>,
+    clients: usize,
+}
+
+impl WsBroadcaster {
+    fn new() -> Self {
+        let (sender, _) = broadcast::channel(100);
+        Self { sender, clients: 0 }
+    }
+
+    fn subscribe(&self) -> broadcast::Receiver<String> {
+        self.sender.subscribe()
+    }
+
+    fn broadcast(&self, msg: &str) {
+        let _ = self.sender.send(msg.to_string());
+    }
+
+    fn client_connected(&mut self) {
+        self.clients += 1;
+        info!("WebSocket 客户端连接, 当前连接数: {}", self.clients);
+    }
+
+    fn client_disconnected(&mut self) {
+        self.clients = self.clients.saturating_sub(1);
+        info!("WebSocket 客户端断开, 当前连接数: {}", self.clients);
+    }
+}
+
+#[derive(Clone)]
+struct DynamicConfig {
+    cors_allowed_origins: Vec<String>,
+    rate_limit_enabled: bool,
+    scrape_modes: Vec<config::ScrapeMode>,
+    last_update: Instant,
+}
+
+#[derive(Clone)]
+struct SeasonCache {
+    season_id: String,
+    cached_at: Instant,
 }
 
 struct RateLimiter {
@@ -167,6 +231,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "限流配置: enabled={}, requests_per_minute={}",
                 cfg.rate_limit.enabled, cfg.rate_limit.requests_per_minute
             );
+            info!(
+                "API端点: luosi={}, qiandao={}",
+                mask_url_for_log(&cfg.api_endpoints.luosi),
+                mask_url_for_log(&cfg.api_endpoints.qiandao)
+            );
             cfg
         }
         Err(e) => {
@@ -183,23 +252,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let pool = SqlitePoolOptions::new()
-        .max_connections(2)
-        .connect(&format!("sqlite:{}?mode=rwc", db_path))
+        .max_connections(4)
+        .connect(&format!(
+            "sqlite:{}?mode=rwc&journal_mode=WAL&synchronous=NORMAL",
+            db_path
+        ))
         .await?;
 
-    server_db::run_migrations(&pool).await?;
+    db::run_migrations(&pool).await?;
+
+    let dynamic_config = DynamicConfig {
+        cors_allowed_origins: config.cors_allowed_origins.clone(),
+        rate_limit_enabled: config.rate_limit.enabled,
+        scrape_modes: config.scrape_modes.clone(),
+        last_update: Instant::now(),
+    };
 
     let state = Arc::new(ServerState {
         config: config.clone(),
         db: pool,
         last_collection: Arc::new(RwLock::new(CollectionStatus::default())),
         rate_limiter: Arc::new(RwLock::new(RateLimiter::new(config.rate_limit.clone()))),
+        season_cache: Arc::new(RwLock::new(None)),
+        dynamic_config: Arc::new(RwLock::new(dynamic_config)),
+        ws_broadcaster: Arc::new(RwLock::new(WsBroadcaster::new())),
     });
 
     let http_state = state.clone();
     let http_port = config.http_port;
     tokio::spawn(async move {
         start_http_server(http_state, http_port, start_time).await;
+    });
+
+    let ws_state = state.clone();
+    let ws_port = config.http_port + 1;
+    tokio::spawn(async move {
+        start_websocket_server(ws_state, ws_port).await;
     });
 
     let (abort_tx, abort_rx) = broadcast::channel::<()>(1);
@@ -211,7 +299,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         abort_tx_clone.send(()).ok();
     });
 
-    run_collector(state, abort_rx).await;
+    run_collector(state.clone(), abort_rx).await;
+
+    graceful_shutdown(state).await;
 
     info!("服务器已关闭");
     Ok(())
@@ -284,16 +374,20 @@ async fn handle_request(
     let client_ip = client_addr.ip().to_string();
 
     {
-        let mut limiter = state.rate_limiter.write().await;
-        if !limiter.is_allowed(&client_ip) {
-            warn!("客户端 {} 请求过于频繁，已限流", client_ip);
-            let response = "HTTP/1.1 429 Too Many Requests\r\nContent-Type: text/plain\r\nContent-Length: 29\r\n\r\nRate limit exceeded, try again";
-            let _ = tokio::io::AsyncWriteExt::write_all(
-                &mut tokio::io::BufWriter::new(stream),
-                response.as_bytes(),
-            )
-            .await;
-            return;
+        let dynamic = state.dynamic_config.read().await;
+        if dynamic.rate_limit_enabled {
+            drop(dynamic);
+            let mut limiter = state.rate_limiter.write().await;
+            if !limiter.is_allowed(&client_ip) {
+                warn!("客户端 {} 请求过于频繁，已限流", client_ip);
+                let response = "HTTP/1.1 429 Too Many Requests\r\nContent-Type: text/plain\r\nContent-Length: 29\r\n\r\nRate limit exceeded, try again";
+                let _ = tokio::io::AsyncWriteExt::write_all(
+                    &mut tokio::io::BufWriter::new(stream),
+                    response.as_bytes(),
+                )
+                .await;
+                return;
+            }
         }
     }
 
@@ -395,8 +489,12 @@ async fn handle_request(
     let method = parts[0];
     let target = parts[1];
     let (path, query_string) = target.split_once('?').unwrap_or((target, ""));
+    let sanitized_query = sanitize_query_string(query_string);
 
-    info!("HTTP {} {} from {} (query: {:?})", method, path, client_ip, query_string);
+    info!(
+        "HTTP {} {} from {} (query: {:?})",
+        method, path, client_ip, sanitized_query
+    );
 
     let mut request_body = String::new();
     if content_length > 0 && header_end_pos < buffer.len() {
@@ -408,9 +506,11 @@ async fn handle_request(
     let (status, body) = match (method, path) {
         ("OPTIONS", _) => {
             let origin = get_origin_header(&request);
+            let dynamic = state.dynamic_config.read().await;
+            let cors_list = &dynamic.cors_allowed_origins;
             let cors_header = if let Some(ref orig) = origin {
-                if state.config.cors_allowed_origins.is_empty()
-                    || state.config.cors_allowed_origins.iter().any(|o| o == orig)
+                if cors_list.is_empty()
+                    || cors_list.iter().any(|o| o == orig)
                 {
                     orig.clone()
                 } else {
@@ -418,12 +518,16 @@ async fn handle_request(
                     return send_options_response(stream, "CORS origin not allowed").await;
                 }
             } else {
-                state.config.cors_allowed_origins.first().cloned().unwrap_or_else(|| "http://localhost:8080".to_string())
+                cors_list
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "http://localhost:8080".to_string())
             };
             return send_options_response_with_cors(stream, &cors_header).await;
         }
         ("GET", "/") | ("GET", "/status") => {
             let last_collection = state.last_collection.read().await.clone();
+
             let status = ApiStatus {
                 server: "TL Monitor Server".to_string(),
                 version: SERVER_VERSION.to_string(),
@@ -432,11 +536,14 @@ async fn handle_request(
                 last_collection,
                 next_collection: get_next_collection_time(),
             };
+
             let body = serde_json::to_string_pretty(&ApiResponse {
                 success: true,
                 data: Some(status),
                 error: None,
-            }).unwrap_or_default();
+            })
+            .unwrap_or_default();
+
             (200, body)
         }
         ("GET", "/admin.html") | ("GET", "/admin") => {
@@ -446,7 +553,11 @@ async fn handle_request(
                 html.len(),
                 html
             );
-            let _ = tokio::io::AsyncWriteExt::write_all(&mut tokio::io::BufWriter::new(stream), response.as_bytes()).await;
+            let _ = tokio::io::AsyncWriteExt::write_all(
+                &mut tokio::io::BufWriter::new(stream),
+                response.as_bytes(),
+            )
+            .await;
             return;
         }
         ("GET", "/api/admin/status") => {
@@ -460,16 +571,24 @@ async fn handle_request(
                     "next_collection": get_next_collection_time(),
                 })),
                 error: None,
-            }).unwrap_or_default();
+            })
+            .unwrap_or_default();
             (200, body)
         }
         ("POST", "/api/admin/status") => {
             #[derive(serde::Deserialize)]
-            struct StatusRequest { password: String }
+            struct StatusRequest {
+                password: String,
+            }
             match serde_json::from_str::<StatusRequest>(&request_body) {
                 Ok(req) => {
                     if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
                         (401, body)
                     } else {
                         let body = serde_json::to_string_pretty(&ApiResponse {
@@ -489,23 +608,45 @@ async fn handle_request(
                                 }
                             })),
                             error: None,
-                        }).unwrap_or_default();
+                        })
+                        .unwrap_or_default();
                         (200, body)
                     }
                 }
                 Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(format!("请求格式错误: {}", e)) }).unwrap_or_default();
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("请求格式错误: {}", e)),
+                    })
+                    .unwrap_or_default();
                     (400, body)
                 }
             }
         }
+        ("GET", "/api/admin/config") => {
+            let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                success: false,
+                data: None,
+                error: Some("此接口需要管理员密码，请使用 POST /api/admin/config".to_string()),
+            })
+            .unwrap_or_default();
+            (401, body)
+        }
         ("POST", "/api/admin/config") => {
             #[derive(serde::Deserialize)]
-            struct ConfigRequest { password: String }
+            struct ConfigRequest {
+                password: String,
+            }
             match serde_json::from_str::<ConfigRequest>(&request_body) {
                 Ok(req) => {
                     if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
                         (401, body)
                     } else {
                         let body = serde_json::to_string_pretty(&ApiResponse {
@@ -519,19 +660,28 @@ async fn handle_request(
                                 "scrape_modes": state.config.scrape_modes,
                             })),
                             error: None,
-                        }).unwrap_or_default();
+                        })
+                        .unwrap_or_default();
                         (200, body)
                     }
                 }
                 Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(format!("请求格式错误: {}", e)) }).unwrap_or_default();
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("请求格式错误: {}", e)),
+                    })
+                    .unwrap_or_default();
                     (400, body)
                 }
             }
         }
         ("POST", "/api/admin/update-config") => {
             #[derive(serde::Deserialize)]
-            struct ScrapeModeConfig { mode: String, enabled: bool }
+            struct ScrapeModeConfig {
+                mode: String,
+                enabled: bool,
+            }
             #[derive(serde::Deserialize)]
             struct UpdateConfigRequest {
                 password: Option<String>,
@@ -543,196 +693,465 @@ async fn handle_request(
                 Ok(req) => {
                     if let Some(password) = &req.password {
                         if let Err(e) = verify_admin(password, &state.config.admin_password) {
-                            let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                            let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                success: false,
+                                data: None,
+                                error: Some(e),
+                            })
+                            .unwrap_or_default();
                             (401, body)
                         } else {
                             let mut new_config = state.config.clone();
-                            if let Some(cors) = req.cors_allowed_origins { new_config.cors_allowed_origins = cors; }
-                            if let Some(enabled) = req.rate_limit_enabled { new_config.rate_limit.enabled = enabled; }
-                            if let Some(modes) = req.scrape_modes {
-                                new_config.scrape_modes = modes.into_iter().map(|m| config::ScrapeMode { mode: m.mode, enabled: m.enabled }).collect();
+                            let mut dynamic_updated = false;
+                            
+                            if let Some(ref cors) = req.cors_allowed_origins {
+                                new_config.cors_allowed_origins = cors.clone();
+                                dynamic_updated = true;
                             }
-                            if let Err(e) = config::save_config(&*get_config_path(), &new_config) {
-                                let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(format!("保存配置失败: {}", e)) }).unwrap_or_default();
+                            if let Some(enabled) = req.rate_limit_enabled {
+                                new_config.rate_limit.enabled = enabled;
+                                dynamic_updated = true;
+                            }
+                            if let Some(ref modes) = req.scrape_modes {
+                                let scrape_modes: Vec<config::ScrapeMode> = modes
+                                    .into_iter()
+                                    .map(|m| config::ScrapeMode {
+                                        mode: m.mode.clone(),
+                                        enabled: m.enabled,
+                                    })
+                                    .collect();
+                                new_config.scrape_modes = scrape_modes.clone();
+                                dynamic_updated = true;
+                            }
+                            
+                            if dynamic_updated {
+                                {
+                                    let mut dynamic = state.dynamic_config.write().await;
+                                    if let Some(cors) = req.cors_allowed_origins {
+                                        dynamic.cors_allowed_origins = cors;
+                                    }
+                                    if let Some(enabled) = req.rate_limit_enabled {
+                                        dynamic.rate_limit_enabled = enabled;
+                                    }
+                                    if let Some(ref modes) = req.scrape_modes {
+                                        dynamic.scrape_modes = modes
+                                            .into_iter()
+                                            .map(|m| config::ScrapeMode {
+                                                mode: m.mode.clone(),
+                                                enabled: m.enabled,
+                                            })
+                                            .collect();
+                                    }
+                                    dynamic.last_update = Instant::now();
+                                }
+                            }
+                            
+                            if let Err(e) = config::save_config(
+                                &*get_config_path(),
+                                &new_config,
+                            ) {
+                                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                    success: false,
+                                    data: None,
+                                    error: Some(format!("保存配置失败: {}", e)),
+                                })
+                                .unwrap_or_default();
                                 (500, body)
                             } else {
-                                let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some("配置已保存，重启后生效".to_string()), error: None }).unwrap_or_default();
+                                let body = serde_json::to_string_pretty(&ApiResponse {
+                                    success: true,
+                                    data: Some("配置已更新，实时生效".to_string()),
+                                    error: None,
+                                })
+                                .unwrap_or_default();
                                 (200, body)
                             }
                         }
                     } else {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some("缺少密码".to_string()) }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some("缺少密码".to_string()),
+                        })
+                        .unwrap_or_default();
                         (400, body)
                     }
                 }
                 Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(format!("请求格式错误: {}", e)) }).unwrap_or_default();
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("请求格式错误: {}", e)),
+                    })
+                    .unwrap_or_default();
                     (400, body)
                 }
             }
         }
         ("GET", "/fire-history") => {
-            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
-            let limit: i32 = get_query_param(query_string, "limit").and_then(|s| s.parse().ok()).unwrap_or(99999);
-            let min_day: Option<i32> = get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
-            let max_day: Option<i32> = get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
-            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
-            let season_id = get_query_param(query_string, "season").unwrap_or_else(|| state.config.season_id.clone());
+            let mode =
+                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let limit: i32 = get_query_param(query_string, "limit")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(99999);
 
-            if let Err(e) = server_db::validate_season_id(&season_id) {
-                let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+            let min_day: Option<i32> = get_query_param(query_string, "min_day")
+                .and_then(|s| s.parse().ok());
+            let max_day: Option<i32> = get_query_param(query_string, "max_day")
+                .and_then(|s| s.parse().ok());
+
+            let market_mode = if mode == "expert" {
+                "season_expert"
+            } else {
+                "season_normal"
+            };
+
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+
+            if let Err(e) = db::validate_season_id(&season_id) {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+                .unwrap_or_default();
                 (400, body)
             } else {
-                match server_db::get_fire_history(&state.db, &season_id, market_mode, limit, min_day, max_day).await {
+                match db::get_fire_history(&state.db, &season_id, market_mode, limit, min_day, max_day).await {
                     Ok(records) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(records), error: None }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse {
+                            success: true,
+                            data: Some(records),
+                            error: None,
+                        })
+                        .unwrap_or_default();
                         (200, body)
                     }
                     Err(e) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
                         (500, body)
                     }
                 }
             }
         }
         ("GET", "/items-history") => {
-            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let mode =
+                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
             let item_id = get_query_param(query_string, "item_id");
-            let limit: i32 = get_query_param(query_string, "limit").and_then(|s| s.parse().ok()).unwrap_or(24);
-            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
-            let season_id = get_query_param(query_string, "season").unwrap_or_else(|| state.config.season_id.clone());
+            let limit: i32 = get_query_param(query_string, "limit")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(24);
+
+            let market_mode = if mode == "expert" {
+                "season_expert"
+            } else {
+                "season_normal"
+            };
+
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
 
             if let Some(item_id) = item_id {
-                if let Err(e) = server_db::validate_season_id(&season_id) {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                if let Err(e) = db::validate_season_id(&season_id) {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(e),
+                    })
+                    .unwrap_or_default();
                     (400, body)
                 } else {
-                    match server_db::get_items_history(&state.db, &item_id, &season_id, market_mode, limit).await {
+                    match db::get_items_history(&state.db, &item_id, &season_id, market_mode, limit)
+                        .await
+                    {
                         Ok(records) => {
-                            let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(records), error: None }).unwrap_or_default();
+                            let body = serde_json::to_string_pretty(&ApiResponse {
+                                success: true,
+                                data: Some(records),
+                                error: None,
+                            })
+                            .unwrap_or_default();
                             (200, body)
                         }
                         Err(e) => {
-                            let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                            let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                success: false,
+                                data: None,
+                                error: Some(e),
+                            })
+                            .unwrap_or_default();
                             (500, body)
                         }
                     }
                 }
             } else {
-                let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some("Missing item_id parameter".to_string()) }).unwrap_or_default();
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some("Missing item_id parameter".to_string()),
+                })
+                .unwrap_or_default();
                 (400, body)
             }
         }
         ("GET", "/items-history-all") => {
-            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
-            let limit: i32 = get_query_param(query_string, "limit").and_then(|s| s.parse().ok()).unwrap_or(99999);
-            let offset: i32 = get_query_param(query_string, "offset").and_then(|s| s.parse().ok()).unwrap_or(0);
-            let min_day: Option<i32> = get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
-            let max_day: Option<i32> = get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
-            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
-            let season_id = get_query_param(query_string, "season").unwrap_or_else(|| state.config.season_id.clone());
+            let mode =
+                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let limit: i32 = get_query_param(query_string, "limit")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(99999);
+            let offset: i32 = get_query_param(query_string, "offset")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
 
-            if let Err(e) = server_db::validate_season_id(&season_id) {
-                let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+            let min_day: Option<i32> = get_query_param(query_string, "min_day")
+                .and_then(|s| s.parse().ok());
+            let max_day: Option<i32> = get_query_param(query_string, "max_day")
+                .and_then(|s| s.parse().ok());
+
+            let market_mode = if mode == "expert" {
+                "season_expert"
+            } else {
+                "season_normal"
+            };
+
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+
+            if let Err(e) = db::validate_season_id(&season_id) {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+                .unwrap_or_default();
                 (400, body)
             } else {
-                match server_db::get_items_history_all(&state.db, &season_id, market_mode, limit, offset, min_day, max_day).await {
+                match db::get_items_history_all(&state.db, &season_id, market_mode, limit, offset, min_day, max_day).await
+                {
                     Ok(records) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(records), error: None }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse {
+                            success: true,
+                            data: Some(records),
+                            error: None,
+                        })
+                        .unwrap_or_default();
                         (200, body)
                     }
                     Err(e) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
                         (500, body)
                     }
                 }
             }
         }
         ("GET", "/fire-history-all") => {
-            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
-            let limit: i32 = get_query_param(query_string, "limit").and_then(|s| s.parse().ok()).unwrap_or(99999);
-            let offset: i32 = get_query_param(query_string, "offset").and_then(|s| s.parse().ok()).unwrap_or(0);
-            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
-            let season_id = get_query_param(query_string, "season").unwrap_or_else(|| state.config.season_id.clone());
+            let mode =
+                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let limit: i32 = get_query_param(query_string, "limit")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(99999);
+            let offset: i32 = get_query_param(query_string, "offset")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
 
-            if let Err(e) = server_db::validate_season_id(&season_id) {
-                let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+            let market_mode = if mode == "expert" {
+                "season_expert"
+            } else {
+                "season_normal"
+            };
+
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+
+            if let Err(e) = db::validate_season_id(&season_id) {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+                .unwrap_or_default();
                 (400, body)
             } else {
-                match server_db::get_fire_history_all(&state.db, &season_id, market_mode, limit, offset).await {
+                match db::get_fire_history_all(&state.db, &season_id, market_mode, limit, offset).await
+                {
                     Ok(records) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(records), error: None }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse {
+                            success: true,
+                            data: Some(records),
+                            error: None,
+                        })
+                        .unwrap_or_default();
                         (200, body)
                     }
                     Err(e) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
                         (500, body)
                     }
                 }
             }
         }
-        ("GET", "/health") => (200, "OK".to_string()),
-        ("GET", "/season-start") => {
-            let season_id = get_query_param(query_string, "season").unwrap_or_else(|| state.config.season_id.clone());
-            let season_start = server_db::get_season_start_time(&state.db, &season_id).await;
-            let body = serde_json::to_string_pretty(&ApiResponse {
-                success: true,
-                data: Some(serde_json::json!({ "season_id": season_id, "started_at": season_start })),
-                error: None,
-            }).unwrap_or_default();
-            (200, body)
-        }
-        ("GET", "/stats") => {
-            let season_id = get_query_param(query_string, "season").unwrap_or_else(|| state.config.season_id.clone());
-            match server_db::get_season_stats(&state.db, &season_id).await {
-                Ok(stats) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(stats), error: None }).unwrap_or_default();
+        ("GET", "/health") => {
+            let health_start = std::time::Instant::now();
+            match sqlx::query("SELECT 1")
+                .execute(&state.db)
+                .await
+            {
+                Ok(_) => {
+                    let elapsed_ms = health_start.elapsed().as_millis();
+                    let body = serde_json::to_string_pretty(&ApiResponse {
+                        success: true,
+                        data: Some(serde_json::json!({
+                            "status": "healthy",
+                            "db_check": "ok",
+                            "db_check_ms": elapsed_ms
+                        })),
+                        error: None,
+                    })
+                    .unwrap_or_default();
                     (200, body)
                 }
                 Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("Database error: {}", e)),
+                    })
+                    .unwrap_or_default();
+                    (503, body)
+                }
+            }
+        }
+        ("GET", "/season-start") => {
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+            let season_start =
+                db::get_season_start_time(&state.db, &season_id).await;
+            let body = serde_json::to_string_pretty(&ApiResponse {
+                success: true,
+                data: Some(serde_json::json!({
+                    "season_id": season_id,
+                    "started_at": season_start
+                })),
+                error: None,
+            })
+            .unwrap_or_default();
+            (200, body)
+        }
+        ("GET", "/stats") => {
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+            match db::get_season_stats(&state.db, &season_id).await {
+                Ok(stats) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse {
+                        success: true,
+                        data: Some(stats),
+                        error: None,
+                    })
+                    .unwrap_or_default();
+                    (200, body)
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(e),
+                    })
+                    .unwrap_or_default();
                     (500, body)
                 }
             }
         }
         ("GET", "/seasons") => {
-            let seasons = server_db::get_all_seasons_list(&state.db).await;
-            let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(seasons), error: None }).unwrap_or_default();
+            let seasons = db::get_all_seasons_list(&state.db).await;
+            let body = serde_json::to_string_pretty(&ApiResponse {
+                success: true,
+                data: Some(seasons),
+                error: None,
+            })
+            .unwrap_or_default();
             (200, body)
         }
+
+        // ─── 管理员 API ───────────────────────────────────────
         ("POST", "/admin/init-season") => {
             match serde_json::from_str::<InitSeasonRequest>(&request_body) {
                 Ok(req) => {
                     if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
                         (401, body)
                     } else {
-                        match server_db::init_new_season(&state.db, &req.season_id, req.season_name.as_deref(), req.started_at).await {
+                        match db::init_new_season(
+                            &state.db,
+                            &req.season_id,
+                            req.season_name.as_deref(),
+                            req.started_at,
+                        )
+                        .await
+                        {
                             Ok(tables) => {
+                                // 初始化成功后立即触发一次采集
                                 info!("新赛季 {} 初始化成功，触发首次采集", req.season_id);
                                 let state_clone = state.clone();
                                 tokio::spawn(async move {
                                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                                     collect_all_modes(&state_clone).await;
                                 });
+
                                 let response = InitSeasonResponse {
                                     success: true,
                                     season_id: req.season_id.clone(),
                                     tables_created: tables,
                                     message: "新赛季初始化成功，已触发首次采集".to_string(),
                                 };
-                                let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(response), error: None }).unwrap_or_default();
+                                let body = serde_json::to_string_pretty(&ApiResponse {
+                                    success: true,
+                                    data: Some(response),
+                                    error: None,
+                                })
+                                .unwrap_or_default();
                                 (200, body)
                             }
                             Err(e) => {
-                                let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                    success: false,
+                                    data: None,
+                                    error: Some(e),
+                                })
+                                .unwrap_or_default();
                                 (500, body)
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(format!("请求格式错误: {}", e)) }).unwrap_or_default();
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("请求格式错误: {}", e)),
+                    })
+                    .unwrap_or_default();
                     (400, body)
                 }
             }
@@ -742,24 +1161,44 @@ async fn handle_request(
                 Ok(req) => {
                     let password = req["password"].as_str().unwrap_or("");
                     if let Err(e) = verify_admin(password, &state.config.admin_password) {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
                         (401, body)
                     } else {
                         let season_id = req["season_id"].as_str().unwrap_or("");
-                        match server_db::archive_season(&state.db, season_id).await {
+                        match db::archive_season(&state.db, season_id).await {
                             Ok(_) => {
-                                let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(serde_json::json!({"archived": season_id})), error: None }).unwrap_or_default();
+                                let body = serde_json::to_string_pretty(&ApiResponse {
+                                    success: true,
+                                    data: Some(serde_json::json!({"archived": season_id})),
+                                    error: None,
+                                })
+                                .unwrap_or_default();
                                 (200, body)
                             }
                             Err(e) => {
-                                let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                    success: false,
+                                    data: None,
+                                    error: Some(e),
+                                })
+                                .unwrap_or_default();
                                 (500, body)
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(format!("请求格式错误: {}", e)) }).unwrap_or_default();
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("请求格式错误: {}", e)),
+                    })
+                    .unwrap_or_default();
                     (400, body)
                 }
             }
@@ -768,88 +1207,178 @@ async fn handle_request(
             match serde_json::from_str::<UpdateApiConfigRequest>(&request_body) {
                 Ok(req) => {
                     if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
                         (401, body)
                     } else {
                         let mut new_config = state.config.clone();
                         new_config.api_config = req.api_config;
-                        if let Err(e) = config::save_config(&*get_config_path(), &new_config) {
-                            let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(format!("保存配置失败: {}", e)) }).unwrap_or_default();
+
+                        if let Err(e) = config::save_config(
+                            &*get_config_path(),
+                            &new_config,
+                        ) {
+                            let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                success: false,
+                                data: None,
+                                error: Some(format!("保存配置失败: {}", e)),
+                            })
+                            .unwrap_or_default();
                             (500, body)
                         } else {
-                            let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some("API配置已更新，重启服务器后生效".to_string()), error: None }).unwrap_or_default();
+                            let body = serde_json::to_string_pretty(&ApiResponse {
+                                success: true,
+                                data: Some("API配置已更新，重启服务器后生效".to_string()),
+                                error: None,
+                            })
+                            .unwrap_or_default();
                             (200, body)
                         }
                     }
                 }
                 Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(format!("请求格式错误: {}", e)) }).unwrap_or_default();
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("请求格式错误: {}", e)),
+                    })
+                    .unwrap_or_default();
                     (400, body)
                 }
             }
         }
         ("POST", "/admin/reset-table") => {
             #[derive(serde::Deserialize)]
-            struct ResetTableRequest { password: String, season_id: String, table_type: String, market_mode: String }
+            struct ResetTableRequest {
+                password: String,
+                season_id: String,
+                table_type: String,
+                market_mode: String,
+            }
             match serde_json::from_str::<ResetTableRequest>(&request_body) {
                 Ok(req) => {
                     if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
                         (401, body)
                     } else {
-                        match server_db::reset_table(&state.db, &req.season_id, &req.table_type, &req.market_mode).await {
-                            Ok(_) => {
-                                let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(format!("表已重置: {}_{}_{}", req.season_id, req.table_type, req.market_mode)), error: None }).unwrap_or_default();
+                        match db::reset_table(&state.db, &req.season_id, &req.table_type, &req.market_mode).await {
+                            Ok((table, count)) => {
+                                let body = serde_json::to_string_pretty(&ApiResponse {
+                                    success: true,
+                                    data: Some(serde_json::json!({
+                                        "table": table,
+                                        "deleted_rows": count
+                                    })),
+                                    error: None,
+                                })
+                                .unwrap_or_default();
                                 (200, body)
                             }
                             Err(e) => {
-                                let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                    success: false,
+                                    data: None,
+                                    error: Some(e),
+                                })
+                                .unwrap_or_default();
                                 (500, body)
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(format!("请求格式错误: {}", e)) }).unwrap_or_default();
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("请求格式错误: {}", e)),
+                    })
+                    .unwrap_or_default();
                     (400, body)
                 }
             }
         }
         ("POST", "/admin/reset-season") => {
             #[derive(serde::Deserialize)]
-            struct ResetSeasonRequest { password: String, season_id: String, tables: Vec<String> }
+            struct ResetSeasonRequest {
+                password: String,
+                season_id: String,
+                tables: Vec<String>,
+            }
             match serde_json::from_str::<ResetSeasonRequest>(&request_body) {
                 Ok(req) => {
                     if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
                         (401, body)
                     } else {
-                        match server_db::reset_season_tables(&state.db, &req.season_id, &req.tables).await {
+                        match db::reset_season_tables(&state.db, &req.season_id, &req.tables).await {
                             Ok(results) => {
-                                let body = serde_json::to_string_pretty(&ApiResponse { success: true, data: Some(serde_json::json!({ "results": results })), error: None }).unwrap_or_default();
+                                let body = serde_json::to_string_pretty(&ApiResponse {
+                                    success: true,
+                                    data: Some(serde_json::json!({ "results": results })),
+                                    error: None,
+                                })
+                                .unwrap_or_default();
                                 (200, body)
                             }
                             Err(e) => {
-                                let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(e) }).unwrap_or_default();
+                                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                    success: false,
+                                    data: None,
+                                    error: Some(e),
+                                })
+                                .unwrap_or_default();
                                 (500, body)
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some(format!("请求格式错误: {}", e)) }).unwrap_or_default();
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("请求格式错误: {}", e)),
+                    })
+                    .unwrap_or_default();
                     (400, body)
                 }
             }
         }
+
         _ => {
-            let body = serde_json::to_string_pretty(&ApiResponse::<()> { success: false, data: None, error: Some("Not Found".to_string()) }).unwrap_or_default();
+            let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                success: false,
+                data: None,
+                error: Some("Not Found".to_string()),
+            })
+            .unwrap_or_default();
             (404, body)
         }
     };
 
     let origin = get_origin_header(&request);
-    send_response(stream, status, &body, &origin, &state.config.cors_allowed_origins).await;
+    let dynamic = state.dynamic_config.read().await;
+    send_response(
+        stream,
+        status,
+        &body,
+        &origin,
+        &dynamic.cors_allowed_origins,
+    )
+    .await;
 }
 
 fn get_origin_header(request: &str) -> Option<String> {
@@ -861,7 +1390,13 @@ fn get_origin_header(request: &str) -> Option<String> {
     None
 }
 
-async fn send_response(stream: tokio::net::TcpStream, status: u16, body: &str, origin: &Option<String>, allowed_origins: &[String]) {
+async fn send_response(
+    stream: tokio::net::TcpStream,
+    status: u16,
+    body: &str,
+    origin: &Option<String>,
+    allowed_origins: &[String],
+) {
     let cors_header = if let Some(ref orig) = origin {
         if allowed_origins.is_empty() || allowed_origins.iter().any(|o| o == orig) {
             orig.clone()
@@ -870,11 +1405,21 @@ async fn send_response(stream: tokio::net::TcpStream, status: u16, body: &str, o
             return send_error_response(stream, status, "CORS origin not allowed").await;
         }
     } else {
-        allowed_origins.first().cloned().unwrap_or_else(|| "http://localhost:8080".to_string())
+        allowed_origins
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "http://localhost:8080".to_string())
     };
 
     let response = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n\r\n{}",
+        "HTTP/1.1 {} {}\r\n\
+        Content-Type: application/json\r\n\
+        Content-Length: {}\r\n\
+        Access-Control-Allow-Origin: {}\r\n\
+        Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
+        Access-Control-Allow-Headers: Content-Type, Authorization\r\n\
+        \r\n\
+        {}",
         status,
         if status == 200 { "OK" } else { "Error" },
         body.len(),
@@ -894,7 +1439,11 @@ async fn send_response(stream: tokio::net::TcpStream, status: u16, body: &str, o
 
 async fn send_error_response(stream: tokio::net::TcpStream, status: u16, message: &str) {
     let response = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+        "HTTP/1.1 {} {}\r\n\
+        Content-Type: text/plain\r\n\
+        Content-Length: {}\r\n\
+        \r\n\
+        {}",
         status,
         if status == 200 { "OK" } else { "Error" },
         message.len(),
@@ -902,13 +1451,22 @@ async fn send_error_response(stream: tokio::net::TcpStream, status: u16, message
     );
 
     let mut buf_writer = tokio::io::BufWriter::new(stream);
-    let _ = buf_writer.write_all(response.as_bytes()).await;
-    let _ = buf_writer.flush().await;
+    if let Err(e) = buf_writer.write_all(response.as_bytes()).await {
+        warn!("发送错误响应失败: {}", e);
+        return;
+    }
+    if let Err(e) = buf_writer.flush().await {
+        warn!("刷新错误响应失败: {}", e);
+    }
 }
 
 async fn send_options_response(stream: tokio::net::TcpStream, message: &str) {
     let response = format!(
-        "HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+        "HTTP/1.1 403 Forbidden\r\n\
+        Content-Type: text/plain\r\n\
+        Content-Length: {}\r\n\
+        \r\n\
+        {}",
         message.len(),
         message
     );
@@ -919,7 +1477,13 @@ async fn send_options_response(stream: tokio::net::TcpStream, message: &str) {
 
 async fn send_options_response_with_cors(stream: tokio::net::TcpStream, cors_header: &str) {
     let response = format!(
-        "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nAccess-Control-Max-Age: 86400\r\n\r\n",
+        "HTTP/1.1 204 No Content\r\n\
+        Access-Control-Allow-Origin: {}\r\n\
+        Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
+        Access-Control-Allow-Headers: Content-Type, Authorization\r\n\
+        Access-Control-Max-Age: 86400\r\n\
+        \r\n\
+        ",
         cors_header
     );
     let mut buf_writer = tokio::io::BufWriter::new(stream);
@@ -937,6 +1501,32 @@ fn get_query_param(query_string: &str, param: &str) -> Option<String> {
         }
     }
     None
+}
+
+const SENSITIVE_PARAMS: &[&str] = &["password", "token", "secret", "key", "api_key", "apikey", "authorization", "auth"];
+
+fn sanitize_query_string(query_string: &str) -> String {
+    if query_string.is_empty() {
+        return String::new();
+    }
+
+    query_string
+        .split('&')
+        .filter_map(|pair| {
+            let kv: Vec<&str> = pair.splitn(2, '=').collect();
+            if kv.is_empty() {
+                return None;
+            }
+
+            let param = kv[0].to_lowercase();
+            if SENSITIVE_PARAMS.contains(&param.as_str()) {
+                Some(format!("{}={}", kv[0], "***"))
+            } else {
+                Some(pair.to_string())
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("&")
 }
 
 fn urlencoding_decode(s: &str) -> String {
@@ -982,11 +1572,10 @@ async fn run_collector(state: Arc<ServerState>, mut abort_rx: broadcast::Receive
     info!("数据采集任务启动中...");
 
     let now = Utc::now();
-    let next_hour = match now
+    let next_hour = match (now + chrono::Duration::hours(1))
         .with_minute(0)
         .and_then(|t| t.with_second(0))
         .and_then(|t| t.with_nanosecond(0))
-        .map(|t| t + chrono::Duration::hours(1))
     {
         Some(t) => t,
         None => {
@@ -996,70 +1585,218 @@ async fn run_collector(state: Arc<ServerState>, mut abort_rx: broadcast::Receive
     };
     let wait_secs = (next_hour - now).num_seconds();
 
-    info!("首次采集后等待到下一个整点: {} ({} 秒后)", next_hour.format("%Y-%m-%d %H:%M:%S UTC"), wait_secs);
+    info!(
+        "下次采集时间: {} ({} 秒后)",
+        next_hour.format("%Y-%m-%d %H:%M:%S UTC"),
+        wait_secs
+    );
 
     info!("启动时执行首次采集...");
     collect_all_modes(&state).await;
 
-    let mut current_next_hour = next_hour;
-
     loop {
-        let now = Utc::now();
-        if now >= current_next_hour {
-            collect_all_modes(&state).await;
-            current_next_hour = match now
-                .with_minute(0)
-                .and_then(|t| t.with_second(0))
-                .and_then(|t| t.with_nanosecond(0))
-                .map(|t| t + chrono::Duration::hours(1))
-            {
-                Some(t) => t,
-                None => {
-                    error!("Failed to calculate next hour");
-                    tokio::time::sleep(std::time::Duration::from_secs(SECONDS_PER_HOUR as u64)).await;
-                    continue;
-                }
-            };
-        } else {
-            let sleep_secs = (current_next_hour - now).num_seconds();
-            tokio::select! {
-                _ = abort_rx.recv() => {
-                    info!("收到关闭信号，退出采集循环");
-                    break;
-                }
-                _ = tokio::time::sleep(std::time::Duration::from_secs(sleep_secs as u64)) => {
-                    collect_all_modes(&state).await;
-                    current_next_hour = match Utc::now()
-                        .with_minute(0)
-                        .and_then(|t| t.with_second(0))
-                        .and_then(|t| t.with_nanosecond(0))
-                        .map(|t| t + chrono::Duration::hours(1))
-                    {
-                        Some(t) => t,
-                        None => {
-                            error!("Failed to calculate next hour");
-                            continue;
-                        }
-                    };
-                }
+        tokio::select! {
+            _ = abort_rx.recv() => {
+                info!("收到关闭信号，退出采集循环");
+                break;
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(SECONDS_PER_HOUR as u64)) => {
+                collect_all_modes(&state).await;
             }
         }
     }
 }
 
+const MAX_RETRIES: u32 = 3;
+const RETRY_DELAY_MS: u64 = 1000;
+
+async fn scrape_fire_with_retry(
+    state: &Arc<ServerState>,
+    market_mode: &str,
+) -> Result<scraper::FirePriceSnapshot, String> {
+    let mut last_error = String::new();
+    
+    for attempt in 1..=MAX_RETRIES {
+        match Scraper::scrape_fire_price(
+            market_mode,
+            &state.config.api_config,
+            &state.config.api_endpoints,
+        )
+        .await
+        {
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                last_error = e;
+                if attempt < MAX_RETRIES {
+                    warn!(
+                        "火价抓取失败 (尝试 {}/{}): {}，{}ms 后重试",
+                        attempt,
+                        MAX_RETRIES,
+                        last_error,
+                        RETRY_DELAY_MS
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                }
+            }
+        }
+    }
+    
+    Err(format!("火价抓取在 {} 次尝试后仍失败: {}", MAX_RETRIES, last_error))
+}
+
+async fn scrape_items_with_retry(
+    state: &Arc<ServerState>,
+    season: &str,
+    market_mode: &str,
+) -> Result<Vec<scraper::Item>, String> {
+    let mut last_error = String::new();
+    
+    for attempt in 1..=MAX_RETRIES {
+        match Scraper::scrape_items(
+            season,
+            market_mode,
+            &state.config.api_config,
+            &state.config.api_endpoints,
+        )
+        .await
+        {
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                last_error = e;
+                if attempt < MAX_RETRIES {
+                    warn!(
+                        "物品抓取失败 (尝试 {}/{}): {}，{}ms 后重试",
+                        attempt,
+                        MAX_RETRIES,
+                        last_error,
+                        RETRY_DELAY_MS
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                }
+            }
+        }
+    }
+    
+    Err(format!("物品抓取在 {} 次尝试后仍失败: {}", MAX_RETRIES, last_error))
+}
+
+async fn collect_single_mode(
+    state: &Arc<ServerState>,
+    season: &str,
+    mode: &str,
+    market_mode: &str,
+    timestamp: i64,
+) -> Option<ModeCollectionStatus> {
+    info!(
+        "[{}] 开始采集 {} 数据...",
+        Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
+        mode
+    );
+
+    let mut mode_status = ModeCollectionStatus {
+        timestamp,
+        fire_success: Some(false),
+        fire_price: None,
+        items_count: None,
+        items_success: Some(false),
+        error: None,
+        collection_success: None,
+    };
+
+    let mut fire_per_rmb = 0.0;
+
+    let fire_result = scrape_fire_with_retry(state, market_mode).await;
+
+    match fire_result {
+        Ok(fire) => {
+            mode_status.fire_success = Some(true);
+            mode_status.fire_price = Some(fire.rmb_per_10k_fire);
+            fire_per_rmb = fire.fire_per_rmb;
+
+            if let Err(e) = db::insert_fire_snapshot(&state.db, season, market_mode, &fire, timestamp).await {
+                mode_status.error = Some(format!("DB error: {}", e));
+            }
+        }
+        Err(e) => {
+            mode_status.error = Some(format!("Fire scrape error: {}", e));
+        }
+    }
+
+    let items_result = scrape_items_with_retry(state, season, market_mode).await;
+
+    match items_result {
+        Ok(items) => {
+            mode_status.items_success = Some(true);
+            mode_status.items_count = Some(items.len());
+
+            let price_for_calc = if fire_per_rmb > 0.0 { fire_per_rmb } else { 1.0 };
+
+            if let Err(e) = db::insert_items_snapshots(&state.db, season, market_mode, price_for_calc, &items, timestamp).await {
+                if mode_status.error.is_none() {
+                    mode_status.error = Some(format!("Items DB error: {}", e));
+                }
+            }
+        }
+        Err(e) => {
+            if mode_status.error.is_none() {
+                mode_status.error = Some(format!("Items scrape error: {}", e));
+            }
+        }
+    }
+
+    info!(
+        "[{}] {} 采集完成: 火价={}, 物品={}",
+        Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
+        mode,
+        mode_status.fire_price.map(|p| p.to_string()).unwrap_or_else(|| "失败".to_string()),
+        mode_status.items_count.unwrap_or(0)
+    );
+
+    let final_success = mode_status.fire_success == Some(true) && mode_status.items_success == Some(true);
+    mode_status.collection_success = Some(final_success);
+    Some(mode_status)
+}
+
 async fn collect_all_modes(state: &Arc<ServerState>) {
-    let current_season = match server_db::get_current_season(&state.db).await {
+    let current_season = get_cached_season(state).await;
+
+    match current_season {
         Some(season) => {
             info!("当前活跃赛季: {}，开始采集", season);
-            season
+            run_collection_for_season(state, &season, timestamp_from_now()).await;
         }
         None => {
             info!("没有活跃的赛季（已全部归档），采集任务暂停");
-            return;
         }
     };
+}
 
-    let timestamp = match Utc::now()
+async fn get_cached_season(state: &Arc<ServerState>) -> Option<String> {
+    let cache = state.season_cache.read().await;
+    
+    if let Some(ref cached) = *cache {
+        let age_secs = cached.cached_at.elapsed().as_secs();
+        if age_secs < 300 {
+            return Some(cached.season_id.clone());
+        }
+    }
+    drop(cache);
+
+    let season = db::get_current_season(&state.db).await?;
+    
+    let new_cache = SeasonCache {
+        season_id: season.clone(),
+        cached_at: Instant::now(),
+    };
+    
+    let mut cache = state.season_cache.write().await;
+    *cache = Some(new_cache);
+    
+    Some(season)
+}
+
+fn timestamp_from_now() -> i64 {
+    match Utc::now()
         .with_minute(0)
         .and_then(|t| t.with_second(0))
         .and_then(|t| t.with_nanosecond(0))
@@ -1067,91 +1804,213 @@ async fn collect_all_modes(state: &Arc<ServerState>) {
         Some(t) => t.timestamp(),
         None => {
             error!("Failed to calculate collection timestamp");
-            return;
-        }
-    };
-
-    let mut new_status = CollectionStatus::default();
-
-    for scrape_mode in &state.config.scrape_modes {
-        if !scrape_mode.enabled {
-            continue;
-        }
-
-        let market_mode = if scrape_mode.mode == "expert" { "season_expert" } else { "season_normal" };
-
-        info!("[{}] 开始采集 {} 数据...", Utc::now().format("%Y-%m-%d %H:%M:%S UTC"), scrape_mode.mode);
-
-        let mut mode_status = ModeCollectionStatus {
-            timestamp,
-            fire_success: Some(false),
-            fire_price: None,
-            items_count: None,
-            items_success: Some(false),
-            error: None,
-            collection_success: None,
-        };
-
-        let mut fire_per_rmb = 0.0;
-
-        match scraper::Scraper::scrape_fire_price(market_mode, &state.config.api_config, &state.config.api_endpoints).await {
-            Ok(fire) => {
-                mode_status.fire_success = Some(true);
-                mode_status.fire_price = Some(fire.rmb_per_10k_fire);
-                fire_per_rmb = fire.fire_per_rmb;
-
-                if let Err(e) = server_db::insert_fire_snapshot(&state.db, &current_season, market_mode, &fire, timestamp).await {
-                    mode_status.error = Some(format!("DB error: {}", e));
-                }
-            }
-            Err(e) => {
-                mode_status.error = Some(format!("Fire scrape error: {}", e));
-            }
-        }
-
-        let items_result = scraper::Scraper::scrape_items(&current_season, market_mode, &state.config.api_config, &state.config.api_endpoints).await;
-
-        match items_result {
-            Ok(items) => {
-                mode_status.items_success = Some(true);
-                mode_status.items_count = Some(items.len());
-
-                let price_for_calc = if fire_per_rmb > 0.0 { fire_per_rmb } else { 1.0 };
-
-                if let Err(e) = server_db::insert_items_snapshots(&state.db, &current_season, market_mode, price_for_calc, &items, timestamp).await {
-                    if mode_status.error.is_none() {
-                        mode_status.error = Some(format!("Items DB error: {}", e));
-                    }
-                }
-            }
-            Err(e) => {
-                if mode_status.error.is_none() {
-                    mode_status.error = Some(format!("Items scrape error: {}", e));
-                }
-            }
-        }
-
-        info!("[{}] {} 采集完成: 火价={}, 物品={}",
-            Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
-            scrape_mode.mode,
-            mode_status.fire_price.map(|p| p.to_string()).unwrap_or_else(|| "失败".to_string()),
-            mode_status.items_count.unwrap_or(0)
-        );
-
-        let final_success = mode_status.fire_success == Some(true) && mode_status.items_success == Some(true);
-        mode_status.collection_success = Some(final_success);
-
-        if scrape_mode.mode == "expert" {
-            new_status.expert = Some(mode_status);
-        } else {
-            new_status.normal = Some(mode_status);
+            0
         }
     }
+}
+
+async fn run_collection_for_season(state: &Arc<ServerState>, season: &str, timestamp: i64) {
+    let mut normal_status = None;
+    let mut expert_status = None;
+
+    let dynamic = state.dynamic_config.read().await;
+    let enabled_modes: Vec<_> = dynamic
+        .scrape_modes
+        .iter()
+        .filter(|m| m.enabled)
+        .collect();
+
+    if enabled_modes.len() == 2 {
+        info!("并行采集普通服和专家服...");
+        
+        let (norm, expert) = tokio::join!(
+            collect_single_mode(
+                state,
+                season,
+                "normal",
+                "season_normal",
+                timestamp
+            ),
+            collect_single_mode(
+                state,
+                season,
+                "expert",
+                "season_expert",
+                timestamp
+            )
+        );
+        
+        normal_status = norm;
+        expert_status = expert;
+    } else {
+        for scrape_mode in enabled_modes {
+            let market_mode = if scrape_mode.mode == "expert" {
+                "season_expert"
+            } else {
+                "season_normal"
+            };
+            
+            let status = collect_single_mode(
+                state,
+                season,
+                &scrape_mode.mode,
+                market_mode,
+                timestamp,
+            ).await;
+            
+            if scrape_mode.mode == "expert" {
+                expert_status = status;
+            } else {
+                normal_status = status;
+            }
+        }
+    }
+
+    let new_status = CollectionStatus {
+        normal: normal_status,
+        expert: expert_status,
+    };
+
+    let ws_payload = new_status.clone();
 
     {
         let mut last = state.last_collection.write().await;
         *last = new_status;
     }
 
-    info!("[{}] 本次采集完成", Utc::now().format("%Y-%m-%d %H:%M:%S UTC"));
+    db::wal_checkpoint(&state.db).await.ok();
+
+    {
+        let broadcaster = state.ws_broadcaster.read().await;
+        let status = serde_json::json!({
+            "type": "collection_complete",
+            "data": {
+                "normal": ws_payload.normal,
+                "expert": ws_payload.expert,
+                "timestamp": chrono::Utc::now().timestamp()
+            }
+        });
+        broadcaster.broadcast(&serde_json::to_string(&status).unwrap_or_default());
+    }
+
+    info!(
+        "[{}] 本次采集完成",
+        Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+    );
+}
+
+fn mask_url_for_log(url: &str) -> String {
+    url.replace("api.qiandao.com", "***")
+        .replace("115.231.176.101", "***")
+}
+
+async fn start_websocket_server(state: Arc<ServerState>, port: u16) {
+    let addr = format!("0.0.0.0:{}", port);
+    info!("WebSocket 服务器启动: ws://{}", addr);
+
+    let listener = match tokio::net::TcpListener::bind(&addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            error!("WebSocket 服务器绑定失败: {}", e);
+            return;
+        }
+    };
+
+    info!("WebSocket 服务器监听中: ws://{}", addr);
+
+    loop {
+        match listener.accept().await {
+            Ok((stream, client_addr)) => {
+                info!("WebSocket 客户端连接: {}", client_addr);
+                let state = state.clone();
+                tokio::spawn(async move {
+                    handle_ws_connection(stream, client_addr, state).await;
+                });
+            }
+            Err(e) => {
+                warn!("WebSocket 连接接受失败: {}", e);
+            }
+        }
+    }
+}
+
+async fn handle_ws_connection(stream: TcpStream, client_addr: std::net::SocketAddr, state: Arc<ServerState>) {
+    let ws_stream = match accept_async(stream).await {
+        Ok(ws) => ws,
+        Err(e) => {
+            warn!("WebSocket 握手失败: {}: {}", client_addr, e);
+            return;
+        }
+    };
+
+    {
+        let mut broadcaster = state.ws_broadcaster.write().await;
+        broadcaster.client_connected();
+    }
+
+    let (write, read) = ws_stream.split();
+    let write = Arc::new(TokioMutex::new(write));
+
+    let mut rx = {
+        let broadcaster = state.ws_broadcaster.read().await;
+        broadcaster.subscribe()
+    };
+
+    let write_clone = write.clone();
+    let send_task = tokio::spawn(async move {
+        while let Ok(msg) = rx.recv().await {
+            let send_result = {
+                let mut w = write_clone.lock().await;
+                w.send(Message::Text(msg.into())).await
+            };
+            if send_result.is_err() {
+                break;
+            }
+        }
+    });
+
+    let write_clone = write.clone();
+    let recv_task = tokio::spawn(async move {
+        let mut read = read;
+        while let Some(msg) = read.next().await {
+            match msg {
+                Ok(Message::Text(text)) => {
+                    debug!("WebSocket 收到消息: {}", text);
+                    if text.trim() == "ping" {
+                        let mut w = write_clone.lock().await;
+                        let _ = w.send(Message::Text("pong".into())).await;
+                    }
+                }
+                Ok(Message::Ping(data)) => {
+                    let mut w = write_clone.lock().await;
+                    let _ = w.send(Message::Pong(data)).await;
+                }
+                Ok(Message::Close(_)) | Err(_) => {
+                    break;
+                }
+                _ => {}
+            }
+        }
+    });
+
+    let _ = tokio::join!(send_task, recv_task);
+
+    {
+        let mut broadcaster = state.ws_broadcaster.write().await;
+        broadcaster.client_disconnected();
+    }
+
+    info!("WebSocket 连接已关闭: {}", client_addr);
+}
+
+async fn graceful_shutdown(state: Arc<ServerState>) {
+    info!("开始优雅关闭...");
+    
+    info!("等待现有请求完成...");
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    
+    info!("关闭数据库连接池...");
+    state.db.close().await;
+    
+    info!("优雅关闭完成");
 }
