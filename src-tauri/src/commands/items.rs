@@ -506,18 +506,3 @@ pub async fn get_realtime_fire_changes(
         .await
         .map_err(|e| e.to_string())
 }
-
-#[cfg(debug_assertions)]
-#[tauri::command]
-pub async fn seed_realtime_fire_data(state: State<'_, Arc<AppState>>) -> Result<usize, String> {
-    tracing::info!("seed_realtime_fire_data called");
-    repo_realtime_fire::seed_test_data(&state.db)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[cfg(not(debug_assertions))]
-#[tauri::command]
-pub async fn seed_realtime_fire_data(_state: State<'_, Arc<AppState>>) -> Result<usize, String> {
-    Err("测试数据生成仅在开发模式下可用".to_string())
-}

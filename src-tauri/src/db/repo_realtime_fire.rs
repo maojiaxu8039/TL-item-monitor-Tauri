@@ -3,32 +3,8 @@ use crate::core::errors::AppError;
 use crate::db::table_resolver::TableResolver;
 use chrono::Utc;
 use rand::{Rng, SeedableRng};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sqlx::SqlitePool;
-
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct RealtimeFirePriceRecord {
-    pub id: i64,
-    pub item_id: String,
-    pub item_name: String,
-    pub fire_price: f64,
-    pub scraped_at: i64,
-    pub created_at: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FirePriceChange {
-    pub item_id: String,
-    pub item_name: String,
-    pub current_price: f64,
-    pub change_3h: f64,
-    pub change_1h: f64,
-    pub change_30m: f64,
-    pub change_rate_3h: f64,
-    pub change_rate_1h: f64,
-    pub change_rate_30m: f64,
-    pub trend: String,
-}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct FirePriceChangeItem {
@@ -110,59 +86,58 @@ pub async fn batch_insert_realtime_fire_prices(
 pub async fn get_realtime_fire_changes(
     pool: &SqlitePool,
 ) -> Result<Vec<FirePriceChangeItem>, AppError> {
-    let table = TableResolver::realtime_fire_prices_table();
     let now = Utc::now().timestamp();
+
+    let current_table = TableResolver::item_snapshots_table("ss12", "season_normal");
 
     let three_hours_ago = now - 3 * SECONDS_PER_HOUR;
 
-    let records: Vec<RealtimeFirePriceRecord> = sqlx::query_as(&format!(
+    let latest_records: Vec<(String, String, f64, i64)> = sqlx::query_as(&format!(
         r#"
-            SELECT * FROM {} 
-            WHERE scraped_at > {}
+            SELECT item_id, name, fire_price, scraped_at 
+            FROM {table} 
+            WHERE scraped_at > {cutoff}
             ORDER BY scraped_at DESC
-            "#,
-        table, three_hours_ago
+        "#,
+        table = current_table,
+        cutoff = three_hours_ago
     ))
     .fetch_all(pool)
     .await?;
 
-    if records.is_empty() {
+    if latest_records.is_empty() {
         return Ok(Vec::new());
     }
 
-    let mut latest_by_item: std::collections::HashMap<String, &RealtimeFirePriceRecord> =
+    let mut latest_by_item: std::collections::HashMap<String, (String, f64, i64)> =
         std::collections::HashMap::new();
     let mut price_3h: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
     let mut price_1h: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
     let mut price_30m: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
     let mut price_5m: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
 
-    for record in &records {
-        let item_id = &record.item_id;
-
+    for (item_id, item_name, fire_price, scraped_at) in &latest_records {
         if !latest_by_item.contains_key(item_id) {
-            latest_by_item.insert(item_id.clone(), record);
+            latest_by_item.insert(item_id.clone(), (item_name.clone(), *fire_price, *scraped_at));
         }
 
-        let age_minutes = (now - record.scraped_at) / 60;
-        if age_minutes >= 150 && !price_3h.contains_key(item_id) {
-            price_3h.insert(item_id.clone(), record.fire_price);
+        let age = now - scraped_at;
+        if age >= 150 * SECONDS_PER_MINUTE && !price_3h.contains_key(item_id) {
+            price_3h.insert(item_id.clone(), *fire_price);
         }
-        if age_minutes >= 50 && !price_1h.contains_key(item_id) {
-            price_1h.insert(item_id.clone(), record.fire_price);
+        if age >= 50 * SECONDS_PER_MINUTE && !price_1h.contains_key(item_id) {
+            price_1h.insert(item_id.clone(), *fire_price);
         }
-        if age_minutes >= 20 && !price_30m.contains_key(item_id) {
-            price_30m.insert(item_id.clone(), record.fire_price);
+        if age >= 20 * SECONDS_PER_MINUTE && !price_30m.contains_key(item_id) {
+            price_30m.insert(item_id.clone(), *fire_price);
         }
-        if age_minutes >= 4 && !price_5m.contains_key(item_id) {
-            price_5m.insert(item_id.clone(), record.fire_price);
+        if age >= 4 * SECONDS_PER_MINUTE && !price_5m.contains_key(item_id) {
+            price_5m.insert(item_id.clone(), *fire_price);
         }
     }
 
     let mut result = Vec::new();
-    for (item_id, latest) in latest_by_item {
-        let current_price = latest.fire_price;
-
+    for (item_id, (item_name, current_price, _)) in latest_by_item {
         let price_3h_ago = price_3h.get(&item_id).copied();
         let price_1h_ago = price_1h.get(&item_id).copied();
         let price_30m_ago = price_30m.get(&item_id).copied();
@@ -193,12 +168,12 @@ pub async fn get_realtime_fire_changes(
                 "stable".to_string()
             }
         } else {
-            "unknown".to_string()
+            "stable".to_string()
         };
 
         result.push(FirePriceChangeItem {
             item_id,
-            item_name: latest.item_name.clone(),
+            item_name,
             current_price,
             price_3h_ago,
             price_1h_ago,

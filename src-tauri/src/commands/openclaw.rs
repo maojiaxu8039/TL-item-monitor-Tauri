@@ -637,14 +637,14 @@ pub async fn openclaw_chat(
     let mut last_connect_error = None;
     let mut connected = None;
     for url in gateway_url_candidates(&gateway_url) {
-        println!("[OpenClaw] Connecting to: {}", url);
+        tracing::debug!("[OpenClaw] Connecting to: {}", url);
         match tokio_tungstenite::connect_async(&url).await {
             Ok((ws, _)) => {
                 connected = Some((url, ws));
                 break;
             }
             Err(e) => {
-                println!("[OpenClaw] Connect failed: {}", e);
+                tracing::debug!("[OpenClaw] Connect failed: {}", e);
                 last_connect_error = Some(e.to_string());
             }
         }
@@ -657,7 +657,7 @@ pub async fn openclaw_chat(
         )
     })?;
 
-    println!("[OpenClaw] Connected successfully: {}", url);
+    tracing::debug!("[OpenClaw] Connected successfully: {}", url);
 
     let (mut write, mut read) = ws.split();
     let gateway_token = gateway_token.trim().to_string();
@@ -667,7 +667,7 @@ pub async fn openclaw_chat(
         None
     };
     if let Some(device_auth) = local_device_auth.as_ref() {
-        println!(
+        tracing::debug!(
             "[OpenClaw] Loaded local device identity: {}, operator token: {}",
             device_auth.device_id,
             device_auth.operator_token.is_some()
@@ -680,19 +680,19 @@ pub async fn openclaw_chat(
     let mut uses_gateway_v3 = false;
     let mut gateway_v3_session_key = "main".to_string();
 
-    println!("[OpenClaw] Waiting for challenge...");
+    tracing::debug!("[OpenClaw] Waiting for challenge...");
     while start_time.elapsed() < challenge_timeout && !auth_sent {
         match tokio::time::timeout(Duration::from_millis(500), read.next()).await {
             Ok(Some(Ok(msg))) => {
-                println!("[OpenClaw] Got message: {:?}", msg);
+                tracing::debug!("[OpenClaw] Got message: {:?}", msg);
 
                 if let tokio_tungstenite::tungstenite::Message::Text(text) = msg {
-                    println!("[OpenClaw] Text message: {}", text);
+                    tracing::debug!("[OpenClaw] Text message: {}", text);
 
                     if let Ok(event) = serde_json::from_str::<ChallengeEvent>(&text) {
-                        println!("[OpenClaw] Challenge event: {:?}", event);
+                        tracing::debug!("[OpenClaw] Challenge event: {:?}", event);
                         if event.event == "connect.challenge" {
-                            println!("[OpenClaw] Got challenge, nonce: {}", event.payload.nonce);
+                            tracing::debug!("[OpenClaw] Got challenge, nonce: {}", event.payload.nonce);
 
                             let connect_id = Uuid::new_v4().to_string();
                             let mut connect_params = json!({
@@ -744,7 +744,7 @@ pub async fn openclaw_chat(
                                         }
                                     }
                                     Err(e) => {
-                                        println!("[OpenClaw] Device auth signing failed: {}", e);
+                                        tracing::debug!("[OpenClaw] Device auth signing failed: {}", e);
                                     }
                                 }
                             }
@@ -760,7 +760,7 @@ pub async fn openclaw_chat(
                                 "params": connect_params
                             })
                             .to_string();
-                            println!("[OpenClaw] Sending Gateway v3 connect...");
+                            tracing::debug!("[OpenClaw] Sending Gateway v3 connect...");
 
                             write
                                 .send(tokio_tungstenite::tungstenite::Message::Text(
@@ -777,7 +777,7 @@ pub async fn openclaw_chat(
                                     Ok(Some(Ok(
                                         tokio_tungstenite::tungstenite::Message::Text(text),
                                     ))) => {
-                                        println!(
+                                        tracing::debug!(
                                             "[OpenClaw] Gateway v3 connect response: {}",
                                             text
                                         );
@@ -791,7 +791,7 @@ pub async fn openclaw_chat(
                                                         gateway_response_payload(&value)
                                                             .map(session_key_from_hello)
                                                             .unwrap_or_else(|| "main".to_string());
-                                                    println!(
+                                                    tracing::debug!(
                                                         "[OpenClaw] Gateway v3 connected, session: {}",
                                                         gateway_v3_session_key
                                                     );
@@ -824,7 +824,7 @@ pub async fn openclaw_chat(
                                         });
                                     }
                                     Ok(Some(Ok(other))) => {
-                                        println!(
+                                        tracing::debug!(
                                             "[OpenClaw] Gateway v3 connect other message: {:?}",
                                             other
                                         );
@@ -855,17 +855,17 @@ pub async fn openclaw_chat(
                 }
             }
             Ok(Some(Err(e))) => {
-                println!("[OpenClaw] Read error: {}", e);
+                tracing::debug!("[OpenClaw] Read error: {}", e);
             }
             Err(_) => {
-                println!("[OpenClaw] Timeout waiting for challenge...");
+                tracing::debug!("[OpenClaw] Timeout waiting for challenge...");
             }
             _ => {}
         }
     }
 
     if !auth_sent {
-        println!("[OpenClaw] No challenge received, sending auth anyway...");
+        tracing::debug!("[OpenClaw] No challenge received, sending auth anyway...");
         let auth_msg = format!("__auth__:{}", gateway_token);
         write
             .send(tokio_tungstenite::tungstenite::Message::Text(
@@ -898,7 +898,7 @@ pub async fn openclaw_chat(
         })
         .to_string();
 
-        println!("[OpenClaw] Sending Gateway v3 chat.send");
+        tracing::debug!("[OpenClaw] Sending Gateway v3 chat.send");
         write
             .send(tokio_tungstenite::tungstenite::Message::Text(
                 send_request.into(),
@@ -913,7 +913,7 @@ pub async fn openclaw_chat(
         while send_start.elapsed() < Duration::from_secs(15) {
             match tokio::time::timeout(Duration::from_millis(500), read.next()).await {
                 Ok(Some(Ok(tokio_tungstenite::tungstenite::Message::Text(text)))) => {
-                    println!("[OpenClaw] Gateway v3 received: {}", text);
+                    tracing::debug!("[OpenClaw] Gateway v3 received: {}", text);
 
                     if let Ok(value) = serde_json::from_str::<Value>(&text) {
                         if is_gateway_response_for(&value, &send_id) {
@@ -953,7 +953,7 @@ pub async fn openclaw_chat(
                     });
                 }
                 Ok(Some(Ok(other))) => {
-                    println!("[OpenClaw] Gateway v3 other message: {:?}", other);
+                    tracing::debug!("[OpenClaw] Gateway v3 other message: {:?}", other);
                 }
                 Ok(Some(Err(e))) => {
                     return Ok(OpenClawResponse {
@@ -1005,7 +1005,7 @@ pub async fn openclaw_chat(
             while poll_start.elapsed() < Duration::from_secs(5) {
                 match tokio::time::timeout(Duration::from_secs(2), read.next()).await {
                     Ok(Some(Ok(tokio_tungstenite::tungstenite::Message::Text(text)))) => {
-                        println!("[OpenClaw] Gateway v3 history received: {}", text);
+                        tracing::debug!("[OpenClaw] Gateway v3 history received: {}", text);
 
                         if let Ok(value) = serde_json::from_str::<Value>(&text) {
                             if is_gateway_response_for(&value, &history_id) {
@@ -1084,7 +1084,7 @@ pub async fn openclaw_chat(
                         });
                     }
                     Ok(Some(Ok(other))) => {
-                        println!("[OpenClaw] Gateway v3 history other message: {:?}", other);
+                        tracing::debug!("[OpenClaw] Gateway v3 history other message: {:?}", other);
                     }
                     Ok(Some(Err(e))) => {
                         return Ok(OpenClawResponse {
@@ -1141,7 +1141,7 @@ pub async fn openclaw_chat(
     let request_json =
         serde_json::to_string(&request).map_err(|e| format!("序列化消息失败: {}", e))?;
 
-    println!("[OpenClaw] Sending chat: {}", request_json);
+    tracing::debug!("[OpenClaw] Sending chat: {}", request_json);
 
     write
         .send(tokio_tungstenite::tungstenite::Message::Text(
@@ -1150,7 +1150,7 @@ pub async fn openclaw_chat(
         .await
         .map_err(|e| format!("发送消息失败: {}", e))?;
 
-    println!("[OpenClaw] Waiting for response...");
+    tracing::debug!("[OpenClaw] Waiting for response...");
 
     let mut response_text = String::new();
     let mut last_error = None;
@@ -1161,11 +1161,11 @@ pub async fn openclaw_chat(
         match tokio::time::timeout(Duration::from_secs(2), read.next()).await {
             Ok(Some(Ok(msg))) => match msg {
                 tokio_tungstenite::tungstenite::Message::Text(text) => {
-                    println!("[OpenClaw] Received: {}", text);
+                    tracing::debug!("[OpenClaw] Received: {}", text);
 
                     let frame = parse_gateway_frame(&text);
                     if let Some(error) = frame.error {
-                        println!("[OpenClaw] Gateway error: {}", error);
+                        tracing::debug!("[OpenClaw] Gateway error: {}", error);
                         last_error = Some(error);
                     }
 
@@ -1174,27 +1174,27 @@ pub async fn openclaw_chat(
                     }
 
                     if frame.done {
-                        println!("[OpenClaw] Response complete");
+                        tracing::debug!("[OpenClaw] Response complete");
                         break;
                     }
                 }
                 tokio_tungstenite::tungstenite::Message::Close(_) => {
-                    println!("[OpenClaw] Connection closed");
+                    tracing::debug!("[OpenClaw] Connection closed");
                     break;
                 }
                 other => {
-                    println!("[OpenClaw] Other message: {:?}", other);
+                    tracing::debug!("[OpenClaw] Other message: {:?}", other);
                 }
             },
             Ok(Some(Err(e))) => {
-                println!("[OpenClaw] Error: {}", e);
+                tracing::debug!("[OpenClaw] Error: {}", e);
             }
             Err(_) => {}
             _ => {}
         }
     }
 
-    println!("[OpenClaw] Final response: {} chars", response_text.len());
+    tracing::debug!("[OpenClaw] Final response: {} chars", response_text.len());
 
     if response_text.is_empty() {
         return Ok(OpenClawResponse {

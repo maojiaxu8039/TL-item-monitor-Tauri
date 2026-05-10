@@ -557,8 +557,6 @@ export const cmd = {
   },
   getRealtimeFireChanges: () =>
     invoke<FirePriceChangeItem[]>("get_realtime_fire_changes"),
-  seedRealtimeFireData: () =>
-    invoke<number>("seed_realtime_fire_data"),
   getFirePriceInsight: () =>
     invoke<FirePriceInsight>("get_fire_price_insight"),
   getItemPriceInsights: () =>
