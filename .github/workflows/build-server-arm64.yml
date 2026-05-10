@@ -1,4 +1,4 @@
-name: Download Linux ARM64 Build
+name: Build Server (ARM64)
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - 'server-standalone/**'
-      - '.github/workflows/download-arm64.yml'
+      - '.github/workflows/build-server-arm64.yml'
   workflow_dispatch:
 
 jobs:
@@ -28,6 +28,7 @@ jobs:
 
       - name: Build server binary
         env:
+          CARGO_INCREMENTAL: 0
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
           CC: aarch64-linux-gnu-gcc
           RUSTFLAGS: "-C target-feature=-crt-static"
@@ -47,12 +48,12 @@ jobs:
         with:
           name: linux-arm64-server
           path: server-standalone/target/aarch64-unknown-linux-gnu/release/tl-monitor-server
-          retention-days: 7
+          retention-days: 30
 
       - name: Deployment summary
         if: github.ref == 'refs/heads/main'
         run: |
-          echo "## � ARM64 Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## ARM64 Server Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Artifact:** linux-arm64-server" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

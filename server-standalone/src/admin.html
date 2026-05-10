@@ -537,7 +537,7 @@
                         <div class="form-group">
                             <label>时间范围</label>
                             <select id="export-range">
-                                <option value="1">赛季前 1 天</option>
+                                <option value="1">赛季第 1 天</option>
                                 <option value="3">赛季前 3 天</option>
                                 <option value="7" selected>赛季前 7 天</option>
                                 <option value="30">赛季前 30 天</option>
@@ -855,20 +855,9 @@
 
                 if (rangeSelect !== 'season') {
                     const days = parseInt(rangeSelect);
-                    const exportSeason = document.getElementById('export-season').value;
                     
-                    // 获取当前赛季天数
-                    const seasonResp = await fetch(`/season-start${exportSeason ? '?season=' + exportSeason : ''}`);
-                    const seasonData = await seasonResp.json();
-                    
-                    if (seasonData.success && seasonData.data.started_at > 0) {
-                        const seasonStart = seasonData.data.started_at;
-                        const now = Math.floor(Date.now() / 1000);
-                        const currentDay = Math.floor((now - seasonStart) / 86400) + 1;
-                        
-                        max_day = currentDay;
-                        min_day = Math.max(1, currentDay - days + 1);
-                    }
+                    min_day = 1;
+                    max_day = days;
                 }
 
                 const endpoint = type === 'fire-history' ? '/fire-history' : '/items-history-all';

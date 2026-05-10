@@ -22,7 +22,7 @@ use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use constants::{SECONDS_PER_HOUR, SERVER_VERSION};
+use constants::SERVER_VERSION;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::{broadcast, RwLock};
 use tokio::sync::Mutex as TokioMutex;
@@ -1568,39 +1568,31 @@ fn get_next_collection_time() -> Option<i64> {
     Some(next_hour.timestamp())
 }
 
-async fn run_collector(state: Arc<ServerState>, mut abort_rx: broadcast::Receiver<()>) {
-    info!("数据采集任务启动中...");
-
+fn seconds_until_next_hour() -> u64 {
     let now = Utc::now();
-    let next_hour = match (now + chrono::Duration::hours(1))
+    let next_hour = (now + chrono::Duration::hours(1))
         .with_minute(0)
         .and_then(|t| t.with_second(0))
         .and_then(|t| t.with_nanosecond(0))
-    {
-        Some(t) => t,
-        None => {
-            error!("Failed to calculate next hour timestamp");
-            return;
-        }
-    };
-    let wait_secs = (next_hour - now).num_seconds();
+        .unwrap_or(now);
+    (next_hour - now).num_seconds() as u64
+}
 
-    info!(
-        "下次采集时间: {} ({} 秒后)",
-        next_hour.format("%Y-%m-%d %H:%M:%S UTC"),
-        wait_secs
-    );
-
-    info!("启动时执行首次采集...");
-    collect_all_modes(&state).await;
+async fn run_collector(state: Arc<ServerState>, mut abort_rx: broadcast::Receiver<()>) {
+    info!("数据采集任务启动中...");
 
     loop {
+        let wait_secs = seconds_until_next_hour();
+        info!("等待 {} 秒后到达整点...", wait_secs);
+
         tokio::select! {
             _ = abort_rx.recv() => {
                 info!("收到关闭信号，退出采集循环");
                 break;
             }
-            _ = tokio::time::sleep(std::time::Duration::from_secs(SECONDS_PER_HOUR as u64)) => {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(wait_secs)) => {
+                let now = Utc::now();
+                info!("到达整点 {}，开始采集...", now.format("%Y-%m-%d %H:%M:%S UTC"));
                 collect_all_modes(&state).await;
             }
         }

@@ -366,6 +366,8 @@ pub async fn insert_fire_snapshot(
     Ok(())
 }
 
+const BATCH_SIZE: usize = 500;
+
 pub async fn insert_items_snapshots(
     pool: &SqlitePool,
     season_id: &str,
@@ -378,43 +380,71 @@ pub async fn insert_items_snapshots(
     let table = mode.items_table(season_id);
     let season_start = get_season_start(pool, season_id).await?;
     let season_day = calculate_season_day(season_start, scraped_at);
-    let mut count = 0;
+    let mut total_count = 0;
 
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    for chunk in items.chunks(BATCH_SIZE) {
+        let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    for item in items {
-        let fire_price = item.price * fire_per_rmb;
+        let placeholders: Vec<String> = chunk
+            .iter()
+            .map(|_| "(?, ?, ?, ?, ?, ?)".to_string())
+            .collect();
 
-        if let Err(e) = sqlx::query(&format!(
-            r#"
-            INSERT OR IGNORE INTO {}
-            (item_id, name, item_type, fire_price, scraped_at, season_day)
-            VALUES (?, ?, ?, ?, ?, ?)
-            "#,
-            table
-        ))
-        .bind(&item.item_id)
-        .bind(&item.name)
-        .bind(&item.item_type)
-        .bind(fire_price)
-        .bind(scraped_at)
-        .bind(season_day)
-        .execute(&mut *tx)
-        .await
-        {
-            error!("插入物品快照失败 {}: {}", item.item_id, e);
-        } else {
-            count += 1;
+        let sql = format!(
+            r#"INSERT OR IGNORE INTO {} (item_id, name, item_type, fire_price, scraped_at, season_day) VALUES {}"#,
+            table,
+            placeholders.join(", ")
+        );
+
+        let mut query = sqlx::query(&sql);
+        for item in chunk {
+            let fire_price = item.price * fire_per_rmb;
+            query = query
+                .bind(&item.item_id)
+                .bind(&item.name)
+                .bind(&item.item_type)
+                .bind(fire_price)
+                .bind(scraped_at)
+                .bind(season_day);
         }
-    }
 
-    tx.commit().await.map_err(|e| e.to_string())?;
+        match query.execute(&mut *tx).await {
+            Ok(result) => {
+                total_count += result.rows_affected() as usize;
+            }
+            Err(e) => {
+                error!("批量插入物品快照失败: {}", e);
+                for item in chunk {
+                    let fire_price = item.price * fire_per_rmb;
+                    if let Err(e) = sqlx::query(&format!(
+                        r#"INSERT OR IGNORE INTO {} (item_id, name, item_type, fire_price, scraped_at, season_day) VALUES (?, ?, ?, ?, ?, ?)"#,
+                        table
+                    ))
+                    .bind(&item.item_id)
+                    .bind(&item.name)
+                    .bind(&item.item_type)
+                    .bind(fire_price)
+                    .bind(scraped_at)
+                    .bind(season_day)
+                    .execute(&mut *tx)
+                    .await
+                    {
+                        error!("插入物品快照失败 {}: {}", item.item_id, e);
+                    } else {
+                        total_count += 1;
+                    }
+                }
+            }
+        }
+
+        tx.commit().await.map_err(|e| e.to_string())?;
+    }
 
     info!(
         "已保存 {} 个物品价格快照 (scraped_at: {}, season_day: {})",
-        count, scraped_at, season_day
+        total_count, scraped_at, season_day
     );
-    Ok(count)
+    Ok(total_count)
 }
 
 #[derive(Debug, Clone, Serialize)]

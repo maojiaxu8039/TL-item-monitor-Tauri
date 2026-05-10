@@ -167,11 +167,11 @@ sudo docker run -d \
 
 仓库地址: https://github.com/maojiaxu8039/TL-item-monitor-Tauri
 
-工作流文件: `.github/workflows/download-arm64.yml`
+工作流文件: `.github/workflows/build-server-arm64.yml`
 
 ### 触发构建
 
-1. 访问 Actions 页面: https://github.com/maojiaxu8039/TL-item-monitor-Tauri/actions/workflows/download-arm64.yml
+1. 访问 Actions 页面: https://github.com/maojiaxu8039/TL-item-monitor-Tauri/actions/workflows/build-server-arm64.yml
 2. 点击 "Run workflow"
 3. 选择分支 (main)
 4. 点击 "Run workflow"

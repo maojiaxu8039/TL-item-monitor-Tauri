@@ -71,6 +71,7 @@ struct LuosiItem {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Item {
     pub item_id: String,
     pub name: String,
@@ -340,6 +341,7 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
     debug!("解析 Node 输出...");
 
     #[derive(Deserialize)]
+    #[allow(dead_code)]
     struct NodeFireResult {
         error: Option<String>,
         fire_per_rmb: f64,
@@ -352,6 +354,7 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
         #[serde(default)]
         trading_volume: String,
         source: String,
+        #[allow(dead_code)]
         ts: String,
     }
 
@@ -362,14 +365,20 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
         return Err(format!("Node error: {}", error));
     }
 
+    let now = chrono::Utc::now();
+    let now_timestamp = now.timestamp();
+    let source_time = (now + chrono::Duration::hours(8))
+        .format("%Y/%m/%d %H:%M:%S")
+        .to_string();
+
     Ok(FirePriceSnapshot {
         rmb_per_10k_fire: result.ten_k,
         fire_per_rmb: result.fire_per_rmb,
         increase_ratio: result.increase_ratio,
         trading_volume: result.trading_volume,
         source: result.source,
-        source_time: result.ts,
-        scraped_at: chrono::Utc::now().timestamp(),
+        source_time,
+        scraped_at: now_timestamp,
     })
 }
 
@@ -394,6 +403,11 @@ fn parse_qiandao_response(data: QiandaoResponse, mode: &str) -> Result<FirePrice
         0.0
     };
 
+    let now = chrono::Utc::now();
+    let source_time = (now + chrono::Duration::hours(8))
+        .format("%Y/%m/%d %H:%M:%S")
+        .to_string();
+
     Ok(FirePriceSnapshot {
         rmb_per_10k_fire,
         fire_per_rmb: ratio_price,
@@ -407,8 +421,8 @@ fn parse_qiandao_response(data: QiandaoResponse, mode: &str) -> Result<FirePrice
                 "赛季普通"
             }
         ),
-        source_time: chrono::Utc::now().format("%Y-%m-%d %H:%M").to_string(),
-        scraped_at: chrono::Utc::now().timestamp(),
+        source_time,
+        scraped_at: now.timestamp(),
     })
 }
 

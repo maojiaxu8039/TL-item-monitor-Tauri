@@ -182,6 +182,12 @@ async fn run_node_fallback(
 
     let data = parse_node_output(&stdout)?;
 
+    let now = Utc::now();
+    let now_timestamp = now.timestamp();
+    let source_time = (now + chrono::Duration::hours(8))
+        .format("%Y/%m/%d %H:%M:%S")
+        .to_string();
+
     Ok(FirePriceSnapshot {
         price_per_wan: data.ten_k,
         rmb_per_10k_fire: data.rmb_per_fire,
@@ -189,8 +195,8 @@ async fn run_node_fallback(
         increase_ratio: Some(data.increase_ratio),
         trading_volume: Some(data.trading_volume),
         source: data.source,
-        source_time: Some(data.ts),
-        scraped_at: Utc::now().timestamp(),
+        source_time: Some(source_time),
+        scraped_at: now_timestamp,
     })
 }
 
@@ -316,6 +322,11 @@ fn parse_qiandao_response(
         0.0
     };
 
+    let now = Utc::now();
+    let source_time = (now + chrono::Duration::hours(8))
+        .format("%Y/%m/%d %H:%M:%S")
+        .to_string();
+
     Ok(FirePriceSnapshot {
         price_per_wan: rmb_per_10k_fire,
         rmb_per_10k_fire,
@@ -330,8 +341,8 @@ fn parse_qiandao_response(
                 "赛季普通"
             }
         ),
-        source_time: Some(Utc::now().format("%Y-%m-%d %H:%M").to_string()),
-        scraped_at: Utc::now().timestamp(),
+        source_time: Some(source_time),
+        scraped_at: now.timestamp(),
     })
 }
 
