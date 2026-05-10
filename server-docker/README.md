@@ -10,19 +10,20 @@
 - [维护命令](#维护命令)
 - [故障排除](#故障排除)
 
----
+***
 
 ## 概览
 
-本项目服务器用于采集《逃离塔科夫》游戏中的火价和物品数据，支持普通服和专家服同时采集。
+本项目服务器用于采集《火炬之光》游戏中的火价和物品数据，支持普通服和专家服同时采集。
 
 **访问地址**:
-| 地址 | 说明 |
-|------|------|
-| `http://NAS_IP:38457/` | 服务器状态页面 |
+
+| 地址                          | 说明            |
+| --------------------------- | ------------- |
+| `http://NAS_IP:38457/`      | 服务器状态页面       |
 | `http://NAS_IP:38457/admin` | 管理页面（需要管理员密码） |
 
----
+***
 
 ## 完整的部署流程
 
@@ -49,7 +50,7 @@ gh run list --workflow=build-server-arm64.yml --limit 1
 gh run view <run-id>
 ```
 
-**构建状态查看**: https://github.com/maojiaxu8039/TL-item-monitor-Tauri/actions/workflows/build-server-arm64.yml
+**构建状态查看**: <https://github.com/maojiaxu8039/TL-item-monitor-Tauri/actions/workflows/build-server-arm64.yml>
 
 ### 阶段三：下载并部署到 NAS
 
@@ -91,7 +92,7 @@ sshpass -p 'NAS密码' ssh -o StrictHostKeyChecking=no -p 10039 用户@NAS_IP 's
 curl -s "http://100.124.122.65:38457/api/admin/status" -H "Content-Type: application/json" -d '{"password":"8039"}'
 ```
 
----
+***
 
 ## GitHub Actions 自动构建
 
@@ -109,10 +110,10 @@ curl -s "http://100.124.122.65:38457/api/admin/status" -H "Content-Type: applica
 
 ### 触发方式
 
-| 方式 | 说明 |
-|------|------|
-| Push 代码 | 自动触发 `main` 分支的构建 |
-| 手动触发 | `gh workflow run build-server-arm64.yml` |
+| 方式      | 说明                                       |
+| ------- | ---------------------------------------- |
+| Push 代码 | 自动触发 `main` 分支的构建                        |
+| 手动触发    | `gh workflow run build-server-arm64.yml` |
 
 ### 下载构建产物
 
@@ -124,7 +125,7 @@ gh run download <run-id> --name linux-arm64-server --dir <目标目录>
 gh run list --workflow=build-server-arm64.yml --limit 5
 ```
 
----
+***
 
 ## NAS 部署详细步骤
 
@@ -153,6 +154,8 @@ mkdir -p /data_s001/data/udata/real/15510607744/Docker/tl-monitor/resources
 
 ### 5. 启动容器（完整命令）
 
+使用 `tl-monitor:full` 镜像：
+
 ```bash
 sudo docker run -d \
   --name tl-monitor-server \
@@ -166,20 +169,71 @@ sudo docker run -d \
   tl-monitor:full /app/tl-monitor-server
 ```
 
----
+### 6. 更新已有容器
+
+当代码更新后，可以直接替换二进制文件而不需要重建容器：
+
+```bash
+# 1. 停止容器
+sudo docker stop tl-monitor-server
+
+# 2. 替换二进制文件（在 NAS 上执行）
+# 下载新的 GitHub Actions 构建产物后：
+sudo cp /path/to/new/tl-monitor-server /data_s001/data/udata/real/15510607744/Docker/tl-monitor/tl-monitor-server
+sudo chmod +x /data_s001/data/udata/real/15510607744/Docker/tl-monitor/tl-monitor-server
+
+# 3. 启动容器
+sudo docker start tl-monitor-server
+
+# 4. 验证
+sudo docker logs tl-monitor-server --tail 20
+```
+
+### 7. 从 NAS 镜像重新构建新容器
+
+如果在 NAS 上已经 commit 了最新镜像 `ghcr.io/maojiaxu8039/tl-monitor-server:latest`，可以直接使用：
+
+```bash
+# 1. 登录 GHCR（如需要）
+echo $GITHUB_TOKEN | sudo docker login ghcr.io -u maojiaxu8039 --password-stdin
+
+# 2. 拉取最新镜像
+sudo docker pull ghcr.io/maojiaxu8039/tl-monitor-server:latest
+
+# 3. 停止旧容器
+sudo docker stop tl-monitor-server
+sudo docker rm tl-monitor-server
+
+# 4. 使用新镜像启动容器
+sudo docker run -d \
+  --name tl-monitor-server \
+  --restart unless-stopped \
+  -p 38457:8080 \
+  -e TL_CONFIG_PATH=/app/config/server_config.yaml \
+  -e TL_RESOURCES_DIR=/app/resources \
+  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor/data:/data \
+  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor/config:/app/config \
+  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor:/app \
+  ghcr.io/maojiaxu8039/tl-monitor-server:latest /app/tl-monitor-server
+
+# 5. 验证
+sudo docker logs tl-monitor-server --tail 30
+```
+
+***
 
 ## 环境变量说明
 
-| 变量名 | 默认值 | 必须 | 说明 |
-|--------|--------|------|------|
-| `TL_CONFIG_PATH` | `/config/server_config.yaml` | ⚠️ 必须设置 | 配置文件路径，应设为 `/app/config/server_config.yaml` |
-| `TL_RESOURCES_DIR` | `/resources` | ⚠️ 必须设置 | 资源目录，应设为 `/app/resources` |
-| `TL_DB_PATH` | `/data/tl_monitor.db` | 可选 | 数据库文件路径 |
-| `RUST_LOG` | `info` | 可选 | 日志级别 |
+| 变量名                | 默认值                          | 必须      | 说明                                          |
+| ------------------ | ---------------------------- | ------- | ------------------------------------------- |
+| `TL_CONFIG_PATH`   | `/config/server_config.yaml` | ⚠️ 必须设置 | 配置文件路径，应设为 `/app/config/server_config.yaml` |
+| `TL_RESOURCES_DIR` | `/resources`                 | ⚠️ 必须设置 | 资源目录，应设为 `/app/resources`                   |
+| `TL_DB_PATH`       | `/data/tl_monitor.db`        | 可选      | 数据库文件路径                                     |
+| `RUST_LOG`         | `info`                       | 可选      | 日志级别                                        |
 
 **重要**：必须正确设置 `TL_CONFIG_PATH` 和 `TL_RESOURCES_DIR` 环境变量，否则服务器将无法找到配置文件和资源文件。
 
----
+***
 
 ## 维护命令
 
@@ -255,7 +309,7 @@ sudo docker logs --tail 100 tl-monitor-server | grep -i error
 sudo docker logs tl-monitor-server > /tmp/tl-monitor.log
 ```
 
----
+***
 
 ## 故障排除
 
@@ -341,7 +395,7 @@ sudo docker exec -u root tl-monitor-server sqlite3 /data/tl_monitor.db \
 sudo docker restart tl-monitor-server
 ```
 
----
+***
 
 ## 技术支持
 
@@ -352,6 +406,6 @@ sudo docker restart tl-monitor-server
 3. 配置文件内容（注意脱敏）
 4. 具体错误信息
 
----
+***
 
 *文档最后更新：2026-05-11*
