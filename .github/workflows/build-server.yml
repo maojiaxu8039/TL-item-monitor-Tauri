@@ -1,18 +1,23 @@
-name: Build and Deploy Server
+name: Build Server (Docker Image)
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'src-tauri/**'
+      - 'src-tauri/src/server/**'
+      - 'src-tauri/src/bin/server.rs'
+      - 'src-tauri/src/scraper/**'
+      - 'src-tauri/src/db/repo_*.rs'
+      - 'src-tauri/Cargo.toml'
       - 'server-docker/**'
-      - '.github/workflows/build-deploy.yml'
+      - '.github/workflows/build-server.yml'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/tl-monitor-server
+  ARCH: aarch64-unknown-linux-gnu
 
 jobs:
   build:
@@ -28,18 +33,23 @@ jobs:
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          target: aarch64-unknown-linux-gnu
+          target: ${{ env.ARCH }}
 
       - name: Install cross
         run: cargo install cross --version 0.2.4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglib2.0-dev libssl-dev pkg-config
 
       - name: Build server binary
         env:
           CARGO_TERM_COLOR: always
         run: |
           cd src-tauri
-          cross build --release --bin server --target aarch64-unknown-linux-gnu
-          ls -la target/aarch64-unknown-linux-gnu/release/server
+          cross build --release --bin server --target ${{ env.ARCH }}
+          ls -la target/${{ env.ARCH }}/release/server
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -61,14 +71,13 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Copy binary to docker context
         run: |
           mkdir -p server-docker/bin
-          cp src-tauri/target/aarch64-unknown-linux-gnu/release/server server-docker/bin/
+          cp src-tauri/target/${{ env.ARCH }}/release/server server-docker/bin/
           ls -la server-docker/bin/
 
       - name: Build and push ARM64 image
@@ -83,24 +92,13 @@ jobs:
           cache-to: type=gha,mode=max
           file: ./server-docker/Dockerfile.prebuilt
 
-      - name: Create deployment summary
+      - name: Deployment summary
+        if: github.ref == 'refs/heads/main'
         run: |
-          echo "## 🚀 Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚀 Server Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### NAS Deployment" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "# SSH 到 NAS 后执行：" >> $GITHUB_STEP_SUMMARY
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
-          echo "docker stop tl-monitor-server || true" >> $GITHUB_STEP_SUMMARY
-          echo "docker rm tl-monitor-server || true" >> $GITHUB_STEP_SUMMARY
-          echo "docker run -d \\" >> $GITHUB_STEP_SUMMARY
-          echo "  --name tl-monitor-server \\" >> $GITHUB_STEP_SUMMARY
-          echo "  --restart unless-stopped \\" >> $GITHUB_STEP_SUMMARY
-          echo "  -p 38457:8080 \\" >> $GITHUB_STEP_SUMMARY
-          echo "  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor/data:/data \\" >> $GITHUB_STEP_SUMMARY
-          echo "  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor/config:/app/config \\" >> $GITHUB_STEP_SUMMARY
-          echo "  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor/resources:/app/resources \\" >> $GITHUB_STEP_SUMMARY
-          echo "  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
