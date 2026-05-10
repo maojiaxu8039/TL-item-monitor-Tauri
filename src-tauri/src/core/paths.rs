@@ -8,9 +8,9 @@ fn app_dir() -> PathBuf {
         .join("..");
 
     // Check if we're in development mode (project directory exists with src-tauri)
-    let dev_path = project_dir.join("dev_data");
-    if dev_path.exists() || std::env::var("TL_MONITOR_DEV").is_ok() {
-        return dev_path;
+    let data_path = project_dir.join("data");
+    if data_path.exists() || std::env::var("TL_MONITOR_DEV").is_ok() {
+        return data_path;
     }
 
     // Production: use system data directory
