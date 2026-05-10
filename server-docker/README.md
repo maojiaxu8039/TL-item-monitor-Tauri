@@ -14,7 +14,7 @@
 
 ## 概览
 
-本项目服务器用于采集《火炬之光》游戏中的火价和物品数据，支持普通服和专家服同时采集。
+本项目服务器用于采集《火炬之光》(Torchlight) 游戏中的火价和物品数据，支持普通服和专家服同时采集。
 
 **访问地址**:
 
@@ -266,18 +266,64 @@ sudo docker stop tl-monitor-server && sudo docker rm tl-monitor-server
 
 当 GitHub Actions 构建完成后，按以下步骤更新：
 
+**方式一：直接替换二进制文件（推荐）**
+
 ```bash
-# 1. 停止容器
+# 1. 在本地下载 GitHub Actions 构建产物
+gh run download <run-id> --name linux-arm64-server --dir /tmp/tl-build
+
+# 2. 上传到 NAS
+base64 -i /tmp/tl-build/tl-monitor-server | sshpass -p 'NAS密码' ssh -o StrictHostKeyChecking=no -p 10039 用户@NAS_IP "cat > /tmp/tl-monitor-server.b64 && cat /tmp/tl-monitor-server.b64 | base64 -d > /tmp/tl-monitor-server && rm /tmp/tl-monitor-server.b64"
+
+# 3. 在 NAS 上替换二进制文件
+sshpass -p 'NAS密码' ssh -o StrictHostKeyChecking=no -p 10039 用户@NAS_IP << 'EOF'
 sudo docker stop tl-monitor-server
-
-# 2. 替换二进制文件（通过本地下载后上传）
-# 使用 base64 方式上传新构建的 tl-monitor-server
-
-# 3. 启动容器
+sudo cp /tmp/tl-monitor-server /data_s001/data/udata/real/15510607744/Docker/tl-monitor/tl-monitor-server
+sudo chmod +x /data_s001/data/udata/real/15510607744/Docker/tl-monitor/tl-monitor-server
 sudo docker start tl-monitor-server
+EOF
 
 # 4. 验证
+sshpass -p 'NAS密码' ssh -o StrictHostKeyChecking=no -p 10039 用户@NAS_IP 'sudo docker logs tl-monitor-server --tail 20'
+```
+
+**方式二：使用 NAS 上的 GHCR 镜像**
+
+```bash
+# 1. 登录 GHCR（需要 GitHub Token）
+echo $GITHUB_TOKEN | sudo docker login ghcr.io -u maojiaxu8039 --password-stdin
+
+# 2. 拉取最新镜像
+sudo docker pull ghcr.io/maojiaxu8039/tl-monitor-server:latest
+
+# 3. 停止并删除旧容器
+sudo docker stop tl-monitor-server
+sudo docker rm tl-monitor-server
+
+# 4. 使用新镜像启动容器
+sudo docker run -d \
+  --name tl-monitor-server \
+  --restart unless-stopped \
+  -p 38457:8080 \
+  -e TL_CONFIG_PATH=/app/config/server_config.yaml \
+  -e TL_RESOURCES_DIR=/app/resources \
+  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor/data:/data \
+  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor/config:/app/config \
+  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor:/app \
+  ghcr.io/maojiaxu8039/tl-monitor-server:latest /app/tl-monitor-server
+
+# 5. 验证
 sudo docker logs tl-monitor-server --tail 20
+```
+
+**方式三：在 NAS 上 commit 现有容器生成新镜像**
+
+```bash
+# 1. 确保当前容器运行的是最新版本
+sudo docker commit tl-monitor-server ghcr.io/maojiaxu8039/tl-monitor-server:latest
+
+# 2. 推送镜像到 GHCR（如需要）
+sudo docker push ghcr.io/maojiaxu8039/tl-monitor-server:latest
 ```
 
 ### 数据管理
