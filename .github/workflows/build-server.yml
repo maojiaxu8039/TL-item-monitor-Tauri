@@ -5,11 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'src-tauri/src/server/**'
-      - 'src-tauri/src/bin/server.rs'
-      - 'src-tauri/src/scraper/**'
-      - 'src-tauri/src/db/repo_*.rs'
-      - 'src-tauri/Cargo.toml'
+      - 'server-standalone/**'
       - 'server-docker/**'
       - '.github/workflows/build-server.yml'
   workflow_dispatch:
@@ -17,7 +13,6 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/tl-monitor-server
-  ARCH: aarch64-unknown-linux-gnu
 
 jobs:
   build:
@@ -33,8 +28,7 @@ jobs:
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          target: ${{ env.ARCH }}
-          override: true
+          target: aarch64-unknown-linux-gnu
 
       - name: Install cross compilation dependencies
         run: |
@@ -43,22 +37,24 @@ jobs:
             gcc-aarch64-linux-gnu \
             libc6-dev-arm64-cross \
             pkg-config \
-            libssl-dev \
-            libglib2.0-dev \
-            libglib2.0-dev-arm64-cross
+            libssl-dev
 
       - name: Build server binary
         env:
           CARGO_INCREMENTAL: 0
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
           CC: aarch64-linux-gnu-gcc
-          PKG_CONFIG_SYSROOT_DIR: /usr/aarch64-linux-gnu
-          PKG_CONFIG_PATH: /usr/aarch64-linux-gnu/lib/pkgconfig
           RUSTFLAGS: "-C target-feature=-crt-static"
         run: |
-          cd src-tauri
-          cargo build --release --bin server --target ${{ env.ARCH }}
-          ls -la target/${{ env.ARCH }}/release/server
+          cd server-standalone
+          cargo build --release --target aarch64-unknown-linux-gnu
+          ls -la target/aarch64-unknown-linux-gnu/release/
+
+      - name: Verify build output
+        run: |
+          cd server-standalone
+          file target/aarch64-unknown-linux-gnu/release/tl-monitor-server
+          ldd target/aarch64-unknown-linux-gnu/release/tl-monitor-server 2>&1 | head -10
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -86,7 +82,7 @@ jobs:
       - name: Copy binary to docker context
         run: |
           mkdir -p server-docker/bin
-          cp src-tauri/target/${{ env.ARCH }}/release/server server-docker/bin/
+          cp server-standalone/target/aarch64-unknown-linux-gnu/release/tl-monitor-server server-docker/bin/server
           ls -la server-docker/bin/
 
       - name: Build and push ARM64 image
