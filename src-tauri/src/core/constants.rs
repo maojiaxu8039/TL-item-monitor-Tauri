@@ -1,7 +1,7 @@
 pub const FIRE_PRICE_DIVISOR: f64 = 10000.0;
 
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const SERVER_VERSION: &str = "3.2.0";
+pub const SERVER_VERSION: &str = "3.3";
 
 pub const SECONDS_PER_MINUTE: i64 = 60;
 pub const SECONDS_PER_HOUR: i64 = 3600;

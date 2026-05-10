@@ -6,7 +6,7 @@
 
 use serde::Serialize;
 use sqlx::{Row, SqlitePool};
-use tracing::{error, info, warn};
+use tracing::{debug, info, warn};
 
 use super::scraper::{FirePriceSnapshot, Item};
 
@@ -405,6 +405,88 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
     Ok(())
 }
 
+/// WAL 检查点 - 将 WAL 文件写入主数据库，减少磁盘空间占用
+/// 应该定期调用（如每小时或每天）
+pub async fn wal_checkpoint(pool: &SqlitePool) -> Result<WalCheckpointResult, String> {
+    info!("执行 WAL checkpoint...");
+
+    let page_count: i64 = sqlx::query_scalar("PRAGMA page_count")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("获取页数失败: {}", e))?;
+
+    let freelist_count: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("获取空闲页数失败: {}", e))?;
+
+    let wal_size: i64 = sqlx::query_scalar("PRAGMA wal_checkpoint(PASSIVE)")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("WAL checkpoint 失败: {}", e))?;
+
+    info!(
+        "WAL checkpoint 完成: 数据库页数={}, 空闲页数={}, WAL页数={}",
+        page_count, freelist_count, wal_size
+    );
+
+    Ok(WalCheckpointResult {
+        page_count,
+        freelist_count,
+        wal_pages_checkpointed: wal_size,
+    })
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WalCheckpointResult {
+    pub page_count: i64,
+    pub freelist_count: i64,
+    pub wal_pages_checkpointed: i64,
+}
+
+/// 获取数据库文件大小信息
+pub async fn get_db_size_info(pool: &SqlitePool) -> Result<DbSizeInfo, String> {
+    let page_size: i64 = sqlx::query_scalar("PRAGMA page_size")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("获取页大小失败: {}", e))?;
+
+    let page_count: i64 = sqlx::query_scalar("PRAGMA page_count")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("获取页数失败: {}", e))?;
+
+    let freelist_count: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("获取空闲页数失败: {}", e))?;
+
+    let database_size_kb = (page_count * page_size) / 1024;
+    let wal_info: (i64, i64, i64) = sqlx::query_as::<_, (i64, i64, i64)>("PRAGMA wal_checkpoint(PASSIVE)")
+        .fetch_one(pool)
+        .await
+        .unwrap_or((0, 0, 0));
+
+    let wal_size_kb = (wal_info.2 * page_size) / 1024;
+
+    Ok(DbSizeInfo {
+        page_size_bytes: page_size,
+        total_pages: page_count,
+        freelist_pages: freelist_count,
+        database_size_kb,
+        wal_size_kb,
+    })
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DbSizeInfo {
+    pub page_size_bytes: i64,
+    pub total_pages: i64,
+    pub freelist_pages: i64,
+    pub database_size_kb: i64,
+    pub wal_size_kb: i64,
+}
+
 /// 保存火价快照（按赛季+模式分表）
 pub async fn insert_fire_snapshot(
     pool: &SqlitePool,
@@ -438,14 +520,16 @@ pub async fn insert_fire_snapshot(
     .await
     .map_err(|e| format!("插入火价快照失败: {}", e))?;
 
-    info!(
+    debug!(
         "火价快照已保存: {} (scraped_at: {}, season_day: {})",
         fire.rmb_per_10k_fire, scraped_at, season_day
     );
     Ok(())
 }
 
-/// 保存物品价格快照（按赛季+模式分表）
+/// 保存物品价格快照（按赛季+模式分表）- 批量插入优化（分批处理）
+const BATCH_SIZE: usize = 500;
+
 pub async fn insert_items_snapshots(
     pool: &SqlitePool,
     season_id: &str,
@@ -458,43 +542,60 @@ pub async fn insert_items_snapshots(
     let table = mode.items_table(season_id);
     let season_start = get_season_start(pool, season_id).await?;
     let season_day = calculate_season_day(season_start, scraped_at);
-    let mut count = 0;
 
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
-
-    for item in items {
-        let fire_price = item.price * fire_per_rmb;
-
-        if let Err(e) = sqlx::query(&format!(
-            r#"
-            INSERT OR IGNORE INTO {}
-            (item_id, name, item_type, fire_price, scraped_at, season_day)
-            VALUES (?, ?, ?, ?, ?, ?)
-            "#,
-            table
-        ))
-        .bind(&item.item_id)
-        .bind(&item.name)
-        .bind(&item.item_type)
-        .bind(fire_price)
-        .bind(scraped_at)
-        .bind(season_day)
-        .execute(&mut *tx)
-        .await
-        {
-            error!("插入物品快照失败 {}: {}", item.item_id, e);
-        } else {
-            count += 1;
-        }
+    if items.is_empty() {
+        return Ok(0);
     }
 
-    tx.commit().await.map_err(|e| e.to_string())?;
+    let mut total_count = 0;
+    let total_batches = (items.len() + BATCH_SIZE - 1) / BATCH_SIZE;
 
-    info!(
-        "已保存 {} 个物品价格快照 (scraped_at: {}, season_day: {})",
-        count, scraped_at, season_day
+    for (batch_idx, batch) in items.chunks(BATCH_SIZE).enumerate() {
+        let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+        let mut placeholders = String::new();
+        for i in 0..batch.len() {
+            if i > 0 {
+                placeholders.push_str(", ");
+            }
+            placeholders.push_str("(?, ?, ?, ?, ?, ?)");
+        }
+
+        let sql_string = format!(
+            "INSERT OR IGNORE INTO {} (item_id, name, item_type, fire_price, scraped_at, season_day) VALUES {}",
+            table,
+            placeholders
+        );
+        let mut sqlx_query = sqlx::query(&sql_string);
+
+        for item in batch {
+            let fire_price = item.price * fire_per_rmb;
+            sqlx_query = sqlx_query
+                .bind(&item.item_id)
+                .bind(&item.name)
+                .bind(&item.item_type)
+                .bind(fire_price)
+                .bind(scraped_at)
+                .bind(season_day);
+        }
+
+        let result = sqlx_query.execute(&mut *tx).await.map_err(|e| e.to_string())?;
+        let count = result.rows_affected() as usize;
+        total_count += count;
+
+        tx.commit().await.map_err(|e| e.to_string())?;
+
+        debug!(
+            "物品快照批次 {}/{}: 插入 {} 条 (scraped_at: {}, season_day: {})",
+            batch_idx + 1, total_batches, count, scraped_at, season_day
+        );
+    }
+
+    debug!(
+        "已保存 {} 个物品价格快照 (共 {} 批次, scraped_at: {}, season_day: {})",
+        total_count, total_batches, scraped_at, season_day
     );
-    Ok(count)
+    Ok(total_count)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -627,7 +728,7 @@ pub async fn reset_table(
     season_id: &str,
     table_type: &str,
     market_mode: &str,
-) -> Result<(), String> {
+) -> Result<(String, i64), String> {
     validate_season_id(season_id)?;
     
     let table = match (table_type, market_mode) {
@@ -638,7 +739,6 @@ pub async fn reset_table(
         _ => return Err("无效的表类型".to_string()),
     };
     
-    // 检查表是否存在
     let exists: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?"
     )
@@ -651,14 +751,14 @@ pub async fn reset_table(
         return Err(format!("表 {} 不存在", table));
     }
     
-    // 清空表数据（使用 DELETE 而不是 DROP，保留表结构）
-    sqlx::query(&format!("DELETE FROM {}", table))
+    let result = sqlx::query(&format!("DELETE FROM {}", table))
         .execute(pool)
         .await
         .map_err(|e| format!("清空表 {} 失败: {}", table, e))?;
     
-    info!("已重置表: {}，共删除了 {} 条记录", table, 0);
-    Ok(())
+    let rows_affected = result.rows_affected();
+    info!("已重置表: {}，共删除了 {} 条记录", table, rows_affected);
+    Ok((table, rows_affected as i64))
 }
 
 /// 重置指定赛季的所有表
@@ -695,34 +795,33 @@ pub struct SeasonStats {
 pub async fn get_season_stats(pool: &SqlitePool, season_id: &str) -> Result<SeasonStats, String> {
     validate_season_id(season_id)?;
 
-    let table_normal_fire = format!("fire_price_snapshots_{}_normal", season_id);
-    let table_normal_items = format!("item_snapshots_{}_normal", season_id);
-    let table_expert_fire = format!("fire_price_snapshots_{}_expert", season_id);
-    let table_expert_items = format!("item_snapshots_{}_expert", season_id);
+    let tables = [
+        ("normal_fire", format!("fire_price_snapshots_{}_normal", season_id)),
+        ("normal_items", format!("item_snapshots_{}_normal", season_id)),
+        ("expert_fire", format!("fire_price_snapshots_{}_expert", season_id)),
+        ("expert_items", format!("item_snapshots_{}_expert", season_id)),
+    ];
 
-    let normal_fire_count: i64 =
-        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table_normal_fire))
-            .fetch_one(pool)
-            .await
-            .unwrap_or(0);
+    let mut normal_fire_count = 0i64;
+    let mut normal_items_count = 0i64;
+    let mut expert_fire_count = 0i64;
+    let mut expert_items_count = 0i64;
 
-    let normal_items_count: i64 =
-        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table_normal_items))
-            .fetch_one(pool)
+    for (name, table) in &tables {
+        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table))
+            .fetch_optional(pool)
             .await
+            .unwrap_or(None)
             .unwrap_or(0);
-
-    let expert_fire_count: i64 =
-        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table_expert_fire))
-            .fetch_one(pool)
-            .await
-            .unwrap_or(0);
-
-    let expert_items_count: i64 =
-        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table_expert_items))
-            .fetch_one(pool)
-            .await
-            .unwrap_or(0);
+        
+        match *name {
+            "normal_fire" => normal_fire_count = count,
+            "normal_items" => normal_items_count = count,
+            "expert_fire" => expert_fire_count = count,
+            "expert_items" => expert_items_count = count,
+            _ => {}
+        }
+    }
 
     Ok(SeasonStats {
         normal_fire_count,

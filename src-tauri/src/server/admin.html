@@ -577,6 +577,121 @@
         let serverConfig = null;
         let apiPassword = '';
         let isAuthenticated = false;
+        let ws = null;
+        let wsReconnectTimer = null;
+        const WS_PORT_OFFSET = 1;
+
+        function getWsUrl() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.hostname;
+            const httpPort = parseInt(window.location.port) || 8080;
+            const wsPort = httpPort + WS_PORT_OFFSET;
+            return `${protocol}//${host}:${wsPort}`;
+        }
+
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                return;
+            }
+            
+            const wsUrl = getWsUrl();
+            console.log('正在连接 WebSocket:', wsUrl);
+            
+            try {
+                ws = new WebSocket(wsUrl);
+            } catch (e) {
+                console.error('WebSocket 创建失败:', e);
+                scheduleReconnect();
+                return;
+            }
+
+            ws.onopen = () => {
+                console.log('WebSocket 已连接');
+                if (wsReconnectTimer) {
+                    clearTimeout(wsReconnectTimer);
+                    wsReconnectTimer = null;
+                }
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    console.log('WebSocket 收到消息:', msg);
+                    
+                    if (msg.type === 'collection_complete' && msg.data) {
+                        updateStatusFromWs(msg.data);
+                    }
+                } catch (e) {
+                    console.error('WebSocket 消息解析失败:', e);
+                }
+            };
+
+            ws.onclose = (event) => {
+                console.log('WebSocket 断开:', event.code, event.reason);
+                ws = null;
+                scheduleReconnect();
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket 错误:', error);
+            };
+        }
+
+        function scheduleReconnect() {
+            if (wsReconnectTimer) return;
+            console.log('3秒后尝试重新连接 WebSocket...');
+            wsReconnectTimer = setTimeout(() => {
+                wsReconnectTimer = null;
+                connectWebSocket();
+            }, 3000);
+        }
+
+        function updateStatusFromWs(data) {
+            const normal = data.normal;
+            const expert = data.expert;
+
+            const normalSuccess = normal && normal.collection_success === true;
+            const expertSuccess = expert && expert.collection_success === true;
+
+            document.getElementById('stat-normal').innerHTML = normalSuccess
+                ? `<span class="badge badge-success">成功</span>`
+                : `<span class="badge badge-error">失败</span>`;
+
+            document.getElementById('stat-expert').innerHTML = expertSuccess
+                ? `<span class="badge badge-success">成功</span>`
+                : `<span class="badge badge-error">失败</span>`;
+
+            const getDisplayError = (mode) => {
+                if (!mode || !mode.error) return '-';
+                const err = mode.error;
+                if (err.includes('No fire price data')) return '赛季还没开始';
+                if (err.includes('Fire scrape error')) return '火价采集失败';
+                return err;
+            };
+
+            const tbody = document.getElementById('collection-tbody');
+            tbody.innerHTML = '';
+
+            [normal, expert].forEach((mode, idx) => {
+                const modeName = idx === 0 ? '普通服' : '专家服';
+                if (mode) {
+                    const isSuccess = mode.collection_success === true;
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${modeName}</td>
+                            <td>${mode.fire_price?.toFixed(2) || '-'}</td>
+                            <td>${mode.items_count || 0}</td>
+                            <td>${formatTime(mode.timestamp)}</td>
+                            <td><span class="badge ${isSuccess ? 'badge-success' : 'badge-error'}">${isSuccess ? '成功' : '失败'}</span></td>
+                            <td>${getDisplayError(mode)}</td>
+                        </tr>
+                    `;
+                }
+            });
+
+            document.getElementById('last-update').textContent = new Date().toLocaleString('zh-CN');
+            showAlert('success', '采集完成，已自动更新状态');
+        }
 
         function updateAuthStatus(success, message) {
             const status = document.getElementById('auth-status');
@@ -709,15 +824,14 @@
                     const normal = info.last_collection.normal;
                     const expert = info.last_collection.expert;
 
-                    console.log('normal:', normal);
-                    console.log('expert:', expert);
-                    console.log('normal.success:', normal?.success);
+                    const normalSuccess = normal && normal.collection_success === true;
+                    const expertSuccess = expert && expert.collection_success === true;
 
-                    document.getElementById('stat-normal').innerHTML = normal && normal.is_success
+                    document.getElementById('stat-normal').innerHTML = normalSuccess
                         ? `<span class="badge badge-success">成功</span>`
                         : `<span class="badge badge-error">失败</span>`;
 
-                    document.getElementById('stat-expert').innerHTML = expert && expert.is_success
+                    document.getElementById('stat-expert').innerHTML = expertSuccess
                         ? `<span class="badge badge-success">成功</span>`
                         : `<span class="badge badge-error">失败</span>`;
 
@@ -735,13 +849,14 @@
                     [normal, expert].forEach((mode, idx) => {
                         const modeName = idx === 0 ? '普通服' : '专家服';
                         if (mode) {
+                            const isSuccess = mode.collection_success === true;
                             tbody.innerHTML += `
                                 <tr>
                                     <td>${modeName}</td>
                                     <td>${mode.fire_price?.toFixed(2) || '-'}</td>
                                     <td>${mode.items_count || 0}</td>
                                     <td>${formatTime(mode.timestamp)}</td>
-                                    <td><span class="badge ${mode.is_success ? 'badge-success' : 'badge-error'}">${mode.is_success ? '成功' : '失败'}</span></td>
+                                    <td><span class="badge ${isSuccess ? 'badge-success' : 'badge-error'}">${isSuccess ? '成功' : '失败'}</span></td>
                                     <td>${getDisplayError(mode)}</td>
                                 </tr>
                             `;
@@ -773,7 +888,7 @@
             }
         }
 
-        async function loadConfig() {
+        async function loadAdminConfig() {
             const password = document.getElementById('cfg-password').value;
             if (!password) {
                 showAlert('error', '请输入管理员密码');
@@ -937,33 +1052,28 @@
             if (!password) return;
 
             const season_id = document.getElementById('reset-season').value;
-            const tables = [];
             const tableTypes = [];
 
             if (document.getElementById('reset-fire-normal').checked) {
-                tables.push('fire_price_snapshots_ss12_normal');
                 tableTypes.push({ type: 'fire', mode: 'normal' });
             }
             if (document.getElementById('reset-fire-expert').checked) {
-                tables.push('fire_price_snapshots_ss12_expert');
                 tableTypes.push({ type: 'fire', mode: 'expert' });
             }
             if (document.getElementById('reset-items-normal').checked) {
-                tables.push('item_snapshots_ss12_normal');
                 tableTypes.push({ type: 'items', mode: 'normal' });
             }
             if (document.getElementById('reset-items-expert').checked) {
-                tables.push('item_snapshots_ss12_expert');
                 tableTypes.push({ type: 'items', mode: 'expert' });
             }
 
-            if (tables.length === 0) {
+            if (tableTypes.length === 0) {
                 showAlert('error', '请至少选择一个要重置的表');
                 return;
             }
 
-            const tableNames = tables.join(', ');
-            if (!confirm(`⚠️ 危险操作确认\n\n即将重置以下表：\n${tableNames}\n\n此操作将清空所有数据，且无法恢复！\n\n输入"重置"确认：`)) return;
+            const tableNames = tableTypes.map(t => `${t.type}-${t.mode}`).join(', ');
+            if (!confirm(`⚠️ 危险操作确认\n\n即将重置赛季 ${season_id} 下的以下表：\n${tableNames}\n\n此操作将清空所有数据，且无法恢复！\n\n输入"重置"确认：`)) return;
             
             const confirmText = prompt('请再次输入"重置"确认此危险操作：');
             if (confirmText !== '重置') {
@@ -1162,14 +1272,16 @@
             document.addEventListener('DOMContentLoaded', () => {
                 loadStatus();
                 loadSeasons();
-                setInterval(loadStatus, 30000);
                 addListeners();
+                connectWebSocket();
+                setInterval(loadStatus, 30000);
             });
         } else {
             loadStatus();
             loadSeasons();
-            setInterval(loadStatus, 30000);
             addListeners();
+            connectWebSocket();
+            setInterval(loadStatus, 30000);
         }
     </script>
 </body>

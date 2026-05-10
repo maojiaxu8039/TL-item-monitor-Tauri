@@ -21,7 +21,11 @@ use std::time::{Duration, Instant};
 use tl_monitor::core::constants::{SECONDS_PER_HOUR, SERVER_VERSION};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::{broadcast, RwLock};
-use tracing::{error, info, warn, Level};
+use tokio::sync::Mutex as TokioMutex;
+use tokio::net::TcpStream;
+use tokio_tungstenite::{accept_async, tungstenite::Message};
+use futures_util::{SinkExt, StreamExt};
+use tracing::{debug, error, info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use tl_monitor::server::config::{ApiConfig, RateLimitConfig, ServerConfig};
@@ -42,6 +46,53 @@ struct ServerState {
     db: SqlitePool,
     last_collection: Arc<RwLock<CollectionStatus>>,
     rate_limiter: Arc<RwLock<RateLimiter>>,
+    season_cache: Arc<RwLock<Option<SeasonCache>>>,
+    dynamic_config: Arc<RwLock<DynamicConfig>>,
+    ws_broadcaster: Arc<RwLock<WsBroadcaster>>,
+}
+
+struct WsBroadcaster {
+    sender: broadcast::Sender<String>,
+    clients: usize,
+}
+
+impl WsBroadcaster {
+    fn new() -> Self {
+        let (sender, _) = broadcast::channel(100);
+        Self { sender, clients: 0 }
+    }
+
+    fn subscribe(&self) -> broadcast::Receiver<String> {
+        self.sender.subscribe()
+    }
+
+    fn broadcast(&self, msg: &str) {
+        let _ = self.sender.send(msg.to_string());
+    }
+
+    fn client_connected(&mut self) {
+        self.clients += 1;
+        info!("WebSocket 客户端连接, 当前连接数: {}", self.clients);
+    }
+
+    fn client_disconnected(&mut self) {
+        self.clients = self.clients.saturating_sub(1);
+        info!("WebSocket 客户端断开, 当前连接数: {}", self.clients);
+    }
+}
+
+#[derive(Clone)]
+struct DynamicConfig {
+    cors_allowed_origins: Vec<String>,
+    rate_limit_enabled: bool,
+    scrape_modes: Vec<tl_monitor::server::config::ScrapeMode>,
+    last_update: Instant,
+}
+
+#[derive(Clone)]
+struct SeasonCache {
+    season_id: String,
+    cached_at: Instant,
 }
 
 struct RateLimiter {
@@ -198,23 +249,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let pool = SqlitePoolOptions::new()
-        .max_connections(2)
-        .connect(&format!("sqlite:{}?mode=rwc", db_path))
+        .max_connections(4)
+        .connect(&format!(
+            "sqlite:{}?mode=rwc&journal_mode=WAL&synchronous=NORMAL",
+            db_path
+        ))
         .await?;
 
     db::run_migrations(&pool).await?;
+
+    let dynamic_config = DynamicConfig {
+        cors_allowed_origins: config.cors_allowed_origins.clone(),
+        rate_limit_enabled: config.rate_limit.enabled,
+        scrape_modes: config.scrape_modes.clone(),
+        last_update: Instant::now(),
+    };
 
     let state = Arc::new(ServerState {
         config: config.clone(),
         db: pool,
         last_collection: Arc::new(RwLock::new(CollectionStatus::default())),
         rate_limiter: Arc::new(RwLock::new(RateLimiter::new(config.rate_limit.clone()))),
+        season_cache: Arc::new(RwLock::new(None)),
+        dynamic_config: Arc::new(RwLock::new(dynamic_config)),
+        ws_broadcaster: Arc::new(RwLock::new(WsBroadcaster::new())),
     });
 
     let http_state = state.clone();
     let http_port = config.http_port;
     tokio::spawn(async move {
         start_http_server(http_state, http_port, start_time).await;
+    });
+
+    let ws_state = state.clone();
+    let ws_port = config.http_port + 1;
+    tokio::spawn(async move {
+        start_websocket_server(ws_state, ws_port).await;
     });
 
     let (abort_tx, abort_rx) = broadcast::channel::<()>(1);
@@ -226,7 +296,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         abort_tx_clone.send(()).ok();
     });
 
-    run_collector(state, abort_rx).await;
+    run_collector(state.clone(), abort_rx).await;
+
+    graceful_shutdown(state).await;
 
     info!("服务器已关闭");
     Ok(())
@@ -299,16 +371,20 @@ async fn handle_request(
     let client_ip = client_addr.ip().to_string();
 
     {
-        let mut limiter = state.rate_limiter.write().await;
-        if !limiter.is_allowed(&client_ip) {
-            warn!("客户端 {} 请求过于频繁，已限流", client_ip);
-            let response = "HTTP/1.1 429 Too Many Requests\r\nContent-Type: text/plain\r\nContent-Length: 29\r\n\r\nRate limit exceeded, try again";
-            let _ = tokio::io::AsyncWriteExt::write_all(
-                &mut tokio::io::BufWriter::new(stream),
-                response.as_bytes(),
-            )
-            .await;
-            return;
+        let dynamic = state.dynamic_config.read().await;
+        if dynamic.rate_limit_enabled {
+            drop(dynamic);
+            let mut limiter = state.rate_limiter.write().await;
+            if !limiter.is_allowed(&client_ip) {
+                warn!("客户端 {} 请求过于频繁，已限流", client_ip);
+                let response = "HTTP/1.1 429 Too Many Requests\r\nContent-Type: text/plain\r\nContent-Length: 29\r\n\r\nRate limit exceeded, try again";
+                let _ = tokio::io::AsyncWriteExt::write_all(
+                    &mut tokio::io::BufWriter::new(stream),
+                    response.as_bytes(),
+                )
+                .await;
+                return;
+            }
         }
     }
 
@@ -410,10 +486,11 @@ async fn handle_request(
     let method = parts[0];
     let target = parts[1];
     let (path, query_string) = target.split_once('?').unwrap_or((target, ""));
+    let sanitized_query = sanitize_query_string(query_string);
 
     info!(
         "HTTP {} {} from {} (query: {:?})",
-        method, path, client_ip, query_string
+        method, path, client_ip, sanitized_query
     );
 
     let mut request_body = String::new();
@@ -426,9 +503,11 @@ async fn handle_request(
     let (status, body) = match (method, path) {
         ("OPTIONS", _) => {
             let origin = get_origin_header(&request);
+            let dynamic = state.dynamic_config.read().await;
+            let cors_list = &dynamic.cors_allowed_origins;
             let cors_header = if let Some(ref orig) = origin {
-                if state.config.cors_allowed_origins.is_empty()
-                    || state.config.cors_allowed_origins.iter().any(|o| o == orig)
+                if cors_list.is_empty()
+                    || cors_list.iter().any(|o| o == orig)
                 {
                     orig.clone()
                 } else {
@@ -436,9 +515,7 @@ async fn handle_request(
                     return send_options_response(stream, "CORS origin not allowed").await;
                 }
             } else {
-                state
-                    .config
-                    .cors_allowed_origins
+                cors_list
                     .first()
                     .cloned()
                     .unwrap_or_else(|| "http://localhost:8080".to_string())
@@ -622,21 +699,50 @@ async fn handle_request(
                             (401, body)
                         } else {
                             let mut new_config = state.config.clone();
-                            if let Some(cors) = req.cors_allowed_origins {
-                                new_config.cors_allowed_origins = cors;
+                            let mut dynamic_updated = false;
+                            
+                            if let Some(ref cors) = req.cors_allowed_origins {
+                                new_config.cors_allowed_origins = cors.clone();
+                                dynamic_updated = true;
                             }
                             if let Some(enabled) = req.rate_limit_enabled {
                                 new_config.rate_limit.enabled = enabled;
+                                dynamic_updated = true;
                             }
-                            if let Some(modes) = req.scrape_modes {
-                                new_config.scrape_modes = modes
+                            if let Some(ref modes) = req.scrape_modes {
+                                let scrape_modes: Vec<tl_monitor::server::config::ScrapeMode> = modes
                                     .into_iter()
                                     .map(|m| tl_monitor::server::config::ScrapeMode {
-                                        mode: m.mode,
+                                        mode: m.mode.clone(),
                                         enabled: m.enabled,
                                     })
                                     .collect();
+                                new_config.scrape_modes = scrape_modes.clone();
+                                dynamic_updated = true;
                             }
+                            
+                            if dynamic_updated {
+                                {
+                                    let mut dynamic = state.dynamic_config.write().await;
+                                    if let Some(cors) = req.cors_allowed_origins {
+                                        dynamic.cors_allowed_origins = cors;
+                                    }
+                                    if let Some(enabled) = req.rate_limit_enabled {
+                                        dynamic.rate_limit_enabled = enabled;
+                                    }
+                                    if let Some(ref modes) = req.scrape_modes {
+                                        dynamic.scrape_modes = modes
+                                            .into_iter()
+                                            .map(|m| tl_monitor::server::config::ScrapeMode {
+                                                mode: m.mode.clone(),
+                                                enabled: m.enabled,
+                                            })
+                                            .collect();
+                                    }
+                                    dynamic.last_update = Instant::now();
+                                }
+                            }
+                            
                             if let Err(e) = tl_monitor::server::config::save_config(
                                 &*get_config_path(),
                                 &new_config,
@@ -651,7 +757,7 @@ async fn handle_request(
                             } else {
                                 let body = serde_json::to_string_pretty(&ApiResponse {
                                     success: true,
-                                    data: Some("配置已保存，重启后生效".to_string()),
+                                    data: Some("配置已更新，实时生效".to_string()),
                                     error: None,
                                 })
                                 .unwrap_or_default();
@@ -898,7 +1004,37 @@ async fn handle_request(
                 }
             }
         }
-        ("GET", "/health") => (200, "OK".to_string()),
+        ("GET", "/health") => {
+            let health_start = std::time::Instant::now();
+            match sqlx::query("SELECT 1")
+                .execute(&state.db)
+                .await
+            {
+                Ok(_) => {
+                    let elapsed_ms = health_start.elapsed().as_millis();
+                    let body = serde_json::to_string_pretty(&ApiResponse {
+                        success: true,
+                        data: Some(serde_json::json!({
+                            "status": "healthy",
+                            "db_check": "ok",
+                            "db_check_ms": elapsed_ms
+                        })),
+                        error: None,
+                    })
+                    .unwrap_or_default();
+                    (200, body)
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(format!("Database error: {}", e)),
+                    })
+                    .unwrap_or_default();
+                    (503, body)
+                }
+            }
+        }
         ("GET", "/season-start") => {
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
@@ -1132,10 +1268,13 @@ async fn handle_request(
                         (401, body)
                     } else {
                         match db::reset_table(&state.db, &req.season_id, &req.table_type, &req.market_mode).await {
-                            Ok(_) => {
+                            Ok((table, count)) => {
                                 let body = serde_json::to_string_pretty(&ApiResponse {
                                     success: true,
-                                    data: Some(format!("表已重置: {}_{}_{}", req.season_id, req.table_type, req.market_mode)),
+                                    data: Some(serde_json::json!({
+                                        "table": table,
+                                        "deleted_rows": count
+                                    })),
                                     error: None,
                                 })
                                 .unwrap_or_default();
@@ -1228,12 +1367,13 @@ async fn handle_request(
     };
 
     let origin = get_origin_header(&request);
+    let dynamic = state.dynamic_config.read().await;
     send_response(
         stream,
         status,
         &body,
         &origin,
-        &state.config.cors_allowed_origins,
+        &dynamic.cors_allowed_origins,
     )
     .await;
 }
@@ -1360,6 +1500,32 @@ fn get_query_param(query_string: &str, param: &str) -> Option<String> {
     None
 }
 
+const SENSITIVE_PARAMS: &[&str] = &["password", "token", "secret", "key", "api_key", "apikey", "authorization", "auth"];
+
+fn sanitize_query_string(query_string: &str) -> String {
+    if query_string.is_empty() {
+        return String::new();
+    }
+
+    query_string
+        .split('&')
+        .filter_map(|pair| {
+            let kv: Vec<&str> = pair.splitn(2, '=').collect();
+            if kv.is_empty() {
+                return None;
+            }
+
+            let param = kv[0].to_lowercase();
+            if SENSITIVE_PARAMS.contains(&param.as_str()) {
+                Some(format!("{}={}", kv[0], "***"))
+            } else {
+                Some(pair.to_string())
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
 fn urlencoding_decode(s: &str) -> String {
     let mut result = String::new();
     let mut chars = s.chars().peekable();
@@ -1438,61 +1604,16 @@ async fn run_collector(state: Arc<ServerState>, mut abort_rx: broadcast::Receive
     }
 }
 
-async fn collect_all_modes(state: &Arc<ServerState>) {
-    // 检查是否有当前活跃赛季
-    match db::get_current_season(&state.db).await {
-        Some(current_season) => {
-            info!("当前活跃赛季: {}，开始采集", current_season);
-        }
-        None => {
-            info!("没有活跃的赛季（已全部归档），采集任务暂停");
-            return;
-        }
-    }
+const MAX_RETRIES: u32 = 3;
+const RETRY_DELAY_MS: u64 = 1000;
 
-    let timestamp = match Utc::now()
-        .with_minute(0)
-        .and_then(|t| t.with_second(0))
-        .and_then(|t| t.with_nanosecond(0))
-    {
-        Some(t) => t.timestamp(),
-        None => {
-            error!("Failed to calculate collection timestamp");
-            return;
-        }
-    };
-
-    let mut new_status = CollectionStatus::default();
-
-    for scrape_mode in &state.config.scrape_modes {
-        if !scrape_mode.enabled {
-            continue;
-        }
-
-        let market_mode = if scrape_mode.mode == "expert" {
-            "season_expert"
-        } else {
-            "season_normal"
-        };
-
-        info!(
-            "[{}] 开始采集 {} 数据...",
-            Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
-            scrape_mode.mode
-        );
-
-        let mut mode_status = ModeCollectionStatus {
-            timestamp,
-            fire_success: Some(false),
-            fire_price: None,
-            items_count: None,
-            items_success: Some(false),
-            error: None,
-            collection_success: None,
-        };
-
-        let mut fire_per_rmb = 0.0;
-
+async fn scrape_fire_with_retry(
+    state: &Arc<ServerState>,
+    market_mode: &str,
+) -> Result<tl_monitor::server::scraper::FirePriceSnapshot, String> {
+    let mut last_error = String::new();
+    
+    for attempt in 1..=MAX_RETRIES {
         match Scraper::scrape_fire_price(
             market_mode,
             &state.config.api_config,
@@ -1500,94 +1621,273 @@ async fn collect_all_modes(state: &Arc<ServerState>) {
         )
         .await
         {
-            Ok(fire) => {
-                mode_status.fire_success = Some(true);
-                mode_status.fire_price = Some(fire.rmb_per_10k_fire);
-                fire_per_rmb = fire.fire_per_rmb;
-
-                if let Err(e) = db::insert_fire_snapshot(
-                    &state.db,
-                    &state.config.season_id,
-                    market_mode,
-                    &fire,
-                    timestamp,
-                )
-                .await
-                {
-                    mode_status.error = Some(format!("DB error: {}", e));
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                last_error = e;
+                if attempt < MAX_RETRIES {
+                    warn!(
+                        "火价抓取失败 (尝试 {}/{}): {}，{}ms 后重试",
+                        attempt,
+                        MAX_RETRIES,
+                        last_error,
+                        RETRY_DELAY_MS
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
                 }
             }
-            Err(e) => {
-                mode_status.error = Some(format!("Fire scrape error: {}", e));
-            }
         }
+    }
+    
+    Err(format!("火价抓取在 {} 次尝试后仍失败: {}", MAX_RETRIES, last_error))
+}
 
-        let items_result = Scraper::scrape_items(
-            &state.config.season_id,
+async fn scrape_items_with_retry(
+    state: &Arc<ServerState>,
+    season: &str,
+    market_mode: &str,
+) -> Result<Vec<tl_monitor::server::scraper::Item>, String> {
+    let mut last_error = String::new();
+    
+    for attempt in 1..=MAX_RETRIES {
+        match Scraper::scrape_items(
+            season,
             market_mode,
             &state.config.api_config,
             &state.config.api_endpoints,
         )
-        .await;
-
-        match items_result {
-            Ok(items) => {
-                mode_status.items_success = Some(true);
-                mode_status.items_count = Some(items.len());
-
-                let price_for_calc = if fire_per_rmb > 0.0 {
-                    fire_per_rmb
-                } else {
-                    1.0
-                };
-
-                if let Err(e) = db::insert_items_snapshots(
-                    &state.db,
-                    &state.config.season_id,
-                    market_mode,
-                    price_for_calc,
-                    &items,
-                    timestamp,
-                )
-                .await
-                {
-                    if mode_status.error.is_none() {
-                        mode_status.error = Some(format!("Items DB error: {}", e));
-                    }
-                }
-            }
+        .await
+        {
+            Ok(result) => return Ok(result),
             Err(e) => {
-                if mode_status.error.is_none() {
-                    mode_status.error = Some(format!("Items scrape error: {}", e));
+                last_error = e;
+                if attempt < MAX_RETRIES {
+                    warn!(
+                        "物品抓取失败 (尝试 {}/{}): {}，{}ms 后重试",
+                        attempt,
+                        MAX_RETRIES,
+                        last_error,
+                        RETRY_DELAY_MS
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
                 }
             }
-        }
-
-        info!(
-            "[{}] {} 采集完成: 火价={}, 物品={}",
-            Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
-            scrape_mode.mode,
-            mode_status
-                .fire_price
-                .map(|p| p.to_string())
-                .unwrap_or_else(|| "失败".to_string()),
-            mode_status.items_count.unwrap_or(0)
-        );
-
-        let final_success =
-            mode_status.fire_success == Some(true) && mode_status.items_success == Some(true);
-        mode_status.collection_success = Some(final_success);
-
-        if scrape_mode.mode == "expert" {
-            new_status.expert = Some(mode_status);
-        } else {
-            new_status.normal = Some(mode_status);
         }
     }
+    
+    Err(format!("物品抓取在 {} 次尝试后仍失败: {}", MAX_RETRIES, last_error))
+}
+
+async fn collect_single_mode(
+    state: &Arc<ServerState>,
+    season: &str,
+    mode: &str,
+    market_mode: &str,
+    timestamp: i64,
+) -> Option<ModeCollectionStatus> {
+    info!(
+        "[{}] 开始采集 {} 数据...",
+        Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
+        mode
+    );
+
+    let mut mode_status = ModeCollectionStatus {
+        timestamp,
+        fire_success: Some(false),
+        fire_price: None,
+        items_count: None,
+        items_success: Some(false),
+        error: None,
+        collection_success: None,
+    };
+
+    let mut fire_per_rmb = 0.0;
+
+    let fire_result = scrape_fire_with_retry(state, market_mode).await;
+
+    match fire_result {
+        Ok(fire) => {
+            mode_status.fire_success = Some(true);
+            mode_status.fire_price = Some(fire.rmb_per_10k_fire);
+            fire_per_rmb = fire.fire_per_rmb;
+
+            if let Err(e) = db::insert_fire_snapshot(&state.db, season, market_mode, &fire, timestamp).await {
+                mode_status.error = Some(format!("DB error: {}", e));
+            }
+        }
+        Err(e) => {
+            mode_status.error = Some(format!("Fire scrape error: {}", e));
+        }
+    }
+
+    let items_result = scrape_items_with_retry(state, season, market_mode).await;
+
+    match items_result {
+        Ok(items) => {
+            mode_status.items_success = Some(true);
+            mode_status.items_count = Some(items.len());
+
+            let price_for_calc = if fire_per_rmb > 0.0 { fire_per_rmb } else { 1.0 };
+
+            if let Err(e) = db::insert_items_snapshots(&state.db, season, market_mode, price_for_calc, &items, timestamp).await {
+                if mode_status.error.is_none() {
+                    mode_status.error = Some(format!("Items DB error: {}", e));
+                }
+            }
+        }
+        Err(e) => {
+            if mode_status.error.is_none() {
+                mode_status.error = Some(format!("Items scrape error: {}", e));
+            }
+        }
+    }
+
+    info!(
+        "[{}] {} 采集完成: 火价={}, 物品={}",
+        Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
+        mode,
+        mode_status.fire_price.map(|p| p.to_string()).unwrap_or_else(|| "失败".to_string()),
+        mode_status.items_count.unwrap_or(0)
+    );
+
+    let final_success = mode_status.fire_success == Some(true) && mode_status.items_success == Some(true);
+    mode_status.collection_success = Some(final_success);
+    Some(mode_status)
+}
+
+async fn collect_all_modes(state: &Arc<ServerState>) {
+    let current_season = get_cached_season(state).await;
+
+    match current_season {
+        Some(season) => {
+            info!("当前活跃赛季: {}，开始采集", season);
+            run_collection_for_season(state, &season, timestamp_from_now()).await;
+        }
+        None => {
+            info!("没有活跃的赛季（已全部归档），采集任务暂停");
+        }
+    };
+}
+
+async fn get_cached_season(state: &Arc<ServerState>) -> Option<String> {
+    let cache = state.season_cache.read().await;
+    
+    if let Some(ref cached) = *cache {
+        let age_secs = cached.cached_at.elapsed().as_secs();
+        if age_secs < 300 {
+            return Some(cached.season_id.clone());
+        }
+    }
+    drop(cache);
+
+    let season = db::get_current_season(&state.db).await?;
+    
+    let new_cache = SeasonCache {
+        season_id: season.clone(),
+        cached_at: Instant::now(),
+    };
+    
+    let mut cache = state.season_cache.write().await;
+    *cache = Some(new_cache);
+    
+    Some(season)
+}
+
+fn timestamp_from_now() -> i64 {
+    match Utc::now()
+        .with_minute(0)
+        .and_then(|t| t.with_second(0))
+        .and_then(|t| t.with_nanosecond(0))
+    {
+        Some(t) => t.timestamp(),
+        None => {
+            error!("Failed to calculate collection timestamp");
+            0
+        }
+    }
+}
+
+async fn run_collection_for_season(state: &Arc<ServerState>, season: &str, timestamp: i64) {
+    let mut normal_status = None;
+    let mut expert_status = None;
+
+    let dynamic = state.dynamic_config.read().await;
+    let enabled_modes: Vec<_> = dynamic
+        .scrape_modes
+        .iter()
+        .filter(|m| m.enabled)
+        .collect();
+
+    if enabled_modes.len() == 2 {
+        info!("并行采集普通服和专家服...");
+        
+        let (norm, expert) = tokio::join!(
+            collect_single_mode(
+                state,
+                season,
+                "normal",
+                "season_normal",
+                timestamp
+            ),
+            collect_single_mode(
+                state,
+                season,
+                "expert",
+                "season_expert",
+                timestamp
+            )
+        );
+        
+        normal_status = norm;
+        expert_status = expert;
+    } else {
+        for scrape_mode in enabled_modes {
+            let market_mode = if scrape_mode.mode == "expert" {
+                "season_expert"
+            } else {
+                "season_normal"
+            };
+            
+            let status = collect_single_mode(
+                state,
+                season,
+                &scrape_mode.mode,
+                market_mode,
+                timestamp,
+            ).await;
+            
+            if scrape_mode.mode == "expert" {
+                expert_status = status;
+            } else {
+                normal_status = status;
+            }
+        }
+    }
+
+    let new_status = CollectionStatus {
+        normal: normal_status,
+        expert: expert_status,
+    };
+
+    let ws_payload = new_status.clone();
 
     {
         let mut last = state.last_collection.write().await;
         *last = new_status;
+    }
+
+    db::wal_checkpoint(&state.db).await.ok();
+
+    {
+        let broadcaster = state.ws_broadcaster.read().await;
+        let status = serde_json::json!({
+            "type": "collection_complete",
+            "data": {
+                "normal": ws_payload.normal,
+                "expert": ws_payload.expert,
+                "timestamp": chrono::Utc::now().timestamp()
+            }
+        });
+        broadcaster.broadcast(&serde_json::to_string(&status).unwrap_or_default());
     }
 
     info!(
@@ -1599,4 +1899,115 @@ async fn collect_all_modes(state: &Arc<ServerState>) {
 fn mask_url_for_log(url: &str) -> String {
     url.replace("api.qiandao.com", "***")
         .replace("115.231.176.101", "***")
+}
+
+async fn start_websocket_server(state: Arc<ServerState>, port: u16) {
+    let addr = format!("0.0.0.0:{}", port);
+    info!("WebSocket 服务器启动: ws://{}", addr);
+
+    let listener = match tokio::net::TcpListener::bind(&addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            error!("WebSocket 服务器绑定失败: {}", e);
+            return;
+        }
+    };
+
+    info!("WebSocket 服务器监听中: ws://{}", addr);
+
+    loop {
+        match listener.accept().await {
+            Ok((stream, client_addr)) => {
+                info!("WebSocket 客户端连接: {}", client_addr);
+                let state = state.clone();
+                tokio::spawn(async move {
+                    handle_ws_connection(stream, client_addr, state).await;
+                });
+            }
+            Err(e) => {
+                warn!("WebSocket 连接接受失败: {}", e);
+            }
+        }
+    }
+}
+
+async fn handle_ws_connection(stream: TcpStream, client_addr: std::net::SocketAddr, state: Arc<ServerState>) {
+    let ws_stream = match accept_async(stream).await {
+        Ok(ws) => ws,
+        Err(e) => {
+            warn!("WebSocket 握手失败: {}: {}", client_addr, e);
+            return;
+        }
+    };
+
+    {
+        let mut broadcaster = state.ws_broadcaster.write().await;
+        broadcaster.client_connected();
+    }
+
+    let (write, read) = ws_stream.split();
+    let write = Arc::new(TokioMutex::new(write));
+
+    let mut rx = {
+        let broadcaster = state.ws_broadcaster.read().await;
+        broadcaster.subscribe()
+    };
+
+    let write_clone = write.clone();
+    let send_task = tokio::spawn(async move {
+        while let Ok(msg) = rx.recv().await {
+            let send_result = {
+                let mut w = write_clone.lock().await;
+                w.send(Message::Text(msg.into())).await
+            };
+            if send_result.is_err() {
+                break;
+            }
+        }
+    });
+
+    let write_clone = write.clone();
+    let recv_task = tokio::spawn(async move {
+        let mut read = read;
+        while let Some(msg) = read.next().await {
+            match msg {
+                Ok(Message::Text(text)) => {
+                    debug!("WebSocket 收到消息: {}", text);
+                    if text.trim() == "ping" {
+                        let mut w = write_clone.lock().await;
+                        let _ = w.send(Message::Text("pong".into())).await;
+                    }
+                }
+                Ok(Message::Ping(data)) => {
+                    let mut w = write_clone.lock().await;
+                    let _ = w.send(Message::Pong(data)).await;
+                }
+                Ok(Message::Close(_)) | Err(_) => {
+                    break;
+                }
+                _ => {}
+            }
+        }
+    });
+
+    let _ = tokio::join!(send_task, recv_task);
+
+    {
+        let mut broadcaster = state.ws_broadcaster.write().await;
+        broadcaster.client_disconnected();
+    }
+
+    info!("WebSocket 连接已关闭: {}", client_addr);
+}
+
+async fn graceful_shutdown(state: Arc<ServerState>) {
+    info!("开始优雅关闭...");
+    
+    info!("等待现有请求完成...");
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    
+    info!("关闭数据库连接池...");
+    state.db.close().await;
+    
+    info!("优雅关闭完成");
 }
