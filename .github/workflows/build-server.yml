@@ -17,6 +17,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/tl-monitor-server
+  ARCH: aarch64-unknown-linux-gnu
 
 jobs:
   build:
@@ -32,21 +33,32 @@ jobs:
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          targets: x86_64-unknown-linux-musl
+          target: ${{ env.ARCH }}
+          override: true
 
       - name: Install cross compilation dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools
+          sudo apt-get install -y \
+            gcc-aarch64-linux-gnu \
+            libc6-dev-arm64-cross \
+            pkg-config \
+            libssl-dev \
+            libglib2.0-dev \
+            libglib2.0-dev-arm64-cross
 
-      - name: Build server binary (static, musl)
+      - name: Build server binary
         env:
           CARGO_INCREMENTAL: 0
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CC: aarch64-linux-gnu-gcc
+          PKG_CONFIG_SYSROOT_DIR: /usr/aarch64-linux-gnu
+          PKG_CONFIG_PATH: /usr/aarch64-linux-gnu/lib/pkgconfig
           RUSTFLAGS: "-C target-feature=-crt-static"
         run: |
           cd src-tauri
-          cargo build --release --bin server --target x86_64-unknown-linux-musl
-          ls -la target/x86_64-unknown-linux-musl/release/server
+          cargo build --release --bin server --target ${{ env.ARCH }}
+          ls -la target/${{ env.ARCH }}/release/server
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -74,14 +86,14 @@ jobs:
       - name: Copy binary to docker context
         run: |
           mkdir -p server-docker/bin
-          cp src-tauri/target/x86_64-unknown-linux-musl/release/server server-docker/bin/
+          cp src-tauri/target/${{ env.ARCH }}/release/server server-docker/bin/
           ls -la server-docker/bin/
 
-      - name: Build and push AMD64 image
+      - name: Build and push ARM64 image
         uses: docker/build-push-action@v6
         with:
           context: ./server-docker
-          platforms: linux/amd64
+          platforms: linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
