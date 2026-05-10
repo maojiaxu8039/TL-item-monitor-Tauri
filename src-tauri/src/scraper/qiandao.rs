@@ -441,6 +441,7 @@ struct QiandaoItem {
 }
 
 #[derive(Debug, serde::Deserialize)]
+#[allow(dead_code)]
 struct NodeJsData {
     #[serde(default, deserialize_with = "deserialize_f64")]
     fire_per_rmb: f64,

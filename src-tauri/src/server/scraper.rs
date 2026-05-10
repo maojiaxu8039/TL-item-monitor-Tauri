@@ -340,6 +340,7 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
     debug!("解析 Node 输出...");
 
     #[derive(Deserialize)]
+    #[allow(dead_code)]
     struct NodeFireResult {
         error: Option<String>,
         fire_per_rmb: f64,
@@ -352,6 +353,7 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
         #[serde(default)]
         trading_volume: String,
         source: String,
+        #[allow(dead_code)]
         ts: String,
     }
 
