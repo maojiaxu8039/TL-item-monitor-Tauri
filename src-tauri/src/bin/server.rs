@@ -251,10 +251,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = SqlitePoolOptions::new()
         .max_connections(4)
         .connect(&format!(
-            "sqlite:{}?mode=rwc&journal_mode=WAL&synchronous=NORMAL",
+            "sqlite:{}?mode=rwc",
             db_path
         ))
         .await?;
+
+    sqlx::query("PRAGMA journal_mode=WAL").execute(&pool).await.ok();
+    sqlx::query("PRAGMA synchronous=NORMAL").execute(&pool).await.ok();
 
     db::run_migrations(&pool).await?;
 
