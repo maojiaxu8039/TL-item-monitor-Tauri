@@ -1,24 +1,21 @@
 version: '3.8'
+
 services:
   tl-monitor:
-    image: debian:bookworm-slim
+    image: ghcr.io/maojiaxu8039/tl-monitor-server:latest
     container_name: tl-monitor
     restart: unless-stopped
     ports:
-      - "8080:8080"
       - "38457:8080"
     volumes:
       - ./data:/data
-      - ./config:/config
+      - ./config:/app/config
       - ./resources:/app/resources
     environment:
       - RUST_LOG=info
       - TL_DB_PATH=/data/tl_monitor.db
-      - TL_CONFIG_PATH=/config/server_config.yaml
-    command:
-      - "/bin/sh"
-      - "-c"
-      - "apt-get update && apt-get install -y curl ca-certificates && chmod +x /app/resources/qiandao_fire && /app/server"
+      - TL_CONFIG_PATH=/app/config/server_config.yaml
+      - TL_RESOURCES_DIR=/app/resources
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s

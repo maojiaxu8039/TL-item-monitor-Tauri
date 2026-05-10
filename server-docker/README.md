@@ -1,73 +1,169 @@
-# TL Monitor Server Docker 配置
+# TL Monitor Server - 部署指南
+
+## 目录
+
+- [快速开始](#快速开始)
+- [GitHub Actions 自动构建](#github-actions-自动构建)
+- [极空间 NAS 部署](#极空间-nas-部署)
+- [配置说明](#配置说明)
+- [维护命令](#维护命令)
+- [故障排除](#故障排除)
+
+---
 
 ## 快速开始
 
-### 1. 准备配置
+### 方式一：使用预编译镜像（推荐）
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/maojiaxu8039/TL-item-monitor-Tauri.git
+cd TL-item-monitor-Tauri
+
+# 2. 准备配置
+mkdir -p server-docker/data server-docker/config server-docker/resources
+
+# 3. 复制配置文件
+cp server-docker/config/server_config.yaml.example server-docker/config/server_config.yaml
+
+# 4. 复制火价采集脚本
+cp src-tauri/resources/qiandao_fire server-docker/resources/
+
+# 5. 启动服务
+cd server-docker
+docker compose up -d
+
+# 6. 查看日志
+docker compose logs -f
+```
+
+### 方式二：手动构建镜像
 
 ```bash
 # 在项目根目录执行
-cd /path/to/TL-item-monitor-Tauri
+docker build -f server-docker/Dockerfile -t tl-monitor-server:latest .
 
-# 编辑配置文件（必填：设置强密码）
-vim server-docker/config/server_config.yaml
-```
-
-确保 `server-docker/config/server_config.yaml` 中的 `admin_password` 已设置为强密码：
-
-```yaml
-admin_password: "your_secure_password"
-http_port: 8080
-```
-
-### 2. 构建并启动
-
-```bash
-# 在项目根目录执行
-docker compose -f server-docker/docker-compose.yml up -d
-```
-
-或使用 docker-compose（较旧版本）：
-
-```bash
-docker-compose -f server-docker/docker-compose.yml up -d
-```
-
-### 3. 验证运行
-
-```bash
-curl http://localhost:8080/health
-```
-
-## 单独构建
-
-如果只想构建镜像而不运行：
-
-```bash
-docker build -t tl-monitor-server:latest -f server-docker/Dockerfile .
-```
-
-注意：由于 Dockerfile 需要访问 `src-tauri` 目录，构建上下文是项目根目录。
-
-## 手动运行容器
-
-```bash
+# 运行
 docker run -d \
-  --name tl-monitor-server \
-  -p 8080:8080 \
-  -v $(pwd)/server-docker/data:/data \
-  -v $(pwd)/server-docker/config:/config \
-  -e RUST_LOG=info \
+  --name tl-monitor \
+  -p 38457:8080 \
+  -v $(pwd)/data:/data \
+  -v $(pwd)/config:/app/config \
+  -v $(pwd)/resources:/app/resources \
   tl-monitor-server:latest
 ```
 
-## 配置文件说明
+---
 
-在 `server-docker/config/server_config.yaml` 中配置：
+## GitHub Actions 自动构建
+
+每次推送到 `main` 分支，GitHub Actions 会自动：
+
+1. 在 ARM64 平台上编译 Rust 服务器代码
+2. 构建 Docker 镜像
+3. 推送到 GitHub Container Registry (GHCR)
+
+**镜像地址**: `ghcr.io/maojiaxu8039/tl-monitor-server:latest`
+
+### 检查构建状态
+
+访问: https://github.com/maojiaxu8039/TL-item-monitor-Tauri/actions
+
+---
+
+## 极空间 NAS 部署
+
+### 步骤 1: 开启 SSH
+
+在极空间控制面板中开启 SSH 管理功能。
+
+### 步骤 2: SSH 连接到 NAS
+
+```bash
+ssh -p 10039 15510607744@100.124.122.65
+# 密码: !Mjx452212889
+```
+
+### 步骤 3: 创建目录结构
+
+```bash
+mkdir -p /data_s001/data/udata/real/15510607744/Docker/tl-monitor/data
+mkdir -p /data_s001/data/udata/real/15510607744/Docker/tl-monitor/config
+mkdir -p /data_s001/data/udata/real/15510607744/Docker/tl-monitor/resources
+```
+
+### 步骤 4: 上传配置文件
+
+将以下文件上传到 NAS：
+- `server-docker/config/server_config.yaml`
+- `src-tauri/resources/qiandao_fire` → `resources/`
+
+### 步骤 5: 拉取并启动镜像
+
+```bash
+# 拉取最新镜像
+sudo docker pull ghcr.io/maojiaxu8039/tl-monitor-server:latest
+
+# 停止旧容器（如果存在）
+sudo docker stop tl-monitor-server 2>/dev/null || true
+sudo docker rm tl-monitor-server 2>/dev/null || true
+
+# 启动新容器
+sudo docker run -d \
+  --name tl-monitor-server \
+  --restart unless-stopped \
+  -p 38457:8080 \
+  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor/data:/data \
+  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor/config:/app/config \
+  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor/resources:/app/resources \
+  ghcr.io/maojiaxu8039/tl-monitor-server:latest
+```
+
+### 步骤 6: 验证部署
+
+```bash
+# 查看容器状态
+sudo docker ps | grep tl-monitor
+
+# 查看日志
+sudo docker logs -f tl-monitor-server
+
+# 测试健康检查
+curl http://localhost:38457/health
+```
+
+### 访问地址
+
+| 地址 | 说明 |
+|------|------|
+| `http://极空间IP:38457/` | 服务器状态页面 |
+| `http://极空间IP:38457/admin` | 管理页面 |
+| `http://极空间IP:38457/api/docs` | API 文档 |
+
+---
+
+## 配置说明
+
+### server_config.yaml
 
 ```yaml
-season_id: "ss12"           # 当前赛季 ID
-http_port: 8080             # 服务端口（重启后生效）
-admin_password: "your_secure_password"  # 管理员密码（必填，使用强密码）
+# 管理员密码
+admin_password: "8039"
+
+# 当前赛季ID
+season_id: "ss12"
+
+# HTTP 端口（容器内部）
+http_port: 8080
+
+# 采集模式配置
+scrape_modes:
+  - mode: "normal"
+    enabled: true
+  - mode: "expert"
+    enabled: true
+
+# API 配置
 api_config:
   qiandao_tag_id_normal: "1560053"
   qiandao_spec_id_normal: "267416"
@@ -75,86 +171,184 @@ api_config:
   qiandao_spec_id_expert: "267417"
   luosi_season_id_normal: 1401
   luosi_season_id_expert: 1431
+
+# API 端点
+api_endpoints:
+  luosi: "http://115.231.176.101:8080"
+  qiandao: "https://api.qiandao.com"
+  qiandao_fire_endpoint: "/c2c-web/v1/common/currency-spu-price-list"
+
+# 限流配置
+rate_limit:
+  enabled: true
+  requests_per_minute: 60
+  burst_size: 10
+
+# CORS 允许的来源
+cors_allowed_origins:
+  - "http://localhost:5173"
+  - "http://100.124.122.65:38457"
 ```
 
-## API 接口
-
-### 公开接口
-
-- `GET /status` - 服务器状态
-- `GET /fire-history?mode=normal&limit=24` - 火价历史
-- `GET /fire-history?mode=expert&limit=24` - 专家服火价历史
-- `GET /items-history?mode=normal&item_id=xxx` - 物品历史
-- `GET /items-history-all?mode=normal&limit=100` - 所有物品历史
-- `GET /health` - 健康检查
-- `GET /season-start` - 赛季开始时间
-- `GET /stats` - 赛季统计
-
-### 管理员接口（需要密码）
-
-所有管理员接口需要在请求体中包含 `password` 字段：
-
-```json
-{
-  "password": "your_admin_password",
-  ...
-}
-```
-
-- `POST /admin/init-season` - 初始化新赛季
-- `POST /admin/archive-season` - 归档赛季
-- `POST /admin/update-api-config` - 更新API配置
-
-### 管理后台
-
-服务器提供内置 HTML 管理页面，访问 `http://localhost:8080/admin.html`
-
-## 极空间 NAS 安装步骤
-
-1. **开启 SSH 管理**（在极空间控制面板中）
-
-2. **SSH 连接到 NAS**
-   ```bash
-   ssh admin@your_nas_ip
-   ```
-
-3. **创建目录**
-   ```bash
-   mkdir -p /data/TLMonitor
-   mkdir -p /data/TLMonitor/config
-   ```
-
-4. **复制配置文件到 NAS**
-   ```bash
-   scp server-docker/config/server_config.yaml admin@your_nas_ip:/data/TLMonitor/config/
-   ```
-
-5. **构建并运行容器**
-   ```bash
-   docker build -t tl-monitor-server:latest -f server-docker/Dockerfile .
-   docker run -d \
-     --name tl-monitor-server \
-     --restart unless-stopped \
-     -p 8080:8080 \
-     -v /data/TLMonitor/data:/data \
-     -v /data/TLMonitor/config:/config \
-     -v /etc/localtime:/etc/localtime:ro \
-     tl-monitor-server:latest
-   ```
-
-6. **查看日志**
-   ```bash
-   docker logs -f tl-monitor-server
-   ```
-
-## 定时任务
-
-服务器每小时整点自动采集数据，无需额外配置。
-
-## 环境变量
+### 环境变量
 
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
-| TL_DB_PATH | /data/tl_monitor.db | 数据库文件路径 |
-| TL_CONFIG_PATH | /config/server_config.yaml | 配置文件路径 |
-| RUST_LOG | info | 日志级别 |
+| `RUST_LOG` | info | 日志级别 |
+| `TL_DB_PATH` | /data/tl_monitor.db | 数据库文件路径 |
+| `TL_CONFIG_PATH` | /app/config/server_config.yaml | 配置文件路径 |
+| `TL_RESOURCES_DIR` | /app/resources | 资源文件目录 |
+
+---
+
+## 维护命令
+
+### 容器管理
+
+```bash
+# 查看容器状态
+sudo docker ps | grep tl-monitor
+
+# 查看日志
+sudo docker logs tl-monitor-server
+
+# 实时查看日志
+sudo docker logs -f tl-monitor-server
+
+# 重启容器
+sudo docker restart tl-monitor-server
+
+# 停止容器
+sudo docker stop tl-monitor-server
+
+# 启动容器
+sudo docker start tl-monitor-server
+
+# 删除容器
+sudo docker stop tl-monitor-server && sudo docker rm tl-monitor-server
+```
+
+### 数据管理
+
+```bash
+# 查看数据库大小
+sudo docker exec tl-monitor-server ls -lh /data/*.db
+
+# 备份数据库
+sudo docker exec tl-monitor-server cp /data/tl_monitor.db /data/backup_$(date +%Y%m%d).db
+
+# 查看赛季信息
+sudo docker exec tl-monitor-server sqlite3 /data/tl_monitor.db "SELECT * FROM seasons;"
+```
+
+### 日志分析
+
+```bash
+# 查看最近采集日志
+sudo docker logs --tail 50 tl-monitor-server | grep "采集"
+
+# 查看火价抓取日志
+sudo docker logs --tail 50 tl-monitor-server | grep "火价"
+
+# 查看错误日志
+sudo docker logs --tail 100 tl-monitor-server | grep -i error
+
+# 导出完整日志
+sudo docker logs tl-monitor-server > /tmp/tl-monitor.log
+```
+
+### 更新服务
+
+```bash
+# 1. 拉取最新镜像
+sudo docker pull ghcr.io/maojiaxu8039/tl-monitor-server:latest
+
+# 2. 停止并删除旧容器
+sudo docker stop tl-monitor-server && sudo docker rm tl-monitor-server
+
+# 3. 启动新容器
+sudo docker run -d \
+  --name tl-monitor-server \
+  --restart unless-stopped \
+  -p 38457:8080 \
+  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor/data:/data \
+  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor/config:/app/config \
+  -v /data_s001/data/udata/real/15510607744/Docker/tl-monitor/resources:/app/resources \
+  ghcr.io/maojiaxu8039/tl-monitor-server:latest
+
+# 4. 验证
+sudo docker logs --tail 20 tl-monitor-server
+```
+
+---
+
+## 故障排除
+
+### 问题 1: 容器无法启动
+
+**检查项**:
+
+1. 确认 `qiandao_fire` 文件存在且有执行权限
+2. 确认 `server_config.yaml` 格式正确
+3. 查看容器日志排查具体错误
+
+```bash
+sudo docker logs tl-monitor-server
+```
+
+### 问题 2: 无法访问页面
+
+**检查项**:
+
+1. 确认端口 38457 未被占用
+2. 确认防火墙允许 38457 端口
+3. 确认容器状态为"运行中"
+
+### 问题 3: 数据采集失败
+
+**检查项**:
+
+1. 确认网络可以访问 `http://115.231.176.101:8080`
+2. 确认 `qiandao_fire` 文件有执行权限
+3. 检查采集日志
+
+```bash
+sudo docker logs --tail 100 tl-monitor-server | grep -i "error\|fail\|采集"
+```
+
+### 问题 4: CORS 跨域错误
+
+**解决方案**: 在 `server_config.yaml` 的 `cors_allowed_origins` 中添加客户端地址。
+
+```yaml
+cors_allowed_origins:
+  - "http://你的客户端IP:38457"
+```
+
+### 问题 5: 赛季显示"已归档"
+
+**解决方案**:
+
+```bash
+# 直接修改数据库
+sudo docker exec tl-monitor-server sqlite3 /data/tl_monitor.db \
+  "UPDATE seasons SET ended_at = NULL, is_current = 1 WHERE id = 'ss12'"
+
+# 重启容器
+sudo docker restart tl-monitor-server
+```
+
+---
+
+## 技术支持
+
+如遇问题，请提供：
+
+1. `sudo docker ps` 输出
+2. `sudo docker logs tl-monitor-server` 日志
+3. 配置文件内容
+4. 具体错误信息
+
+---
+
+*文档最后更新：2026-05-10*

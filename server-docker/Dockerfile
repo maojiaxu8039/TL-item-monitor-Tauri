@@ -23,21 +23,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd -m -u 1000 appuser
 
 WORKDIR /app
-COPY --from=builder /target/release/server /app/server
-COPY server-docker/resources /app/resources
-COPY server-docker/config /app/config
 
-RUN chmod +x /app/resources/* 2>/dev/null || true && \
-    chown -R appuser:appuser /app
+COPY --from=builder /target/release/server /app/server
+
+RUN mkdir -p /app/resources /app/config
 
 USER appuser
+
 ENV RUST_LOG=info
 ENV TL_DB_PATH=/data/tl_monitor.db
-ENV TL_CONFIG_PATH=/app/config/server_config.yaml
+ENV TL_CONFIG_PATH=/config/server_config.yaml
 ENV TL_RESOURCES_DIR=/app/resources
 
 EXPOSE 8080
 
-VOLUME ["/data"]
+VOLUME ["/data", "/app/config", "/app/resources"]
 
 CMD ["/app/server"]
