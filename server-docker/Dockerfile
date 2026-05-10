@@ -2,16 +2,16 @@ FROM rust:1.85-bookworm-slim AS builder
 
 WORKDIR /build
 
-COPY src-tauri/Cargo.toml src-tauri/Cargo.lock* ./
-COPY src-tauri/src ./src/
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN cargo build --release --bin server
-RUN strip /target/release/server
+COPY src-tauri/Cargo.toml src-tauri/Cargo.lock* ./
+COPY src-tauri/src ./src/
+
+RUN cargo build --release --bin server && \
+    strip /target/release/server
 
 FROM debian:bookworm-slim
 
@@ -24,16 +24,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY --from=builder /target/release/server /app/server
+COPY server-docker/resources /app/resources
+COPY server-docker/config /app/config
 
-RUN chown -R appuser:appuser /app
+RUN chmod +x /app/resources/* 2>/dev/null || true && \
+    chown -R appuser:appuser /app
 
 USER appuser
 ENV RUST_LOG=info
 ENV TL_DB_PATH=/data/tl_monitor.db
-ENV TL_CONFIG_PATH=/config/server_config.yaml
+ENV TL_CONFIG_PATH=/app/config/server_config.yaml
+ENV TL_RESOURCES_DIR=/app/resources
 
 EXPOSE 8080
 
-VOLUME ["/data", "/config"]
+VOLUME ["/data"]
 
 CMD ["/app/server"]
