@@ -17,7 +17,6 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/tl-monitor-server
-  ARCH: aarch64-unknown-linux-gnu
 
 jobs:
   build:
@@ -33,24 +32,21 @@ jobs:
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          target: ${{ env.ARCH }}
-          override: true
+          targets: x86_64-unknown-linux-musl
 
       - name: Install cross compilation dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross pkg-config libssl-dev
+          sudo apt-get install -y musl-tools
 
-      - name: Build server binary
+      - name: Build server binary (static, musl)
         env:
           CARGO_INCREMENTAL: 0
           RUSTFLAGS: "-C target-feature=-crt-static"
-          CC: aarch64-linux-gnu-gcc
         run: |
           cd src-tauri
-          cargo build --release --bin server --target ${{ env.ARCH }}
-          ls -la target/${{ env.ARCH }}/release/server
-          aarch64-linux-gnu-strip target/${{ env.ARCH }}/release/server || true
+          cargo build --release --bin server --target x86_64-unknown-linux-musl
+          ls -la target/x86_64-unknown-linux-musl/release/server
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -78,14 +74,14 @@ jobs:
       - name: Copy binary to docker context
         run: |
           mkdir -p server-docker/bin
-          cp src-tauri/target/${{ env.ARCH }}/release/server server-docker/bin/
+          cp src-tauri/target/x86_64-unknown-linux-musl/release/server server-docker/bin/
           ls -la server-docker/bin/
 
-      - name: Build and push ARM64 image
+      - name: Build and push AMD64 image
         uses: docker/build-push-action@v6
         with:
           context: ./server-docker
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
