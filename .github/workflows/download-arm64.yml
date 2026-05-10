@@ -1,50 +1,61 @@
 name: Download Linux ARM64 Build
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server-standalone/**'
+      - '.github/workflows/download-arm64.yml'
   workflow_dispatch:
-    inputs:
-      run_id:
-        description: 'Build run ID to download from'
-        required: false
-        type: string
 
 jobs:
-  download:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download artifact
-        id: download
-        uses: actions/download-artifact@v4
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          name: linux-arm64-server
-          path: ./server-standalone/target/aarch64-unknown-linux-gnu/release/
+          target: aarch64-unknown-linux-gnu
 
-      - name: Verify binary
+      - name: Install cross compilation dependencies
         run: |
-          cd server-standalone/target/aarch64-unknown-linux-gnu/release/
-          ls -la tl-monitor-server
-          file tl-monitor-server
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross pkg-config libssl-dev
 
-      - name: Create tarball
+      - name: Build server binary
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CC: aarch64-linux-gnu-gcc
+          RUSTFLAGS: "-C target-feature=-crt-static"
         run: |
-          cd server-standalone/target/aarch64-unknown-linux-gnu/release/
-          tar -czf tl-monitor-server-arm64.tar.gz tl-monitor-server
-          ls -la *.tar.gz
+          cd server-standalone
+          cargo build --release --target aarch64-unknown-linux-gnu
 
-      - name: Upload tarball
+      - name: Verify build output
+        run: |
+          cd server-standalone
+          ls -la target/aarch64-unknown-linux-gnu/release/
+          file target/aarch64-unknown-linux-gnu/release/tl-monitor-server
+          ldd target/aarch64-unknown-linux-gnu/release/tl-monitor-server 2>&1 | head -20
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tl-monitor-server-arm64-tarball
-          path: server-standalone/target/aarch64-unknown-linux-gnu/release/tl-monitor-server-arm64.tar.gz
-          retention-days: 30
+          name: linux-arm64-server
+          path: server-standalone/target/aarch64-unknown-linux-gnu/release/tl-monitor-server
+          retention-days: 7
 
-      - name: Summary
+      - name: Deployment summary
+        if: github.ref == 'refs/heads/main'
         run: |
-          echo "## 📦 Download Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## � ARM64 Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Binary: `server-standalone/target/aarch64-unknown-linux-gnu/release/tl-monitor-server`" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifact:** linux-arm64-server" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download the artifact from the Actions run." >> $GITHUB_STEP_SUMMARY
+          echo "Build ID: ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "下载方式：Actions -> linux-arm64-server -> Download" >> $GITHUB_STEP_SUMMARY
