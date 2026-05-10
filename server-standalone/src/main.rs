@@ -1796,15 +1796,23 @@ async fn get_cached_season(state: &Arc<ServerState>) -> Option<String> {
 }
 
 fn timestamp_from_now() -> i64 {
-    match Utc::now()
+    let now = Utc::now();
+    let rounded = now
         .with_minute(0)
         .and_then(|t| t.with_second(0))
-        .and_then(|t| t.with_nanosecond(0))
-    {
-        Some(t) => t.timestamp(),
+        .and_then(|t| t.with_nanosecond(0));
+    
+    match rounded {
+        Some(t) => {
+            let ts = t.timestamp();
+            debug!("计算采集时间戳: now={}, rounded={}, timestamp={}", 
+                  now.format("%Y-%m-%d %H:%M:%S UTC"), 
+                  t.format("%Y-%m-%d %H:%M:%S UTC"), ts);
+            ts
+        },
         None => {
             error!("Failed to calculate collection timestamp");
-            0
+            Utc::now().timestamp()
         }
     }
 }
