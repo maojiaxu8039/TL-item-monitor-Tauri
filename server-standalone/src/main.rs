@@ -377,6 +377,9 @@ async fn handle_request(
 ) {
     use tokio::io::AsyncReadExt;
 
+    // Add read timeout to prevent slowloris attacks
+    let read_timeout = std::time::Duration::from_secs(30);
+
     let client_ip = client_addr.ip().to_string();
 
     {
@@ -404,15 +407,28 @@ async fn handle_request(
     let mut content_length = 0usize;
     let mut header_end_pos = 0usize;
 
+    let read_start = std::time::Instant::now();
     loop {
-        match stream.read(&mut temp).await {
-            Ok(0) => {
+        // Check read timeout
+        if read_start.elapsed() > read_timeout {
+            warn!("客户端 {} 读取超时", client_ip);
+            let response = "HTTP/1.1 408 Request Timeout\r\nContent-Type: text/plain\r\nContent-Length: 15\r\n\r\nRequest timeout";
+            let _ = tokio::io::AsyncWriteExt::write_all(
+                &mut tokio::io::BufWriter::new(&mut stream),
+                response.as_bytes(),
+            )
+            .await;
+            return;
+        }
+
+        match tokio::time::timeout(std::time::Duration::from_secs(5), stream.read(&mut temp)).await {
+            Ok(Ok(0)) => {
                 if !header_complete && buffer.is_empty() {
                     return;
                 }
                 break;
             }
-            Ok(n) => {
+            Ok(Ok(n)) => {
                 buffer.extend_from_slice(&temp[..n]);
 
                 if !header_complete {

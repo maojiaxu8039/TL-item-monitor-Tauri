@@ -120,6 +120,13 @@ pub async fn backup_database(
     dest_path: String,
 ) -> Result<OkResponse, String> {
     let db_path = paths::db_path();
+
+    // WAL mode: need to checkpoint before copying to ensure all data is in main db file
+    sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+        .execute(&state.db)
+        .await
+        .map_err(|e| format!("WAL checkpoint 失败: {}", e))?;
+
     std::fs::copy(&db_path, &dest_path).map_err(|e| format!("备份失败: {}", e))?;
 
     let now = chrono::Utc::now().timestamp().to_string();
@@ -134,6 +141,34 @@ pub async fn restore_database(
     src_path: String,
 ) -> Result<OkResponse, String> {
     let db_path = paths::db_path();
+
+    // Validate source file exists and is a valid SQLite database
+    if !std::path::Path::new(&src_path).exists() {
+        return Err("恢复失败: 源文件不存在".to_string());
+    }
+
+    let metadata = std::fs::metadata(&src_path)
+        .map_err(|e| format!("无法读取源文件: {}", e))?;
+    if metadata.len() < 512 {
+        return Err("恢复失败: 源文件太小，可能不是有效的数据库".to_string());
+    }
+
+    // Check SQLite magic header
+    let mut header = [0u8; 16];
+    let mut file = std::fs::File::open(&src_path)
+        .map_err(|e| format!("无法打开源文件: {}", e))?;
+    std::io::Read::read_exact(&mut file, &mut header)
+        .map_err(|e| format!("无法读取文件头: {}", e))?;
+    if &header[0..6] != b"SQLite" {
+        return Err("恢复失败: 源文件不是有效的 SQLite 数据库".to_string());
+    }
+
+    // Remove WAL files before restore to avoid corruption
+    let wal_path = db_path.with_extension("db-wal");
+    let shm_path = db_path.with_extension("db-shm");
+    let _ = std::fs::remove_file(&wal_path);
+    let _ = std::fs::remove_file(&shm_path);
+
     std::fs::copy(&src_path, &db_path).map_err(|e| format!("恢复失败: {}", e))?;
     Ok(OkResponse::success("数据库已恢复 — 请重启应用"))
 }

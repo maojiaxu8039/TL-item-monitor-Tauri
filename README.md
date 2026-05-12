@@ -2,175 +2,160 @@
 
 ## 项目概述
 
-本项目包含两个独立的组件：
+TL Monitor 是一个用于监控火炬之光游戏火价和物品价格的综合工具，支持桌面客户端和独立服务器两种部署模式。
 
 | 组件 | 目录 | 说明 |
 |------|------|------|
-| **桌面客户端** | `src-tauri/` | Tauri 2.0 桌面应用，用于查看和管理火价数据 |
-| **独立服务器** | `server-standalone/` | 数据采集服务器，运行在 NAS 或其他服务器上 |
+| **桌面客户端** | `src-tauri/` | Tauri 2.0 桌面应用，提供完整的图形界面 |
+| **独立服务器** | `server-standalone/` | 轻量级 HTTP 数据采集服务器，适合 NAS/服务器部署 |
 
-## 组件详情
+## 核心功能
 
-### 桌面客户端 (src-tauri)
+- **火价监控**: 实时显示当前火价，支持历史走势分析和赛季对比
+- **物品价格**: 搜索、筛选、对比物品价格，支持历史趋势查看
+- **捡漏出货**: 实时监控物品价格变化，自动检测涨跌机会
+- **策略分析**: 创建打宝策略，计算成本和收益
+- **价格预警**: 设置价格阈值，触发系统通知
+- **数据同步**: 客户端与服务器之间的数据同步
+- **AI 分析**: 集成 HERMES Gateway，支持智能分析
 
-Tauri 2.0 桌面应用，提供图形界面用于：
+## 技术栈
 
-- 查看火价历史和趋势
-- 管理监控的物品
-- 设置价格提醒
-- 策略管理
-- 捡漏出货分析
-- 赛季数据对比
-
-**技术栈**: Tauri 2.0 + React + TypeScript + Rust + SQLite
-
-### 独立服务器 (server-standalone)
-
-部署在 NAS 或服务器上的数据采集服务，提供：
-
-- 整点自动采集火价和物品数据
-- REST API 管理接口
-- WebSocket 实时数据推送
-- 管理员认证
-
-**技术栈**: Rust + SQLite + Tokio
-
-**部署文档**: [server-docker/README.md](server-docker/README.md)
+| 层级 | 技术 | 版本 |
+|------|------|------|
+| 前端 | React + TypeScript | 19.x / 5.x |
+| 构建工具 | Vite | 6.x |
+| UI 框架 | Tailwind CSS | 3.x |
+| 状态管理 | TanStack Query | 5.x |
+| 桌面框架 | Tauri | 2.x |
+| 后端 | Rust | 1.79+ |
+| 数据库 | SQLite | 3.x |
+| 图表 | Recharts | 2.x |
 
 ## 快速开始
+
+### 环境要求
+
+- Node.js 18+
+- Rust 1.79+
+- macOS / Linux / Windows
 
 ### 桌面客户端
 
 ```bash
-cd src-tauri
-cargo tauri dev
+# 安装依赖
+npm install
+
+# 开发模式
+npm run dev
+
+# 类型检查
+npm run typecheck
+
+# 构建生产版本
+npm run build
 ```
 
-### 服务器部署
+### 独立服务器
 
-1. 修改代码并推送到 GitHub
-2. GitHub Actions 自动构建 ARM64 版本
-3. 下载构建产物并部署到 NAS
+```bash
+cd server-standalone
 
-详细步骤请参阅 [server-docker/README.md](server-docker/README.md)。
+# 开发模式
+cargo run
+
+# 生产构建
+cargo build --release
+
+# 运行
+./target/release/tl-server-standalone
+```
 
 ## 项目结构
 
 ```
 TL-item-monitor-Tauri/
-├── src-tauri/              # 桌面客户端（Tauri 应用）
+├── src/                          # 前端源码 (React + TypeScript)
+│   ├── components/
+│   │   ├── dashboard/            # 页面组件
+│   │   ├── layout/               # 布局组件
+│   │   └── ui/                   # 通用 UI 组件
+│   ├── hooks/                    # React Hooks
+│   ├── lib/                      # 工具函数和命令封装
+│   └── contexts/                 # React Context
+│
+├── src-tauri/                    # Tauri 后端 (Rust)
 │   ├── src/
-│   │   ├── bin/           # 二进制入口
-│   │   ├── commands/      # Tauri 命令（前端调用）
-│   │   ├── components/   # React 组件
-│   │   ├── contexts/      # React 上下文
-│   │   ├── core/         # 核心模块
-│   │   ├── db/           # 数据库模块
-│   │   │   └── migrations/  # 数据库迁移脚本
-│   │   ├── lib/          # TypeScript 类型和命令
-│   │   ├── scheduler/    # 调度器
-│   │   ├── scraper/      # 数据抓取
-│   │   └── services/     # 服务模块
-│   ├── src/              # Rust 源代码
-│   └── Cargo.toml
+│   │   ├── commands/             # Tauri 命令
+│   │   ├── db/                   # 数据库操作和迁移
+│   │   ├── scheduler/            # 定时任务
+│   │   ├── scraper/              # 数据采集
+│   │   ├── services/             # 业务服务
+│   │   └── core/                 # 核心模块
+│   └── resources/                # 资源文件
 │
-├── server-standalone/     # 独立服务器（已弃用）
-│   └── ...
+├── server-standalone/            # 独立服务器
+│   └── src/
+│       └── main.rs               # HTTP 服务器入口
 │
-└── server-docker/         # Docker 部署配置
-    └── ...
+├── server-docker/                # Docker 配置 (已弃用)
+│   └── Dockerfile                # 说明：请使用 server-standalone
+│
+└── docs/                         # 项目文档
+    ├── DEVELOPMENT_GUIDE.md      # 开发指南
+    └── RELEASE_READINESS_OPTIMIZATION_REPORT.md  # 发布检查报告
 ```
 
 ## 数据库结构
 
-### 数据库文件位置
+### 核心表
 
-```
-data/tl_monitor.db
-```
+| 表名 | 说明 |
+|------|------|
+| `items_normal` / `items_expert` | 实时物品价格 |
+| `fire_price_normal` / `fire_price_expert` | 实时火价 |
+| `item_snapshots_{season}_{mode}` | 物品历史快照 |
+| `fire_price_snapshots_{season}_{mode}` | 火价历史快照 |
+| `item_realtime_prices` | 近3小时实时价格变化 |
+| `sections` / `section_items` | 分组管理 |
+| `strategies` / `strategy_costs` / `strategy_outputs` | 策略分析 |
+| `alert_rules` / `alert_events` | 价格预警 |
+| `seasons` | 赛季信息 |
 
-### 表分类
+## 安全注意事项
 
-#### 1️⃣ 物品相关表
+### 配置管理
 
-| 表名 | 说明 | 状态 |
-|------|------|------|
-| `items_normal` | 普通市场物品 | ✅ 正常使用 |
-| `items_expert` | 专家市场物品 | ✅ 正常使用 |
+- **管理员密码**: 部署前必须通过环境变量 `TL_ADMIN_PASSWORD` 设置，不要使用默认密码
+- **配置文件**: 生产环境使用 `server_config.example.yaml` 作为模板
 
-#### 2️⃣ 火价相关表
+### 权限控制
 
-| 表名 | 说明 | 状态 |
-|------|------|------|
-| `fire_price_normal` | 普通市场火价 | ✅ 正常使用 |
-| `fire_price_expert` | 专家市场火价 | ✅ 正常使用 |
+- Tauri 应用已收紧文件系统权限，只允许访问应用数据目录和用户选择的文件
+- CSP 已移除 `unsafe-eval`，仅保留必要的 `unsafe-inline` 用于样式
 
-#### 3️⃣ 实时数据表
+### 数据采集
 
-| 表名 | 说明 | 状态 |
-|------|------|------|
-| `item_realtime_prices` | 物品实时价格 | ✅ 正常使用 |
+- 采集模块使用 `danger_accept_invalid_certs(true)` 以兼容第三方 API，已在代码中明确标注风险
+- 建议生产环境使用反向代理和 HTTPS
 
-#### 4️⃣ 快照表（按赛季和市场模式）
+## 发布检查清单
 
-| 表名 | 说明 | 状态 |
-|------|------|------|
-| `item_snapshots_ss12_normal` | ss12 普通物品快照 | ✅ 正常使用 |
-| `item_snapshots_ss12_expert` | ss12 专家物品快照 | ✅ 正常使用 |
-| `item_snapshots_ss11_normal` | ss11 普通物品快照 | ✅ 正常使用 |
-| `item_snapshots_ss11_expert` | ss11 专家物品快照 | ✅ 正常使用 |
-| `fire_price_snapshots_ss12_normal` | ss12 普通火价快照 | ✅ 正常使用 |
-| `fire_price_snapshots_ss12_expert` | ss12 专家火价快照 | ✅ 正常使用 |
-| `fire_price_snapshots_ss11_normal` | ss11 普通火价快照 | ✅ 正常使用 |
-| `fire_price_snapshots_ss11_expert` | ss11 专家火价快照 | ✅ 正常使用 |
+在发布前请确保：
 
-#### 5️⃣ 配置表
-
-| 表名 | 说明 | 状态 |
-|------|------|------|
-| `seasons` | 赛季信息 | ✅ 正常使用 |
-| `season_api_configs` | 赛季 API 配置 | ✅ 正常使用 |
-| `app_meta` | 应用元数据 | ✅ 正常使用 |
-
-#### 6️⃣ 策略相关表
-
-| 表名 | 说明 | 状态 |
-|------|------|------|
-| `strategies` | 策略表 | ✅ 正常使用 |
-| `strategy_costs` | 策略成本 | ✅ 正常使用 |
-| `strategy_details` | 策略详情 | ✅ 正常使用 |
-| `strategy_outputs` | 策略输出 | ✅ 正常使用 |
-
-#### 7️⃣ 警报相关表
-
-| 表名 | 说明 | 状态 |
-|------|------|------|
-| `alert_rules` | 警报规则 | ✅ 正常使用 |
-| `alert_events` | 警报事件 | ✅ 正常使用 |
-
-#### 8️⃣ 分组相关表
-
-| 表名 | 说明 | 状态 |
-|------|------|------|
-| `sections` | 分组表 | ✅ 正常使用 |
-| `section_items` | 分组物品关联 | ✅ 正常使用 |
-
-#### 9️⃣ 其他表
-
-| 表名 | 说明 | 状态 |
-|------|------|------|
-| `source_diagnostics` | 数据源诊断 | ✅ 正常使用 |
-| `_migrations` | 迁移记录 | ✅ 系统表 |
+1. ✅ `npm run typecheck` 通过
+2. ✅ `npm run lint` 通过（无 warning）
+3. ✅ `cargo test` 通过（src-tauri 和 server-standalone）
+4. ✅ 数据库迁移在空库上测试通过
+5. ✅ 管理员密码已修改
+6. ✅ 备份恢复功能测试通过
+7. ✅ Docker 构建测试通过（如使用）
 
 ## 版本信息
 
 - **当前版本**: v1.0.0
-- **服务器版本**: v3.3
+- **最后更新**: 2026-05-13
 
-## GitHub Release
-
-https://github.com/maojiaxu8039/TL-item-monitor-Tauri/releases
-
-## License
+## 许可证
 
 MIT

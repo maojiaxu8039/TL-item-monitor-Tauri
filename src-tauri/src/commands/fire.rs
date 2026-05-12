@@ -149,9 +149,11 @@ pub async fn set_active_market_context(
     );
 
     // Refresh items cache for new context
+    // IMPORTANT: Clone the Arc<AppState> reference, not the AppState itself
+    // to ensure all tasks share the same state instance
     let mode_str = mode.as_str().to_string();
     let season_for_cache = seasonId.clone();
-    let state_clone = Arc::new((*state).clone());
+    let state_clone = Arc::clone(&state);
     tokio::spawn(async move {
         match repo_items::get_items_from_realtime_table(&state_clone.db, &season_for_cache, &mode_str).await {
             Ok(items) => {
