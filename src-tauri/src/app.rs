@@ -146,58 +146,75 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
     // Always fetch latest fire price from API on startup
     let default_season = config.app.season_id.clone();
     let default_mode = config.scrape.fire_price_mode.clone();
+    let expert_enabled = config.scrape.expert_enabled;
     
     tracing::info!("[STARTUP] Fetching latest fire price from API...");
-    let fire_price = match crate::scraper::scrape_fire_price().await {
+    
+    // Scrape normal mode fire price (always)
+    let mut fire_price: Option<FirePriceSnapshot> = None;
+    match scraper::scrape_fire_price().await {
         Ok(snapshot) => {
-            tracing::info!("[STARTUP] Successfully fetched fire price from API: {} RMB/10K fire", 
+            tracing::info!("[STARTUP] Successfully fetched normal fire price: {} RMB/10K fire", 
                 snapshot.rmb_per_10k_fire);
-            
-            // Insert into database
-            if let Err(e) = repo_fire::insert_fire_record(
-                &pool,
-                &default_season,
-                &default_mode,
-                &snapshot,
-            ).await {
-                tracing::warn!("[STARTUP] Failed to insert fire record into database: {}", e);
+            if let Err(e) = repo_fire::insert_fire_record(&pool, &default_season, "season_normal", &snapshot).await {
+                tracing::warn!("[STARTUP] Failed to insert normal fire record: {}", e);
             } else {
-                tracing::info!("[STARTUP] Successfully inserted fire record into database");
+                tracing::info!("[STARTUP] Successfully inserted normal fire record");
             }
-            
-            Some(snapshot)
+            if default_mode == "season_normal" {
+                fire_price = Some(snapshot);
+            }
         }
         Err(e) => {
-            tracing::warn!("[STARTUP] Failed to fetch fire price from API: {}, trying database...", e);
-            
+            tracing::warn!("[STARTUP] Failed to fetch normal fire price: {}, trying database...", e);
             // Fallback to database if API fails
-            match repo_fire::get_latest_fire(&pool, &default_season, &default_mode).await {
-                Ok(Some(record)) => {
-                    tracing::info!("[STARTUP] Using cached fire price from database: {} RMB/10K fire", 
-                        record.rmb_per_10k_fire);
-                    let snapshot = FirePriceSnapshot {
-                        price_per_wan: if record.fire_per_rmb > 0.0 {
-                            10000.0 / record.fire_per_rmb
-                        } else {
-                            0.0
-                        },
-                        rmb_per_10k_fire: record.rmb_per_10k_fire,
-                        fire_per_rmb: record.fire_per_rmb,
-                        increase_ratio: record.increase_ratio,
-                        trading_volume: record.trading_volume,
-                        source: record.source,
-                        source_time: record.source_time,
-                        scraped_at: record.scraped_at,
-                    };
-                    Some(snapshot)
-                }
-                _ => {
-                    tracing::error!("[STARTUP] No fire price data available in database either");
-                    None
+            if let Ok(Some(record)) = repo_fire::get_latest_fire(&pool, &default_season, "season_normal").await {
+                tracing::info!("[STARTUP] Using cached normal fire price from database: {} RMB/10K fire", 
+                    record.rmb_per_10k_fire);
+                let snapshot = FirePriceSnapshot {
+                    price_per_wan: if record.fire_per_rmb > 0.0 {
+                        10000.0 / record.fire_per_rmb
+                    } else {
+                        0.0
+                    },
+                    rmb_per_10k_fire: record.rmb_per_10k_fire,
+                    fire_per_rmb: record.fire_per_rmb,
+                    increase_ratio: record.increase_ratio,
+                    trading_volume: record.trading_volume,
+                    source: record.source,
+                    source_time: record.source_time,
+                    scraped_at: record.scraped_at,
+                };
+                if default_mode == "season_normal" {
+                    fire_price = Some(snapshot);
                 }
             }
         }
-    };
+    }
+    
+    // Scrape expert mode fire price if expert_enabled
+    if expert_enabled {
+        tracing::info!("[STARTUP] Expert mode enabled, fetching expert fire price...");
+        match scraper::qiandao::scrape_by_mode("专家").await {
+            Ok(snapshot) => {
+                tracing::info!("[STARTUP] Successfully fetched expert fire price: {} RMB/10K fire", 
+                    snapshot.rmb_per_10k_fire);
+                if let Err(e) = repo_fire::insert_fire_record(&pool, &default_season, "season_expert", &snapshot).await {
+                    tracing::warn!("[STARTUP] Failed to insert expert fire record: {}", e);
+                } else {
+                    tracing::info!("[STARTUP] Successfully inserted expert fire record");
+                }
+                if default_mode == "season_expert" {
+                    fire_price = Some(snapshot);
+                }
+            }
+            Err(e) => {
+                tracing::warn!("[STARTUP] Failed to fetch expert fire price: {}", e);
+            }
+        }
+    } else {
+        tracing::info!("[STARTUP] Expert mode disabled, skipping expert fire price scrape");
+    }
 
     // Auto-import items: prefer API scrape, fall back to JSON file
     // Always refresh from API on startup to get latest prices

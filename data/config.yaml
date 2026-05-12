@@ -1,12 +1,13 @@
 schema_version: 1
 scrape:
-  fire_price_mode: season_expert
+  fire_price_mode: season_normal
   fire_price_scrape_interval: 300
   fire_price_scrape_enabled: true
   items_source: api
   items_json_path: ''
   items_reload_interval: 300
   auto_reload: true
+  expert_enabled: false
 desktop:
   auto_start: false
   tray_on_close: false

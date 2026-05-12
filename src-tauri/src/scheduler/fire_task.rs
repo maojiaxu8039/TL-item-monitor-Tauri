@@ -48,21 +48,20 @@ pub async fn run_fire_scrape_task(
                 }
 
                 let interval_secs = config.scrape.fire_price_scrape_interval.max(60);
+                let expert_enabled = config.scrape.expert_enabled;
                 let ctx = state.active_context.read().clone();
-                let mode_str = match ctx.market_mode {
-                    MarketMode::SeasonExpert => "专家",
-                    _ => "普通",
-                };
+                let season_id = ctx.season_id.clone();
 
-                let start = std::time::Instant::now();
-                match scraper::qiandao::scrape_by_mode(mode_str).await {
+                // Scrape normal mode fire price (always)
+                let normal_start = std::time::Instant::now();
+                match scraper::qiandao::scrape_by_mode("普通").await {
                     Ok(snapshot) => {
-                        let duration_ms = start.elapsed().as_millis() as i64;
+                        let duration_ms = normal_start.elapsed().as_millis() as i64;
 
                         let _ = crate::db::repo_fire::insert_fire_record(
                             &state.db,
-                            &ctx.season_id,
-                            ctx.market_mode.as_str(),
+                            &season_id,
+                            "season_normal",
                             &snapshot,
                         ).await;
 
@@ -71,7 +70,7 @@ pub async fn run_fire_scrape_task(
                             "qiandao",
                             "api",
                             true,
-                            Some(ctx.market_mode.as_str()),
+                            Some("season_normal"),
                             None,
                             true,
                             duration_ms,
@@ -79,48 +78,115 @@ pub async fn run_fire_scrape_task(
                             None,
                         ).await;
 
-                        {
+                        // Update state fire price if current mode is normal
+                        if matches!(ctx.market_mode, MarketMode::SeasonNormal) {
                             let mut fire = state.fire_price.write();
                             *fire = Some(snapshot.clone());
+                            drop(fire);
+                            emit_fire_price_updated(&app, FirePricePayload {
+                                rmb_per_10k_fire: snapshot.rmb_per_10k_fire,
+                                fire_per_rmb: snapshot.fire_per_rmb,
+                                increase_ratio: snapshot.increase_ratio,
+                                trading_volume: snapshot.trading_volume.clone(),
+                                source: snapshot.source.clone(),
+                                source_time: snapshot.source_time.clone(),
+                                scraped_at: snapshot.scraped_at,
+                            });
                         }
-                        {
-                            let mut status = state.task_status.write();
-                            status.last_fire_scrape = Some(chrono::Utc::now().timestamp());
-                        }
 
-                        emit_fire_price_updated(&app, FirePricePayload {
-                            rmb_per_10k_fire: snapshot.rmb_per_10k_fire,
-                            fire_per_rmb: snapshot.fire_per_rmb,
-                            increase_ratio: snapshot.increase_ratio,
-                            trading_volume: snapshot.trading_volume.clone(),
-                            source: snapshot.source.clone(),
-                            source_time: snapshot.source_time.clone(),
-                            scraped_at: snapshot.scraped_at,
-                        });
-
-                        info!("Fire price scraped [{}]: {} RMB/10K", mode_str, snapshot.rmb_per_10k_fire);
-
-                        ticker = interval(Duration::from_secs(interval_secs));
+                        info!("Fire price scraped [normal]: {} RMB/10K", snapshot.rmb_per_10k_fire);
                     }
                     Err(e) => {
-                        let duration_ms = start.elapsed().as_millis() as i64;
+                        let duration_ms = normal_start.elapsed().as_millis() as i64;
                         let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
                             &state.db,
                             "qiandao",
                             "api",
                             true,
-                            Some(ctx.market_mode.as_str()),
+                            Some("season_normal"),
                             None,
                             false,
                             duration_ms,
                             None,
                             Some(&e.to_string()),
                         ).await;
-                        error!("Fire scrape failed [{}]: {}", mode_str, e);
-
-                        ticker = interval(Duration::from_secs(interval_secs));
+                        error!("Fire scrape failed [normal]: {}", e);
                     }
                 }
+
+                // Scrape expert mode fire price if expert_enabled
+                if expert_enabled {
+                    let expert_start = std::time::Instant::now();
+                    match scraper::qiandao::scrape_by_mode("专家").await {
+                        Ok(snapshot) => {
+                            let duration_ms = expert_start.elapsed().as_millis() as i64;
+
+                            let _ = crate::db::repo_fire::insert_fire_record(
+                                &state.db,
+                                &season_id,
+                                "season_expert",
+                                &snapshot,
+                            ).await;
+
+                            let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
+                                &state.db,
+                                "qiandao",
+                                "api",
+                                true,
+                                Some("season_expert"),
+                                None,
+                                true,
+                                duration_ms,
+                                None,
+                                None,
+                            ).await;
+
+                            // Update state fire price if current mode is expert
+                            if matches!(ctx.market_mode, MarketMode::SeasonExpert) {
+                                let mut fire = state.fire_price.write();
+                                *fire = Some(snapshot.clone());
+                                drop(fire);
+                                emit_fire_price_updated(&app, FirePricePayload {
+                                    rmb_per_10k_fire: snapshot.rmb_per_10k_fire,
+                                    fire_per_rmb: snapshot.fire_per_rmb,
+                                    increase_ratio: snapshot.increase_ratio,
+                                    trading_volume: snapshot.trading_volume.clone(),
+                                    source: snapshot.source.clone(),
+                                    source_time: snapshot.source_time.clone(),
+                                    scraped_at: snapshot.scraped_at,
+                                });
+                            }
+
+                            info!("Fire price scraped [expert]: {} RMB/10K", snapshot.rmb_per_10k_fire);
+                        }
+                        Err(e) => {
+                            let duration_ms = expert_start.elapsed().as_millis() as i64;
+                            let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
+                                &state.db,
+                                "qiandao",
+                                "api",
+                                true,
+                                Some("season_expert"),
+                                None,
+                                false,
+                                duration_ms,
+                                None,
+                                Some(&e.to_string()),
+                            ).await;
+                            error!("Fire scrape failed [expert]: {}", e);
+                        }
+                    }
+                } else {
+                    info!("Expert mode disabled, skipping expert fire price scrape");
+                }
+
+                // Update last fire scrape time
+                {
+                    let mut status = state.task_status.write();
+                    status.last_fire_scrape = Some(chrono::Utc::now().timestamp());
+                }
+
+                ticker = interval(Duration::from_secs(interval_secs));
             }
         }
     }
