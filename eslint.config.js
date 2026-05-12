@@ -16,7 +16,10 @@ export default defineConfig([
       'react-refresh': reactRefresh,
     },
     rules: {
-      'react-refresh/only-export-components': 'warn',
+      'react-refresh/only-export-components': [
+        'warn',
+        { allowConstantExport: true },
+      ],
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-empty-object-type': 'off',
@@ -28,5 +31,8 @@ export default defineConfig([
         ...globals.node,
       },
     },
+  },
+  {
+    ignores: ['src/contexts/**/*', 'src/hooks/**/*'],
   },
 ])

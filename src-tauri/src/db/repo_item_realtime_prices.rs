@@ -135,11 +135,11 @@ pub async fn get_price_changes(pool: &SqlitePool) -> Result<Vec<ItemPriceChange>
         let diff_3h = (age - three_hour).abs();
         if diff_3h <= 1800 { // Within 30 minutes of 3h
             match price_3h.get(item_id) {
-                Some((existing_diff, _)) if diff_3h < *existing_diff as i64 => {
-                    price_3h.insert(item_id.clone(), (diff_3h as i64, *fire_price));
+                Some((existing_diff, _)) if diff_3h < *existing_diff => {
+                    price_3h.insert(item_id.clone(), (diff_3h, *fire_price));
                 }
                 None => {
-                    price_3h.insert(item_id.clone(), (diff_3h as i64, *fire_price));
+                    price_3h.insert(item_id.clone(), (diff_3h, *fire_price));
                 }
                 _ => {}
             }
@@ -148,11 +148,11 @@ pub async fn get_price_changes(pool: &SqlitePool) -> Result<Vec<ItemPriceChange>
         let diff_1h = (age - one_hour).abs();
         if diff_1h <= 900 { // Within 15 minutes of 1h
             match price_1h.get(item_id) {
-                Some((existing_diff, _)) if diff_1h < *existing_diff as i64 => {
-                    price_1h.insert(item_id.clone(), (diff_1h as i64, *fire_price));
+                Some((existing_diff, _)) if diff_1h < *existing_diff => {
+                    price_1h.insert(item_id.clone(), (diff_1h, *fire_price));
                 }
                 None => {
-                    price_1h.insert(item_id.clone(), (diff_1h as i64, *fire_price));
+                    price_1h.insert(item_id.clone(), (diff_1h, *fire_price));
                 }
                 _ => {}
             }
@@ -161,11 +161,11 @@ pub async fn get_price_changes(pool: &SqlitePool) -> Result<Vec<ItemPriceChange>
         let diff_30m = (age - thirty_min).abs();
         if diff_30m <= 600 { // Within 10 minutes of 30m
             match price_30m.get(item_id) {
-                Some((existing_diff, _)) if diff_30m < *existing_diff as i64 => {
-                    price_30m.insert(item_id.clone(), (diff_30m as i64, *fire_price));
+                Some((existing_diff, _)) if diff_30m < *existing_diff => {
+                    price_30m.insert(item_id.clone(), (diff_30m, *fire_price));
                 }
                 None => {
-                    price_30m.insert(item_id.clone(), (diff_30m as i64, *fire_price));
+                    price_30m.insert(item_id.clone(), (diff_30m, *fire_price));
                 }
                 _ => {}
             }
@@ -174,11 +174,11 @@ pub async fn get_price_changes(pool: &SqlitePool) -> Result<Vec<ItemPriceChange>
         let diff_5m = (age - five_min).abs();
         if diff_5m <= 600 { // Within 10 minutes of 5m
             match price_5m.get(item_id) {
-                Some((existing_diff, _)) if diff_5m < *existing_diff as i64 => {
-                    price_5m.insert(item_id.clone(), (diff_5m as i64, *fire_price));
+                Some((existing_diff, _)) if diff_5m < *existing_diff => {
+                    price_5m.insert(item_id.clone(), (diff_5m, *fire_price));
                 }
                 None => {
-                    price_5m.insert(item_id.clone(), (diff_5m as i64, *fire_price));
+                    price_5m.insert(item_id.clone(), (diff_5m, *fire_price));
                 }
                 _ => {}
             }

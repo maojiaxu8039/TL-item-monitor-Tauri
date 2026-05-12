@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { X, Check, AlertCircle } from "lucide-react";
 
 export interface Toast {
@@ -44,32 +44,4 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
       ))}
     </div>
   );
-}
-
-export function useToast() {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-
-  const addToast = useCallback((type: Toast["type"], message: string) => {
-    const id = String(Date.now());
-    setToasts((prev) => [...prev, { id, message, type }]);
-  }, []);
-
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
-  // Auto dismiss after 3 seconds
-  useEffect(() => {
-    if (toasts.length === 0) return;
-    const timers = toasts.map((toast) =>
-      setTimeout(() => {
-        dismissToast(toast.id);
-      }, 3000)
-    );
-    return () => {
-      timers.forEach((timer) => clearTimeout(timer));
-    };
-  }, [toasts, dismissToast]);
-
-  return { toasts, addToast, dismissToast };
 }

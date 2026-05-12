@@ -17,7 +17,8 @@ import {
   WifiOff,
   RefreshCw,
 } from "lucide-react";
-import { ToastContainer, useToast } from "@/components/ui/Toast";
+import { ToastContainer } from "@/components/ui/Toast";
+import { useToast } from "@/hooks/useToast";
 
 interface AISettings {
   gatewayUrl: string;

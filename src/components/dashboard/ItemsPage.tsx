@@ -31,7 +31,8 @@ import {
   Database,
 } from "lucide-react";
 import { ItemPriceTrendModal } from "./ItemPriceTrendModal";
-import { ToastContainer, useToast } from "@/components/ui/Toast";
+import { ToastContainer } from "@/components/ui/Toast";
+import { useToast } from "@/hooks/useToast";
 
 const COLUMN_HELPER = createColumnHelper<ItemData>();
 
