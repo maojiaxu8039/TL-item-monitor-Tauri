@@ -10,6 +10,11 @@ src/tsconfig.tsbuildinfo
 web-server/target/
 *.local
 
+# Environment variables (never commit)
+.env
+.env.local
+.env.*.local
+
 # Development data
 dev_data/
 *.db

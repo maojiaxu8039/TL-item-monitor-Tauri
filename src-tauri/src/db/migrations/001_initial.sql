@@ -1,5 +1,6 @@
 -- Initial schema for TL Item Monitor (v2)
--- All foreign keys and constraints defined for new installations.
+-- Real-time tables: items_normal, items_expert, fire_price_normal, fire_price_expert
+-- Snapshot tables: item_snapshots_{season}_{mode}, fire_price_snapshots_{season}_{mode}
 
 CREATE TABLE IF NOT EXISTS app_meta (
     key TEXT PRIMARY KEY,
@@ -32,18 +33,54 @@ CREATE TABLE IF NOT EXISTS season_api_configs (
     FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS items (
-    item_id TEXT NOT NULL,
-    season_id TEXT NOT NULL DEFAULT 'current',
-    market_mode TEXT NOT NULL DEFAULT 'season_normal',
+-- Real-time items table for normal mode (no season suffix)
+CREATE TABLE IF NOT EXISTS items_normal (
+    item_id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     item_type TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL DEFAULT '',
     price REAL NOT NULL DEFAULT 0,
     last_time INTEGER,
-    updated_at INTEGER NOT NULL,
-    PRIMARY KEY (season_id, market_mode, item_id),
-    FOREIGN KEY (season_id) REFERENCES seasons(id)
+    season_day INTEGER NOT NULL DEFAULT 1,
+    updated_at INTEGER NOT NULL
+);
+
+-- Real-time items table for expert mode
+CREATE TABLE IF NOT EXISTS items_expert (
+    item_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    item_type TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT '',
+    price REAL NOT NULL DEFAULT 0,
+    last_time INTEGER,
+    season_day INTEGER NOT NULL DEFAULT 1,
+    updated_at INTEGER NOT NULL
+);
+
+-- Real-time fire price table for normal mode
+CREATE TABLE IF NOT EXISTS fire_price_normal (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rmb_per_10k_fire REAL NOT NULL,
+    fire_per_rmb REAL NOT NULL DEFAULT 0,
+    increase_ratio REAL,
+    trading_volume TEXT,
+    source TEXT NOT NULL DEFAULT '',
+    source_time TEXT,
+    scraped_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+-- Real-time fire price table for expert mode
+CREATE TABLE IF NOT EXISTS fire_price_expert (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rmb_per_10k_fire REAL NOT NULL,
+    fire_per_rmb REAL NOT NULL DEFAULT 0,
+    increase_ratio REAL,
+    trading_volume TEXT,
+    source TEXT NOT NULL DEFAULT '',
+    source_time TEXT,
+    scraped_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sections (
@@ -63,6 +100,9 @@ CREATE TABLE IF NOT EXISTS section_items (
     season_id TEXT NOT NULL DEFAULT 'current',
     market_mode TEXT NOT NULL DEFAULT 'season_normal',
     item_id TEXT NOT NULL,
+    item_name TEXT,
+    item_type TEXT,
+    current_price REAL,
     purchase_fire_price REAL NOT NULL DEFAULT 0,
     count INTEGER NOT NULL DEFAULT 1,
     more_value REAL NOT NULL DEFAULT 0,
@@ -70,8 +110,7 @@ CREATE TABLE IF NOT EXISTS section_items (
     last_time TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE CASCADE,
-    FOREIGN KEY (season_id, market_mode, item_id) REFERENCES items(season_id, market_mode, item_id)
+    FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS strategies (
@@ -87,6 +126,51 @@ CREATE TABLE IF NOT EXISTS strategies (
     quiet_end TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS strategy_costs (
+    id TEXT PRIMARY KEY,
+    strategy_id TEXT NOT NULL,
+    season_id TEXT NOT NULL DEFAULT 'ss12',
+    market_mode TEXT NOT NULL DEFAULT 'season_normal',
+    fire_price REAL NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (strategy_id) REFERENCES strategies(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS strategy_details (
+    id TEXT PRIMARY KEY,
+    strategy_id TEXT NOT NULL,
+    season_id TEXT NOT NULL DEFAULT 'ss12',
+    market_mode TEXT NOT NULL DEFAULT 'season_normal',
+    item_id TEXT NOT NULL,
+    item_name TEXT NOT NULL DEFAULT '',
+    item_type TEXT NOT NULL DEFAULT '',
+    target_price REAL NOT NULL DEFAULT 0,
+    current_price REAL NOT NULL DEFAULT 0,
+    expected_profit_rate REAL NOT NULL DEFAULT 0,
+    rank INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (strategy_id) REFERENCES strategies(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS strategy_outputs (
+    id TEXT PRIMARY KEY,
+    strategy_id TEXT NOT NULL,
+    season_id TEXT NOT NULL DEFAULT 'ss12',
+    market_mode TEXT NOT NULL DEFAULT 'season_normal',
+    item_id TEXT NOT NULL,
+    item_name TEXT NOT NULL DEFAULT '',
+    item_type TEXT NOT NULL DEFAULT '',
+    buy_price REAL NOT NULL DEFAULT 0,
+    sell_price REAL NOT NULL DEFAULT 0,
+    profit_rate REAL NOT NULL DEFAULT 0,
+    realtime_value REAL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (strategy_id) REFERENCES strategies(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS alert_rules (
@@ -129,13 +213,36 @@ CREATE TABLE IF NOT EXISTS source_diagnostics (
     updated_at INTEGER NOT NULL
 );
 
--- Indexes
+-- Real-time item price changes (for quick deal hunting)
+CREATE TABLE IF NOT EXISTS item_realtime_prices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL,
+    item_name TEXT NOT NULL,
+    price REAL NOT NULL,
+    scraped_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_item_realtime_item_scraped ON item_realtime_prices(item_id, scraped_at DESC);
+
+-- Indexes for real-time tables
+CREATE INDEX IF NOT EXISTS idx_fire_price_normal_scraped ON fire_price_normal(scraped_at DESC);
+CREATE INDEX IF NOT EXISTS idx_fire_price_expert_scraped ON fire_price_expert(scraped_at DESC);
+
+-- Indexes for sections
 CREATE INDEX IF NOT EXISTS idx_sections_strategy_order ON sections(strategy_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_section_items_section ON section_items(section_id);
 
--- Additional indexes for common query patterns
+-- Indexes for alert events
 CREATE INDEX IF NOT EXISTS idx_alert_events_triggered ON alert_events(triggered_at DESC);
 CREATE INDEX IF NOT EXISTS idx_alert_rules_strategy ON alert_rules(strategy_id);
+
+-- Indexes for section_items lookup
 CREATE INDEX IF NOT EXISTS idx_section_items_lookup ON section_items(section_id, season_id, market_mode, item_id);
+
+-- Indexes for strategy tables
+CREATE INDEX IF NOT EXISTS idx_strategy_costs_strategy ON strategy_costs(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_strategy_details_strategy ON strategy_details(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_strategy_outputs_strategy ON strategy_outputs(strategy_id);
 
 PRAGMA foreign_keys = ON;

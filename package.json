@@ -11,7 +11,9 @@
     "debug": "RUST_BACKTRACE=1 cargo test",
     "vite:dev": "vite",
     "vite:build": "vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext ts,tsx",
+    "lint:fix": "eslint src --ext ts,tsx --fix"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
