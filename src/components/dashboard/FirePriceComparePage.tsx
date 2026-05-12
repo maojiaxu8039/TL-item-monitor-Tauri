@@ -1,30 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart2, ArrowUpCircle, ArrowDownCircle, CalendarDays } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { cmd } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 
-type TimeRange = "12h" | "24h" | "3d" | "7d" | "30d" | "all";
-
-const RANGE_HOURS: Record<TimeRange, number> = {
-  "12h": 12,
-  "24h": 24,
-  "3d": 72,
-  "7d": 168,
-  "30d": 720,
-  "all": 9999,
-};
-
-// Day limits for each time range
-const RANGE_DAY_LIMITS: Record<TimeRange, number> = {
-  "12h": 1,
-  "24h": 1,
-  "3d": 3,
-  "7d": 7,
-  "30d": 30,
-  "all": 9999,
-};
+type TimeRange = "all" | "3d" | "7d" | "14d" | "30d";
+type DayRange = { start: number; end: number };
 
 interface FireDataPoint {
   scraped_at: number;
@@ -39,29 +21,36 @@ interface ChartPoint {
   history: number | null;
 }
 
+const SS12_START = 1776355200; // 2026-04-17 00:00:00 UTC+8
+
 export default function FirePriceComparePage() {
   const [historySeason, setHistorySeason] = useState("ss11");
-  const [timeRange, setTimeRange] = useState<TimeRange>("24h");
+  const [timeRange, setTimeRange] = useState<TimeRange>("all");
+  const [customDayRange, setCustomDayRange] = useState<DayRange>({ start: 1, end: 7 });
+  const [useCustomRange, setUseCustomRange] = useState(false);
   const { marketContext } = useSectionRefresh();
 
   const currentSeason = marketContext.seasonId;
   const marketMode = marketContext.marketMode;
 
-  // For short time ranges, use filtered data; for long ranges, use all data
-  const isShortTimeRange = ["12h", "24h"].includes(timeRange);
+  const timeRanges: { label: string; value: TimeRange; dayRange: DayRange }[] = [
+    { label: "第1-3天", value: "3d", dayRange: { start: 1, end: 3 } },
+    { label: "第1-7天", value: "7d", dayRange: { start: 1, end: 7 } },
+    { label: "第1-14天", value: "14d", dayRange: { start: 1, end: 14 } },
+    { label: "第1-30天", value: "30d", dayRange: { start: 1, end: 30 } },
+    { label: "整个赛季", value: "all", dayRange: { start: 1, end: 999 } },
+  ];
 
   const currentQuery = useQuery({
     queryKey: ["fire-trend-current", currentSeason, marketMode, timeRange],
-    queryFn: () => isShortTimeRange 
-      ? cmd.getFireHistory(RANGE_HOURS[timeRange])
-      : cmd.getFireHistoryBySeason(currentSeason, marketMode, RANGE_HOURS[timeRange]),
+    queryFn: () => cmd.getFireHistoryBySeason(currentSeason, marketMode, 99999),
     refetchInterval: 60000,
     enabled: !!currentSeason,
   });
 
   const historyQuery = useQuery({
     queryKey: ["fire-trend-history", historySeason, marketMode, timeRange],
-    queryFn: () => cmd.getFireHistoryBySeason(historySeason, marketMode, RANGE_HOURS[timeRange]),
+    queryFn: () => cmd.getFireHistoryBySeason(historySeason, marketMode, 99999),
     refetchInterval: 60000,
     enabled: !!historySeason,
   });
@@ -69,84 +58,82 @@ export default function FirePriceComparePage() {
   const currentData: FireDataPoint[] = (currentQuery.data || []) as FireDataPoint[];
   const historyData: FireDataPoint[] = (historyQuery.data || []) as FireDataPoint[];
 
-  // Build chart data
-  const buildChartData = (): ChartPoint[] => {
-    if (isShortTimeRange) {
-      // Short time range: group by hour of day (00-23)
-      const currentByHour: Record<number, number[]> = {};
-      const historyByHour: Record<number, number[]> = {};
+  const currentMaxDay = useMemo(() => {
+    const now = Date.now() / 1000;
+    const daysSinceStart = Math.floor((now - SS12_START) / 86400) + 1;
+    return Math.max(1, daysSinceStart);
+  }, []);
 
-      currentData.forEach((r) => {
-        const hour = new Date(r.scraped_at * 1000).getHours();
-        if (!currentByHour[hour]) currentByHour[hour] = [];
-        currentByHour[hour].push(r.rmb_per_10k_fire);
-      });
-
-      historyData.forEach((r) => {
-        const hour = new Date(r.scraped_at * 1000).getHours();
-        if (!historyByHour[hour]) historyByHour[hour] = [];
-        historyByHour[hour].push(r.rmb_per_10k_fire);
-      });
-
-      // Create 24 hour slots
-      const hours = timeRange === "12h" 
-        ? [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]
-        : Array.from({ length: 24 }, (_, i) => i);
-
-      return hours.map((hour) => {
-        const currentPrices = currentByHour[hour];
-        const historyPrices = historyByHour[hour];
-        return {
-          label: `${String(hour).padStart(2, "0")}:00`,
-          sortKey: hour,
-          current: currentPrices ? currentPrices.reduce((a, b) => a + b, 0) / currentPrices.length : null,
-          history: historyPrices ? historyPrices.reduce((a, b) => a + b, 0) / historyPrices.length : null,
-        };
-      });
-    } else {
-      // Long time range: aggregate by season day with limit
-      const dayLimit = RANGE_DAY_LIMITS[timeRange];
-      const currentByDay = new Map<number, number[]>();
-      const historyByDay = new Map<number, number[]>();
-
-      currentData.forEach((r) => {
-        const day = r.season_day;
-        if (day > dayLimit) return;
-        if (!currentByDay.has(day)) currentByDay.set(day, []);
-        currentByDay.get(day)!.push(r.rmb_per_10k_fire);
-      });
-
-      historyData.forEach((r) => {
-        const day = r.season_day;
-        if (day > dayLimit) return;
-        if (!historyByDay.has(day)) historyByDay.set(day, []);
-        historyByDay.get(day)!.push(r.rmb_per_10k_fire);
-      });
-
-      // Get all unique days up to limit
-      const allDays = new Set([
-        ...Array.from(currentByDay.keys()),
-        ...Array.from(historyByDay.keys()),
-      ]);
-
-      return Array.from(allDays)
-        .sort((a, b) => a - b)
-        .map((day) => {
-          const currentPrices = currentByDay.get(day);
-          const historyPrices = historyByDay.get(day);
-          return {
-            label: `第${day}天`,
-            sortKey: day,
-            current: currentPrices ? currentPrices.reduce((a, b) => a + b, 0) / currentPrices.length : null,
-            history: historyPrices ? historyPrices.reduce((a, b) => a + b, 0) / historyPrices.length : null,
-          };
-        });
+  const getDayRange = (): DayRange | null => {
+    if (useCustomRange) {
+      return customDayRange;
     }
+    const range = timeRanges.find(r => r.value === timeRange);
+    return range?.dayRange ?? null;
+  };
+
+  const buildChartData = (): ChartPoint[] => {
+    const dayRange = getDayRange();
+
+    let filteredCurrent = currentData;
+    let filteredHistory = historyData;
+
+    if (dayRange !== null) {
+      filteredCurrent = currentData.filter(r => r.season_day >= dayRange.start && r.season_day <= dayRange.end);
+      filteredHistory = historyData.filter(r => r.season_day >= dayRange.start && r.season_day <= dayRange.end);
+    }
+
+    const currentByDayHour = new Map<string, number>();
+    const historyByDayHour = new Map<string, number>();
+    const currentTimestamps = new Map<string, number>();
+    const historyTimestamps = new Map<string, number>();
+
+    filteredCurrent.forEach((r) => {
+      const hour = new Date(r.scraped_at * 1000).getHours();
+      const key = `${r.season_day}-${hour}`;
+      if (!currentByDayHour.has(key)) {
+        currentByDayHour.set(key, r.rmb_per_10k_fire);
+        currentTimestamps.set(key, r.scraped_at);
+      }
+    });
+
+    filteredHistory.forEach((r) => {
+      const hour = new Date(r.scraped_at * 1000).getHours();
+      const key = `${r.season_day}-${hour}`;
+      if (!historyByDayHour.has(key)) {
+        historyByDayHour.set(key, r.rmb_per_10k_fire);
+        historyTimestamps.set(key, r.scraped_at);
+      }
+    });
+
+    const allKeys = new Set([
+      ...currentByDayHour.keys(),
+      ...historyByDayHour.keys(),
+    ]);
+
+    const sortedKeys = Array.from(allKeys).sort((a, b) => {
+      const tsA = currentTimestamps.get(a) || historyTimestamps.get(a) || 0;
+      const tsB = currentTimestamps.get(b) || historyTimestamps.get(b) || 0;
+      return tsA - tsB;
+    });
+
+    return sortedKeys.map((key) => {
+      const [day, hour] = key.split("-").map(Number);
+      const date = new Date((currentTimestamps.get(key) || historyTimestamps.get(key) || 0) * 1000);
+      const month = date.getMonth() + 1;
+      const dayOfMonth = date.getDate();
+      const label = `${month}/${dayOfMonth} ${String(hour).padStart(2, "0")}:00`;
+      return {
+        label,
+        sortKey: (currentTimestamps.get(key) || historyTimestamps.get(key) || 0),
+        current: currentByDayHour.get(key) ?? null,
+        history: historyByDayHour.get(key) ?? null,
+      };
+    });
   };
 
   const chartData = buildChartData();
 
-  // Calculate Y-axis domain to prevent negative values
   const allValues = chartData.flatMap(d => [d.current, d.history]).filter((v): v is number => v !== null);
   const minValue = allValues.length > 0 ? Math.min(...allValues) : 0;
   const maxValue = allValues.length > 0 ? Math.max(...allValues) : 100;
@@ -155,23 +142,13 @@ export default function FirePriceComparePage() {
     Math.ceil(maxValue * 1.1)
   ];
 
-  const timeRanges: { label: string; value: TimeRange }[] = [
-    { label: "12小时", value: "12h" },
-    { label: "24小时", value: "24h" },
-    { label: "3天", value: "3d" },
-    { label: "7天", value: "7d" },
-    { label: "30天", value: "30d" },
-    { label: "整个赛季", value: "all" },
-  ];
-
-  // Filter data by time range for stats calculation
-  const dayLimit = RANGE_DAY_LIMITS[timeRange];
-  const filteredCurrentData = isShortTimeRange 
-    ? currentData 
-    : currentData.filter(r => r.season_day <= dayLimit);
-  const filteredHistoryData = isShortTimeRange 
-    ? historyData 
-    : historyData.filter(r => r.season_day <= dayLimit);
+  const dayRange = getDayRange();
+  const filteredCurrentData = dayRange !== null
+    ? currentData.filter(r => r.season_day >= dayRange.start && r.season_day <= dayRange.end)
+    : currentData;
+  const filteredHistoryData = dayRange !== null
+    ? historyData.filter(r => r.season_day >= dayRange.start && r.season_day <= dayRange.end)
+    : historyData;
 
   const currentAvg = filteredCurrentData.length > 0
     ? filteredCurrentData.reduce((sum, r) => sum + r.rmb_per_10k_fire, 0) / filteredCurrentData.length
@@ -183,6 +160,22 @@ export default function FirePriceComparePage() {
   const currentLow = filteredCurrentData.length > 0 ? Math.min(...filteredCurrentData.map((r) => r.rmb_per_10k_fire)) : 0;
   const historyHigh = filteredHistoryData.length > 0 ? Math.max(...filteredHistoryData.map((r) => r.rmb_per_10k_fire)) : 0;
   const historyLow = filteredHistoryData.length > 0 ? Math.min(...filteredHistoryData.map((r) => r.rmb_per_10k_fire)) : 0;
+
+  const handleCustomRangeChange = (field: 'start' | 'end', value: string) => {
+    const num = parseInt(value);
+    if (value === "" || isNaN(num)) {
+      return;
+    }
+    const newRange = { ...customDayRange };
+    if (field === 'start') {
+      newRange.start = Math.max(1, Math.min(num, customDayRange.end));
+    } else {
+      newRange.end = Math.max(customDayRange.start, Math.min(num, currentMaxDay));
+    }
+    setCustomDayRange(newRange);
+    setUseCustomRange(true);
+    setTimeRange("all");
+  };
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
@@ -214,20 +207,53 @@ export default function FirePriceComparePage() {
             <span className="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">当前</span>
           </div>
 
-          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-            {timeRanges.map(({ label, value }) => (
-              <button
-                key={value}
-                onClick={() => setTimeRange(value)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  timeRange === value
-                    ? "bg-white text-slate-700 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+              {timeRanges.map(({ label, value }) => (
+                <button
+                  key={value}
+                  onClick={() => {
+                    setTimeRange(value);
+                    setUseCustomRange(false);
+                  }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    timeRange === value && !useCustomRange
+                      ? "bg-white text-slate-700 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            
+            <div className="flex items-center gap-2 ml-2">
+              <CalendarDays className="w-4 h-4 text-slate-400" />
+              <span className="text-xs text-slate-500">自定义</span>
+              <input
+                type="number"
+                min={1}
+                max={currentMaxDay}
+                value={customDayRange.start}
+                onChange={(e) => handleCustomRangeChange('start', e.target.value)}
+                className="w-16 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+              <span className="text-xs text-slate-400">~</span>
+              <input
+                type="number"
+                min={1}
+                max={currentMaxDay}
+                value={customDayRange.end}
+                onChange={(e) => handleCustomRangeChange('end', e.target.value)}
+                className="w-16 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+              <span className="text-xs text-slate-400">天</span>
+              {useCustomRange && (
+                <span className="text-xs text-blue-500 ml-1">
+                  (第{customDayRange.start}-{customDayRange.end}天)
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -298,7 +324,7 @@ export default function FirePriceComparePage() {
                 tick={{ fontSize: 11, fill: "#9CA3AF" }}
                 tickLine={false}
                 axisLine={{ stroke: "#E5E7EB" }}
-                interval={isShortTimeRange ? 0 : "preserveStartEnd"}
+                interval="preserveStartEnd"
               />
               <YAxis
                 domain={yDomain}
@@ -337,43 +363,9 @@ export default function FirePriceComparePage() {
 
       {/* Best Time Analysis */}
       {filteredCurrentData.length > 0 && (() => {
-        let analysisData: { hour: number; price: number; day: number }[] = [];
+        const sortedData = [...filteredCurrentData].sort((a, b) => a.scraped_at - b.scraped_at);
         
-        if (isShortTimeRange) {
-          // For short time ranges, use hourly aggregated data
-          const hourlyData: Record<number, { prices: number[]; days: number[] }> = {};
-          
-          filteredCurrentData.forEach((r) => {
-            const hour = new Date(r.scraped_at * 1000).getHours();
-            if (!hourlyData[hour]) hourlyData[hour] = { prices: [], days: [] };
-            hourlyData[hour].prices.push(r.rmb_per_10k_fire);
-            hourlyData[hour].days.push(r.season_day);
-          });
-          
-          analysisData = Object.entries(hourlyData).map(([hour, data]) => ({
-            hour: parseInt(hour),
-            price: data.prices.reduce((a, b) => a + b, 0) / data.prices.length,
-            day: Math.min(...data.days),
-          })).sort((a, b) => a.hour - b.hour);
-        } else {
-          // For long time ranges, use daily aggregated data
-          const dailyData: Record<number, { prices: number[]; days: number[] }> = {};
-          
-          filteredCurrentData.forEach((r) => {
-            const day = r.season_day;
-            if (!dailyData[day]) dailyData[day] = { prices: [], days: [] };
-            dailyData[day].prices.push(r.rmb_per_10k_fire);
-            dailyData[day].days.push(r.season_day);
-          });
-          
-          analysisData = Object.entries(dailyData).map(([day, data]) => ({
-            hour: 0, // Not used for daily
-            price: data.prices.reduce((a, b) => a + b, 0) / data.prices.length,
-            day: parseInt(day),
-          })).sort((a, b) => a.day - b.day);
-        }
-        
-        if (analysisData.length < 2) {
+        if (sortedData.length < 2) {
           return (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
               <div className="flex items-center gap-2 mb-4">
@@ -384,124 +376,91 @@ export default function FirePriceComparePage() {
             </div>
           );
         }
-        
-        // Calculate price changes between consecutive points
-        const priceChanges: { index: number; startPrice: number; endPrice: number; changePct: number; hour: number; day: number }[] = [];
-        
-        for (let i = 1; i < analysisData.length; i++) {
-          const prev = analysisData[i - 1];
-          const curr = analysisData[i];
-          const changePct = ((curr.price - prev.price) / prev.price) * 100;
-          
-          priceChanges.push({
-            index: i,
-            startPrice: prev.price,
-            endPrice: curr.price,
-            changePct,
-            hour: curr.hour,
-            day: curr.day,
-          });
-        }
 
-        // Dynamic thresholds based on time range
-        // Use more lenient thresholds for daily data since price changes are smaller
-        const dropThreshold = isShortTimeRange ? -2 : -1;
-        const stableThreshold = isShortTimeRange ? 1 : 0.5;
+        const allPrices = sortedData.map(r => r.rmb_per_10k_fire);
+        const avgPrice = allPrices.reduce((a, b) => a + b, 0) / allPrices.length;
+        const minPrice = Math.min(...allPrices);
+        const maxPrice = Math.max(...allPrices);
 
-        // Find best sell time: largest price drop
-        const largestDrops = priceChanges
-          .filter(pc => pc.changePct < dropThreshold)
-          .sort((a, b) => a.changePct - b.changePct);
+        const globalMinIdx = sortedData.findIndex(r => r.rmb_per_10k_fire === minPrice);
+        const globalMaxIdx = sortedData.findIndex(r => r.rmb_per_10k_fire === maxPrice);
 
-        let bestSellTime: { startHour: number; endHour: number; day: number; reason: string } | null = null;
-        
-        if (largestDrops.length > 0) {
-          const biggestDrop = largestDrops[0];
-          const prevData = analysisData[biggestDrop.index - 1];
-          
-          if (isShortTimeRange) {
-            // For short time ranges, show hour-based recommendation
-            const sellHour = prevData.hour;
-            bestSellTime = {
-              startHour: sellHour,
-              endHour: (sellHour + 2) % 24,
-              day: prevData.day,
-              reason: `预计 ${String(sellHour).padStart(2, '0')}:00 后火价将下跌 ${Math.abs(biggestDrop.changePct).toFixed(1)}%`
-            };
-          } else {
-            // For long time ranges, show day-based recommendation
-            bestSellTime = {
-              startHour: 0,
-              endHour: 2,
-              day: prevData.day,
-              reason: `预计第${prevData.day}天火价将下跌 ${Math.abs(biggestDrop.changePct).toFixed(1)}%`
-            };
+        const minPoint = {
+          day: sortedData[globalMinIdx].season_day,
+          hour: new Date(sortedData[globalMinIdx].scraped_at * 1000).getHours(),
+          price: minPrice,
+          timestamp: sortedData[globalMinIdx].scraped_at,
+        };
+
+        const maxPoint = {
+          day: sortedData[globalMaxIdx].season_day,
+          hour: new Date(sortedData[globalMaxIdx].scraped_at * 1000).getHours(),
+          price: maxPrice,
+          timestamp: sortedData[globalMaxIdx].scraped_at,
+        };
+
+        const groupByDay = new Map<number, { hour: number; price: number; timestamp: number }[]>();
+        sortedData.forEach(r => {
+          const day = r.season_day;
+          const hour = new Date(r.scraped_at * 1000).getHours();
+          if (!groupByDay.has(day)) {
+            groupByDay.set(day, []);
           }
-        }
+          groupByDay.get(day)!.push({ hour, price: r.rmb_per_10k_fire, timestamp: r.scraped_at });
+        });
 
-        // Find best buy time: after large drop, during long stable period
-        const stablePeriods: { startIndex: number; endIndex: number; startPrice: number; avgPrice: number; duration: number; hour: number; day: number }[] = [];
-        
-        let stableStart: typeof priceChanges[0] | null = null;
-        let stablePrices: number[] = [];
-        
-        for (const pc of priceChanges) {
-          if (pc.changePct >= -stableThreshold && pc.changePct <= stableThreshold) {
-            if (!stableStart) {
-              stableStart = pc;
-              stablePrices = [pc.startPrice, pc.endPrice];
-            } else {
-              stablePrices.push(pc.endPrice);
+        const dailyStats = Array.from(groupByDay.entries()).map(([day, points]) => {
+          const prices = points.map(p => p.price);
+          const min = Math.min(...prices);
+          const max = Math.max(...prices);
+          const minPoint = points.find(p => p.price === min)!;
+          const maxPoint = points.find(p => p.price === max)!;
+          const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+          return { day, min, max, avg, minHour: minPoint.hour, maxHour: maxPoint.hour, minTimestamp: minPoint.timestamp, maxTimestamp: maxPoint.timestamp };
+        });
+
+        const avgDailyAvg = dailyStats.reduce((a, d) => a + d.avg, 0) / dailyStats.length;
+
+        const lowDays = dailyStats.filter(d => d.avg < avgDailyAvg * 0.9).sort((a, b) => a.min - b.min);
+        const highDays = dailyStats.filter(d => d.avg > avgDailyAvg * 1.1).sort((a, b) => b.max - a.max);
+
+        const bestBuyTime = lowDays.length > 0 
+          ? {
+              day: lowDays[0].day,
+              hour: lowDays[0].minHour,
+              price: lowDays[0].min,
+              reason: `第${lowDays[0].day}天 ${String(lowDays[0].minHour).padStart(2, '0')}:00 均价最低 (${lowDays[0].avg.toFixed(0)}元)，最低达 ${lowDays[0].min.toFixed(0)}元`
             }
-          } else {
-            if (stableStart && stablePrices.length >= (isShortTimeRange ? 2 : 2)) {
-              const avgPrice = stablePrices.reduce((a, b) => a + b, 0) / stablePrices.length;
-              const startData = analysisData[stableStart.index - 1];
-              
-              stablePeriods.push({
-                startIndex: stableStart.index,
-                endIndex: pc.index,
-                startPrice: stableStart.startPrice,
-                avgPrice,
-                duration: stablePrices.length,
-                hour: startData.hour,
-                day: startData.day,
-              });
+          : {
+              day: minPoint.day,
+              hour: minPoint.hour,
+              price: minPoint.price,
+              reason: `第${minPoint.day}天 ${String(minPoint.hour).padStart(2, '0')}:00 出现全赛季最低价 ${minPoint.price.toFixed(0)}元`
+            };
+
+        const bestSellTime = highDays.length > 0
+          ? {
+              day: highDays[0].day,
+              hour: highDays[0].maxHour,
+              price: highDays[0].max,
+              reason: `第${highDays[0].day}天 ${String(highDays[0].maxHour).padStart(2, '0')}:00 均价最高 (${highDays[0].avg.toFixed(0)}元)，最高达 ${highDays[0].max.toFixed(0)}元`
             }
-            stableStart = null;
-            stablePrices = [];
-          }
-        }
-
-        stablePeriods.sort((a, b) => b.duration - a.duration);
-
-        let bestBuyTime: { startHour: number; endHour: number; day: number; reason: string } | null = null;
-        
-        if (stablePeriods.length > 0) {
-          const longestStable = stablePeriods[0];
-          
-          if (isShortTimeRange) {
-            const buyHour = longestStable.hour;
-            bestBuyTime = {
-              startHour: buyHour,
-              endHour: (buyHour + 2) % 24,
-              day: longestStable.day,
-              reason: `预计 ${String(buyHour).padStart(2, '0')}:00 后火价进入 ${longestStable.duration} 小时平稳期`
+          : {
+              day: maxPoint.day,
+              hour: maxPoint.hour,
+              price: maxPoint.price,
+              reason: `第${maxPoint.day}天 ${String(maxPoint.hour).padStart(2, '0')}:00 出现全赛季最高价 ${maxPoint.price.toFixed(0)}元`
             };
-          } else {
-            bestBuyTime = {
-              startHour: 0,
-              endHour: 2,
-              day: longestStable.day,
-              reason: `预计第${longestStable.day}天后火价进入 ${longestStable.duration} 天平稳期`
-            };
-          }
-        }
 
-        // Dynamic title based on time range
-        const analysisTitle = isShortTimeRange 
-          ? `基于 ${currentSeason.toUpperCase()} 最近${timeRange === '12h' ? '12小时' : '24小时'}数据统计`
-          : `基于 ${currentSeason.toUpperCase()} ${timeRange === '3d' ? '最近3天' : timeRange === '7d' ? '最近7天' : timeRange === '30d' ? '最近30天' : '整个赛季'}数据统计`;
+        const rangeLabel = useCustomRange
+          ? `第${customDayRange.start}-${customDayRange.end}天`
+          : timeRange === "all" ? "整个赛季"
+          : timeRange === "3d" ? "第1-3天"
+          : timeRange === "7d" ? "第1-7天"
+          : timeRange === "14d" ? "第1-14天"
+          : "第1-30天";
+
+        const analysisTitle = `基于 ${currentSeason.toUpperCase()} ${rangeLabel}数据统计`;
 
         return (
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
@@ -512,58 +471,60 @@ export default function FirePriceComparePage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <ArrowUpCircle className="w-4 h-4 text-slate-600" />
-                  <span className="text-sm font-medium text-slate-700">最适合出售初火时间段</span>
+                  <ArrowDownCircle className="w-5 h-5 text-green-600" />
+                  <span className="text-sm font-medium text-green-700">最佳购买火时机</span>
                 </div>
-                {bestSellTime ? (
-                  <>
-                    <div className="text-lg font-bold text-slate-800">
-                      {isShortTimeRange 
-                        ? `${String(bestSellTime.startHour).padStart(2, '0')}:00 - ${String(bestSellTime.endHour).padStart(2, '0')}:00`
-                        : `第${bestSellTime.day}天 00:00 - 02:00`
-                      }
-                    </div>
-                    <div className="text-sm text-slate-500 mt-1">
-                      {bestSellTime.reason}
-                    </div>
-                    <div className="text-xs text-slate-400 mt-1">
-                      建议在火价大幅下跌前2小时出售
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-lg text-slate-400">
-                    {isShortTimeRange ? "所选时间段内无大幅下跌" : "所选时间段内无大幅下跌"}
-                  </div>
-                )}
+                <div className="text-xl font-bold text-green-800">
+                  第{bestBuyTime.day}天 {String(bestBuyTime.hour).padStart(2, '0')}:00
+                </div>
+                <div className="text-sm text-green-600 font-medium mt-1">
+                  ¥{bestBuyTime.price.toFixed(2)}/万火
+                </div>
+                <div className="text-xs text-green-600 mt-1">
+                  {bestBuyTime.reason}
+                </div>
+                <div className="text-xs text-green-500 mt-2 pt-2 border-t border-green-200">
+                  建议：火价低于均价时购入初火
+                </div>
               </div>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <ArrowDownCircle className="w-4 h-4 text-slate-600" />
-                  <span className="text-sm font-medium text-slate-700">最适合购买初火时间段</span>
+                  <ArrowUpCircle className="w-5 h-5 text-orange-600" />
+                  <span className="text-sm font-medium text-orange-700">最佳出售火时机</span>
                 </div>
-                {bestBuyTime ? (
-                  <>
-                    <div className="text-lg font-bold text-slate-800">
-                      {isShortTimeRange 
-                        ? `${String(bestBuyTime.startHour).padStart(2, '0')}:00 - ${String(bestBuyTime.endHour).padStart(2, '0')}:00`
-                        : `第${bestBuyTime.day}天 00:00 - 02:00`
-                      }
-                    </div>
-                    <div className="text-sm text-slate-500 mt-1">
-                      {bestBuyTime.reason}
-                    </div>
-                    <div className="text-xs text-slate-400 mt-1">
-                      建议在长时间平稳期开始前2小时收火
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-lg text-slate-400">
-                    {isShortTimeRange ? "所选时间段内无长时间平稳期" : "所选时间段内无长时间平稳期"}
-                  </div>
-                )}
+                <div className="text-xl font-bold text-orange-800">
+                  第{bestSellTime.day}天 {String(bestSellTime.hour).padStart(2, '0')}:00
+                </div>
+                <div className="text-sm text-orange-600 font-medium mt-1">
+                  ¥{bestSellTime.price.toFixed(2)}/万火
+                </div>
+                <div className="text-xs text-orange-600 mt-1">
+                  {bestSellTime.reason}
+                </div>
+                <div className="text-xs text-orange-500 mt-2 pt-2 border-t border-orange-200">
+                  建议：火价高于均价时出售物品换RMB
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 p-3 bg-slate-50 rounded-lg">
+              <div className="text-xs text-slate-500 mb-2">赛季统计</div>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-xs text-slate-400">均价</div>
+                  <div className="text-sm font-medium text-slate-700">¥{avgPrice.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-400">最低价</div>
+                  <div className="text-sm font-medium text-green-600">¥{minPrice.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-400">最高价</div>
+                  <div className="text-sm font-medium text-orange-600">¥{maxPrice.toFixed(2)}</div>
+                </div>
               </div>
             </div>
           </div>

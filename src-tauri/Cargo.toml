@@ -47,9 +47,10 @@ ring = "0.17"
 # Tracing / logging
 tracing = "0.1"
 tracing-subscriber = "0.3"
+log = "0.4"
 
 # HTTP (for scrapers)
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "http2"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "blocking"] }
 
 # WebSocket
 tokio-tungstenite = "0.26"

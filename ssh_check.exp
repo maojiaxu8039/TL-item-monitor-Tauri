@@ -1,0 +1,40 @@
+#!/usr/bin/env expect
+set timeout 30
+set password {!Mjx452212889}
+
+spawn sshpass -p $password ssh -o StrictHostKeyChecking=no -p 10039 15510607744@100.124.122.65
+expect {
+    "Warning:" {
+        exp_continue
+    }
+    "Password:" {
+        send "$password\r"
+    }
+    "$ " {
+    }
+    "# " {
+    }
+}
+
+sleep 1
+send "sudo ps aux | grep -i nodebaby | grep -v grep\r"
+
+expect {
+    "\[sudo\] password" {
+        send "$password\r"
+    }
+    eof
+}
+
+expect {
+    "# " {
+        send "exit\r"
+    }
+    "$ " {
+        send "exit\r"
+    }
+    eof
+}
+
+set result $expect_out(buffer)
+puts $result

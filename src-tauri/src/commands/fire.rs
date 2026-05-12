@@ -34,8 +34,43 @@ pub async fn get_dashboard_summary(
         .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
         .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string());
 
+    let history_fire = if let Some(ref current_fire) = fire {
+        let season_start = repo_fire::get_season_start(&state.db, &ctx.season_id)
+            .await
+            .unwrap_or(1776384000);
+        let current_season_day = crate::core::constants::calculate_season_day(
+            current_fire.scraped_at,
+            season_start,
+        );
+        let current_hour = ((current_fire.scraped_at % 86400) / 3600) as i32;
+
+        repo_fire::get_previous_season_fire_by_season_day(
+            &state.db,
+            &ctx.season_id,
+            ctx.market_mode.as_str(),
+            current_season_day,
+            current_hour,
+        )
+        .await
+        .ok()
+        .flatten()
+        .map(|record| FirePriceUI::from(FirePriceSnapshot {
+            price_per_wan: record.rmb_per_10k_fire,
+            rmb_per_10k_fire: record.rmb_per_10k_fire,
+            fire_per_rmb: record.fire_per_rmb,
+            increase_ratio: record.increase_ratio,
+            trading_volume: record.trading_volume,
+            source: record.source,
+            source_time: record.source_time,
+            scraped_at: record.scraped_at,
+        }))
+    } else {
+        None
+    };
+
     Ok(DashboardSummary {
         fire: fire.map(FirePriceUI::from),
+        history_fire,
         total_fire,
         total_rmb,
         season_name: ctx.season_id.clone(),

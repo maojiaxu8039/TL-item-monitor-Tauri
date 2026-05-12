@@ -1,5 +1,5 @@
 use crate::core::constants::{
-    calculate_season_day, BATCH_SIZE_SMALL, SECONDS_PER_DAY, SECONDS_PER_HOUR,
+    calculate_season_day, BATCH_SIZE_LARGE, BATCH_SIZE_SMALL, SECONDS_PER_DAY, SECONDS_PER_HOUR,
 };
 use crate::core::errors::AppError;
 use crate::core::state::FirePriceSnapshot;
@@ -615,7 +615,7 @@ pub async fn insert_item_snapshot(
     let season_start = get_season_start(pool, season_id).await?;
     let season_day = calculate_season_day(recorded_at, season_start);
     sqlx::query(&format!(
-        r#"INSERT INTO {} (item_id, name, item_type, fire_price, scraped_at, season_day)
+        r#"INSERT OR IGNORE INTO {} (item_id, name, item_type, fire_price, scraped_at, season_day)
            VALUES (?, ?, ?, ?, ?, ?)"#,
         table
     ))
@@ -629,6 +629,53 @@ pub async fn insert_item_snapshot(
     .await?;
 
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub struct ItemSnapshotBatchItem {
+    pub item_id: String,
+    pub name: String,
+    pub item_type: Option<String>,
+    pub fire_price: f64,
+    pub scraped_at: i64,
+}
+
+pub async fn insert_item_snapshots_batch(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    items: Vec<ItemSnapshotBatchItem>,
+) -> Result<usize, AppError> {
+    if items.is_empty() {
+        return Ok(0);
+    }
+
+    let table = TableResolver::item_snapshots_table(season_id, market_mode);
+    let season_start = get_season_start(pool, season_id).await?;
+
+    let mut inserted = 0usize;
+    for chunk in items.chunks(BATCH_SIZE_LARGE) {
+        let mut qb: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
+            sqlx::query_builder::QueryBuilder::new(&format!(
+                r#"INSERT OR IGNORE INTO {} (item_id, name, item_type, fire_price, scraped_at, season_day) "#,
+                table
+            ));
+
+        qb.push_values(chunk, |mut b, item| {
+            let season_day = calculate_season_day(item.scraped_at, season_start);
+            b.push_bind(&item.item_id)
+                .push_bind(&item.name)
+                .push_bind(item.item_type.clone().unwrap_or_default())
+                .push_bind(item.fire_price)
+                .push_bind(item.scraped_at)
+                .push_bind(season_day);
+        });
+
+        let result = qb.build().execute(pool).await?;
+        inserted += result.rows_affected() as usize;
+    }
+
+    Ok(inserted)
 }
 
 /// Get season summary: current fire price, item count, 24h stats.

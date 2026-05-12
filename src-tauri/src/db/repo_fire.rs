@@ -1,4 +1,4 @@
-use crate::core::constants::get_season_start as get_const_season_start;
+use crate::core::constants::{get_previous_season_id, get_previous_season_start, get_season_start as get_const_season_start, SECONDS_PER_DAY, SECONDS_PER_HOUR};
 use crate::db::models::{FirePriceRecord, FirePriceSnapshotRecord};
 use crate::db::table_resolver::TableResolver;
 use chrono::Utc;
@@ -147,6 +147,84 @@ pub async fn get_fire_history(
         .collect();
 
     Ok(result)
+}
+
+pub async fn get_previous_season_fire_by_season_day(
+    pool: &SqlitePool,
+    current_season_id: &str,
+    market_mode: &str,
+    current_season_day: i32,
+    current_hour: i32,
+) -> Result<Option<FirePriceRecord>, crate::core::errors::AppError> {
+    let Some(prev_season_id) = get_previous_season_id(current_season_id) else {
+        tracing::debug!("No previous season for {}", current_season_id);
+        return Ok(None);
+    };
+
+    let Some(prev_season_start) = get_previous_season_start(current_season_id) else {
+        tracing::debug!("No previous season start for {}", current_season_id);
+        return Ok(None);
+    };
+
+    let prev_season_day = current_season_day;
+    let prev_day_start = prev_season_start + (prev_season_day as i64 - 1) * SECONDS_PER_DAY;
+
+    let hour_start = prev_day_start + (current_hour as i64) * SECONDS_PER_HOUR;
+    let hour_end = hour_start + SECONDS_PER_HOUR;
+
+    let prev_table = TableResolver::fire_price_snapshots_table(prev_season_id, market_mode);
+
+    let record: Option<FirePriceRecord> = sqlx::query_as(
+        &format!(
+            r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, created_at
+           FROM {}
+           WHERE scraped_at >= ? AND scraped_at < ?
+           ORDER BY scraped_at DESC LIMIT 1"#,
+            prev_season_id, market_mode, prev_table
+        )
+    )
+    .bind(hour_start)
+    .bind(hour_end)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(record)
+}
+
+pub async fn get_previous_season_fire_nearest(
+    pool: &SqlitePool,
+    current_season_id: &str,
+    market_mode: &str,
+    current_season_day: i32,
+) -> Result<Option<FirePriceRecord>, crate::core::errors::AppError> {
+    let Some(prev_season_id) = get_previous_season_id(current_season_id) else {
+        tracing::debug!("No previous season for {}", current_season_id);
+        return Ok(None);
+    };
+
+    let Some(prev_season_start) = get_previous_season_start(current_season_id) else {
+        tracing::debug!("No previous season start for {}", current_season_id);
+        return Ok(None);
+    };
+
+    let prev_season_day = current_season_day;
+    let target_time = prev_season_start + (prev_season_day as i64 - 1) * SECONDS_PER_DAY + SECONDS_PER_HOUR;
+
+    let prev_table = TableResolver::fire_price_snapshots_table(prev_season_id, market_mode);
+
+    let record: Option<FirePriceRecord> = sqlx::query_as(
+        &format!(
+            r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, created_at
+           FROM {}
+           ORDER BY ABS(scraped_at - ?) ASC LIMIT 1"#,
+            prev_season_id, market_mode, prev_table
+        )
+    )
+    .bind(target_time)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(record)
 }
 
 pub async fn get_fire_history_all(

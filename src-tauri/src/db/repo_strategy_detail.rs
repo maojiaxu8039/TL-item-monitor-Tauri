@@ -1,5 +1,5 @@
 use crate::db::models_strategy::*;
-use crate::db::repo_realtime_fire;
+use crate::db::repo_fire;
 use chrono::Utc;
 use sqlx::SqlitePool;
 
@@ -125,9 +125,10 @@ pub async fn add_strategy_cost(
     let now = Utc::now().timestamp();
 
     let fire_price = if req.is_realtime {
-        repo_realtime_fire::get_current_fire_price(pool)
-            .await
-            .unwrap_or(0.0)
+        match repo_fire::get_latest_fire(pool, "ss12", "season_normal").await {
+            Ok(Some(record)) => record.fire_per_rmb,
+            _ => 0.0,
+        }
     } else {
         0.0
     };
@@ -168,9 +169,10 @@ pub async fn update_strategy_cost(
         .ok_or_else(|| crate::core::errors::AppError::Db("Cost not found".to_string()))?;
 
     let fire_price = if req.is_realtime {
-        repo_realtime_fire::get_current_fire_price(pool)
-            .await
-            .unwrap_or(cost.fire_price)
+        match repo_fire::get_latest_fire(pool, "ss12", "season_normal").await {
+            Ok(Some(record)) => record.fire_per_rmb,
+            _ => cost.fire_price,
+        }
     } else {
         cost.fire_price
     };

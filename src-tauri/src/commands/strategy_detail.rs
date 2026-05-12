@@ -1,6 +1,7 @@
 use crate::commands::types::OkResponse;
 use crate::core::state::AppState;
 use crate::db::models_strategy::*;
+use crate::db::repo_fire;
 use crate::db::repo_strategy_detail;
 use std::sync::Arc;
 use tauri::State;
@@ -160,9 +161,10 @@ pub async fn refresh_strategy_fire_prices(
 
     for cost in costs {
         if cost.is_realtime {
-            let fire_price = crate::db::repo_realtime_fire::get_current_fire_price(&state.db)
-                .await
-                .unwrap_or(cost.fire_price);
+            let fire_price = match repo_fire::get_latest_fire(&state.db, "ss12", "season_normal").await {
+                Ok(Some(record)) => record.fire_per_rmb,
+                _ => cost.fire_price,
+            };
             let total_fire = cost.count * fire_price;
 
             sqlx::query(

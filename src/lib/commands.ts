@@ -20,6 +20,7 @@ export interface FirePriceUI {
 
 export interface DashboardSummary {
   fire: FirePriceUI | null;
+  history_fire: FirePriceUI | null;
   total_fire: number;
   total_rmb: number;
   season_name: string;
@@ -93,16 +94,18 @@ export interface ItemHistoryRecord {
 
 export interface FirePriceChangeItem {
   item_id: string;
-  item_name: string;
+  name: string;
   current_price: number;
-  price_3h_ago: number | null;
-  price_1h_ago: number | null;
-  price_30m_ago: number | null;
   price_5m_ago: number | null;
-  change_amount_3h: number | null;
-  change_rate_3h: number | null;
+  price_30m_ago: number | null;
+  price_1h_ago: number | null;
+  price_3h_ago: number | null;
   change_rate_5m: number | null;
+  change_rate_30m: number | null;
+  change_rate_1h: number | null;
+  change_rate_3h: number | null;
   trend: string;
+  score: number;
 }
 
 export interface SeasonSummary {
@@ -526,6 +529,21 @@ export const cmd = {
     last_time: number | null;
     recorded_at: number;
   }) => invoke<{ success: boolean; message?: string }>("sync_items_record", { params }),
+
+  syncItemsBatch: (params: {
+    season_id: string;
+    market_mode: string;
+    items: Array<{
+      season_id: string;
+      market_mode: string;
+      item_id: string;
+      name: string;
+      item_type: string | null;
+      price: number;
+      last_time: number | null;
+      recorded_at: number;
+    }>;
+  }) => invoke<{ success: boolean; message?: string }>("sync_items_batch", { params }),
 
   getFirePriceCompare: (historySeason: string) =>
     invoke<FirePriceCompareResult>("get_fire_price_compare", { historySeason }),

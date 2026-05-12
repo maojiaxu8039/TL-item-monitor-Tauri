@@ -926,21 +926,35 @@ pub async fn get_items_history_all(
     offset: i32,
     min_day: Option<i32>,
     max_day: Option<i32>,
+    since_timestamp: Option<i64>,
 ) -> Result<Vec<ItemSnapshotWithInfo>, String> {
     let mode = MarketMode::parse(market_mode);
     let table = mode.items_table(season_id);
 
-    let where_clause = match (min_day, max_day) {
-        (Some(min), Some(max)) if min > 0 && max > 0 => {
-            format!(" WHERE season_day >= {} AND season_day <= {} ", min, max)
+    let mut conditions: Vec<String> = Vec::new();
+    
+    if let (Some(min), Some(max)) = (min_day, max_day) {
+        if min > 0 && max > 0 {
+            conditions.push(format!(" season_day >= {} AND season_day <= {} ", min, max));
         }
-        (Some(min), _) if min > 0 => {
-            format!(" WHERE season_day >= {} ", min)
+    } else if let Some(min) = min_day {
+        if min > 0 {
+            conditions.push(format!(" season_day >= {} ", min));
         }
-        (_, Some(max)) if max > 0 => {
-            format!(" WHERE season_day <= {} ", max)
+    } else if let Some(max) = max_day {
+        if max > 0 {
+            conditions.push(format!(" season_day <= {} ", max));
         }
-        _ => String::new(),
+    }
+    
+    if let Some(ts) = since_timestamp {
+        conditions.push(format!(" scraped_at > {} ", ts))
+    }
+    
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", conditions.join(" AND "))
     };
 
     let query = format!(

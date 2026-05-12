@@ -7,24 +7,30 @@ import type { DashboardSummary, FireHistoryItem } from "@/lib/commands"
 export function DashboardStats() {
   const { marketContext } = useSectionRefresh()
 
-  const { data: summary } = useQuery<DashboardSummary>({
+  const { data: summary, isLoading: summaryLoading } = useQuery<DashboardSummary>({
     queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getDashboardSummary(),
     staleTime: 30 * 1000,
+    retry: 1,
+    retryDelay: 1000,
   })
 
-  const { data: fireHistory = [] } = useQuery<FireHistoryItem[]>({
+  const { data: fireHistory = [], isLoading: fireHistoryLoading } = useQuery<FireHistoryItem[]>({
     queryKey: ["fire-history", marketContext.seasonId, marketContext.marketMode, 24],
     queryFn: () => cmd.getFireHistory(24),
     staleTime: 60 * 1000,
+    retry: 1,
+    retryDelay: 1000,
   })
 
-  const { data: sections = [] } = useQuery({
+  const { data: sections = [], isLoading: sectionsLoading } = useQuery({
     queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getSections(),
+    retry: 1,
+    retryDelay: 1000,
   })
 
-  const { data: allSectionItems = [] } = useQuery({
+  const { data: allSectionItems = [], isLoading: sectionItemsLoading } = useQuery({
     queryKey: ["all-section-items", marketContext.seasonId, marketContext.marketMode],
     queryFn: async () => {
       const allItems: any[] = []
@@ -39,7 +45,11 @@ export function DashboardStats() {
       return allItems
     },
     enabled: sections.length > 0,
+    retry: 1,
+    retryDelay: 1000,
   })
+
+  const isLoading = summaryLoading || fireHistoryLoading || sectionsLoading || sectionItemsLoading
 
   const rmbPer10kFire = summary?.fire?.rmb_per_10k_fire ?? 61.87
 
@@ -91,6 +101,49 @@ export function DashboardStats() {
     fireStats.change = fireHistory.length >= 2 
       ? ((fireHistory[fireHistory.length - 1].rmb_per_10k_fire - fireHistory[0].rmb_per_10k_fire) / fireHistory[0].rmb_per_10k_fire) * 100
       : 0
+  }
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 animate-pulse">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-1.5 rounded-lg bg-slate-100">
+              <Package className="w-4 h-4 text-slate-300" />
+            </div>
+            <span className="text-xs text-slate-400 font-medium">加载中...</span>
+          </div>
+          <div className="h-6 bg-slate-200 rounded w-3/4"></div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 animate-pulse">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-1.5 rounded-lg bg-slate-100">
+              <Flame className="w-4 h-4 text-slate-300" />
+            </div>
+            <span className="text-xs text-slate-400 font-medium">加载中...</span>
+          </div>
+          <div className="h-6 bg-slate-200 rounded w-3/4"></div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 animate-pulse">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-1.5 rounded-lg bg-slate-100">
+              <History className="w-4 h-4 text-slate-300" />
+            </div>
+            <span className="text-xs text-slate-400 font-medium">加载中...</span>
+          </div>
+          <div className="h-6 bg-slate-200 rounded w-3/4"></div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 animate-pulse">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-1.5 rounded-lg bg-slate-100">
+              <TrendingUp className="w-4 h-4 text-slate-300" />
+            </div>
+            <span className="text-xs text-slate-400 font-medium">加载中...</span>
+          </div>
+          <div className="h-6 bg-slate-200 rounded w-3/4"></div>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -15,28 +15,14 @@ struct LuosiItem {
     item_type: Option<String>,
 }
 
-/// Scrape items from Luosi API for SS12 普通服 (season_id=1401).
-#[allow(dead_code)]
 pub async fn scrape_normal_items() -> Result<Vec<Item>, AppError> {
     scrape_by_season_id(1401, "ss12", "season_normal").await
 }
 
-/// Scrape items from Luosi API for SS12 专家服 (season_id=1431).
-#[allow(dead_code)]
 pub async fn scrape_expert_items() -> Result<Vec<Item>, AppError> {
     scrape_by_season_id(1431, "ss12", "season_expert").await
 }
 
-/// Scrape items from Luosi API, selecting the correct season_id
-/// based on `season_id` and `market_mode`.
-///
-/// season_id mapping (刷图小助手 API):
-///   ss12 赛季普通 → 1401 | ss12 赛季专家 → 1431
-///   ss11 赛季普通 → 1201 | ss11 赛季专家 → 1231
-///
-/// 公式: 200 * season_num - 1000 + mode_suffix
-///   - season_num = 12 (from "ss12") or 11 (from "ss11")
-///   - mode_suffix = 1 (普通) 或 31 (专家)
 pub async fn scrape_items(season_id: &str, market_mode: &str) -> Result<Vec<Item>, AppError> {
     let season_num = match season_id.strip_prefix("ss") {
         Some(s) => s.parse::<i32>().ok(),
@@ -69,28 +55,54 @@ async fn scrape_by_season_id(
 ) -> Result<Vec<Item>, AppError> {
     let url = format!("{}?season_id={}", LUOSI_BASE_URL, api_season_id);
 
+    tracing::info!("[LUOSI] Creating reqwest client for URL: {}", url);
+    
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| AppError::Scrape(format!("reqwest build error: {}", e)))?;
 
+    tracing::info!("[LUOSI] Sending HTTP request to: {}", url);
+    
     let resp = client
         .get(&url)
         .send()
         .await
-        .map_err(|e| AppError::Scrape(format!("request failed: {}", e)))?;
-
+        .map_err(|e| {
+            tracing::error!("[LUOSI] HTTP request failed: {}", e);
+            AppError::Scrape(format!("request failed: {}", e))
+        })?;
+    
+    tracing::info!("[LUOSI] Response received, status: {}", resp.status());
+    
     if !resp.status().is_success() {
-        return Err(AppError::Scrape(format!(
-            "API returned status: {}",
-            resp.status()
-        )));
+        let status = resp.status();
+        return Err(AppError::Scrape(format!("API returned error status: {}", status)));
     }
-
-    let map: HashMap<String, LuosiItem> = resp
-        .json()
+    
+    let body = resp
+        .text()
         .await
-        .map_err(|e| AppError::Scrape(format!("failed to parse JSON: {}", e)))?;
+        .map_err(|e| {
+            tracing::error!("[LUOSI] Failed to read response: {}", e);
+            AppError::Scrape(format!("failed to read response: {}", e))
+        })?;
+    
+    tracing::info!("[LUOSI] Response body: {} bytes", body.len());
+    
+    if body.len() < 100 {
+        tracing::warn!("[LUOSI] Response body too small, might be an error: {}", body);
+        return Err(AppError::Scrape(format!("API returned empty or invalid response: {}", body)));
+    }
+    
+    let map: HashMap<String, LuosiItem> = serde_json::from_str(&body)
+        .map_err(|e| {
+            tracing::error!("[LUOSI] JSON parse error: {}", e);
+            AppError::Scrape(format!("failed to parse JSON: {}", e))
+        })?;
+
+    tracing::info!("[LUOSI] Parsed {} items from API", map.len());
 
     let now = chrono::Utc::now().timestamp();
     let items: Vec<Item> = map
@@ -108,11 +120,6 @@ async fn scrape_by_season_id(
         })
         .collect();
 
-    tracing::info!(
-        "Scraped {} items from Luosi API for {}/{}",
-        items.len(),
-        season_id,
-        market_mode
-    );
+    tracing::info!("[LUOSI] Transformed {} items for {}/{}", items.len(), season_id, market_mode);
     Ok(items)
 }

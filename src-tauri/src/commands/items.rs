@@ -2,7 +2,7 @@ use crate::commands::types::{DbStats, ItemsStats, OkResponse, SearchResult};
 use crate::core::state::AppState;
 use crate::db::repo_history;
 use crate::db::repo_items;
-use crate::db::repo_realtime_fire;
+use crate::db::repo_item_realtime_prices;
 use crate::scraper;
 use crate::services::send_notification;
 use std::process::Command;
@@ -410,12 +410,19 @@ pub struct SyncItemsRecordParams {
     pub recorded_at: i64,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct SyncItemsBatchParams {
+    pub season_id: String,
+    pub market_mode: String,
+    pub items: Vec<SyncItemsRecordParams>,
+}
+
 #[tauri::command]
 pub async fn sync_items_record(
     state: State<'_, Arc<AppState>>,
     params: SyncItemsRecordParams,
 ) -> Result<OkResponse, String> {
-    repo_history::insert_item_snapshot(
+    match repo_history::insert_item_snapshot(
         &state.db,
         &params.season_id,
         &params.market_mode,
@@ -427,9 +434,47 @@ pub async fn sync_items_record(
         params.recorded_at,
     )
     .await
-    .map_err(|e| e.to_string())?;
+    {
+        Ok(_) => Ok(OkResponse::success("Item record synced")),
+        Err(e) => {
+            let err_str = e.to_string();
+            if err_str.contains("UNIQUE constraint failed") || err_str.contains("duplicate") {
+                Ok(OkResponse::success("Item record already exists"))
+            } else {
+                Err(err_str)
+            }
+        }
+    }
+}
 
-    Ok(OkResponse::success("Item record synced"))
+#[tauri::command]
+pub async fn sync_items_batch(
+    state: State<'_, Arc<AppState>>,
+    params: SyncItemsBatchParams,
+) -> Result<OkResponse, String> {
+    let batch_items: Vec<repo_history::ItemSnapshotBatchItem> = params
+        .items
+        .iter()
+        .map(|item| repo_history::ItemSnapshotBatchItem {
+            item_id: item.item_id.clone(),
+            name: item.name.clone(),
+            item_type: item.item_type.clone(),
+            fire_price: item.price,
+            scraped_at: item.recorded_at,
+        })
+        .collect();
+
+    match repo_history::insert_item_snapshots_batch(
+        &state.db,
+        &params.season_id,
+        &params.market_mode,
+        batch_items,
+    )
+    .await
+    {
+        Ok(inserted) => Ok(OkResponse::success(&format!("Batch synced: {} records", inserted))),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 #[tauri::command]
@@ -500,9 +545,22 @@ pub async fn get_items_price_compare(
 #[tauri::command]
 pub async fn get_realtime_fire_changes(
     state: State<'_, Arc<AppState>>,
-) -> Result<Vec<repo_realtime_fire::FirePriceChangeItem>, String> {
-    tracing::debug!("get_realtime_fire_changes called");
-    repo_realtime_fire::get_realtime_fire_changes(&state.db)
+) -> Result<Vec<repo_item_realtime_prices::ItemPriceChange>, String> {
+    tracing::info!("get_realtime_fire_changes called");
+    let result = repo_item_realtime_prices::get_price_changes(&state.db)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    
+    tracing::info!("get_realtime_fire_changes: returning {} items", result.len());
+    
+    // Log a sample of the results
+    if !result.is_empty() {
+        let sample = &result[0..std::cmp::min(3, result.len())];
+        for item in sample {
+            tracing::info!("Sample: {} - current={}, change_5m={:?}, trend={}", 
+                item.name, item.current_price, item.change_rate_5m, item.trend);
+        }
+    }
+    
+    Ok(result)
 }

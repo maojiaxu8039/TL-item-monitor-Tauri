@@ -103,6 +103,16 @@ export function TopBar() {
         )}
       </div>
 
+      {summary?.history_fire && (
+        <div className="flex items-center gap-2 text-[13px]">
+          <span className="text-slate-500 font-medium">上赛季火价</span>
+          <span className="font-bold text-slate-500 text-base">
+            {summary.history_fire.rmb_per_10k_fire?.toFixed(2) || "—"}
+          </span>
+          <span className="text-slate-400">元/万火</span>
+        </div>
+      )}
+
       <div className="flex-1" />
 
       <Button

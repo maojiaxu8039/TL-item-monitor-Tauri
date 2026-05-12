@@ -35,19 +35,19 @@ pub struct SeasonInfo {
 pub const SEASONS: &[SeasonInfo] = &[
     SeasonInfo {
         id: "ss12",
-        start_timestamp: 1776384000,
+        start_timestamp: 1776355200, // 2026-04-17 00:00:00 UTC+8
         name: "SS12 当前赛季",
         is_current: true,
     },
     SeasonInfo {
         id: "ss11",
-        start_timestamp: 1768521600,
+        start_timestamp: 1768521600, // 2026-01-07 00:00:00 UTC+8
         name: "SS11 历史赛季",
         is_current: false,
     },
     SeasonInfo {
         id: "ss10",
-        start_timestamp: 1699392000,
+        start_timestamp: 1699392000, // 2023-11-07 00:00:00 UTC+8
         name: "SS10 历史赛季",
         is_current: false,
     },
@@ -66,6 +66,22 @@ pub fn get_current_season_id() -> &'static str {
         .find(|s| s.is_current)
         .map(|s| s.id)
         .unwrap_or("ss12")
+}
+
+pub fn get_previous_season_id(current_id: &str) -> Option<&'static str> {
+    let current_idx = SEASONS.iter().position(|s| s.id == current_id)?;
+    if current_idx >= SEASONS.len() - 1 {
+        return None;
+    }
+    Some(SEASONS[current_idx + 1].id)
+}
+
+pub fn get_previous_season_start(current_id: &str) -> Option<i64> {
+    let current_idx = SEASONS.iter().position(|s| s.id == current_id)?;
+    if current_idx >= SEASONS.len() - 1 {
+        return None;
+    }
+    Some(SEASONS[current_idx + 1].start_timestamp)
 }
 
 pub fn calculate_season_day(scraped_at: i64, season_start: i64) -> i32 {

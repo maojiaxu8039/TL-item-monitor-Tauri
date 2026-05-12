@@ -4,12 +4,12 @@ use crate::core::state::{
 };
 use crate::db::models::Item;
 use crate::db::repo_fire;
+use crate::db::repo_item_realtime_prices;
 use crate::db::repo_items;
 use crate::scheduler::alert_task::run_price_alert_task;
 use crate::scheduler::fire_task::run_fire_scrape_task;
 use crate::scheduler::history_task::run_hourly_snapshot_task;
 use crate::scheduler::items_task::run_items_reload_task;
-use crate::scheduler::realtime_fire_task::run_realtime_fire_price_collect_task;
 use crate::scheduler::SchedulerHandle;
 use crate::scraper;
 use parking_lot::RwLock;
@@ -143,46 +143,56 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
         AppConfig::default()
     });
 
-    // Load latest fire price from DB on startup (using default context)
+    // Always fetch latest fire price from API on startup
     let default_season = config.app.season_id.clone();
     let default_mode = config.scrape.fire_price_mode.clone();
-    let fire_price = match repo_fire::get_latest_fire(&pool, &default_season, &default_mode).await {
-        Ok(Some(record)) => {
-            let snapshot = FirePriceSnapshot {
-                price_per_wan: if record.fire_per_rmb > 0.0 {
-                    10000.0 / record.fire_per_rmb
-                } else {
-                    0.0
-                },
-                rmb_per_10k_fire: record.rmb_per_10k_fire,
-                fire_per_rmb: record.fire_per_rmb,
-                increase_ratio: record.increase_ratio,
-                trading_volume: record.trading_volume,
-                source: record.source,
-                source_time: record.source_time,
-                scraped_at: record.scraped_at,
-            };
+    
+    tracing::info!("[STARTUP] Fetching latest fire price from API...");
+    let fire_price = match crate::scraper::scrape_fire_price().await {
+        Ok(snapshot) => {
+            tracing::info!("[STARTUP] Successfully fetched fire price from API: {} RMB/10K fire", 
+                snapshot.rmb_per_10k_fire);
+            
+            // Insert into database
+            if let Err(e) = repo_fire::insert_fire_record(
+                &pool,
+                &default_season,
+                &default_mode,
+                &snapshot,
+            ).await {
+                tracing::warn!("[STARTUP] Failed to insert fire record into database: {}", e);
+            } else {
+                tracing::info!("[STARTUP] Successfully inserted fire record into database");
+            }
+            
             Some(snapshot)
         }
-        _ => {
-            // No DB record — try scraping immediately via the Qiandao scraper chain.
-            match crate::scraper::scrape_fire_price().await {
-                Ok(snapshot) => {
-                    let ctx = MarketContext {
-                        season_id: "ss12".to_string(),
-                        market_mode: MarketMode::SeasonNormal,
+        Err(e) => {
+            tracing::warn!("[STARTUP] Failed to fetch fire price from API: {}, trying database...", e);
+            
+            // Fallback to database if API fails
+            match repo_fire::get_latest_fire(&pool, &default_season, &default_mode).await {
+                Ok(Some(record)) => {
+                    tracing::info!("[STARTUP] Using cached fire price from database: {} RMB/10K fire", 
+                        record.rmb_per_10k_fire);
+                    let snapshot = FirePriceSnapshot {
+                        price_per_wan: if record.fire_per_rmb > 0.0 {
+                            10000.0 / record.fire_per_rmb
+                        } else {
+                            0.0
+                        },
+                        rmb_per_10k_fire: record.rmb_per_10k_fire,
+                        fire_per_rmb: record.fire_per_rmb,
+                        increase_ratio: record.increase_ratio,
+                        trading_volume: record.trading_volume,
+                        source: record.source,
+                        source_time: record.source_time,
+                        scraped_at: record.scraped_at,
                     };
-                    let _ = repo_fire::insert_fire_record(
-                        &pool,
-                        &ctx.season_id,
-                        ctx.market_mode.as_str(),
-                        &snapshot,
-                    )
-                    .await;
                     Some(snapshot)
                 }
-                Err(e) => {
-                    tracing::warn!("Startup fire scrape failed: {}", e);
+                _ => {
+                    tracing::error!("[STARTUP] No fire price data available in database either");
                     None
                 }
             }
@@ -190,61 +200,81 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
     };
 
     // Auto-import items: prefer API scrape, fall back to JSON file
+    // Always refresh from API on startup to get latest prices
     let default_season = config.app.season_id.clone();
     let default_mode = config.scrape.fire_price_mode.clone();
-    let items_count = repo_items::get_items_count(&pool, &default_season, &default_mode)
-        .await
-        .unwrap_or(0);
     let json_path = config.scrape.items_json_path.clone();
     let json_exists = std::path::Path::new(&json_path).exists();
 
-    let items_cache: Vec<Item> = if items_count == 0 {
-        if json_exists {
-            // JSON exists: try API first, fall back to JSON
-            match scraper::scrape_items(&default_season, &default_mode).await {
-                Ok(items) => {
-                    if repo_items::bulk_insert_items(&pool, &default_season, &default_mode, &items)
-                        .await
-                        .is_ok()
-                    {
-                        tracing::info!("Startup loaded {} items from API", items.len());
-                        items
-                    } else {
-                        tracing::warn!("API items bulk-insert failed, falling back to JSON");
-                        load_items_from_json(&default_season, &default_mode, &json_path)
-                            .unwrap_or_default()
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("API scrape failed, falling back to JSON: {}", e);
-                    load_items_from_json(&default_season, &default_mode, &json_path)
-                        .unwrap_or_default()
-                }
+    // Try to get items from API first
+    tracing::info!("[STARTUP] Fetching latest items from API...");
+    let items_cache: Vec<Item> = match scraper::scrape_items(&default_season, &default_mode).await {
+        Ok(items) => {
+            tracing::info!("[STARTUP] Successfully fetched {} items from API", items.len());
+            
+            // Update database with new items
+            if let Err(e) = repo_items::bulk_insert_items(&pool, &default_season, &default_mode, &items).await {
+                tracing::error!("[STARTUP] Failed to update items in database: {}", e);
+            } else {
+                tracing::info!("[STARTUP] Successfully updated items in database");
             }
-        } else {
-            // No JSON: try API directly
-            match scraper::scrape_items(&default_season, &default_mode).await {
-                Ok(items) => {
-                    if repo_items::bulk_insert_items(&pool, &default_season, &default_mode, &items)
-                        .await
-                        .is_ok()
-                    {
-                        tracing::info!("Startup loaded {} items from API", items.len());
+            
+            // Insert realtime prices
+            let now = chrono::Utc::now().timestamp();
+            let realtime_records: Vec<(String, String, f64, i64)> = items
+                .iter()
+                .map(|item| (item.item_id.clone(), item.name.clone(), item.price, now))
+                .collect();
+            
+            if let Err(e) = repo_item_realtime_prices::batch_insert_realtime_prices(&pool, &realtime_records).await {
+                tracing::warn!("[STARTUP] Failed to insert realtime prices: {}", e);
+            }
+            
+            if let Err(e) = repo_item_realtime_prices::cleanup_old_records(&pool).await {
+                tracing::warn!("[STARTUP] Failed to cleanup old realtime records: {}", e);
+            }
+            
+            items
+        }
+        Err(e) => {
+            tracing::warn!("[STARTUP] Failed to fetch items from API: {}, trying JSON file...", e);
+            
+            // Fallback to JSON file if API fails
+            if json_exists {
+                tracing::info!("[STARTUP] Loading items from JSON file: {}", json_path);
+                match load_items_from_json(&default_season, &default_mode, &json_path) {
+                    Ok(items) if !items.is_empty() => {
+                        tracing::info!("[STARTUP] Loaded {} items from JSON file", items.len());
+                        if let Err(e) = repo_items::bulk_insert_items(&pool, &default_season, &default_mode, &items).await {
+                            tracing::error!("[STARTUP] Failed to update items from JSON in database: {}", e);
+                        }
+                        
+                        let now = chrono::Utc::now().timestamp();
+                        let realtime_records: Vec<(String, String, f64, i64)> = items
+                            .iter()
+                            .map(|item| (item.item_id.clone(), item.name.clone(), item.price, now))
+                            .collect();
+                        
+                        if let Err(e) = repo_item_realtime_prices::batch_insert_realtime_prices(&pool, &realtime_records).await {
+                            tracing::warn!("[STARTUP] Failed to insert realtime prices from JSON: {}", e);
+                        }
+                        
+                        items
                     }
-                    items
+                    Ok(_) => {
+                        tracing::warn!("[STARTUP] JSON file is empty, using existing database items");
+                        Vec::new()
+                    }
+                    Err(e) => {
+                        tracing::error!("[STARTUP] Failed to load from JSON: {}, using existing database items", e);
+                        Vec::new()
+                    }
                 }
-                Err(e) => {
-                    tracing::warn!("Startup API scrape failed: {}", e);
-                    Vec::new()
-                }
+            } else {
+                tracing::warn!("[STARTUP] No JSON file found and API failed, using existing database items");
+                Vec::new()
             }
         }
-    } else {
-        tracing::info!(
-            "Items table already has {} records, skipping startup load",
-            items_count
-        );
-        Vec::new()
     };
 
     let state = AppState {
@@ -372,14 +402,6 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         apply_snapshot_metadata_migration(pool).await?;
         record_migration(pool, 7).await?;
     }
-    if current_version < 8 {
-        apply_sql_migration(
-            pool,
-            8,
-            include_str!("db/migrations/008_create_item_realtime_fire_prices.sql"),
-        )
-        .await?;
-    }
     if current_version < 9 {
         apply_sql_migration(
             pool,
@@ -393,6 +415,14 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
             pool,
             10,
             include_str!("db/migrations/010_add_realtime_value_to_outputs.sql"),
+        )
+        .await?;
+    }
+    if current_version < 11 {
+        apply_sql_migration(
+            pool,
+            11,
+            include_str!("db/migrations/011_create_item_realtime_prices.sql"),
         )
         .await?;
     }
@@ -856,21 +886,6 @@ async fn seed_test_data_for_all_seasons(pool: &SqlitePool) -> Result<(), String>
             &mut rng,
         )
         .await?;
-
-        // Generate snapshots for SS11 (history season, start: 2026-01-16)
-        let ss11_start = chrono::DateTime::parse_from_rfc3339("2026-01-16T00:00:00Z")
-            .expect("固定日期格式应始终有效")
-            .timestamp();
-        generate_season_snapshots(
-            pool,
-            "ss11",
-            mode,
-            ss11_start,
-            &realtime_items,
-            base_fire_price * 0.85,
-            &mut rng,
-        )
-        .await?;
     }
 
     tracing::info!("All season snapshot data generation complete");
@@ -1094,7 +1109,6 @@ pub fn start_background_tasks(
     let (items_abort_tx, items_abort_rx) = broadcast::channel::<()>(1);
     let (snapshot_abort_tx, snapshot_abort_rx) = broadcast::channel::<()>(1);
     let (alert_abort_tx, alert_abort_rx) = broadcast::channel::<()>(1);
-    let (realtime_abort_tx, realtime_abort_rx) = broadcast::channel::<()>(1);
 
     {
         let app = app.clone();
@@ -1109,9 +1123,13 @@ pub fn start_background_tasks(
         let app = app.clone();
         let state = state.clone();
         state.task_status.write().items_reload_running = true;
+        tracing::info!("[DEBUG] About to spawn items_reload_task");
         rt.spawn(async move {
+            tracing::info!("[DEBUG] items_reload_task spawned, calling run_items_reload_task");
             run_items_reload_task(app, state, items_abort_rx).await;
+            tracing::info!("[DEBUG] items_reload_task returned");
         });
+        tracing::info!("[DEBUG] items_reload_task spawned");
     }
 
     {
@@ -1130,19 +1148,10 @@ pub fn start_background_tasks(
         });
     }
 
-    {
-        let app = app.clone();
-        let state = state.clone();
-        rt.spawn(async move {
-            run_realtime_fire_price_collect_task(app, state, realtime_abort_rx).await;
-        });
-    }
-
     SchedulerHandle {
         fire_scrape_abort: fire_abort_tx,
         items_reload_abort: items_abort_tx,
         hourly_snapshot_abort: snapshot_abort_tx,
         alert_task_abort: alert_abort_tx,
-        realtime_fire_abort: realtime_abort_tx,
     }
 }

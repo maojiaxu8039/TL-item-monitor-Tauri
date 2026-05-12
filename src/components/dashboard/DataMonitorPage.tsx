@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Database, Download, RefreshCw, Server, Wifi, WifiOff, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { cmd } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
+import { useSyncContext } from "@/contexts/SyncContext";
 import { toast } from "sonner";
 import ServerAdminPanel from "./ServerAdminPanel";
 import type { SyncJobState, SyncFailure } from "@/lib/commands";
@@ -89,17 +90,27 @@ function createEmptySyncJob(dataType: DataType, mode: SyncMode, range: TimeRange
 
 export default function DataMonitorPage() {
   const [serverUrl, setServerUrl] = useState(() => {
-    return localStorage.getItem("server_url") || "http://848zk4ml8421.vicp.fun:26767";
+    return localStorage.getItem("server_url") || "https://luosan.iepose.cn";
   });
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
   const [dataType, setDataType] = useState<DataType>("fire");
   const [syncMode, setSyncMode] = useState<SyncMode>("normal");
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
-  const [syncJob, setSyncJob] = useState<SyncJobState | null>(null);
   const [showFailures, setShowFailures] = useState(false);
   const [isPaginatedSync, setIsPaginatedSync] = useState(false);
+  const [lastItemsSyncTimestamp, setLastItemsSyncTimestamp] = useState<number | null>(() => {
+    const stored = localStorage.getItem("last_items_sync_timestamp");
+    return stored ? parseInt(stored) : null;
+  });
   const { marketContext } = useSectionRefresh();
+  const { syncJob, setSyncJob, restoreSyncJob } = useSyncContext();
+
+  useEffect(() => {
+    if (syncJob?.status === "running") {
+      toast.info("检测到之前的同步任务，继续执行中...");
+    }
+  }, []);
 
   const checkServerStatus = async (): Promise<ServerStatus | null> => {
     try {
@@ -146,63 +157,76 @@ export default function DataMonitorPage() {
     marketMode: string,
     marketContext: { seasonId: string }
   ): Promise<{ success: number; failed: number; skipped: number; failures: SyncFailure[] }> => {
-    let success = 0;
-    let failed = 0;
-    const failures: SyncFailure[] = [];
     const now = Date.now();
 
-    for (const record of records) {
-      const recordItemId = dataType === "items" ? (record as ItemsHistoryRecord).item_id : undefined;
-      const recordItemName = dataType === "items"
-        ? (record as ItemsHistoryRecord).name ?? (record as ItemsHistoryRecord).item_id
-        : (record as FireHistoryRecord).season_id;
+    if (dataType === "fire") {
+      let success = 0;
+      const failures: SyncFailure[] = [];
 
-      try {
-        if (dataType === "fire") {
-          const fireRecord = record as FireHistoryRecord;
+      for (const record of records as FireHistoryRecord[]) {
+        try {
           await cmd.syncFireRecord({
-            season_id: fireRecord.season_id,
+            season_id: record.season_id,
             market_mode: marketMode,
-            rmb_per_10k_fire: fireRecord.rmb_per_10k_fire,
-            fire_per_rmb: fireRecord.fire_per_rmb,
-            increase_ratio: fireRecord.increase_ratio ?? 0,
-            trading_volume: fireRecord.trading_volume,
-            source: fireRecord.source,
-            source_time: fireRecord.source_time,
-            recorded_at: fireRecord.scraped_at,
+            rmb_per_10k_fire: record.rmb_per_10k_fire,
+            fire_per_rmb: record.fire_per_rmb,
+            increase_ratio: record.increase_ratio ?? 0,
+            trading_volume: record.trading_volume,
+            source: record.source,
+            source_time: record.source_time,
+            recorded_at: record.scraped_at,
           });
           success++;
-        } else {
-          const itemRecord = record as ItemsHistoryRecord;
-          await cmd.syncItemsRecord({
-            season_id: itemRecord.season_id || marketContext.seasonId,
-            market_mode: marketMode,
-            item_id: itemRecord.item_id,
-            name: itemRecord.name || itemRecord.item_id,
-            item_type: itemRecord.item_type ?? null,
-            price: itemRecord.price ?? itemRecord.fire_price ?? 0,
-            last_time: itemRecord.last_time ?? itemRecord.scraped_at,
-            recorded_at: itemRecord.scraped_at,
-          });
-          success++;
-        }
-      } catch (err) {
-        failed++;
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const failure: SyncFailure = {
-          itemId: recordItemId,
-          itemName: recordItemName,
-          recordType: dataType,
-          reason: errorMessage,
-          timestamp: now,
-        };
-        if (failures.length < 10) {
-          failures.push(failure);
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          if (failures.length < 10) {
+            failures.push({
+              itemId: record.season_id,
+              itemName: record.season_id,
+              recordType: dataType,
+              reason: errorMessage,
+              timestamp: now,
+            });
+          }
         }
       }
-    }
 
-    return { success, failed, skipped: 0, failures };
+      return { success, failed: failures.length, skipped: 0, failures };
+    } else {
+      const items = (records as ItemsHistoryRecord[]).map((record) => ({
+        season_id: record.season_id || marketContext.seasonId,
+        market_mode: marketMode,
+        item_id: record.item_id,
+        name: record.name || record.item_id,
+        item_type: record.item_type ?? null,
+        price: record.price ?? record.fire_price ?? 0,
+        last_time: record.last_time ?? record.scraped_at,
+        recorded_at: record.scraped_at,
+      }));
+
+      try {
+        await cmd.syncItemsBatch({
+          season_id: marketContext.seasonId,
+          market_mode: marketMode,
+          items,
+        });
+        return { success: items.length, failed: 0, skipped: 0, failures: [] };
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        return {
+          success: 0,
+          failed: items.length,
+          skipped: 0,
+          failures: [{
+            itemId: "batch",
+            itemName: "批量同步",
+            recordType: dataType,
+            reason: errorMessage,
+            timestamp: now,
+          }],
+        };
+      }
+    }
   };
 
   const syncPaginated = useCallback(async () => {
@@ -220,6 +244,7 @@ export default function DataMonitorPage() {
     let totalFailed = 0;
     let allFailures: SyncFailure[] = [];
     let hasMore = true;
+    let maxScrapedAt = 0;
 
     try {
       if (dataType === "fire") {
@@ -262,7 +287,8 @@ export default function DataMonitorPage() {
           }
         }
       } else {
-        const baseUrl = `${serverUrl}/items-history-all?mode=${modeParam}`;
+        const timestampParam = lastItemsSyncTimestamp ? `&since_timestamp=${lastItemsSyncTimestamp}` : "";
+        const baseUrl = `${serverUrl}/items-history-all?mode=${modeParam}${timestampParam}`;
 
         while (hasMore) {
           const url = `${baseUrl}&limit=${PAGE_SIZE}&offset=${offset}`;
@@ -279,6 +305,8 @@ export default function DataMonitorPage() {
             hasMore = false;
             break;
           }
+
+          records.forEach(r => { if (r.scraped_at > maxScrapedAt) maxScrapedAt = r.scraped_at; });
 
           const pageResult = await syncSinglePage(records, dataType, marketMode, marketContext);
           totalSuccess += pageResult.success;
@@ -304,6 +332,12 @@ export default function DataMonitorPage() {
       job.finishedAt = Date.now();
       job.firstError = allFailures[0]?.reason ?? null;
       setSyncJob({ ...job });
+
+      if (dataType === "items" && maxScrapedAt > 0) {
+        localStorage.setItem("last_items_sync_timestamp", maxScrapedAt.toString());
+        setLastItemsSyncTimestamp(maxScrapedAt);
+        console.log(`[Sync] Updated last_items_sync_timestamp to ${maxScrapedAt}`);
+      }
 
       if (totalSuccess + totalFailed === 0) {
         toast.info("没有可同步的数据");
@@ -357,7 +391,8 @@ export default function DataMonitorPage() {
           failures: result.failures,
         };
       } else {
-        const url = `${serverUrl}/items-history-all?mode=${modeParam}&limit=${hours === 99999 ? 99999 : hours * 10}`;
+        const timestampParam = lastItemsSyncTimestamp ? `&since_timestamp=${lastItemsSyncTimestamp}` : "";
+        const url = `${serverUrl}/items-history-all?mode=${modeParam}${timestampParam}&limit=${hours === 99999 ? 99999 : hours * 10}`;
 
         const response = await fetch(url);
         if (!response.ok) throw new Error("Failed to fetch items data");
@@ -382,6 +417,17 @@ export default function DataMonitorPage() {
       }
     },
     onSuccess: (result) => {
+      if (result.type === "items" && result.synced > 0) {
+        const stored = localStorage.getItem("last_items_sync_timestamp");
+        if (stored) {
+          const ts = parseInt(stored);
+          if (ts > 0) {
+            setLastItemsSyncTimestamp(ts);
+            console.log(`[Sync] Updated last_items_sync_timestamp to ${ts}`);
+          }
+        }
+      }
+
       if (result.message) {
         toast.info(result.message);
       } else {
@@ -781,16 +827,16 @@ export default function DataMonitorPage() {
                 <span>进度</span>
                 <span>{getSyncProgress()}%</span>
               </div>
-              <div className="w-full bg-slate-100 rounded-full h-2">
+              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                 <div
                   className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${getSyncProgress()}%` }}
+                  style={{ width: `${Math.min(getSyncProgress(), 100)}%` }}
                 />
               </div>
               <div className="flex gap-4 text-xs">
-                <span className="text-green-600">成功: {syncJob.success}</span>
-                <span className="text-red-600">失败: {syncJob.failed}</span>
-                <span className="text-slate-500">总计: {syncJob.total}</span>
+                <span className="text-green-600">成功: {syncJob.success.toLocaleString()}</span>
+                <span className="text-red-600">失败: {syncJob.failed.toLocaleString()}</span>
+                <span className="text-slate-500">总计: {syncJob.total.toLocaleString()}</span>
               </div>
             </div>
           )}

@@ -61,14 +61,20 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
         tl_monitor::core::constants::APP_VERSION
     );
 
-    let rt = tokio::runtime::Runtime::new()
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
         .map_err(|e| format!("Failed to create Tokio runtime: {}", e))?;
     let rt_handle = rt.handle().clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -99,6 +105,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             get_notification_permission_status,
             request_notification_permission,
             sync_items_record,
+            sync_items_batch,
             get_item_history_by_season,
             get_item_history_by_day,
             get_items_price_compare,

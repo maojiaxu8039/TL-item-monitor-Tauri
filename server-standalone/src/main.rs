@@ -920,6 +920,8 @@ async fn handle_request(
                 .and_then(|s| s.parse().ok());
             let max_day: Option<i32> = get_query_param(query_string, "max_day")
                 .and_then(|s| s.parse().ok());
+            let since_timestamp: Option<i64> = get_query_param(query_string, "since_timestamp")
+                .and_then(|s| s.parse().ok());
 
             let market_mode = if mode == "expert" {
                 "season_expert"
@@ -939,7 +941,7 @@ async fn handle_request(
                 .unwrap_or_default();
                 (400, body)
             } else {
-                match db::get_items_history_all(&state.db, &season_id, market_mode, limit, offset, min_day, max_day).await
+                match db::get_items_history_all(&state.db, &season_id, market_mode, limit, offset, min_day, max_day, since_timestamp).await
                 {
                     Ok(records) => {
                         let body = serde_json::to_string_pretty(&ApiResponse {

@@ -3,6 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query"
 import { Toaster } from "sonner"
 import { queryClient } from "@/lib/query"
 import { SectionRefreshProvider } from "@/contexts/SectionRefreshContext"
+import { SyncProvider } from "@/contexts/SyncContext"
 import { useTauriEvents } from "@/hooks/useTauriEvents"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { TopBar } from "@/components/layout/TopBar"
@@ -47,7 +48,8 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SectionRefreshProvider>
-        <div className="flex h-screen bg-[#f7f8fb]">
+        <SyncProvider>
+          <div className="flex h-screen bg-[#f7f8fb]">
           <Sidebar page={page} onPageChange={setPage} />
           <div className="flex flex-1 flex-col overflow-hidden">
             <TopBar />
@@ -119,6 +121,7 @@ export default function App() {
             </footer>
           </div>
         </div>
+        </SyncProvider>
       </SectionRefreshProvider>
       <Toaster position="bottom-right" />
     </QueryClientProvider>

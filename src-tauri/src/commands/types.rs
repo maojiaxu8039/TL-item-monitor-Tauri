@@ -32,6 +32,7 @@ impl From<FirePriceSnapshot> for FirePriceUI {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DashboardSummary {
     pub fire: Option<FirePriceUI>,
+    pub history_fire: Option<FirePriceUI>,
     pub total_fire: f64,
     pub total_rmb: f64,
     pub season_name: String,

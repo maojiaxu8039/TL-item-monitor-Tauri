@@ -10,8 +10,12 @@ interface FireChangeCardProps {
 }
 
 function FireChangeCard({ item, isRising }: FireChangeCardProps) {
-  const changeRate = item.change_rate_5m ?? item.change_rate_3h;
-  const price5mAgo = item.price_5m_ago;
+  const maxChange = Math.max(
+    Math.abs(item.change_rate_3h ?? 0),
+    Math.abs(item.change_rate_1h ?? 0),
+    Math.abs(item.change_rate_30m ?? 0),
+    Math.abs(item.change_rate_5m ?? 0)
+  );
   
   return (
     <div className={`bg-white rounded-lg border p-3 transition-colors hover:shadow-sm ${
@@ -21,8 +25,12 @@ function FireChangeCard({ item, isRising }: FireChangeCardProps) {
         <div className="flex items-center gap-2">
           <Package className={`w-4 h-4 ${isRising ? "text-red-500" : "text-green-500"}`} />
           <div>
-            <div className="text-sm font-medium text-slate-900">{item.item_name}</div>
-            <div className="text-xs text-slate-400">ID: {item.item_id}</div>
+            <div className="text-sm font-medium text-slate-900">{item.name}</div>
+            <div className="text-xs text-slate-400">
+              价格: {item.current_price.toFixed(2)} 火 | 
+              变动: {maxChange.toFixed(2)}% | 
+              评分: {item.score.toFixed(2)}
+            </div>
           </div>
         </div>
         <div className={`text-xs font-bold px-2 py-0.5 rounded ${
@@ -32,29 +40,30 @@ function FireChangeCard({ item, isRising }: FireChangeCardProps) {
         </div>
       </div>
 
-      <div className="mt-2 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="text-xs text-slate-500">
-            当前: <span className="font-medium text-slate-700">{item.current_price.toFixed(2)}</span>
+      <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
+        <div className="text-center p-1.5 bg-slate-50 rounded">
+          <div className="text-slate-400">5m</div>
+          <div className={`font-medium ${(item.change_rate_5m ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
+            {item.change_rate_5m !== null ? `${(item.change_rate_5m ?? 0) >= 0 ? "+" : ""}${item.change_rate_5m?.toFixed(1)}%` : "-"}
           </div>
-          {price5mAgo !== null && price5mAgo !== undefined && (
-            <div className="text-xs text-slate-500">
-              5m前: <span className="font-medium text-slate-700">{price5mAgo.toFixed(2)}</span>
-            </div>
-          )}
         </div>
-        {changeRate !== null && changeRate !== undefined && (
-          <div className={`text-sm font-bold ${isRising ? "text-red-500" : "text-green-500"}`}>
-            {changeRate >= 0 ? "+" : ""}{changeRate.toFixed(2)}%
+        <div className="text-center p-1.5 bg-slate-50 rounded">
+          <div className="text-slate-400">30m</div>
+          <div className={`font-medium ${(item.change_rate_30m ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
+            {item.change_rate_30m !== null ? `${(item.change_rate_30m ?? 0) >= 0 ? "+" : ""}${item.change_rate_30m?.toFixed(1)}%` : "-"}
           </div>
-        )}
-      </div>
-
-      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-        <div className="flex items-center gap-3">
-          <span>3h: {item.price_3h_ago?.toFixed(2) || "-"}</span>
-          <span>1h: {item.price_1h_ago?.toFixed(2) || "-"}</span>
-          <span>30m: {item.price_30m_ago?.toFixed(2) || "-"}</span>
+        </div>
+        <div className="text-center p-1.5 bg-slate-50 rounded">
+          <div className="text-slate-400">1h</div>
+          <div className={`font-medium ${(item.change_rate_1h ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
+            {item.change_rate_1h !== null ? `${(item.change_rate_1h ?? 0) >= 0 ? "+" : ""}${item.change_rate_1h?.toFixed(1)}%` : "-"}
+          </div>
+        </div>
+        <div className="text-center p-1.5 bg-slate-50 rounded">
+          <div className="text-slate-400">3h</div>
+          <div className={`font-medium ${(item.change_rate_3h ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
+            {item.change_rate_3h !== null ? `${(item.change_rate_3h ?? 0) >= 0 ? "+" : ""}${item.change_rate_3h?.toFixed(1)}%` : "-"}
+          </div>
         </div>
       </div>
     </div>
@@ -152,7 +161,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
 
 export default function DealsPage() {
   const [showSettings, setShowSettings] = useState(false);
-  const [settings, setSettings] = useState({ rise_threshold: 1, fall_threshold: 1 });
+  const [settings, setSettings] = useState({ rise_threshold: 5, fall_threshold: 5 });
   useSectionRefresh();
 
   useEffect(() => {
@@ -175,24 +184,36 @@ export default function DealsPage() {
   };
 
   const riseItems = fireChanges.filter(item => {
-    const rate = item.change_rate_3h;
-    return item.trend.includes("rise") && rate !== null && rate !== undefined && rate >= settings.rise_threshold;
+    if (!item.trend.includes("rise")) return false;
+    const maxChange = Math.max(
+      Math.abs(item.change_rate_3h ?? 0),
+      Math.abs(item.change_rate_1h ?? 0),
+      Math.abs(item.change_rate_30m ?? 0),
+      Math.abs(item.change_rate_5m ?? 0)
+    );
+    return maxChange >= settings.rise_threshold;
   });
+
   const fallItems = fireChanges.filter(item => {
-    const rate = item.change_rate_3h;
-    return item.trend.includes("fall") && rate !== null && rate !== undefined && rate <= -settings.fall_threshold;
+    if (!item.trend.includes("fall")) return false;
+    const maxChange = Math.max(
+      Math.abs(item.change_rate_3h ?? 0),
+      Math.abs(item.change_rate_1h ?? 0),
+      Math.abs(item.change_rate_30m ?? 0),
+      Math.abs(item.change_rate_5m ?? 0)
+    );
+    return maxChange >= settings.fall_threshold;
   });
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Header */}
       <div className="px-6 py-4 border-b border-slate-100 bg-white">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold text-slate-900">捡漏出货</h1>
             <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400">
-              <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded">上涨 {riseItems.length}</span>
-              <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded">下跌 {fallItems.length}</span>
+              <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded">出货 {riseItems.length}</span>
+              <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded">捡漏 {fallItems.length}</span>
               <span className="text-slate-400">| 出货≥{settings.rise_threshold}% 捡漏≥{settings.fall_threshold}%</span>
             </div>
           </div>
@@ -215,7 +236,6 @@ export default function DealsPage() {
         </div>
       </div>
 
-      {/* Content - Two Columns */}
       <div className="flex-1 overflow-hidden p-6">
         {isLoading ? (
           <div className="flex items-center justify-center h-full text-slate-400">
@@ -228,11 +248,10 @@ export default function DealsPage() {
           <div className="flex flex-col items-center justify-center h-full text-slate-400">
             <Package className="w-12 h-12 text-slate-200 mb-4" />
             <p className="text-lg font-medium">暂无数据</p>
-            <p className="text-sm mt-2">当前赛季暂无物品价格变化记录</p>
+            <p className="text-sm mt-2">请先在数据监控页面同步物品数据</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-6 h-full">
-            {/* Rise Column */}
             <div className="flex flex-col overflow-hidden">
               <div className="flex items-center gap-2 px-1 mb-3">
                 <TrendingUp className="w-5 h-5 text-red-500" />
@@ -253,7 +272,6 @@ export default function DealsPage() {
               </div>
             </div>
 
-            {/* Fall Column */}
             <div className="flex flex-col overflow-hidden">
               <div className="flex items-center gap-2 px-1 mb-3">
                 <TrendingDown className="w-5 h-5 text-green-500" />
@@ -277,7 +295,6 @@ export default function DealsPage() {
         )}
       </div>
 
-      {/* Settings Modal */}
       {showSettings && (
         <SettingsModal
           settings={settings}
