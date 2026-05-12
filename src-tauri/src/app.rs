@@ -480,12 +480,19 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .await?;
     }
     if current_version < 10 {
-        apply_sql_migration(
-            pool,
-            10,
-            include_str!("db/migrations/010_add_realtime_value_to_outputs.sql"),
-        )
-        .await?;
+        // v10: Add realtime_value to strategy_outputs (idempotent)
+        // Check if column already exists before applying
+        if !column_exists(pool, "strategy_outputs", "realtime_value").await? {
+            apply_sql_migration(
+                pool,
+                10,
+                include_str!("db/migrations/010_add_realtime_value_to_outputs.sql"),
+            )
+            .await?;
+        } else {
+            tracing::info!("Migration v10 skipped: column 'realtime_value' already exists");
+            record_migration(pool, 10).await?;
+        }
     }
     if current_version < 11 {
         apply_sql_migration(
