@@ -147,7 +147,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
         }
 
         let imported = 0
-        let errors: string[] = []
+        const errors: string[] = []
 
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim()
