@@ -143,10 +143,32 @@ pub async fn set_active_market_context(
     crate::core::events::emit_market_context_changed(
         &app,
         crate::core::events::MarketContextPayload {
-            season_id: seasonId,
+            season_id: seasonId.clone(),
             market_mode: mode.as_str().to_string(),
         },
     );
+
+    // Refresh items cache for new context
+    let mode_str = mode.as_str().to_string();
+    let season_for_cache = seasonId.clone();
+    let state_clone = Arc::new((&*state).clone());
+    tokio::spawn(async move {
+        match repo_items::get_items_from_realtime_table(&state_clone.db, &season_for_cache, &mode_str).await {
+            Ok(items) => {
+                let mut cache = state_clone.items_cache.write();
+                *cache = items;
+                tracing::info!(
+                    "Items cache refreshed for season={}, mode={}, count={}",
+                    season_for_cache,
+                    mode_str,
+                    cache.len()
+                );
+            }
+            Err(e) => {
+                tracing::warn!("Failed to refresh items cache: {}", e);
+            }
+        }
+    });
 
     Ok(OkResponse::success("Market context updated"))
 }
