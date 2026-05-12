@@ -28,13 +28,11 @@ pub async fn run_items_reload_task(
 
     info!("[DEBUG] Starting main loop");
 
-    // First iteration: wait a short delay before first scrape to allow app to start
     let mut first_run = true;
 
     loop {
         info!("[DEBUG] === TOP OF LOOP ===");
         
-        // Load fresh config first
         let fresh_config = match crate::core::config::load_config() {
             Ok(cfg) => cfg,
             Err(e) => {
@@ -81,11 +79,9 @@ pub async fn run_items_reload_task(
                 }
             }
         } else {
-            // On first run, check if database already has items
             let ctx = state.active_context.read().clone();
             match repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await {
                 Ok(count) if count > 0 => {
-                    // Database already has items, wait for a few seconds before first scrape
                     info!("[DEBUG] Database already has {} items, waiting 5s before first scrape", count);
                     tokio::select! {
                         _ = tokio::time::sleep(Duration::from_secs(5)) => {
@@ -116,112 +112,128 @@ pub async fn run_items_reload_task(
         }
 
         let ctx = state.active_context.read().clone();
-        let start = std::time::Instant::now();
+        let season_id = ctx.season_id.clone();
 
-        let (items_result, source_type) = if items_source == "api" {
-            info!("[DEBUG] Auto reload: fetching from API for {}/{:?}", ctx.season_id, ctx.market_mode);
-            
-            match scraper::scrape_items(&ctx.season_id, ctx.market_mode.as_str()).await {
-                Ok(items) => (Ok(items), "api"),
-                Err(e) => (Err(format!("API scrape failed: {}", e)), "api"),
-            }
-        } else {
-            info!("Auto reload: loading from JSON: {}", json_path);
-            match crate::app::load_items_from_json(&ctx.season_id, ctx.market_mode.as_str(), &json_path) {
-                Ok(items) => (Ok(items), "local"),
-                Err(e) => (Err(format!("JSON load failed: {}", e)), "local"),
-            }
-        };
+        // Scrape both modes simultaneously
+        let start = std::time::Instant::now();
+        
+        let (normal_result, expert_result) = tokio::join!(
+            scrape_for_mode(&season_id, "season_normal", &items_source, &json_path),
+            scrape_for_mode(&season_id, "season_expert", &items_source, &json_path),
+        );
 
         let duration_ms = start.elapsed().as_millis() as i64;
 
-        match items_result {
-            Ok(items) => {
-                let count = items.len() as i64;
-                info!("[DEBUG] API returned {} items", count);
+        // Process normal mode
+        let normal_count = process_scrape_result(
+            &state, 
+            &normal_result, 
+            &season_id, 
+            "season_normal", 
+            source_name,
+            "api"
+        ).await;
 
-                if let Err(e) = repo_items::bulk_insert_items(&state.db, &ctx.season_id, ctx.market_mode.as_str(), &items).await {
-                    error!("Failed to bulk-insert items: {}", e);
-                    let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
-                        &state.db,
-                        source_name,
-                        source_type,
-                        true,
-                        Some(ctx.market_mode.as_str()),
-                        None,
-                        false,
-                        duration_ms,
-                        Some(count),
-                        Some(&e.to_string()),
-                    ).await;
-                } else {
-                    let now = chrono::Utc::now().timestamp();
-                    info!("[DEBUG] Bulk insert success, inserting {} realtime records with timestamp {}", count, now);
+        // Process expert mode (may fail if season not started)
+        let expert_count = process_scrape_result(
+            &state, 
+            &expert_result, 
+            &season_id, 
+            "season_expert", 
+            source_name,
+            "api"
+        ).await;
 
-                    let realtime_records: Vec<(String, String, f64, i64)> = items
-                        .iter()
-                        .map(|item| (item.item_id.clone(), item.name.clone(), item.price, now))
-                        .collect();
+        let now = chrono::Utc::now().timestamp();
 
-                    if let Err(e) = repo_item_realtime_prices::batch_insert_realtime_prices(&state.db, &realtime_records).await {
-                        error!("Failed to insert realtime prices: {}", e);
-                    }
+        // Update status
+        {
+            let mut status = state.task_status.write();
+            status.last_items_reload = Some(now);
+        }
 
-                    if let Err(e) = repo_item_realtime_prices::cleanup_old_records(&state.db).await {
-                        error!("Failed to cleanup old realtime records: {}", e);
-                    }
-
-                    let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
-                        &state.db,
-                        source_name,
-                        source_type,
-                        true,
-                        Some(ctx.market_mode.as_str()),
-                        None,
-                        true,
-                        duration_ms,
-                        Some(count),
-                        None,
-                    ).await;
-
-                    {
-                        let mut cache = state.items_cache.write();
-                        *cache = items;
-                    }
-
-                    {
-                        let mut status = state.task_status.write();
-                        status.last_items_reload = Some(now);
-                    }
-
-                    let _ = app.emit("items-updated", serde_json::json!({
-                        "count": count,
-                        "updated_at": now
-                    }));
-
-                    info!("Items reload complete: {} items from {}", count, items_source);
+        // Update cache with current mode items
+        if normal_count > 0 {
+            let current_mode = ctx.market_mode.as_str();
+            if current_mode == "season_normal" || normal_count > 0 {
+                if let Ok(items) = repo_items::get_items_from_realtime_table(
+                    &state.db, 
+                    &season_id, 
+                    if current_mode == "season_normal" { current_mode } else { "season_normal" }
+                ).await {
+                    let mut cache = state.items_cache.write();
+                    *cache = items;
                 }
             }
-            Err(e) => {
-                error!("Items reload failed: {}", e);
-                let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
-                    &state.db,
-                    source_name,
-                    source_type,
-                    true,
-                    Some(ctx.market_mode.as_str()),
-                    None,
-                    false,
-                    duration_ms,
-                    None,
-                    Some(&e),
-                ).await;
-                {
-                    let mut status = state.task_status.write();
-                    status.last_items_reload = Some(chrono::Utc::now().timestamp());
+        }
+
+        // Emit event if at least one mode succeeded
+        if normal_count > 0 || expert_count > 0 {
+            let _ = app.emit("items-updated", serde_json::json!({
+                "normal_count": normal_count,
+                "expert_count": expert_count,
+                "updated_at": now
+            }));
+            info!("Items reload complete: normal={}, expert={}, source={}", normal_count, expert_count, items_source);
+        }
+    }
+}
+
+async fn scrape_for_mode(
+    season_id: &str,
+    mode: &str,
+    source: &str,
+    json_path: &str,
+) -> Result<Vec<crate::db::models::Item>, String> {
+    if source == "api" {
+        info!("[DEBUG] Auto reload: fetching {} items from API for {}/{}", mode, season_id, mode);
+        scraper::scrape_items(season_id, mode)
+            .await
+            .map_err(|e| format!("API scrape failed for {}: {}", mode, e))
+    } else {
+        info!("Auto reload: loading {} items from JSON for {}/{}", mode, season_id, mode);
+        crate::app::load_items_from_json(season_id, mode, json_path)
+            .map_err(|e| format!("JSON load failed for {}: {}", mode, e))
+    }
+}
+
+async fn process_scrape_result(
+    state: &Arc<AppState>,
+    result: &Result<Vec<crate::db::models::Item>, String>,
+    season_id: &str,
+    mode: &str,
+    source_name: &str,
+    source_type: &str,
+) -> i64 {
+    match result {
+        Ok(items) if !items.is_empty() => {
+            let count = items.len() as i64;
+            info!("[DEBUG] API returned {} {} items", count, mode);
+
+            if let Err(e) = repo_items::bulk_insert_items(&state.db, season_id, mode, items).await {
+                error!("Failed to bulk-insert {} items: {}", mode, e);
+                0
+            } else {
+                let now = chrono::Utc::now().timestamp();
+                let realtime_records: Vec<(String, String, f64, i64)> = items
+                    .iter()
+                    .map(|item| (item.item_id.clone(), item.name.clone(), item.price, now))
+                    .collect();
+
+                if let Err(e) = repo_item_realtime_prices::batch_insert_realtime_prices(&state.db, &realtime_records).await {
+                    error!("Failed to insert {} realtime prices: {}", mode, e);
                 }
 
+                count
             }
+        }
+        Ok(_) => {
+            info!("[DEBUG] No {} items fetched (season may not be started)", mode);
+            0
+        }
+        Err(e) => {
+            info!("[DEBUG] {} items reload skipped: {}", mode, e);
+            0
         }
     }
 }

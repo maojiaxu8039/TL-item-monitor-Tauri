@@ -206,76 +206,57 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
     let json_path = config.scrape.items_json_path.clone();
     let json_exists = std::path::Path::new(&json_path).exists();
 
-    // Try to get items from API first
-    tracing::info!("[STARTUP] Fetching latest items from API...");
-    let items_cache: Vec<Item> = match scraper::scrape_items(&default_season, &default_mode).await {
-        Ok(items) => {
-            tracing::info!("[STARTUP] Successfully fetched {} items from API", items.len());
-            
-            // Update database with new items
-            if let Err(e) = repo_items::bulk_insert_items(&pool, &default_season, &default_mode, &items).await {
-                tracing::error!("[STARTUP] Failed to update items in database: {}", e);
+    // Scrape both modes simultaneously
+    tracing::info!("[STARTUP] Fetching latest items from API for both modes...");
+    let (normal_items, expert_items) = tokio::join!(
+        scrape_mode_items(&default_season, "season_normal", &json_path, json_exists),
+        scrape_mode_items(&default_season, "season_expert", &json_path, json_exists),
+    );
+
+    // Process normal mode items
+    let items_cache: Vec<Item> = match normal_items {
+        Ok(items) if !items.is_empty() => {
+            tracing::info!("[STARTUP] Successfully fetched {} normal items from API", items.len());
+            if let Err(e) = repo_items::bulk_insert_items(&pool, &default_season, "season_normal", &items).await {
+                tracing::error!("[STARTUP] Failed to update normal items in database: {}", e);
             } else {
-                tracing::info!("[STARTUP] Successfully updated items in database");
+                tracing::info!("[STARTUP] Successfully updated normal items in database");
             }
-            
-            // Insert realtime prices
-            let now = chrono::Utc::now().timestamp();
-            let realtime_records: Vec<(String, String, f64, i64)> = items
-                .iter()
-                .map(|item| (item.item_id.clone(), item.name.clone(), item.price, now))
-                .collect();
-            
-            if let Err(e) = repo_item_realtime_prices::batch_insert_realtime_prices(&pool, &realtime_records).await {
-                tracing::warn!("[STARTUP] Failed to insert realtime prices: {}", e);
-            }
-            
-            if let Err(e) = repo_item_realtime_prices::cleanup_old_records(&pool).await {
-                tracing::warn!("[STARTUP] Failed to cleanup old realtime records: {}", e);
-            }
-            
+            insert_realtime_prices(&pool, &items).await;
             items
         }
+        Ok(_) => {
+            tracing::warn!("[STARTUP] No normal items fetched from API");
+            Vec::new()
+        }
         Err(e) => {
-            tracing::warn!("[STARTUP] Failed to fetch items from API: {}, trying JSON file...", e);
-            
-            // Fallback to JSON file if API fails
-            if json_exists {
-                tracing::info!("[STARTUP] Loading items from JSON file: {}", json_path);
-                match load_items_from_json(&default_season, &default_mode, &json_path) {
-                    Ok(items) if !items.is_empty() => {
-                        tracing::info!("[STARTUP] Loaded {} items from JSON file", items.len());
-                        if let Err(e) = repo_items::bulk_insert_items(&pool, &default_season, &default_mode, &items).await {
-                            tracing::error!("[STARTUP] Failed to update items from JSON in database: {}", e);
-                        }
-                        
-                        let now = chrono::Utc::now().timestamp();
-                        let realtime_records: Vec<(String, String, f64, i64)> = items
-                            .iter()
-                            .map(|item| (item.item_id.clone(), item.name.clone(), item.price, now))
-                            .collect();
-                        
-                        if let Err(e) = repo_item_realtime_prices::batch_insert_realtime_prices(&pool, &realtime_records).await {
-                            tracing::warn!("[STARTUP] Failed to insert realtime prices from JSON: {}", e);
-                        }
-                        
-                        items
-                    }
-                    Ok(_) => {
-                        tracing::warn!("[STARTUP] JSON file is empty, using existing database items");
-                        Vec::new()
-                    }
-                    Err(e) => {
-                        tracing::error!("[STARTUP] Failed to load from JSON: {}, using existing database items", e);
-                        Vec::new()
-                    }
-                }
-            } else {
-                tracing::warn!("[STARTUP] No JSON file found and API failed, using existing database items");
-                Vec::new()
-            }
+            tracing::warn!("[STARTUP] Failed to fetch normal items from API: {}", e);
+            Vec::new()
         }
     };
+
+    // Process expert mode items (may be empty if expert season not started)
+    match expert_items {
+        Ok(items) if !items.is_empty() => {
+            tracing::info!("[STARTUP] Successfully fetched {} expert items from API", items.len());
+            if let Err(e) = repo_items::bulk_insert_items(&pool, &default_season, "season_expert", &items).await {
+                tracing::error!("[STARTUP] Failed to update expert items in database: {}", e);
+            } else {
+                tracing::info!("[STARTUP] Successfully updated expert items in database");
+            }
+        }
+        Ok(_) => {
+            tracing::info!("[STARTUP] Expert mode has no data yet (season may not be started)");
+        }
+        Err(e) => {
+            tracing::info!("[STARTUP] Expert mode API not available: {}", e);
+        }
+    }
+
+    // Cleanup old realtime records
+    if let Err(e) = repo_item_realtime_prices::cleanup_old_records(&pool).await {
+        tracing::warn!("[STARTUP] Failed to cleanup old realtime records: {}", e);
+    }
 
     let state = AppState {
         db: pool,
@@ -297,6 +278,53 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
     };
 
     Ok(state)
+}
+
+async fn scrape_mode_items(
+    season: &str,
+    mode: &str,
+    json_path: &str,
+    json_exists: bool,
+) -> Result<Vec<Item>, String> {
+    // Try API first
+    match scraper::scrape_items(season, mode).await {
+        Ok(items) => Ok(items),
+        Err(e) => {
+            tracing::warn!("[STARTUP] Failed to fetch {} items from API: {}, trying JSON file...", mode, e);
+            
+            // Fallback to JSON file if API fails
+            if json_exists {
+                tracing::info!("[STARTUP] Loading {} items from JSON file: {}", mode, json_path);
+                match load_items_from_json(season, mode, json_path) {
+                    Ok(items) => {
+                        tracing::info!("[STARTUP] Loaded {} {} items from JSON file", items.len(), mode);
+                        Ok(items)
+                    }
+                    Err(e) => {
+                        tracing::warn!("[STARTUP] Failed to load {} from JSON: {}", mode, e);
+                        Err(e.to_string())
+                    }
+                }
+            } else {
+                Err(e.to_string())
+            }
+        }
+    }
+}
+
+async fn insert_realtime_prices(pool: &SqlitePool, items: &[Item]) {
+    if items.is_empty() {
+        return;
+    }
+    let now = chrono::Utc::now().timestamp();
+    let realtime_records: Vec<(String, String, f64, i64)> = items
+        .iter()
+        .map(|item| (item.item_id.clone(), item.name.clone(), item.price, now))
+        .collect();
+    
+    if let Err(e) = repo_item_realtime_prices::batch_insert_realtime_prices(pool, &realtime_records).await {
+        tracing::warn!("[STARTUP] Failed to insert realtime prices: {}", e);
+    }
 }
 
 async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
