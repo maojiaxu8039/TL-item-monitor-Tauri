@@ -519,6 +519,22 @@ export const cmd = {
     recorded_at: number;
   }) => invoke<{ success: boolean; message?: string }>("sync_fire_record", { params }),
 
+  syncFireBatch: (params: {
+    season_id: string;
+    market_mode: string;
+    records: Array<{
+      season_id: string;
+      market_mode: string;
+      rmb_per_10k_fire: number;
+      fire_per_rmb: number;
+      increase_ratio: number;
+      trading_volume: string;
+      source: string;
+      source_time: string;
+      recorded_at: number;
+    }>;
+  }) => invoke<{ success: boolean; message?: string }>("sync_fire_batch", { params }),
+
   syncItemsRecord: (params: {
     season_id: string;
     market_mode: string;

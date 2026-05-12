@@ -160,38 +160,40 @@ export default function DataMonitorPage() {
     const now = Date.now();
 
     if (dataType === "fire") {
-      let success = 0;
-      const failures: SyncFailure[] = [];
+      const fireRecords = (records as FireHistoryRecord[]).map((record) => ({
+        season_id: record.season_id,
+        market_mode: marketMode,
+        rmb_per_10k_fire: record.rmb_per_10k_fire,
+        fire_per_rmb: record.fire_per_rmb,
+        increase_ratio: record.increase_ratio ?? 0,
+        trading_volume: record.trading_volume,
+        source: record.source,
+        source_time: record.source_time,
+        recorded_at: record.scraped_at,
+      }));
 
-      for (const record of records as FireHistoryRecord[]) {
-        try {
-          await cmd.syncFireRecord({
-            season_id: record.season_id,
-            market_mode: marketMode,
-            rmb_per_10k_fire: record.rmb_per_10k_fire,
-            fire_per_rmb: record.fire_per_rmb,
-            increase_ratio: record.increase_ratio ?? 0,
-            trading_volume: record.trading_volume,
-            source: record.source,
-            source_time: record.source_time,
-            recorded_at: record.scraped_at,
-          });
-          success++;
-        } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          if (failures.length < 10) {
-            failures.push({
-              itemId: record.season_id,
-              itemName: record.season_id,
-              recordType: dataType,
-              reason: errorMessage,
-              timestamp: now,
-            });
-          }
-        }
+      try {
+        await cmd.syncFireBatch({
+          season_id: marketContext.seasonId,
+          market_mode: marketMode,
+          records: fireRecords,
+        });
+        return { success: fireRecords.length, failed: 0, skipped: 0, failures: [] };
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        return {
+          success: 0,
+          failed: fireRecords.length,
+          skipped: 0,
+          failures: [{
+            itemId: "batch",
+            itemName: "批量同步",
+            recordType: dataType,
+            reason: errorMessage,
+            timestamp: now,
+          }],
+        };
       }
-
-      return { success, failed: failures.length, skipped: 0, failures };
     } else {
       const items = (records as ItemsHistoryRecord[]).map((record) => ({
         season_id: record.season_id || marketContext.seasonId,

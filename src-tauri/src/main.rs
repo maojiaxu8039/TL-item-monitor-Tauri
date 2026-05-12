@@ -90,6 +90,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             get_season_summary,
             get_season_trends,
             sync_fire_record,
+            sync_fire_batch,
             get_fire_price_compare,
             get_fire_price_insight,
             get_item_price_insights,

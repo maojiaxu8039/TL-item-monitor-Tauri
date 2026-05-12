@@ -325,6 +325,13 @@ pub struct SyncFireRecordParams {
     pub recorded_at: i64,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct SyncFireBatchParams {
+    pub season_id: String,
+    pub market_mode: String,
+    pub records: Vec<SyncFireRecordParams>,
+}
+
 #[tauri::command]
 pub async fn sync_fire_record(
     state: State<'_, Arc<AppState>>,
@@ -350,6 +357,45 @@ pub async fn sync_fire_record(
     .map_err(|e| e.to_string())?;
 
     Ok(OkResponse::success("Fire record synced"))
+}
+
+#[tauri::command]
+pub async fn sync_fire_batch(
+    state: State<'_, Arc<AppState>>,
+    params: SyncFireBatchParams,
+) -> Result<OkResponse, String> {
+    if params.records.is_empty() {
+        return Ok(OkResponse::success("No records to sync"));
+    }
+
+    let batch_items: Vec<repo_history::FireSnapshotBatchItem> = params
+        .records
+        .into_iter()
+        .map(|r| repo_history::FireSnapshotBatchItem {
+            snapshot: FirePriceSnapshot {
+                price_per_wan: r.rmb_per_10k_fire,
+                rmb_per_10k_fire: r.rmb_per_10k_fire,
+                fire_per_rmb: r.fire_per_rmb,
+                increase_ratio: Some(r.increase_ratio),
+                trading_volume: Some(r.trading_volume),
+                source: r.source,
+                source_time: Some(r.source_time),
+                scraped_at: r.recorded_at,
+            },
+            scraped_at: r.recorded_at,
+        })
+        .collect();
+
+    let inserted = repo_history::insert_fire_snapshots_batch(
+        &state.db,
+        &params.season_id,
+        &params.market_mode,
+        batch_items,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(OkResponse::success(&format!("Batch synced: {} records", inserted)))
 }
 
 #[tauri::command]

@@ -129,6 +129,85 @@ pub async fn insert_fire_snapshot(
     Ok(())
 }
 
+#[derive(Debug, Clone)]
+pub struct FireSnapshotBatchItem {
+    pub snapshot: FirePriceSnapshot,
+    pub scraped_at: i64,
+}
+
+/// Batch insert fire price records for hourly snapshot.
+/// Writes to both real-time table AND snapshots table.
+/// Uses INSERT OR IGNORE to deduplicate by scraped_at.
+pub async fn insert_fire_snapshots_batch(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    items: Vec<FireSnapshotBatchItem>,
+) -> Result<usize, crate::core::errors::AppError> {
+    if items.is_empty() {
+        return Ok(0);
+    }
+
+    let now = Utc::now().timestamp();
+    let season_start = get_season_start(pool, season_id).await?;
+    let realtime_table = TableResolver::fire_price_table(season_id, market_mode);
+    let snapshots_table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
+    
+    let mut tx = pool.begin().await?;
+    let mut inserted = 0usize;
+
+    // Batch insert into real-time table
+    for chunk in items.chunks(BATCH_SIZE_SMALL) {
+        let mut qb: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
+            sqlx::query_builder::QueryBuilder::new(
+                &format!(
+                    "INSERT OR IGNORE INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, created_at) ",
+                    realtime_table
+                )
+            );
+        qb.push_values(chunk, |mut b, item| {
+            let season_day = calculate_season_day(item.scraped_at, season_start);
+            b.push_bind(item.snapshot.rmb_per_10k_fire)
+                .push_bind(item.snapshot.fire_per_rmb)
+                .push_bind(item.snapshot.increase_ratio)
+                .push_bind(&item.snapshot.trading_volume)
+                .push_bind(&item.snapshot.source)
+                .push_bind(&item.snapshot.source_time)
+                .push_bind(item.scraped_at)
+                .push_bind(season_day)
+                .push_bind(now);
+        });
+        let result = qb.build().execute(&mut *tx).await?;
+        inserted += result.rows_affected() as usize;
+    }
+
+    // Batch insert into snapshots table
+    for chunk in items.chunks(BATCH_SIZE_SMALL) {
+        let mut qb: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
+            sqlx::query_builder::QueryBuilder::new(
+                &format!(
+                    "INSERT OR IGNORE INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day) ",
+                    snapshots_table
+                )
+            );
+        qb.push_values(chunk, |mut b, item| {
+            let season_day = calculate_season_day(item.scraped_at, season_start);
+            b.push_bind(item.snapshot.rmb_per_10k_fire)
+                .push_bind(item.snapshot.fire_per_rmb)
+                .push_bind(item.snapshot.increase_ratio)
+                .push_bind(&item.snapshot.trading_volume)
+                .push_bind(&item.snapshot.source)
+                .push_bind(&item.snapshot.source_time)
+                .push_bind(item.scraped_at)
+                .push_bind(season_day);
+        });
+        qb.build().execute(&mut *tx).await?;
+    }
+
+    tx.commit().await?;
+    Ok(inserted)
+}
+
 /// Get item price history from snapshots.
 pub async fn get_item_history(
     pool: &SqlitePool,
