@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import { motion } from "framer-motion"
 import { useState } from "react"
-import { useQuery, useMutation } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { cmd } from "@/lib/commands"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 
 export function TopBar() {
   const { refreshData, marketContext, setMarketContext } = useSectionRefresh()
+  const queryClient = useQueryClient()
   const [marketMode, setMarketMode] = useState(marketContext.marketMode)
   const [dataSource, setDataSource] = useState<"api" | "local">("api")
   const [notificationEnabled, setNotificationEnabled] = useState(true)
@@ -40,7 +41,11 @@ export function TopBar() {
       const season_id = summary?.season_name || "ss12"
       setMarketContext({ seasonId: season_id, marketMode: newMode })
       toast.success("已切换到" + (newMode === "season_normal" ? "赛季普通" : "赛季专家"))
-      refreshData()
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary", season_id, newMode] })
+      queryClient.invalidateQueries({ queryKey: ["sections", season_id, newMode] })
+      queryClient.invalidateQueries({ queryKey: ["section-items", season_id, newMode] })
+      queryClient.invalidateQueries({ queryKey: ["items-search", season_id, newMode] })
+      queryClient.invalidateQueries({ queryKey: ["fire-history", season_id, newMode] })
     },
     onError: (error) => {
       toast.error(`切换失败: ${error}`)
