@@ -750,38 +750,6 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
         );
     }
 
-    // 3. Ensure realtime fire prices table (for quick deal hunting)
-    let realtime_table = TableResolver::realtime_fire_prices_table();
-    sqlx::query(&format!(
-        "CREATE TABLE IF NOT EXISTS {} (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            item_id TEXT NOT NULL,
-            item_name TEXT NOT NULL,
-            fire_price REAL NOT NULL,
-            scraped_at INTEGER NOT NULL,
-            created_at INTEGER NOT NULL
-        )",
-        realtime_table
-    ))
-    .execute(pool)
-    .await
-    .map_err(|e| format!("Failed to ensure realtime fire prices table: {}", e))?;
-
-    sqlx::query(&format!(
-        "CREATE INDEX IF NOT EXISTS idx_realtime_item_scraped ON {}(item_id, scraped_at DESC)",
-        realtime_table
-    ))
-    .execute(pool)
-    .await
-    .map_err(|e| {
-        format!(
-            "Failed to create index on realtime fire prices table: {}",
-            e
-        )
-    })?;
-
-    tracing::info!("Ensured realtime fire prices table: {}", realtime_table);
-
     Ok(())
 }
 
@@ -892,19 +860,18 @@ async fn seed_test_data_for_all_seasons(pool: &SqlitePool) -> Result<(), String>
     Ok(())
 }
 
-/// Generate 20 days of hourly snapshots for a specific season
+/// Generate hourly snapshots for a specific season (only from real data)
 #[cfg(debug_assertions)]
 async fn generate_season_snapshots(
     pool: &SqlitePool,
     season_id: &str,
     mode: &str,
-    season_start: i64,
+    _season_start: i64,
     realtime_items: &[(String, String, String, f64)],
-    base_fire_price: f64,
-    rng: &mut rand::rngs::StdRng,
+    _base_fire_price: f64,
+    _rng: &mut rand::rngs::StdRng,
 ) -> Result<(), String> {
     use crate::db::table_resolver::TableResolver;
-    use rand::Rng;
 
     let item_snapshots = TableResolver::item_snapshots_table(season_id, mode);
     let fire_snapshots = TableResolver::fire_price_snapshots_table(season_id, mode);
@@ -947,69 +914,20 @@ async fn generate_season_snapshots(
 
     if snapshot_count.0 > 0 && !needs_regeneration {
         tracing::info!(
-            "{} {} item_snapshots already has {} records and item_ids match, skipping",
+            "{} {} item_snapshots already has {} records and item_ids match",
             season_id,
             mode,
             snapshot_count.0
         );
-    } else {
-        let mut snapshots_inserted = 0;
-        let total_days = 20; // Generate 20 days of data
-
-        for day in 0..total_days {
-            for hour in 0..24 {
-                let scraped_at = season_start + (day as i64 * 24 * 3600) + (hour as i64 * 3600);
-                let season_day = day + 1;
-
-                for (item_id, name, item_type, base_price) in realtime_items {
-                    // Generate realistic price variations
-                    let day_factor = if day < 7 {
-                        1.0 + (day as f64 * 0.015)
-                    } else if day < 14 {
-                        1.105 - ((day - 7) as f64 * 0.008)
-                    } else {
-                        (1.049 - ((day - 14) as f64 * 0.006)).max(0.6)
-                    };
-
-                    let hour_volatility = (hour as f64 - 12.0) / 120.0;
-                    let random_noise = rng.gen_range(-0.03..0.03);
-                    let season_factor = if season_id == "ss11" {
-                        rng.gen_range(0.75..0.88)
-                    } else {
-                        1.0
-                    };
-                    let price = (base_price
-                        * season_factor
-                        * day_factor
-                        * (1.0 + hour_volatility + random_noise))
-                        .max(1.0);
-
-                    let sql = format!(
-                        "INSERT OR IGNORE INTO {} (item_id, name, item_type, fire_price, scraped_at, season_day) \
-                         VALUES (?, ?, ?, ?, ?, ?)",
-                        item_snapshots
-                    );
-
-                    match sqlx::query(&sql)
-                        .bind(item_id)
-                        .bind(name)
-                        .bind(item_type)
-                        .bind(price)
-                        .bind(scraped_at)
-                        .bind(season_day)
-                        .execute(pool)
-                        .await
-                    {
-                        Ok(_) => snapshots_inserted += 1,
-                        Err(e) => tracing::warn!("Failed to insert item snapshot: {}", e),
-                    }
-                }
-            }
-        }
-
+    } else if realtime_items.is_empty() {
         tracing::info!(
-            "Generated {} item_snapshots for {} {} from realtime data",
-            snapshots_inserted,
+            "{} {} item_snapshots is empty and no realtime items available, will be populated by hourly snapshot task",
+            season_id,
+            mode
+        );
+    } else {
+        tracing::info!(
+            "{} {} item_snapshots is empty but realtime items available, will be populated by hourly snapshot task",
             season_id,
             mode
         );
@@ -1024,74 +942,14 @@ async fn generate_season_snapshots(
 
     if fire_snapshot_count.0 > 0 {
         tracing::info!(
-            "{} {} fire_price_snapshots already has {} records, skipping",
+            "{} {} fire_price_snapshots already has {} records",
             season_id,
             mode,
             fire_snapshot_count.0
         );
     } else {
-        let mut fire_snapshots_inserted = 0;
-        let total_days = 20;
-
-        for day in 0..total_days {
-            for hour in 0..24 {
-                let scraped_at = season_start + (day as i64 * 24 * 3600) + (hour as i64 * 3600);
-                let season_day = day + 1;
-
-                let day_factor = if day < 7 {
-                    1.0 + (day as f64 * 0.02)
-                } else if day < 14 {
-                    1.14 - ((day - 7) as f64 * 0.01)
-                } else {
-                    (1.07 - ((day - 14) as f64 * 0.008)).max(0.5)
-                };
-
-                let hour_volatility = (hour as f64 - 12.0) / 100.0;
-                let random_noise = rng.gen_range(-0.02..0.02);
-                let season_factor = if season_id == "ss11" { 0.85 } else { 1.0 };
-
-                let rmb_per_10k = (base_fire_price
-                    * season_factor
-                    * day_factor
-                    * (1.0 + hour_volatility + random_noise))
-                    .max(1.0);
-                let fire_per_rmb = 10000.0 / rmb_per_10k;
-                let increase_ratio = if fire_snapshots_inserted > 0 {
-                    Some(random_noise * 100.0)
-                } else {
-                    None
-                };
-
-                let sql = format!(
-                    "INSERT INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    fire_snapshots
-                );
-
-                match sqlx::query(&sql)
-                    .bind(rmb_per_10k)
-                    .bind(fire_per_rmb)
-                    .bind(increase_ratio)
-                    .bind(format!("{}", rng.gen_range(1000..10000)))
-                    .bind("server_snapshot")
-                    .bind(
-                        chrono::DateTime::from_timestamp(scraped_at, 0)
-                            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string()),
-                    )
-                    .bind(scraped_at)
-                    .bind(season_day)
-                    .execute(pool)
-                    .await
-                {
-                    Ok(_) => fire_snapshots_inserted += 1,
-                    Err(e) => tracing::warn!("Failed to insert fire snapshot: {}", e),
-                }
-            }
-        }
-
         tracing::info!(
-            "Generated {} fire_price_snapshots for {} {}",
-            fire_snapshots_inserted,
+            "{} {} fire_price_snapshots is empty, will be populated by hourly snapshot task",
             season_id,
             mode
         );

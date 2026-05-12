@@ -46,33 +46,6 @@ CREATE TABLE IF NOT EXISTS items (
     FOREIGN KEY (season_id) REFERENCES seasons(id)
 );
 
-CREATE TABLE IF NOT EXISTS fire_price_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    season_id TEXT NOT NULL DEFAULT 'current',
-    market_mode TEXT NOT NULL DEFAULT 'season_normal',
-    rmb_per_10k_fire REAL NOT NULL,
-    fire_per_rmb REAL NOT NULL DEFAULT 0,
-    increase_ratio REAL,
-    trading_volume TEXT,
-    source TEXT NOT NULL DEFAULT '',
-    source_time TEXT,
-    scraped_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    UNIQUE(season_id, market_mode, scraped_at),
-    FOREIGN KEY (season_id) REFERENCES seasons(id)
-);
-
-CREATE TABLE IF NOT EXISTS item_price_snapshots (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    item_id TEXT NOT NULL,
-    season_id TEXT NOT NULL DEFAULT 'current',
-    market_mode TEXT NOT NULL DEFAULT 'season_normal',
-    fire_price REAL NOT NULL,
-    scraped_at INTEGER NOT NULL,
-    UNIQUE(season_id, item_id, market_mode, scraped_at),
-    FOREIGN KEY (season_id) REFERENCES seasons(id)
-);
-
 CREATE TABLE IF NOT EXISTS sections (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -157,10 +130,6 @@ CREATE TABLE IF NOT EXISTS source_diagnostics (
 );
 
 -- Indexes
-CREATE INDEX IF NOT EXISTS idx_items_season_mode_name ON items(season_id, market_mode, name);
-CREATE INDEX IF NOT EXISTS idx_fire_records_scraped ON fire_price_records(scraped_at);
-CREATE INDEX IF NOT EXISTS idx_fire_records_season_mode_time ON fire_price_records(season_id, market_mode, scraped_at);
-CREATE INDEX IF NOT EXISTS idx_snapshots_item ON item_price_snapshots(item_id, scraped_at);
 CREATE INDEX IF NOT EXISTS idx_sections_strategy_order ON sections(strategy_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_section_items_section ON section_items(section_id);
 

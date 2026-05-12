@@ -268,62 +268,7 @@ function HoardCard({
   );
 }
 
-// ─── Mock Analysis Generator ───────────────────────────────────────────────
 
-function generateMockAnalysis(items: any[]): HoardAnalysis[] {
-  return items.slice(0, 20).map((item) => {
-    const currentPrice = item.price || Math.random() * 100 + 10;
-    const volatility = Math.random() * 60 + 20;
-    const cycle = Math.random() * 48 + 12;
-    const priceRange = currentPrice * (volatility / 100);
-    const minPrice = currentPrice - priceRange / 2;
-    const maxPrice = currentPrice + priceRange / 2;
-    const avgPrice = (minPrice + maxPrice) / 2;
-
-    let recommendation: "hoard" | "sell" | "watch";
-    let reason: string;
-
-    if (volatility > 50 && cycle < 36) {
-      recommendation = "hoard";
-      reason = "价格波动大且周期短，适合短线囤货";
-    } else if (volatility > 40 && currentPrice > avgPrice * 1.2) {
-      recommendation = "sell";
-      reason = "价格处于高位，建议出手获利";
-    } else {
-      recommendation = "watch";
-      reason = "价格波动较小，建议观望等待时机";
-    }
-
-    const expectedProfit = ((maxPrice - minPrice) / minPrice) * 100;
-    const buyDay = Math.floor(Math.random() * 30) + 1;
-    const buyHour = Math.floor(Math.random() * 24);
-    const sellDay = Math.min(buyDay + Math.floor(cycle / 24), 90);
-    const sellHour = (buyHour + Math.floor(cycle % 24)) % 24;
-
-    return {
-      item_id: item.item_id,
-      item_name: item.name,
-      item_type: item.item_type,
-      volatility_score: Math.round(volatility),
-      cycle_period: Math.round(cycle),
-      price_range: priceRange,
-      current_price: currentPrice,
-      avg_price: avgPrice,
-      min_price: Math.max(1, minPrice),
-      max_price: maxPrice,
-      best_buy_day: buyDay,
-      best_buy_hour: buyHour,
-      best_buy_price: minPrice,
-      best_sell_day: sellDay,
-      best_sell_hour: sellHour,
-      best_sell_price: maxPrice,
-      expected_profit: expectedProfit,
-      confidence: Math.round(Math.random() * 40 + 50),
-      recommendation,
-      reason,
-    };
-  });
-}
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
@@ -355,8 +300,9 @@ export default function PriceAnalysisPage() {
 
   // 生成分析数据
   const analysisData = useMemo(() => {
-    if (!itemsData?.items) return [];
-    return generateMockAnalysis(itemsData.items);
+    // TODO: 等待后端实现真实的囤货分析功能
+    // 目前暂时返回空数组
+    return [];
   }, [itemsData]);
 
   // 过滤和排序
