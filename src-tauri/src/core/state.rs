@@ -53,6 +53,22 @@ pub struct ScrapeSettings {
     pub items_json_path: String,
     pub items_reload_interval: u64,
     pub auto_reload: bool,
+    pub expert_enabled: bool,
+}
+
+impl Default for ScrapeSettings {
+    fn default() -> Self {
+        Self {
+            fire_price_mode: "season_normal".to_string(),
+            fire_price_scrape_interval: 300,
+            fire_price_scrape_enabled: true,
+            items_source: "api".to_string(),
+            items_json_path: String::new(),
+            items_reload_interval: 300,
+            auto_reload: true,
+            expert_enabled: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -131,20 +147,6 @@ impl Default for SeasonApiConfig {
             qiandao_spec_id_expert: "267417".to_string(),
             luosi_season_id_normal: 1401,
             luosi_season_id_expert: 1431,
-        }
-    }
-}
-
-impl Default for ScrapeSettings {
-    fn default() -> Self {
-        Self {
-            fire_price_mode: "season_normal".to_string(),
-            fire_price_scrape_interval: 300,
-            fire_price_scrape_enabled: true,
-            items_source: "api".to_string(),
-            items_json_path: String::new(),
-            items_reload_interval: 300,
-            auto_reload: true,
         }
     }
 }

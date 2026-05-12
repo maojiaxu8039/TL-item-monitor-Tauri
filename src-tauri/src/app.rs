@@ -206,12 +206,11 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
     let json_path = config.scrape.items_json_path.clone();
     let json_exists = std::path::Path::new(&json_path).exists();
 
-    // Scrape both modes simultaneously
-    tracing::info!("[STARTUP] Fetching latest items from API for both modes...");
-    let (normal_items, expert_items) = tokio::join!(
-        scrape_mode_items(&default_season, "season_normal", &json_path, json_exists),
-        scrape_mode_items(&default_season, "season_expert", &json_path, json_exists),
-    );
+    // Scrape modes based on expert_enabled setting
+    let expert_enabled = config.scrape.expert_enabled;
+    
+    tracing::info!("[STARTUP] Fetching latest items from API...");
+    let normal_items = scrape_mode_items(&default_season, "season_normal", &json_path, json_exists).await;
 
     // Process normal mode items
     let items_cache: Vec<Item> = match normal_items {
@@ -235,22 +234,26 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
         }
     };
 
-    // Process expert mode items (may be empty if expert season not started)
-    match expert_items {
-        Ok(items) if !items.is_empty() => {
-            tracing::info!("[STARTUP] Successfully fetched {} expert items from API", items.len());
-            if let Err(e) = repo_items::bulk_insert_items(&pool, &default_season, "season_expert", &items).await {
-                tracing::error!("[STARTUP] Failed to update expert items in database: {}", e);
-            } else {
-                tracing::info!("[STARTUP] Successfully updated expert items in database");
+    // Process expert mode items only if expert_enabled is true
+    if expert_enabled {
+        match scrape_mode_items(&default_season, "season_expert", &json_path, json_exists).await {
+            Ok(items) if !items.is_empty() => {
+                tracing::info!("[STARTUP] Successfully fetched {} expert items from API", items.len());
+                if let Err(e) = repo_items::bulk_insert_items(&pool, &default_season, "season_expert", &items).await {
+                    tracing::error!("[STARTUP] Failed to update expert items in database: {}", e);
+                } else {
+                    tracing::info!("[STARTUP] Successfully updated expert items in database");
+                }
+            }
+            Ok(_) => {
+                tracing::info!("[STARTUP] Expert mode enabled but no data fetched (season may not be started)");
+            }
+            Err(e) => {
+                tracing::warn!("[STARTUP] Expert mode enabled but API failed: {}", e);
             }
         }
-        Ok(_) => {
-            tracing::info!("[STARTUP] Expert mode has no data yet (season may not be started)");
-        }
-        Err(e) => {
-            tracing::info!("[STARTUP] Expert mode API not available: {}", e);
-        }
+    } else {
+        tracing::info!("[STARTUP] Expert mode disabled, skipping expert items scrape");
     }
 
     // Cleanup old realtime records

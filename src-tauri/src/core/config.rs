@@ -68,6 +68,7 @@ pub fn load_config() -> Result<AppConfig, String> {
                 items_json_path: flat.items_json_path,
                 items_reload_interval: flat.items_reload_interval,
                 auto_reload: flat.auto_reload,
+                expert_enabled: false,
             },
             desktop: DesktopSettings::default(),
             notification: NotificationSettings::default(),

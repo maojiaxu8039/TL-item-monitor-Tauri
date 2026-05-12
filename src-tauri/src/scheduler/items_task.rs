@@ -54,6 +54,7 @@ pub async fn run_items_reload_task(
         let items_source = fresh_config.scrape.items_source.clone();
         let json_path = fresh_config.scrape.items_json_path.clone();
         let source_name = if items_source == "api" { "luosi" } else { "local_json" };
+        let expert_enabled = fresh_config.scrape.expert_enabled;
 
         if !first_run {
             info!("[DEBUG] Waiting {} seconds for next refresh...", current_interval);
@@ -114,35 +115,27 @@ pub async fn run_items_reload_task(
         let ctx = state.active_context.read().clone();
         let season_id = ctx.season_id.clone();
 
-        // Scrape both modes simultaneously
-        let start = std::time::Instant::now();
-        
-        let (normal_result, expert_result) = tokio::join!(
-            scrape_for_mode(&season_id, "season_normal", &items_source, &json_path),
-            scrape_for_mode(&season_id, "season_expert", &items_source, &json_path),
-        );
-
-        let duration_ms = start.elapsed().as_millis() as i64;
+        // Scrape normal mode items
+        info!("[DEBUG] Auto reload: fetching normal items from {}", items_source);
+        let normal_result = scrape_for_mode(&season_id, "season_normal", &items_source, &json_path).await;
 
         // Process normal mode
         let normal_count = process_scrape_result(
             &state, 
             &normal_result, 
             &season_id, 
-            "season_normal", 
-            source_name,
-            "api"
+            "season_normal"
         ).await;
 
-        // Process expert mode (may fail if season not started)
-        let expert_count = process_scrape_result(
-            &state, 
-            &expert_result, 
-            &season_id, 
-            "season_expert", 
-            source_name,
-            "api"
-        ).await;
+        // Scrape expert mode only if expert_enabled
+        let expert_count = if expert_enabled {
+            info!("[DEBUG] Expert mode enabled: fetching expert items from {}", items_source);
+            let expert_result = scrape_for_mode(&season_id, "season_expert", &items_source, &json_path).await;
+            process_scrape_result(&state, &expert_result, &season_id, "season_expert").await
+        } else {
+            info!("[DEBUG] Expert mode disabled, skipping expert items scrape");
+            0
+        };
 
         let now = chrono::Utc::now().timestamp();
 
@@ -202,13 +195,11 @@ async fn process_scrape_result(
     result: &Result<Vec<crate::db::models::Item>, String>,
     season_id: &str,
     mode: &str,
-    source_name: &str,
-    source_type: &str,
 ) -> i64 {
     match result {
         Ok(items) if !items.is_empty() => {
             let count = items.len() as i64;
-            info!("[DEBUG] API returned {} {} items", count, mode);
+            info!("[DEBUG] {} returned {} {} items", if mode == "season_normal" { "Normal" } else { "Expert" }, count, mode);
 
             if let Err(e) = repo_items::bulk_insert_items(&state.db, season_id, mode, items).await {
                 error!("Failed to bulk-insert {} items: {}", mode, e);
@@ -228,7 +219,7 @@ async fn process_scrape_result(
             }
         }
         Ok(_) => {
-            info!("[DEBUG] No {} items fetched (season may not be started)", mode);
+            info!("[DEBUG] No {} items fetched", mode);
             0
         }
         Err(e) => {
