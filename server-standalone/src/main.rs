@@ -469,8 +469,18 @@ async fn handle_request(
                     return;
                 }
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 warn!("读取请求失败: {}", e);
+                return;
+            }
+            Err(_) => {
+                warn!("客户端 {} 读取超时", client_ip);
+                let response = "HTTP/1.1 408 Request Timeout\r\nContent-Type: text/plain\r\nContent-Length: 15\r\n\r\nRequest timeout";
+                let _ = tokio::io::AsyncWriteExt::write_all(
+                    &mut tokio::io::BufWriter::new(&mut stream),
+                    response.as_bytes(),
+                )
+                .await;
                 return;
             }
         }

@@ -88,8 +88,8 @@ sshpass -p 'NAS密码' ssh -o StrictHostKeyChecking=no -p 10039 用户@NAS_IP 's
 # 查看最新日志
 sshpass -p 'NAS密码' ssh -o StrictHostKeyChecking=no -p 10039 用户@NAS_IP 'sudo docker logs tl-monitor-server --tail 30'
 
-# 测试 API
-curl -s "http://100.124.122.65:38457/api/admin/status" -H "Content-Type: application/json" -d '{"password":"8039"}'
+# 测试 API（将 $TL_ADMIN_PASSWORD 替换为你的实际管理员密码）
+curl -s "http://100.124.122.65:38457/api/admin/status" -H "Content-Type: application/json" -d "{\"password\":\"$TL_ADMIN_PASSWORD\"}"
 ```
 
 ***

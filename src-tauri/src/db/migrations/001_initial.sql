@@ -214,13 +214,16 @@ CREATE TABLE IF NOT EXISTS source_diagnostics (
 );
 
 -- Real-time item price changes (for quick deal hunting)
+-- NOTE: This table is recreated in migration v11 with the correct column names.
+-- We create a temporary version here to avoid breaking old code, but v11 will
+-- handle the proper schema with 'name' and 'fire_price' columns.
 CREATE TABLE IF NOT EXISTS item_realtime_prices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id TEXT NOT NULL,
-    item_name TEXT NOT NULL,
-    price REAL NOT NULL,
+    name TEXT NOT NULL,
+    fire_price REAL NOT NULL,
     scraped_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
 CREATE INDEX IF NOT EXISTS idx_item_realtime_item_scraped ON item_realtime_prices(item_id, scraped_at DESC);

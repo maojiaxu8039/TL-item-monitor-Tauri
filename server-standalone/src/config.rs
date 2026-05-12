@@ -144,6 +144,13 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig, String> {
     let mut config: ServerConfig =
         serde_yaml::from_str(&content).map_err(|e| format!("解析配置文件失败: {}", e))?;
 
+    // Override admin_password from environment variable if set
+    if let Ok(env_password) = std::env::var("TL_ADMIN_PASSWORD") {
+        if !env_password.is_empty() {
+            config.admin_password = env_password;
+        }
+    }
+
     if config.api_endpoints.luosi.is_empty() {
         config.api_endpoints.luosi = default_luosi_api();
     }

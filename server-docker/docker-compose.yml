@@ -16,6 +16,9 @@ services:
       - TL_DB_PATH=/data/tl_monitor.db
       - TL_CONFIG_PATH=/app/config/server_config.yaml
       - TL_RESOURCES_DIR=/app/resources
+      # IMPORTANT: Set your admin password here or via .env file
+      # Never use the default password in production
+      - TL_ADMIN_PASSWORD=${TL_ADMIN_PASSWORD:-changeme}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s

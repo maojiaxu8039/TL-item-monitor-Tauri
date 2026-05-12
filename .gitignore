@@ -18,6 +18,8 @@ web-server/target/
 # Development data
 dev_data/
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 
