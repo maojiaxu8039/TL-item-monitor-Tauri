@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query"
 import { useState, useEffect, useMemo } from "react"
 import { Package, Flame, TrendingUp, TrendingDown, Minus, History, ArrowUp, ArrowDown, Award, ChevronLeft, ChevronRight } from "lucide-react"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
+import { MetricCard } from "@/components/ui/MetricCard"
+import { StatusBadge } from "@/components/ui/StatusBadge"
 import { cmd } from "@/lib/commands"
 import type { DashboardSummary, FireHistoryItem, StrategyWithCosts } from "@/lib/commands"
 
@@ -119,7 +121,7 @@ export function DashboardStats() {
     fireStats.min = Math.min(...prices)
     fireStats.max = Math.max(...prices)
     fireStats.avg = prices.reduce((a, b) => a + b, 0) / prices.length
-    fireStats.change = fireHistory.length >= 2 
+    fireStats.change = fireHistory.length >= 2
       ? ((fireHistory[fireHistory.length - 1].rmb_per_10k_fire - fireHistory[0].rmb_per_10k_fire) / fireHistory[0].rmb_per_10k_fire) * 100
       : 0
   }
@@ -252,42 +254,17 @@ export function DashboardStats() {
   if (isLoading) {
     return (
       <div className="grid grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 animate-pulse">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-1.5 rounded-lg bg-slate-100">
-              <Package className="w-4 h-4 text-slate-300" />
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="metric-card animate-pulse">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-1.5 rounded-lg bg-slate-100">
+                <Package className="w-4 h-4 text-slate-300" />
+              </div>
+              <span className="text-xs text-slate-400 font-medium">加载中...</span>
             </div>
-            <span className="text-xs text-slate-400 font-medium">加载中...</span>
+            <div className="h-6 bg-slate-200 rounded w-3/4"></div>
           </div>
-          <div className="h-6 bg-slate-200 rounded w-3/4"></div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 animate-pulse">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-1.5 rounded-lg bg-slate-100">
-              <Flame className="w-4 h-4 text-slate-300" />
-            </div>
-            <span className="text-xs text-slate-400 font-medium">加载中...</span>
-          </div>
-          <div className="h-6 bg-slate-200 rounded w-3/4"></div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 animate-pulse">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-1.5 rounded-lg bg-slate-100">
-              <History className="w-4 h-4 text-slate-300" />
-            </div>
-            <span className="text-xs text-slate-400 font-medium">加载中...</span>
-          </div>
-          <div className="h-6 bg-slate-200 rounded w-3/4"></div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 animate-pulse">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-1.5 rounded-lg bg-slate-100">
-              <TrendingUp className="w-4 h-4 text-slate-300" />
-            </div>
-            <span className="text-xs text-slate-400 font-medium">加载中...</span>
-          </div>
-          <div className="h-6 bg-slate-200 rounded w-3/4"></div>
-        </div>
+        ))}
       </div>
     )
   }
@@ -295,64 +272,70 @@ export function DashboardStats() {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-4 gap-3">
-        <StatCard
-          icon={<Package className="w-4 h-4 text-blue-500" />}
+        <MetricCard
           label="监控物品"
           value={stats.itemCount.toString()}
-          unit="个"
+          icon={Package}
+          iconBg="bg-blue-50"
+          iconColor="text-blue-500"
+          helper={<span className="text-xs text-slate-400">个</span>}
         />
-        <StatCard
-          icon={<Flame className="w-4 h-4 text-red-500" />}
+        <MetricCard
           label="当前火价"
           value={stats.currentFire.toFixed(2)}
-          unit="元/万火"
-          subValue={summary?.fire?.increase_ratio !== null && summary?.fire?.increase_ratio !== undefined ? (
-            <span className={`text-xs font-medium ml-1 ${summary.fire.increase_ratio >= 0 ? "text-red-500" : "text-green-500"}`}>
-              {summary.fire.increase_ratio >= 0 ? "↑" : "↓"}{Math.abs(summary.fire.increase_ratio).toFixed(2)}%
-            </span>
-          ) : null}
+          icon={Flame}
+          iconBg="bg-red-50"
+          iconColor="text-red-500"
+          helper={
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-slate-400">元/万火</span>
+              {summary?.fire?.increase_ratio !== null && summary?.fire?.increase_ratio !== undefined && (
+                <span className={`text-xs font-medium ${summary.fire.increase_ratio >= 0 ? "text-red-500" : "text-green-500"}`}>
+                  {summary.fire.increase_ratio >= 0 ? "↑" : "↓"}{Math.abs(summary.fire.increase_ratio).toFixed(2)}%
+                </span>
+              )}
+            </div>
+          }
         />
-        <StatCard
-          icon={<History className="w-4 h-4 text-purple-500" />}
+        <MetricCard
           label="历史火价"
           value={fireStats.avg.toFixed(2)}
-          unit="元/万火"
-          subValue={fireHistory.length > 0 ? (
-            <div className="flex items-center gap-2 mt-1">
-              <span className="flex items-center gap-0.5 text-xs text-slate-400">
-                <ArrowDown className="w-3 h-3 text-blue-500" />
-                {fireStats.min.toFixed(2)}
-              </span>
-              <span className="flex items-center gap-0.5 text-xs text-slate-400">
-                <ArrowUp className="w-3 h-3 text-red-500" />
-                {fireStats.max.toFixed(2)}
-              </span>
-            </div>
-          ) : null}
+          icon={History}
+          iconBg="bg-purple-50"
+          iconColor="text-purple-500"
+          helper={
+            fireHistory.length > 0 ? (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="flex items-center gap-0.5 text-xs text-slate-400">
+                  <ArrowDown className="w-3 h-3 text-blue-500" />
+                  {fireStats.min.toFixed(2)}
+                </span>
+                <span className="flex items-center gap-0.5 text-xs text-slate-400">
+                  <ArrowUp className="w-3 h-3 text-red-500" />
+                  {fireStats.max.toFixed(2)}
+                </span>
+              </div>
+            ) : <span className="text-xs text-slate-400">元/万火</span>
+          }
         />
-        <StatCard
-          icon={profitStatus === "profit" ? (
-            <TrendingUp className="w-4 h-4 text-red-500" />
-          ) : profitStatus === "loss" ? (
-            <TrendingDown className="w-4 h-4 text-green-500" />
-          ) : (
-            <Minus className="w-4 h-4 text-slate-400" />
-          )}
+        <MetricCard
           label="策略收益"
-          value={Math.abs(stats.profit).toFixed(2)}
-          unit="元"
-          valueColor={profitStatus === "profit" ? "text-red-600" : profitStatus === "loss" ? "text-green-600" : "text-slate-600"}
-          prefix={profitStatus === "profit" ? "+" : profitStatus === "loss" ? "-" : ""}
-          subValue={allSectionItems.length > 0 ? (
-            <span className={`text-xs font-medium ml-1 ${stats.profitPercent >= 0 ? "text-red-500" : "text-green-500"}`}>
-              {stats.profitPercent >= 0 ? "↑" : "↓"}{Math.abs(stats.profitPercent).toFixed(2)}%
-            </span>
-          ) : null}
+          value={`${profitStatus === "profit" ? "+" : profitStatus === "loss" ? "-" : ""}${Math.abs(stats.profit).toFixed(2)}`}
+          icon={profitStatus === "profit" ? TrendingUp : profitStatus === "loss" ? TrendingDown : Minus}
+          iconBg={profitStatus === "profit" ? "bg-red-50" : profitStatus === "loss" ? "bg-green-50" : "bg-slate-50"}
+          iconColor={profitStatus === "profit" ? "text-red-500" : profitStatus === "loss" ? "text-green-500" : "text-slate-400"}
+          helper={
+            allSectionItems.length > 0 ? (
+              <span className={`text-xs font-medium ${stats.profitPercent >= 0 ? "text-red-500" : "text-green-500"}`}>
+                {stats.profitPercent >= 0 ? "↑" : "↓"}{Math.abs(stats.profitPercent).toFixed(2)}%
+              </span>
+            ) : <span className="text-xs text-slate-400">元</span>
+          }
         />
       </div>
 
       {top3.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
+        <div className="surface p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Award className="w-4 h-4 text-yellow-500" />
@@ -394,12 +377,12 @@ export function DashboardStats() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-slate-900 text-sm truncate">{rec.strategy_name}</span>
-                        <span className={`px-1.5 py-0.5 text-[10px] rounded border ${getLevelColor(rec.level)}`}>
+                        <StatusBadge variant={rec.level === "strong" ? "success" : rec.level === "good" ? "info" : rec.level === "watch" ? "warning" : "danger"}>
                           {getLevelText(rec.level)}
-                        </span>
-                        <span className={`px-1.5 py-0.5 text-[10px] rounded ${getRiskColor(rec.risk_level)}`}>
+                        </StatusBadge>
+                        <StatusBadge variant={rec.risk_level === "low" ? "success" : rec.risk_level === "medium" ? "warning" : "danger"}>
                           {rec.risk_level === "low" ? "低风险" : rec.risk_level === "medium" ? "中风险" : "高风险"}
-                        </span>
+                        </StatusBadge>
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
                         <span>评分: <span className="font-medium">{rec.score}</span></span>
@@ -448,42 +431,6 @@ export function DashboardStats() {
             ))}
           </div>
         </div>
-      )}
-    </div>
-  )
-}
-
-function StatCard({
-  icon,
-  label,
-  value,
-  unit,
-  valueColor = "text-slate-700",
-  prefix = "",
-  subValue = null,
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  unit: string
-  valueColor?: string
-  prefix?: string
-  subValue?: React.ReactNode | null
-}) {
-  return (
-    <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="p-1.5 rounded-lg bg-slate-50">
-          {icon}
-        </div>
-        <span className="text-xs text-slate-500 font-medium">{label}</span>
-      </div>
-      <div className="flex items-baseline gap-1">
-        <span className={`text-xl font-bold ${valueColor}`}>{prefix}{value}</span>
-        <span className="text-xs text-slate-400">{unit}</span>
-      </div>
-      {subValue && (
-        <div className="mt-1">{subValue}</div>
       )}
     </div>
   )

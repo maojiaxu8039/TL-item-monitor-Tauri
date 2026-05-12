@@ -1,6 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingDown, TrendingUp, Loader2, Settings, RefreshCw, Package } from "lucide-react";
+import { PageShell } from "@/components/ui/PageShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Surface } from "@/components/ui/Surface";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
+import { Button } from "@/components/ui/button";
 import { cmd, type FirePriceChangeItem } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 
@@ -16,28 +23,30 @@ function FireChangeCard({ item, isRising }: FireChangeCardProps) {
     Math.abs(item.change_rate_30m ?? 0),
     Math.abs(item.change_rate_5m ?? 0)
   ), [item.change_rate_3h, item.change_rate_1h, item.change_rate_30m, item.change_rate_5m]);
-  
+
   return (
-    <div className={`bg-white rounded-lg border p-3 transition-colors hover:shadow-sm ${
-      isRising ? "border-green-100 hover:border-green-200" : "border-red-100 hover:border-red-200"
-    }`}>
+    <Surface
+      interactive
+      padding="sm"
+      className={`transition-colors ${
+        isRising ? "border-red-100 hover:border-red-200" : "border-green-100 hover:border-green-200"
+      }`}
+    >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
-          <Package className={`w-4 h-4 ${isRising ? "text-green-500" : "text-red-500"}`} />
+          <Package className={`w-4 h-4 ${isRising ? "text-red-500" : "text-green-500"}`} />
           <div>
             <div className="text-sm font-medium text-slate-900">{item.name}</div>
             <div className="text-xs text-slate-400">
-              价格: {item.current_price.toFixed(2)} 火 | 
-              变动: {maxChange.toFixed(2)}% | 
+              价格: {item.current_price.toFixed(2)} 火 |
+              变动: {maxChange.toFixed(2)}% |
               评分: {item.score.toFixed(2)}
             </div>
           </div>
         </div>
-        <div className={`text-xs font-bold px-2 py-0.5 rounded ${
-          isRising ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-        }`}>
+        <StatusBadge variant={isRising ? "danger" : "success"}>
           {item.trend === "sharp_rise" ? "暴涨" : item.trend === "rise" ? "上涨" : item.trend === "sharp_fall" ? "暴跌" : item.trend === "fall" ? "下跌" : "平稳"}
-        </div>
+        </StatusBadge>
       </div>
 
       <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
@@ -66,7 +75,7 @@ function FireChangeCard({ item, isRising }: FireChangeCardProps) {
           </div>
         </div>
       </div>
-    </div>
+    </Surface>
   );
 }
 
@@ -95,15 +104,15 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
         </div>
-        
+
         <div className="p-5 space-y-5">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-green-500" />
+                <TrendingUp className="w-4 h-4 text-red-500" />
                 <span className="text-sm font-medium text-slate-700">出货阈值</span>
               </div>
-              <span className="text-sm font-medium text-green-600">{riseThreshold}%</span>
+              <span className="text-sm font-medium text-red-600">{riseThreshold}%</span>
             </div>
             <div className="pl-6">
               <div className="text-xs text-slate-500 mb-1.5">涨幅超过此百分比时显示为出货机会</div>
@@ -114,7 +123,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
                 step={1}
                 value={riseThreshold}
                 onChange={(e) => setRiseThreshold(Number(e.target.value))}
-                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-green-500"
+                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-500"
               />
               <div className="flex justify-between text-xs text-slate-400 mt-1">
                 <span>1%</span>
@@ -126,10 +135,10 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <TrendingDown className="w-4 h-4 text-red-500" />
+                <TrendingDown className="w-4 h-4 text-green-500" />
                 <span className="text-sm font-medium text-slate-700">捡漏阈值</span>
               </div>
-              <span className="text-sm font-medium text-red-600">{fallThreshold}%</span>
+              <span className="text-sm font-medium text-green-600">{fallThreshold}%</span>
             </div>
             <div className="pl-6">
               <div className="text-xs text-slate-500 mb-1.5">跌幅超过此百分比时显示为捡漏机会</div>
@@ -140,7 +149,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
                 step={1}
                 value={fallThreshold}
                 onChange={(e) => setFallThreshold(Number(e.target.value))}
-                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-500"
+                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-green-500"
               />
               <div className="flex justify-between text-xs text-slate-400 mt-1">
                 <span>1%</span>
@@ -206,64 +215,55 @@ export default function DealsPage() {
   });
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100 bg-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-slate-900">捡漏出货</h1>
-            <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400">
-              <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded">出货 {riseItems.length}</span>
-              <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded">捡漏 {fallItems.length}</span>
-              <span className="text-slate-400">| 出货≥{settings.rise_threshold}% 捡漏≥{settings.fall_threshold}%</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => refetch()}
-              className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-sm rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              <RefreshCw className="w-4 h-4" />
+    <PageShell size="xl" className="h-full flex flex-col">
+      <PageHeader
+        title="捡漏出货"
+        description={`实时监控物品价格变化，自动检测涨跌机会 | 出货≥${settings.rise_threshold}% 捡漏≥${settings.fall_threshold}%`}
+        icon={TrendingUp}
+        iconBg="bg-orange-50"
+        iconColor="text-orange-500"
+        actions={
+          <ToolbarActions>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              <RefreshCw className="w-4 h-4 mr-1.5" />
               刷新
-            </button>
-            <button
-              onClick={() => setShowSettings(true)}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              <Settings className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
+              <Settings className="w-4 h-4 mr-1.5" />
               设置
-            </button>
-          </div>
-        </div>
-      </div>
+            </Button>
+          </ToolbarActions>
+        }
+      />
 
-      <div className="flex-1 overflow-hidden p-6">
+      <div className="flex-1 overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center h-full text-slate-400">
+          <div className="flex items-center justify-center h-full">
             <div className="flex flex-col items-center gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-slate-300" />
-              <span>加载中...</span>
+              <span className="text-slate-400">加载中...</span>
             </div>
           </div>
         ) : fireChanges.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-slate-400">
-            <Package className="w-12 h-12 text-slate-200 mb-4" />
-            <p className="text-lg font-medium">暂无数据</p>
-            <p className="text-sm mt-2">请先在数据监控页面同步物品数据</p>
-          </div>
+          <EmptyState
+            title="暂无数据"
+            description="请先在数据监控页面同步物品数据"
+            icon={Package}
+          />
         ) : (
           <div className="grid grid-cols-2 gap-6 h-full">
             <div className="flex flex-col overflow-hidden">
               <div className="flex items-center gap-2 px-1 mb-3">
                 <TrendingUp className="w-5 h-5 text-red-500" />
                 <h2 className="text-sm font-semibold text-slate-700">出货机会</h2>
-                <span className="text-xs text-slate-400">涨幅≥{settings.rise_threshold}%</span>
+                <StatusBadge variant="danger">涨幅≥{settings.rise_threshold}%</StatusBadge>
               </div>
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
                 {riseItems.length === 0 ? (
-                  <div className="bg-slate-50 rounded-lg border border-slate-200 py-12 text-center">
-                    <TrendingUp className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                    <div className="text-sm text-slate-400">暂无符合条件的上涨物品</div>
-                  </div>
+                  <EmptyState
+                    title="暂无符合条件的上涨物品"
+                    icon={TrendingUp}
+                  />
                 ) : (
                   riseItems.map((item) => (
                     <FireChangeCard key={item.item_id} item={item} isRising={true} />
@@ -276,14 +276,14 @@ export default function DealsPage() {
               <div className="flex items-center gap-2 px-1 mb-3">
                 <TrendingDown className="w-5 h-5 text-green-500" />
                 <h2 className="text-sm font-semibold text-slate-700">捡漏机会</h2>
-                <span className="text-xs text-slate-400">跌幅≥{settings.fall_threshold}%</span>
+                <StatusBadge variant="success">跌幅≥{settings.fall_threshold}%</StatusBadge>
               </div>
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
                 {fallItems.length === 0 ? (
-                  <div className="bg-slate-50 rounded-lg border border-slate-200 py-12 text-center">
-                    <TrendingDown className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                    <div className="text-sm text-slate-400">暂无符合条件的下跌物品</div>
-                  </div>
+                  <EmptyState
+                    title="暂无符合条件的下跌物品"
+                    icon={TrendingDown}
+                  />
                 ) : (
                   fallItems.map((item) => (
                     <FireChangeCard key={item.item_id} item={item} isRising={false} />
@@ -302,6 +302,6 @@ export default function DealsPage() {
           onClose={() => setShowSettings(false)}
         />
       )}
-    </div>
+    </PageShell>
   );
 }
