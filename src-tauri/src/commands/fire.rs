@@ -151,17 +151,18 @@ pub async fn set_active_market_context(
     // Refresh items cache for new context
     let mode_str = mode.as_str().to_string();
     let season_for_cache = seasonId.clone();
-    let state_clone = Arc::new((&*state).clone());
+    let state_clone = Arc::new((*state).clone());
     tokio::spawn(async move {
         match repo_items::get_items_from_realtime_table(&state_clone.db, &season_for_cache, &mode_str).await {
             Ok(items) => {
                 let mut cache = state_clone.items_cache.write();
-                *cache = items;
+                let count = items.len();
+                *cache = Arc::new(items);
                 tracing::info!(
                     "Items cache refreshed for season={}, mode={}, count={}",
                     season_for_cache,
                     mode_str,
-                    cache.len()
+                    count
                 );
             }
             Err(e) => {
@@ -219,7 +220,7 @@ pub async fn refresh_items(state: State<'_, Arc<AppState>>) -> Result<OkResponse
 
     {
         let mut cache = state.items_cache.write();
-        *cache = items;
+        *cache = Arc::new(items);
     }
     {
         let mut status = state.task_status.write();
@@ -535,28 +536,28 @@ pub async fn get_item_price_insights(
     )
     .await?;
 
+    // Pre-index history data by item_id for O(1) lookup instead of O(N*M)
+    let mut history_map: std::collections::HashMap<String, Vec<f64>> = std::collections::HashMap::new();
+    for record in &item_history {
+        history_map
+            .entry(record.item_id.clone())
+            .or_default()
+            .push(record.fire_price);
+    }
+
     let mut insights = Vec::new();
 
-    for (item_id, name, current_price) in items
-        .0
-        .iter()
-        .map(|i| (i.item_id.clone(), i.name.clone(), i.price))
-    {
-        let history: Vec<f64> = item_history
-            .iter()
-            .filter(|h| h.item_id == item_id)
-            .map(|h| h.fire_price)
-            .collect();
-
-        if history.len() < 3 {
-            continue;
-        }
+    for item in &items.0 {
+        let history = match history_map.get(&item.item_id) {
+            Some(h) if h.len() >= 3 => h,
+            _ => continue,
+        };
 
         let avg = history.iter().sum::<f64>() / history.len() as f64;
         let min = history.iter().copied().fold(f64::INFINITY, f64::min);
         let max = history.iter().copied().fold(f64::NEG_INFINITY, f64::max);
         let trend_percent = if avg > 0.0 {
-            ((current_price - avg) / avg) * 100.0
+            ((item.price - avg) / avg) * 100.0
         } else {
             0.0
         };
@@ -568,20 +569,20 @@ pub async fn get_item_price_insights(
             "stable"
         };
 
-        let (recommendation, reason) = if current_price < avg * 0.85 {
+        let (recommendation, reason) = if item.price < avg * 0.85 {
             (
                 "buy",
                 format!(
                     "价格低于均价{}%，处于低位",
-                    ((1.0 - current_price / avg) * 100.0).round()
+                    ((1.0 - item.price / avg) * 100.0).round()
                 ),
             )
-        } else if current_price > avg * 1.15 {
+        } else if item.price > avg * 1.15 {
             (
                 "sell",
                 format!(
                     "价格高于均价{}%，处于高位",
-                    ((current_price / avg - 1.0) * 100.0).round()
+                    ((item.price / avg - 1.0) * 100.0).round()
                 ),
             )
         } else {
@@ -589,9 +590,9 @@ pub async fn get_item_price_insights(
         };
 
         insights.push(serde_json::json!({
-            "item_id": item_id,
-            "item_name": name,
-            "current_price": current_price,
+            "item_id": &item.item_id,
+            "item_name": &item.name,
+            "current_price": item.price,
             "avg_price": avg,
             "min_price": min,
             "max_price": max,

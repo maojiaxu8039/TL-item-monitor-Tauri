@@ -187,7 +187,6 @@ export default function ItemsPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [page, setPage] = useState(1);
   const { toasts, addToast, dismissToast } = useToast();
-  const [, setDataSource] = useState<"api" | "local">("api");
   const [historySeason, setHistorySeason] = useState("ss11");
   const [trendItem, setTrendItem] = useState<{ itemId: string; name: string } | null>(null);
   const [dayFilter, setDayFilter] = useState("all");
@@ -202,15 +201,6 @@ export default function ItemsPage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchKeyword]);
-
-  useEffect(() => {
-    let mounted = true;
-    cmd.getConfig().then((cfg) => {
-      if (!mounted) return;
-      setDataSource(cfg.scrape.items_source === "local" ? "local" : "api");
-    }).catch(() => {});
-    return () => { mounted = false; };
-  }, []);
 
   // ─── Data queries ───────────────────────────────────────────────────────
   const { marketContext } = useSectionRefresh();
@@ -276,12 +266,14 @@ export default function ItemsPage() {
   });
 
   // ─── Filter and sort items client-side ───────────────────────────────────
-  const getItemCompare = useCallback((itemId: string): ItemPriceCompare | null => {
-    if (!priceCompareData) return null;
-    const compare = priceCompareData.find((c: ItemPriceCompare) => c.item_id === itemId);
-    if (!compare) return null;
-    return compare;
+  const compareMap = useMemo(() => {
+    if (!priceCompareData) return new Map<string, ItemPriceCompare>();
+    return new Map(priceCompareData.map((c: ItemPriceCompare) => [c.item_id, c]));
   }, [priceCompareData]);
+
+  const getItemCompare = useCallback((itemId: string): ItemPriceCompare | null => {
+    return compareMap.get(itemId) ?? null;
+  }, [compareMap]);
 
   const items = searchResult?.items ?? [];
   const total = searchResult?.total ?? 0;
@@ -471,7 +463,7 @@ export default function ItemsPage() {
   // ─── Reset page when filters change ────────────────────────────────────
   useEffect(() => {
     setPage(1);
-  }, [debouncedKeyword, typeFilter]);
+  }, [debouncedKeyword, typeFilter, dayFilter]);
 
   return (
     <div className="p-6 space-y-5 max-w-6xl mx-auto">
@@ -499,18 +491,18 @@ export default function ItemsPage() {
             unit="火"
           />
           <StatCard
-            icon={<TrendingUp className="w-4 h-4 text-red-500" />}
+            icon={<TrendingUp className="w-4 h-4 text-green-500" />}
             label="最高价格"
             value={stats.maxPrice.toFixed(2)}
             unit="火"
-            valueColor="text-red-600"
+            valueColor="text-green-600"
           />
           <StatCard
-            icon={<TrendingDown className="w-4 h-4 text-green-500" />}
+            icon={<TrendingDown className="w-4 h-4 text-red-500" />}
             label="最低价格"
             value={stats.minPrice.toFixed(2)}
             unit="火"
-            valueColor="text-green-600"
+            valueColor="text-red-600"
           />
           <StatCard
             icon={<Tag className="w-4 h-4 text-purple-500" />}

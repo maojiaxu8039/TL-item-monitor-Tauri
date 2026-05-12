@@ -110,7 +110,7 @@ export default function DataMonitorPage() {
     if (syncJob?.status === "running") {
       toast.info("检测到之前的同步任务，继续执行中...");
     }
-  }, []);
+  }, [syncJob?.status]);
 
   const checkServerStatus = async (): Promise<ServerStatus | null> => {
     try {

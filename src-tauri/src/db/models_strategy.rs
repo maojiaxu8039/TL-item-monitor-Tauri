@@ -10,6 +10,7 @@ pub struct StrategyDetail {
     pub output_value: f64,
     pub defense_value: f64,
     pub remark: Option<String>,
+    pub image_url: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -62,6 +63,7 @@ pub struct CreateStrategyRequest {
     pub output_value: f64,
     pub defense_value: f64,
     pub remark: Option<String>,
+    pub image_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +75,7 @@ pub struct UpdateStrategyRequest {
     pub output_value: f64,
     pub defense_value: f64,
     pub remark: Option<String>,
+    pub image_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

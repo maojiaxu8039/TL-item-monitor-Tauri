@@ -7,40 +7,33 @@
 pub struct TableResolver;
 
 impl TableResolver {
-    /// Get items table name for given market_mode (real-time, no season suffix)
-    pub fn items_table(_season_id: &str, market_mode: &str) -> String {
-        let mode_suffix = match market_mode {
+    /// Extract mode suffix from market_mode string
+    #[inline]
+    fn mode_suffix(market_mode: &str) -> &'static str {
+        match market_mode {
             "season_expert" | "expert" => "expert",
             _ => "normal",
-        };
-        format!("items_{}", mode_suffix)
+        }
+    }
+
+    /// Get items table name for given market_mode (real-time, no season suffix)
+    pub fn items_table(_season_id: &str, market_mode: &str) -> String {
+        format!("items_{}", Self::mode_suffix(market_mode))
     }
 
     /// Get fire price table name for given market_mode (real-time, no season suffix)
     pub fn fire_price_table(_season_id: &str, market_mode: &str) -> String {
-        let mode_suffix = match market_mode {
-            "season_expert" | "expert" => "expert",
-            _ => "normal",
-        };
-        format!("fire_price_{}", mode_suffix)
+        format!("fire_price_{}", Self::mode_suffix(market_mode))
     }
 
     /// Get item snapshots table name for given season and mode (historical, with season suffix)
     pub fn item_snapshots_table(season_id: &str, market_mode: &str) -> String {
-        let mode_suffix = match market_mode {
-            "season_expert" | "expert" => "expert",
-            _ => "normal",
-        };
-        format!("item_snapshots_{}_{}", season_id, mode_suffix)
+        format!("item_snapshots_{}_{}", season_id, Self::mode_suffix(market_mode))
     }
 
     /// Get fire price snapshots table name for given season and mode (historical, with season suffix)
     pub fn fire_price_snapshots_table(season_id: &str, market_mode: &str) -> String {
-        let mode_suffix = match market_mode {
-            "season_expert" | "expert" => "expert",
-            _ => "normal",
-        };
-        format!("fire_price_snapshots_{}_{}", season_id, mode_suffix)
+        format!("fire_price_snapshots_{}_{}", season_id, Self::mode_suffix(market_mode))
     }
 
     /// List all supported season/mode combinations for snapshot tables.
@@ -69,6 +62,18 @@ impl TableResolver {
             && &season_id[..2] == "ss"
             && season_id[2..].chars().all(|c| c.is_ascii_digit());
         is_valid_season && is_valid_mode
+    }
+
+    /// Validate season_id and market_mode, returning an error if invalid.
+    /// This should be called before using any table name in SQL queries.
+    pub fn validate(season_id: &str, market_mode: &str) -> Result<(), crate::core::errors::AppError> {
+        if !Self::is_supported(season_id, market_mode) {
+            return Err(crate::core::errors::AppError::Validation(format!(
+                "Invalid season_id '{}' or market_mode '{}'",
+                season_id, market_mode
+            )));
+        }
+        Ok(())
     }
 }
 

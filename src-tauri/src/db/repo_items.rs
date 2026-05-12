@@ -148,15 +148,23 @@ pub async fn get_db_record_count(pool: &SqlitePool) -> Result<i64, crate::core::
             let snapshots_table = TableResolver::item_snapshots_table(season, mode);
             let fire_snapshots_table = TableResolver::fire_price_snapshots_table(season, mode);
 
-            let count: (i64,) = sqlx::query_as(&format!(
-                "SELECT (SELECT COUNT(DISTINCT item_id) FROM {}) + (SELECT COUNT(*) FROM {})",
-                snapshots_table, fire_snapshots_table
-            ))
-            .fetch_one(pool)
-            .await?;
-            total += count.0;
+            let item_sql = format!("SELECT COUNT(DISTINCT item_id) FROM {}", snapshots_table);
+            let fire_sql = format!("SELECT COUNT(*) FROM {}", fire_snapshots_table);
+
+            let (item_count, fire_count) = tokio::join!(
+                sqlx::query_as::<_, (i64,)>(&item_sql).fetch_one(pool),
+                sqlx::query_as::<_, (i64,)>(&fire_sql).fetch_one(pool)
+            );
+
+            if let Ok(count) = item_count {
+                total += count.0;
+            }
+            if let Ok(count) = fire_count {
+                total += count.0;
+            }
         }
     }
+
     Ok(total)
 }
 
@@ -213,14 +221,6 @@ pub async fn get_items_by_season(
     Ok(items)
 }
 
-pub async fn get_all_items(
-    pool: &SqlitePool,
-    season_id: &str,
-    market_mode: &str,
-) -> Result<Vec<Item>, crate::core::errors::AppError> {
-    get_items_by_season(pool, season_id, market_mode).await
-}
-
 /// Get items from real-time table (items_normal/expert).
 /// Used to load items_cache on startup for snapshot tasks.
 pub async fn get_items_from_realtime_table(
@@ -262,4 +262,41 @@ pub async fn clear_items(
         .execute(pool)
         .await?;
     Ok(())
+}
+
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct ItemSearchResult {
+    pub item_id: String,
+    pub name: String,
+    pub item_type: String,
+    pub price: f64,
+}
+
+pub async fn search_items_simple(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    keyword: &str,
+) -> Result<Vec<ItemSearchResult>, crate::core::errors::AppError> {
+    let items_table = TableResolver::items_table(season_id, market_mode);
+    let pattern = format!("%{}%", keyword);
+    
+    let items: Vec<ItemSearchResult> = sqlx::query_as(&format!(
+        r#"
+            SELECT item_id, name, item_type, price
+            FROM {}
+            WHERE name LIKE ?
+            ORDER BY name
+            LIMIT 50
+            "#,
+        items_table
+    ))
+    .bind(&pattern)
+    .fetch_all(pool)
+    .await?;
+    
+    Ok(items)
 }

@@ -5,7 +5,6 @@ use tracing::{error, info, warn};
 use crate::core::state::{AppState, NotificationSettings};
 use crate::db::models::SectionItem;
 use crate::db::repo_alerts;
-use crate::db::repo_items;
 use crate::services::send_notification;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -199,19 +198,24 @@ async fn evaluate_item_rule(
     item_id: &str,
     threshold: f64,
 ) -> bool {
-    let latest_price = match repo_items::get_all_items(db, season_id, market_mode).await {
-        Ok(items) => items
-            .into_iter()
-            .find(|i| i.item_id == item_id)
-            .map(|i| i.price),
+    let items_table = crate::db::table_resolver::TableResolver::items_table(season_id, market_mode);
+    let latest_price: Option<(f64,)> = match sqlx::query_as(&format!(
+        "SELECT price FROM {} WHERE item_id = ? LIMIT 1",
+        items_table
+    ))
+    .bind(item_id)
+    .fetch_optional(db)
+    .await
+    {
+        Ok(price) => price,
         Err(e) => {
-            warn!("Failed to get items: {}", e);
+            warn!("Failed to get item price: {}", e);
             None
         }
     };
 
     let latest_price = match latest_price {
-        Some(p) => p,
+        Some((p,)) => p,
         None => {
             info!("No price data for item {}", item_id);
             return false;

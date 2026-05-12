@@ -122,7 +122,7 @@ pub async fn get_fire_history(
             r#"SELECT id, '{}' as season_id, '{}' as market_mode, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day, scraped_at as created_at
            FROM {}
            WHERE scraped_at >= ?
-           ORDER BY scraped_at DESC"#,
+           ORDER BY scraped_at ASC"#,
             season_id, market_mode, table
         )
     )

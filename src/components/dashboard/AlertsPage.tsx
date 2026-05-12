@@ -8,8 +8,9 @@ import {
   Clock,
   ChevronDown,
   ChevronRight,
+  Search,
 } from "lucide-react";
-import { cmd, AlertRule, AlertEvent } from "@/lib/commands";
+import { cmd, AlertRule, AlertEvent, ItemSearchResult } from "@/lib/commands";
 import { useToast } from "@/hooks/useToast";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,10 @@ export default function AlertsPage() {
     cooldown_seconds: 300,
   });
 
+  const [itemSearch, setItemSearch] = useState("");
+  const [itemResults, setItemResults] = useState<ItemSearchResult[]>([]);
+  const [selectedItemName, setSelectedItemName] = useState<string>("");
+
   const loadData = async () => {
     try {
       const [rulesData, eventsData] = await Promise.all([
@@ -100,8 +105,8 @@ export default function AlertsPage() {
   }, []);
 
   const handleCreate = async () => {
-    if (!createForm.item_id.trim()) {
-      addToast("warning", "请输入物品ID");
+    if (selectedItemName && !createForm.item_id.trim()) {
+      addToast("warning", "请先从搜索结果中选择物品");
       return;
     }
     if (createForm.threshold <= 0) {
@@ -125,11 +130,42 @@ export default function AlertsPage() {
         threshold: 100,
         cooldown_seconds: 300,
       });
+      setSelectedItemName("");
+      setItemSearch("");
+      setItemResults([]);
       loadData();
     } catch (e) {
       console.error("Failed to create rule:", e);
       addToast("error", `创建规则失败: ${e}`);
     }
+  };
+
+  const searchItems = async (keyword: string) => {
+    setItemSearch(keyword);
+    if (keyword.length < 1) {
+      setItemResults([]);
+      return;
+    }
+    try {
+      const results = await cmd.searchItemsForArbitrage(keyword);
+      setItemResults(results);
+    } catch (err) {
+      console.error("[Alerts] Search items error:", err);
+      setItemResults([]);
+    }
+  };
+
+  const selectItem = (item: ItemSearchResult) => {
+    setCreateForm(prev => ({ ...prev, item_id: item.name }));
+    setSelectedItemName(item.name);
+    setItemSearch(item.name);
+    setItemResults([]);
+  };
+
+  const clearSelectedItem = () => {
+    setCreateForm(prev => ({ ...prev, item_id: "" }));
+    setSelectedItemName("");
+    setItemSearch("");
   };
 
   const handleToggle = async (rule: AlertRule) => {
@@ -365,13 +401,43 @@ export default function AlertsPage() {
               </Select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">物品ID</label>
-              <Input
-                value={createForm.item_id}
-                onChange={(e) => setCreateForm({ ...createForm, item_id: e.target.value })}
-                placeholder="输入物品ID，如: item_001"
-              />
-              <p className="text-xs text-slate-400 mt-1">留空则监控所有物品</p>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">物品名称</label>
+              {selectedItemName ? (
+                <div className="flex items-center gap-2 px-3 py-2 bg-green-50 rounded-lg border border-green-200">
+                  <span className="flex-1 text-sm text-green-700 font-medium">{selectedItemName}</span>
+                  <button
+                    onClick={clearSelectedItem}
+                    className="text-green-500 hover:text-green-700"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    value={itemSearch}
+                    onChange={(e) => searchItems(e.target.value)}
+                    placeholder="搜索物品名称..."
+                    className="pl-10"
+                  />
+                </div>
+              )}
+              {itemResults.length > 0 && (
+                <div className="mt-1 max-h-40 overflow-y-auto border border-slate-200 rounded-lg">
+                  {itemResults.map(item => (
+                    <button
+                      key={item.item_id}
+                      onClick={() => selectItem(item)}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center justify-between"
+                    >
+                      <span>{item.name}</span>
+                      <span className="text-slate-400 text-xs">{item.price?.toLocaleString() ?? "无价"} 火</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!selectedItemName && <p className="text-xs text-slate-400 mt-1">留空则监控所有物品</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">

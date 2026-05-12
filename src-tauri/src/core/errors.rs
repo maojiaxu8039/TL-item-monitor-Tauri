@@ -27,6 +27,12 @@ pub enum AppError {
     Unknown(String),
 }
 
+impl AppError {
+    pub fn to_cmd_err<T>(self) -> Result<T, String> {
+        Err(self.to_string())
+    }
+}
+
 impl From<sqlx::Error> for AppError {
     fn from(e: sqlx::Error) -> Self {
         AppError::Db(e.to_string())

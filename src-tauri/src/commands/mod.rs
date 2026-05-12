@@ -1,6 +1,7 @@
 pub mod types;
 
 pub mod alerts;
+pub mod arbitrage;
 pub mod config;
 pub mod deals;
 pub mod diagnostics;
@@ -15,6 +16,7 @@ pub mod strategies;
 pub mod strategy_detail;
 
 pub use alerts::*;
+pub use arbitrage::*;
 pub use config::*;
 pub use deals::*;
 pub use diagnostics::*;

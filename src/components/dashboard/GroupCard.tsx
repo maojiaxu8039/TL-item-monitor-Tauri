@@ -4,7 +4,7 @@ import { cmd } from "@/lib/commands"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { DangerButton } from "@/components/ui/danger-button"
 import { motion } from "framer-motion"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
@@ -79,54 +79,54 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
     onError: () => toast.error("删除失败"),
   })
 
-  const handleRemoveItem = (itemId: string, itemName: string) => {
+  const handleRemoveItem = useCallback((itemId: string, itemName: string) => {
     setItemToDelete({ id: itemId, name: itemName })
     setDeleteDialogOpen(true)
-  }
+  }, [])
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = useCallback(() => {
     if (itemToDelete) {
       removeItem.mutate({ sectionId: section.id, itemId: itemToDelete.id })
     }
     setDeleteDialogOpen(false)
     setItemToDelete(null)
-  }
+  }, [itemToDelete, removeItem, section.id])
 
-  const handleStartEdit = () => {
+  const handleStartEdit = useCallback(() => {
     setEditName(displayName)
     setIsEditing(true)
     setTimeout(() => inputRef.current?.select(), 0)
-  }
+  }, [displayName])
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = useCallback(() => {
     const trimmedName = editName.trim()
     if (trimmedName && trimmedName !== displayName) {
       updateSectionMutation.mutate(trimmedName)
     }
     setIsEditing(false)
-  }
+  }, [editName, displayName, updateSectionMutation])
 
-  const handleCancelEdit = () => {
+  const handleCancelEdit = useCallback(() => {
     setEditName(displayName)
     setIsEditing(false)
-  }
+  }, [displayName])
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       handleSaveEdit()
     } else if (e.key === "Escape") {
       handleCancelEdit()
     }
-  }
+  }, [handleSaveEdit, handleCancelEdit])
 
-  const calculateMorePerFire = (item: SectionItem) => {
+  const calculateMorePerFire = useCallback((item: SectionItem) => {
     const moreValue = item.more_value ?? 0
     const currentPrice = item.current_price ?? 0
     if (currentPrice === 0 || moreValue === 0) return 0
     return (moreValue / currentPrice) * 10
-  }
+  }, [])
 
-  const getItemEvaluation = (item: SectionItem) => {
+  const getItemEvaluation = useCallback((item: SectionItem) => {
     const purchaseFirePrice = item.purchase_fire_price ?? 0
     const currentPrice = item.current_price ?? 0
     
@@ -137,10 +137,18 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
       return { text: "值的", className: "bg-green-50 text-green-600" }
     }
     return { text: "不值的", className: "bg-slate-100 text-slate-500" }
-  }
+  }, [])
 
-  const totalFire = items.reduce((sum, item) => sum + (item.current_price ?? 0) * item.count, 0)
-  const totalRmb = items.reduce((sum, item) => sum + (item.current_price ?? 0) * item.count * rmbPer10kFire / 10000, 0)
+  const { totalFire, totalRmb } = useMemo(() => {
+    return items.reduce((acc, item) => {
+      const price = item.current_price ?? 0
+      const itemTotal = price * item.count
+      return {
+        totalFire: acc.totalFire + itemTotal,
+        totalRmb: acc.totalRmb + itemTotal * rmbPer10kFire / 10000,
+      }
+    }, { totalFire: 0, totalRmb: 0 })
+  }, [items, rmbPer10kFire])
 
   return (
     <>

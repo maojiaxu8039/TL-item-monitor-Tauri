@@ -1,6 +1,8 @@
 pub mod models;
+pub mod models_arbitrage;
 pub mod models_strategy;
 pub mod repo_alerts;
+pub mod repo_arbitrage;
 pub mod repo_config;
 pub mod repo_fire;
 pub mod repo_history;

@@ -69,9 +69,34 @@ pub async fn delete_strategy(
     pool: &SqlitePool,
     id: &str,
 ) -> Result<(), crate::core::errors::AppError> {
+    let mut tx = pool.begin().await?;
+
+    // Execute delete operations in order to respect foreign key constraints
+    sqlx::query("DELETE FROM strategy_costs WHERE strategy_id=?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM strategy_outputs WHERE strategy_id=?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM alert_rules WHERE strategy_id=?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("UPDATE sections SET strategy_id = NULL WHERE strategy_id=?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
     sqlx::query("DELETE FROM strategies WHERE id=?")
         .bind(id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(())
 }

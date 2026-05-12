@@ -12,8 +12,8 @@ pub const DEFAULT_PRICE_CHANGE_THRESHOLD: f64 = 5.0;
 pub const DEFAULT_BARGAIN_THRESHOLD: f64 = -10.0;
 pub const DEFAULT_SELL_THRESHOLD: f64 = 15.0;
 
-pub const BATCH_SIZE_SMALL: usize = 200;
-pub const BATCH_SIZE_LARGE: usize = 500;
+pub const BATCH_SIZE_SMALL: usize = 500;
+pub const BATCH_SIZE_LARGE: usize = 2000;
 
 pub const QUERY_LIMIT_DEFAULT: i64 = 100;
 pub const QUERY_LIMIT_MAX: i64 = 99999;
@@ -35,7 +35,7 @@ pub struct SeasonInfo {
 pub const SEASONS: &[SeasonInfo] = &[
     SeasonInfo {
         id: "ss12",
-        start_timestamp: 1776355200, // 2026-04-17 00:00:00 UTC+8
+        start_timestamp: 1776420000, // 2026-04-17 10:00:00 UTC
         name: "SS12 当前赛季",
         is_current: true,
     },

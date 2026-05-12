@@ -22,6 +22,7 @@ const DataMonitorPage = lazy(() => import("@/components/dashboard/DataMonitorPag
 const FirePriceComparePage = lazy(() => import("@/components/dashboard/FirePriceComparePage"))
 const HelpPage = lazy(() => import("@/components/dashboard/HelpPage"))
 const AlertsPage = lazy(() => import("@/components/dashboard/AlertsPage"))
+const ArbitragePage = lazy(() => import("@/components/dashboard/ArbitragePage"))
 
 function PageLoading() {
   return (
@@ -113,6 +114,11 @@ export default function App() {
               {page === "alerts" && (
                 <LazyPage>
                   <AlertsPage />
+                </LazyPage>
+              )}
+              {page === "arbitrage" && (
+                <LazyPage>
+                  <ArbitragePage />
                 </LazyPage>
               )}
             </main>

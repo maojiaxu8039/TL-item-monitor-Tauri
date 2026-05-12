@@ -17,47 +17,65 @@ fn next_hour_timestamp() -> Option<i64> {
 }
 
 async fn record_hourly_snapshot(state: &Arc<AppState>, snapshot_at: i64) {
-    let ctx = state.active_context.read().clone();
-    let fire_opt = state.fire_price.read().clone();
-    let items = state.items_cache.read().clone();
-
-    if let Some(ref fire) = fire_opt {
-        if let Err(e) = repo_history::insert_fire_snapshot(
-            &state.db,
-            &ctx.season_id,
-            ctx.market_mode.as_str(),
-            fire,
-            snapshot_at,
-        )
-        .await
-        {
-            warn!("Hourly fire snapshot failed: {}", e);
-        } else {
-            info!("Hourly fire snapshot recorded at {}", snapshot_at);
+    {
+        let mut running = state.snapshot_running.write();
+        if *running {
+            warn!("Hourly snapshot already running, skipping overlap at {}", snapshot_at);
+            return;
         }
+        *running = true;
     }
 
-    if !items.is_empty() {
-        match repo_history::insert_item_price_snapshots(
-            &state.db,
-            &ctx.season_id,
-            ctx.market_mode.as_str(),
-            &items,
-            snapshot_at,
-        )
-        .await
-        {
-            Ok(count) => {
-                info!(
-                    "Hourly item snapshot recorded: {} items at {}",
-                    count, snapshot_at
-                );
-            }
-            Err(e) => {
-                error!("Hourly item snapshot failed: {}", e);
+    let result = async {
+        let ctx = state.active_context.read().clone();
+        let fire_opt = state.fire_price.read().clone();
+        let items = state.items_cache.read().clone();
+
+        if let Some(ref fire) = fire_opt {
+            if let Err(e) = repo_history::insert_fire_snapshot(
+                &state.db,
+                &ctx.season_id,
+                ctx.market_mode.as_str(),
+                fire,
+                snapshot_at,
+            )
+            .await
+            {
+                warn!("Hourly fire snapshot failed: {}", e);
+            } else {
+                info!("Hourly fire snapshot recorded at {}", snapshot_at);
             }
         }
+
+        if !items.is_empty() {
+            match repo_history::insert_item_price_snapshots(
+                &state.db,
+                &ctx.season_id,
+                ctx.market_mode.as_str(),
+                &items,
+                snapshot_at,
+            )
+            .await
+            {
+                Ok(count) => {
+                    info!(
+                        "Hourly item snapshot recorded: {} items at {}",
+                        count, snapshot_at
+                    );
+                }
+                Err(e) => {
+                    error!("Hourly item snapshot failed: {}", e);
+                }
+            }
+        }
+    }.await;
+
+    {
+        let mut running = state.snapshot_running.write();
+        *running = false;
     }
+
+    result
 }
 
 pub async fn run_hourly_snapshot_task(

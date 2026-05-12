@@ -58,3 +58,53 @@ pub fn send_notification(app: &AppHandle, title: &str, body: &str) -> Result<(),
     info!("Notification sent successfully");
     Ok(())
 }
+
+pub fn format_notification_message(
+    item_name: &str,
+    item_type: &str,
+    current_price: f64,
+    previous_price: f64,
+    change_rate: f64,
+    change_type: &str,
+) -> String {
+    let (change_symbol, change_word) = if change_rate > 0.0 {
+        ("📈", "上涨")
+    } else {
+        ("📉", "下跌")
+    };
+    let change_pct = format!("{:.1}", change_rate.abs());
+
+    let price_diff = (current_price - previous_price).abs();
+    let diff_str = format!("{:.1}", price_diff);
+
+    let type_emoji = match item_type {
+        "武器" | "weapon" => "⚔️",
+        "护甲" | "armor" => "🛡️",
+        "饰品" | "accessory" => "💍",
+        "消耗品" | "consumable" => "🧪",
+        "材料" | "material" => "📦",
+        _ => "📦",
+    };
+
+    let action = match change_type {
+        "sharp_rise" => "🔥 暴涨提醒",
+        "rise" => "📈 上涨提醒",
+        "sharp_fall" => "⚡ 暴跌提醒",
+        "fall" => "📉 下跌提醒",
+        _ => "📊 价格变动",
+    };
+
+    format!(
+        "{} {}\n{} {} | {}\n当前: {} | 之前: {}\n{}: {}% ({})",
+        action,
+        change_symbol,
+        type_emoji,
+        item_name,
+        item_type,
+        current_price,
+        previous_price,
+        change_word,
+        change_pct,
+        diff_str
+    )
+}

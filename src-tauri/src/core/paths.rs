@@ -2,7 +2,7 @@
 use std::path::PathBuf;
 
 fn app_dir() -> PathBuf {
-    if cfg!(debug_assertions) {
+    let dir = if cfg!(debug_assertions) {
         let project_dir = std::env::current_dir()
             .unwrap_or_else(|_| PathBuf::from("."))
             .join("..");
@@ -15,7 +15,12 @@ fn app_dir() -> PathBuf {
         dirs::data_dir()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
             .join("com.tlmonitor.app")
+    };
+
+    if !dir.exists() {
+        let _ = std::fs::create_dir_all(&dir);
     }
+    dir
 }
 
 pub fn db_path() -> PathBuf {
@@ -23,7 +28,11 @@ pub fn db_path() -> PathBuf {
 }
 
 pub fn logs_dir() -> PathBuf {
-    app_dir().join("logs")
+    let dir = app_dir().join("logs");
+    if !dir.exists() {
+        let _ = std::fs::create_dir_all(&dir);
+    }
+    dir
 }
 
 pub fn config_path() -> PathBuf {

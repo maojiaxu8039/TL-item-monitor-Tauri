@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 // Types (mirror Rust structs)
 // ============================================================================
 
-export type PageId = "dashboard" | "firecompare" | "items" | "deals" | "records" | "strategies" | "priceanalysis" | "aianalysis" | "import_export" | "settings" | "help" | "alerts";
+export type PageId = "dashboard" | "firecompare" | "items" | "deals" | "records" | "strategies" | "priceanalysis" | "aianalysis" | "import_export" | "settings" | "help" | "alerts" | "arbitrage";
 
 export interface FirePriceUI {
   price_per_wan: number;
@@ -666,6 +666,29 @@ export const cmd = {
     invoke<OkResponse>("delete_strategy_output", { id }),
   refreshStrategyFirePrices: (strategyId: string) =>
     invoke<StrategyWithCosts>("refresh_strategy_fire_prices", { strategyId }),
+
+  // Arbitrage (套利比价) commands
+  getArbitrageRecipes: () => invoke<ArbitrageRecipe[]>("get_arbitrage_recipes"),
+  getArbitrageRecipeDetail: (recipeId: string) =>
+    invoke<ArbitrageRecipeWithDetails | null>("get_arbitrage_recipe_detail", { recipeId }),
+  createArbitrageRecipe: (request: CreateRecipeRequest) =>
+    invoke<string>("create_arbitrage_recipe", { request }),
+  updateArbitrageRecipe: (recipeId: string, request: UpdateRecipeRequest) =>
+    invoke<OkResponse>("update_arbitrage_recipe", { recipeId, request }),
+  updateArbitrageIngredients: (recipeId: string, request: UpdateIngredientsRequest) =>
+    invoke<OkResponse>("update_arbitrage_ingredients", { recipeId, request }),
+  updateArbitrageOutputs: (recipeId: string, request: UpdateOutputsRequest) =>
+    invoke<OkResponse>("update_arbitrage_outputs", { recipeId, request }),
+  deleteArbitrageRecipe: (recipeId: string) =>
+    invoke<OkResponse>("delete_arbitrage_recipe", { recipeId }),
+  calculateArbitrage: (seasonId?: string, marketMode?: string, showAll?: boolean) =>
+    invoke<ArbitrageResponse>("calculate_arbitrage", { seasonId, marketMode, showAll }),
+  searchItemsForArbitrage: (keyword: string) =>
+    invoke<ItemSearchResult[]>("search_items_for_arbitrage", { keyword }),
+  getArbitrageItemPrice: (itemId: string) =>
+    invoke<number | null>("get_arbitrage_item_price", { itemId }),
+  toggleArbitrageRecipeEnabled: (recipeId: string, enabled: boolean) =>
+    invoke<OkResponse>("toggle_arbitrage_recipe_enabled", { recipeId, enabled }),
 };
 
 export interface ArchiveResult {
@@ -782,6 +805,7 @@ export interface StrategyWithCosts {
   output_value: number;
   defense_value: number;
   remark: string | null;
+  image_url: string | null;
   created_at: number;
   updated_at: number;
   costs: StrategyCost[];
@@ -798,6 +822,7 @@ export interface CreateStrategyRequest {
   output_value: number;
   defense_value: number;
   remark: string | null;
+  image_url: string | null;
 }
 
 export interface UpdateStrategyRequest {
@@ -808,6 +833,7 @@ export interface UpdateStrategyRequest {
   output_value: number;
   defense_value: number;
   remark: string | null;
+  image_url: string | null;
 }
 
 export interface AddCostRequest {
@@ -893,3 +919,119 @@ export const serverAdmin = {
         return data.data;
       }),
 };
+
+// ============================================================================
+// Arbitrage (套利比价) Types
+// ============================================================================
+
+export interface ArbitrageRecipe {
+  id: string;
+  name: string;
+  recipe_type: string;
+  enabled: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ArbitrageIngredient {
+  id: string;
+  recipe_id: string;
+  item_id: string;
+  item_name: string | null;
+  count: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ArbitrageOutput {
+  id: string;
+  recipe_id: string;
+  item_id: string;
+  item_name: string | null;
+  count: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ArbitrageRecipeWithDetails {
+  recipe: ArbitrageRecipe;
+  ingredients: ArbitrageIngredient[];
+  outputs: ArbitrageOutput[];
+}
+
+export interface IngredientCostDetail {
+  item_id: string;
+  item_name: string;
+  count: number;
+  unit_price: number;
+  total_cost: number;
+}
+
+export interface OutputRevenueDetail {
+  item_id: string;
+  item_name: string;
+  count: number;
+  unit_price: number;
+  total_value: number;
+  after_tax_value: number;
+}
+
+export interface ArbitrageCalculationResult {
+  recipe_id: string;
+  recipe_name: string;
+  recipe_type: string;
+  total_cost: number;
+  total_output_value: number;
+  profit: number;
+  profit_margin: number;
+  ingredients_detail: IngredientCostDetail[];
+  outputs_detail: OutputRevenueDetail[];
+  is_profitable: boolean;
+  used_lowest_price: boolean;
+}
+
+export interface ArbitrageResponse {
+  recipes: ArbitrageCalculationResult[];
+  calculated_at: number;
+  total_profitable: number;
+  total_loss: number;
+}
+
+export interface ItemSearchResult {
+  item_id: string;
+  name: string;
+  item_type: string;
+  price: number;
+}
+
+export interface CreateIngredientRequest {
+  item_name: string;
+  count: number;
+}
+
+export interface CreateOutputRequest {
+  item_name: string;
+  count: number;
+}
+
+export interface CreateRecipeRequest {
+  name: string;
+  recipe_type: string;
+  enabled: boolean;
+  ingredients: CreateIngredientRequest[];
+  outputs: CreateOutputRequest[];
+}
+
+export interface UpdateRecipeRequest {
+  name?: string;
+  recipe_type?: string;
+  enabled?: boolean;
+}
+
+export interface UpdateIngredientsRequest {
+  ingredients: CreateIngredientRequest[];
+}
+
+export interface UpdateOutputsRequest {
+  outputs: CreateOutputRequest[];
+}

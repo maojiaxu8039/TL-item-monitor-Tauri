@@ -110,7 +110,6 @@ pub async fn delete_alert_rule(pool: &SqlitePool, id: &str) -> Result<(), AppErr
 
 // ─── Alert Events ──────────────────────────────────────────────────────────
 
-#[allow(dead_code)]
 pub async fn create_alert_event(
     pool: &SqlitePool,
     rule_id: &str,
@@ -142,15 +141,6 @@ pub async fn create_alert_event(
         seen: false,
         created_at: now,
     })
-}
-
-#[allow(dead_code)]
-pub async fn mark_alert_seen(pool: &SqlitePool, id: &str) -> Result<(), AppError> {
-    sqlx::query("UPDATE alert_events SET seen = 1 WHERE id = ?")
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
 }
 
 pub async fn get_alert_events(pool: &SqlitePool, limit: i64) -> Result<Vec<AlertEvent>, AppError> {

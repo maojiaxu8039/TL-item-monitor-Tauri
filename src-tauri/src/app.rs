@@ -123,11 +123,31 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
     }
 
     let pool = SqlitePoolOptions::new()
-        .max_connections(1)
+        .max_connections(10)
+        .min_connections(2)
+        .acquire_timeout(std::time::Duration::from_secs(30))
+        .idle_timeout(std::time::Duration::from_secs(300))
+        .max_lifetime(std::time::Duration::from_secs(1800))
         .after_connect(|conn, _meta| {
             Box::pin(async move {
+                // Enable WAL mode for better concurrent read/write performance
+                sqlx::query("PRAGMA journal_mode = WAL")
+                    .execute(&mut *conn)
+                    .await?;
+                sqlx::query("PRAGMA synchronous = NORMAL")
+                    .execute(&mut *conn)
+                    .await?;
+                sqlx::query("PRAGMA cache_size = -64000")
+                    .execute(&mut *conn)
+                    .await?;
+                sqlx::query("PRAGMA temp_store = MEMORY")
+                    .execute(&mut *conn)
+                    .await?;
+                sqlx::query("PRAGMA mmap_size = 268435456")
+                    .execute(&mut *conn)
+                    .await?;
                 sqlx::query("PRAGMA foreign_keys = ON")
-                    .execute(conn)
+                    .execute(&mut *conn)
                     .await?;
                 Ok(())
             })
@@ -219,7 +239,7 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
     // Auto-import items: prefer API scrape, fall back to JSON file
     // Always refresh from API on startup to get latest prices
     let default_season = config.app.season_id.clone();
-    let default_mode = config.scrape.fire_price_mode.clone();
+    let _default_mode = config.scrape.fire_price_mode.clone();
     let json_path = config.scrape.items_json_path.clone();
     let json_exists = std::path::Path::new(&json_path).exists();
 
@@ -282,7 +302,7 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
         db: pool,
         config: RwLock::new(config.clone()),
         fire_price: RwLock::new(fire_price),
-        items_cache: RwLock::new(items_cache),
+        items_cache: RwLock::new(Arc::new(items_cache)),
         active_context: RwLock::new(MarketContext {
             season_id: config.app.season_id.clone(),
             market_mode: MarketMode::SeasonNormal,
@@ -295,6 +315,7 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
             db_size_kb: 0.0,
         }),
         scheduler_handle: RwLock::new(None),
+        snapshot_running: RwLock::new(false),
     };
 
     Ok(state)
@@ -471,6 +492,38 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
             pool,
             11,
             include_str!("db/migrations/011_create_item_realtime_prices.sql"),
+        )
+        .await?;
+    }
+    if current_version < 12 {
+        apply_sql_migration(
+            pool,
+            12,
+            include_str!("db/migrations/012_create_arbitrage_tables.sql"),
+        )
+        .await?;
+    }
+    if current_version < 13 {
+        apply_sql_migration(
+            pool,
+            13,
+            include_str!("db/migrations/013_fix_arbitrage_tables.sql"),
+        )
+        .await?;
+    }
+    if current_version < 14 {
+        apply_sql_migration(
+            pool,
+            14,
+            include_str!("db/migrations/014_add_strategy_image_url.sql"),
+        )
+        .await?;
+    }
+    if current_version < 15 {
+        apply_sql_migration(
+            pool,
+            15,
+            include_str!("db/migrations/015_add_performance_indexes.sql"),
         )
         .await?;
     }
@@ -1030,10 +1083,25 @@ pub fn start_background_tasks(
         let state = state.clone();
         state.task_status.write().items_reload_running = true;
         tracing::info!("[DEBUG] About to spawn items_reload_task");
-        rt.spawn(async move {
-            tracing::info!("[DEBUG] items_reload_task spawned, calling run_items_reload_task");
-            run_items_reload_task(app, state, items_abort_rx).await;
-            tracing::info!("[DEBUG] items_reload_task returned");
+        std::thread::spawn(move || {
+            tracing::info!("[DEBUG] items_reload_task thread spawned");
+            match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(items_rt) => {
+                    items_rt.block_on(async move {
+                        tracing::info!(
+                            "[DEBUG] items_reload_task runtime started, calling run_items_reload_task"
+                        );
+                        run_items_reload_task(app, state, items_abort_rx).await;
+                        tracing::info!("[DEBUG] items_reload_task returned");
+                    });
+                }
+                Err(e) => {
+                    tracing::error!("Failed to create items reload runtime: {}", e);
+                }
+            }
         });
         tracing::info!("[DEBUG] items_reload_task spawned");
     }

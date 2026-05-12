@@ -168,6 +168,17 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             update_strategy_output,
             delete_strategy_output,
             refresh_strategy_fire_prices,
+            get_arbitrage_recipes,
+            get_arbitrage_recipe_detail,
+            create_arbitrage_recipe,
+            update_arbitrage_recipe,
+            update_arbitrage_ingredients,
+            update_arbitrage_outputs,
+            delete_arbitrage_recipe,
+            calculate_arbitrage,
+            search_items_for_arbitrage,
+            get_arbitrage_item_price,
+            toggle_arbitrage_recipe_enabled,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

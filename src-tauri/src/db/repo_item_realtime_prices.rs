@@ -58,8 +58,9 @@ pub async fn batch_insert_realtime_prices(
     }
 
     let mut inserted = 0usize;
+    let mut tx = pool.begin().await?;
 
-    for chunk in records.chunks(500) {
+    for chunk in records.chunks(2000) {
         let mut query_builder: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
             sqlx::query_builder::QueryBuilder::new(
                 "INSERT INTO item_realtime_prices (item_id, name, fire_price, scraped_at) "
@@ -72,10 +73,11 @@ pub async fn batch_insert_realtime_prices(
                 .push_bind(scraped_at);
         });
 
-        let result = query_builder.build().execute(pool).await?;
+        let result = query_builder.build().execute(&mut *tx).await?;
         inserted += result.rows_affected() as usize;
     }
 
+    tx.commit().await?;
     Ok(inserted)
 }
 
@@ -111,77 +113,68 @@ pub async fn get_price_changes(pool: &SqlitePool) -> Result<Vec<ItemPriceChange>
     }
 
     let mut latest_by_item: std::collections::HashMap<String, (String, f64, i64)> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(records.len() / 4);
     
     // For each item, find the closest price to each time period
-    let mut price_5m: std::collections::HashMap<String, (i64, f64)> = std::collections::HashMap::new();
-    let mut price_30m: std::collections::HashMap<String, (i64, f64)> = std::collections::HashMap::new();
-    let mut price_1h: std::collections::HashMap<String, (i64, f64)> = std::collections::HashMap::new();
-    let mut price_3h: std::collections::HashMap<String, (i64, f64)> = std::collections::HashMap::new();
+    let mut price_5m: std::collections::HashMap<String, (i64, f64)> = std::collections::HashMap::with_capacity(records.len() / 4);
+    let mut price_30m: std::collections::HashMap<String, (i64, f64)> = std::collections::HashMap::with_capacity(records.len() / 4);
+    let mut price_1h: std::collections::HashMap<String, (i64, f64)> = std::collections::HashMap::with_capacity(records.len() / 4);
+    let mut price_3h: std::collections::HashMap<String, (i64, f64)> = std::collections::HashMap::with_capacity(records.len() / 4);
+
+    const FIVE_MIN: i64 = 5 * 60;
+    const THIRTY_MIN: i64 = 30 * 60;
+    const ONE_HOUR: i64 = 60 * 60;
+    const THREE_HOUR: i64 = 3 * 60 * 60;
 
     for (item_id, name, fire_price, scraped_at) in &records {
-        if !latest_by_item.contains_key(item_id) {
-            latest_by_item.insert(item_id.clone(), (name.clone(), *fire_price, *scraped_at));
-        }
+        latest_by_item.entry(item_id.clone())
+            .or_insert_with(|| (name.clone(), *fire_price, *scraped_at));
 
         let age = now - scraped_at;
 
-        let five_min = 5 * 60;
-        let thirty_min = 30 * 60;
-        let one_hour = 60 * 60;
-        let three_hour = 3 * 60 * 60;
-
         // Find closest price for each time period
-        let diff_3h = (age - three_hour).abs();
+        let diff_3h = (age - THREE_HOUR).abs();
         if diff_3h <= 1800 { // Within 30 minutes of 3h
-            match price_3h.get(item_id) {
-                Some((existing_diff, _)) if diff_3h < *existing_diff => {
-                    price_3h.insert(item_id.clone(), (diff_3h, *fire_price));
-                }
-                None => {
-                    price_3h.insert(item_id.clone(), (diff_3h, *fire_price));
-                }
-                _ => {}
-            }
+            price_3h.entry(item_id.clone())
+                .and_modify(|(existing_diff, _)| {
+                    if diff_3h < *existing_diff {
+                        *existing_diff = diff_3h;
+                    }
+                })
+                .or_insert((diff_3h, *fire_price));
         }
         
-        let diff_1h = (age - one_hour).abs();
+        let diff_1h = (age - ONE_HOUR).abs();
         if diff_1h <= 900 { // Within 15 minutes of 1h
-            match price_1h.get(item_id) {
-                Some((existing_diff, _)) if diff_1h < *existing_diff => {
-                    price_1h.insert(item_id.clone(), (diff_1h, *fire_price));
-                }
-                None => {
-                    price_1h.insert(item_id.clone(), (diff_1h, *fire_price));
-                }
-                _ => {}
-            }
+            price_1h.entry(item_id.clone())
+                .and_modify(|(existing_diff, _)| {
+                    if diff_1h < *existing_diff {
+                        *existing_diff = diff_1h;
+                    }
+                })
+                .or_insert((diff_1h, *fire_price));
         }
         
-        let diff_30m = (age - thirty_min).abs();
+        let diff_30m = (age - THIRTY_MIN).abs();
         if diff_30m <= 600 { // Within 10 minutes of 30m
-            match price_30m.get(item_id) {
-                Some((existing_diff, _)) if diff_30m < *existing_diff => {
-                    price_30m.insert(item_id.clone(), (diff_30m, *fire_price));
-                }
-                None => {
-                    price_30m.insert(item_id.clone(), (diff_30m, *fire_price));
-                }
-                _ => {}
-            }
+            price_30m.entry(item_id.clone())
+                .and_modify(|(existing_diff, _)| {
+                    if diff_30m < *existing_diff {
+                        *existing_diff = diff_30m;
+                    }
+                })
+                .or_insert((diff_30m, *fire_price));
         }
         
-        let diff_5m = (age - five_min).abs();
+        let diff_5m = (age - FIVE_MIN).abs();
         if diff_5m <= 600 { // Within 10 minutes of 5m
-            match price_5m.get(item_id) {
-                Some((existing_diff, _)) if diff_5m < *existing_diff => {
-                    price_5m.insert(item_id.clone(), (diff_5m, *fire_price));
-                }
-                None => {
-                    price_5m.insert(item_id.clone(), (diff_5m, *fire_price));
-                }
-                _ => {}
-            }
+            price_5m.entry(item_id.clone())
+                .and_modify(|(existing_diff, _)| {
+                    if diff_5m < *existing_diff {
+                        *existing_diff = diff_5m;
+                    }
+                })
+                .or_insert((diff_5m, *fire_price));
         }
     }
     

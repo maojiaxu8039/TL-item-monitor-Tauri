@@ -21,6 +21,9 @@ import {
   ThumbsUp,
   AlertTriangle,
   Info,
+  Image,
+  Upload,
+  ExternalLink,
 } from "lucide-react";
 import { cmd, StrategyWithCosts, ItemData } from "@/lib/commands";
 import { useToast } from "@/hooks/useToast";
@@ -32,18 +35,19 @@ import { strategyTemplates, type StrategyTemplate } from "@/lib/strategyTemplate
 
 
 const LABELS = [
-  { value: "K8", label: "K8" },
+  { value: "K7", label: "K7" },
+  { value: "K8-1", label: "K8-1" },
+  { value: "K8-2", label: "K8-2" },
   { value: "U8", label: "U8" },
   { value: "深空", label: "深空" },
-  { value: "普通", label: "普通" },
+  { value: "九红深空", label: "九红深空" },
 ];
 
 const DIFFICULTIES = [
   { value: "简单", label: "简单" },
   { value: "普通", label: "普通" },
   { value: "困难", label: "困难" },
-  { value: "噩梦", label: "噩梦" },
-  { value: "地狱", label: "地狱" },
+  { value: "专家", label: "专家" },
 ];
 
 interface EditStrategyForm {
@@ -54,6 +58,7 @@ interface EditStrategyForm {
   output_value: number;
   defense_value: number;
   remark: string;
+  image_url: string;
 }
 
 interface CostForm {
@@ -103,11 +108,12 @@ export default function StrategiesPage() {
 
   const [editForm, setEditForm] = useState<EditStrategyForm>({
     name: "",
-    label: "K8",
+    label: "K8-1",
     difficulty: "普通",
     output_value: 0,
     defense_value: 0,
     remark: "",
+    image_url: "",
   });
 
   const [costForm, setCostForm] = useState<CostForm>({
@@ -125,6 +131,8 @@ export default function StrategiesPage() {
     item_type: "",
     count: 1,
   });
+
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -193,6 +201,7 @@ export default function StrategiesPage() {
         output_value: editForm.output_value,
         defense_value: editForm.defense_value,
         remark: editForm.remark || null,
+        image_url: editForm.image_url || null,
       });
       addToast("success", "策略创建成功");
       setShowCreateDialog(false);
@@ -213,6 +222,7 @@ export default function StrategiesPage() {
       output_value: strategy.output_value,
       defense_value: strategy.defense_value,
       remark: strategy.remark || "",
+      image_url: strategy.image_url || "",
     });
     setShowEditDialog(true);
   };
@@ -231,6 +241,7 @@ export default function StrategiesPage() {
         output_value: editForm.output_value,
         defense_value: editForm.defense_value,
         remark: editForm.remark || null,
+        image_url: editForm.image_url || null,
       });
       addToast("success", "策略更新成功");
       setShowEditDialog(false);
@@ -365,11 +376,12 @@ export default function StrategiesPage() {
   const resetForm = () => {
     setEditForm({
       name: "",
-      label: "K8",
+      label: "K8-1",
       difficulty: "普通",
       output_value: 0,
       defense_value: 0,
       remark: "",
+      image_url: "",
     });
   };
 
@@ -426,16 +438,19 @@ export default function StrategiesPage() {
 
   const getLabelColor = (label: string) => {
     switch (label) {
-      case "K8": return "bg-orange-100 text-orange-600";
+      case "K7": return "bg-green-100 text-green-600";
+      case "K8-1": return "bg-orange-100 text-orange-600";
+      case "K8-2": return "bg-red-100 text-red-600";
       case "U8": return "bg-purple-100 text-purple-600";
       case "深空": return "bg-blue-100 text-blue-600";
+      case "九红深空": return "bg-yellow-100 text-yellow-700";
       default: return "bg-gray-100 text-gray-600";
     }
   };
 
   const getProfitColor = (ratio: number) => {
-    if (ratio > 0) return "text-green-600";
-    if (ratio < 0) return "text-red-600";
+    if (ratio > 0) return "text-red-600";
+    if (ratio < 0) return "text-green-600";
     return "text-gray-600";
   };
 
@@ -627,12 +642,7 @@ export default function StrategiesPage() {
                     <h3 className="font-medium text-slate-900">{template.name}</h3>
                     <p className="text-xs text-slate-500 mt-1">{template.description}</p>
                   </div>
-                  <span className={`px-2 py-0.5 text-xs rounded ${
-                    template.label === "K8" ? "bg-orange-100 text-orange-600" :
-                    template.label === "U8" ? "bg-purple-100 text-purple-600" :
-                    template.label === "深空" ? "bg-blue-100 text-blue-600" :
-                    "bg-gray-100 text-gray-600"
-                  }`}>
+                  <span className={`px-2 py-0.5 text-xs rounded ${getLabelColor(template.label)}`}>
                     {template.label}
                   </span>
                 </div>
@@ -666,6 +676,7 @@ export default function StrategiesPage() {
                         output_value: template.output_value,
                         defense_value: template.defense_value,
                         remark: template.remark,
+                        image_url: null,
                       });
                       const strategyId = result;
                       for (const cost of template.costs) {
@@ -750,14 +761,22 @@ export default function StrategiesPage() {
                         </div>
                         <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
                           <span>评分: <span className="font-medium">{rec.score}</span></span>
-                          <span>收益率: <span className={`font-medium ${rec.profit_ratio >= 0 ? "text-green-600" : "text-red-600"}`}>
+                          <span>收益率: <span className={`font-medium ${rec.profit_ratio >= 0 ? "text-red-600" : "text-green-600"}`}>
                             {rec.profit_ratio >= 0 ? "+" : ""}{rec.profit_ratio.toFixed(1)}%
                           </span></span>
-                          <span>预计收益: <span className={`font-medium ${rec.expected_profit_fire >= 0 ? "text-green-600" : "text-red-600"}`}>
+                          <span>预计收益: <span className={`font-medium ${rec.expected_profit_fire >= 0 ? "text-red-600" : "text-green-600"}`}>
                             {rec.expected_profit_fire >= 0 ? "+" : ""}{rec.expected_profit_fire.toFixed(0)}火
                           </span></span>
                         </div>
                       </div>
+                      {strategy?.image_url && (
+                        <img
+                          src={strategy.image_url}
+                          alt="加点图"
+                          className="w-16 h-16 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-80"
+                          onClick={() => setPreviewImage(strategy.image_url)}
+                        />
+                      )}
                       <div className="text-right">
                         <div className={`text-2xl font-bold ${
                           rec.score >= 80 ? "text-green-600" :
@@ -791,10 +810,47 @@ export default function StrategiesPage() {
                       </div>
                     )}
                     {strategy && (
-                      <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-4 text-xs text-slate-500">
-                        <span>成本: <span className="text-red-500">{strategy.total_cost_fire.toFixed(0)}火</span></span>
-                        <span>产出: <span className="text-green-500">{strategy.total_output_value.toFixed(0)}火</span></span>
-                        <span>难度: {strategy.difficulty}</span>
+                      <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
+                        <div className="flex items-center gap-4 text-xs text-slate-500">
+                          <span>成本: <span className="text-red-500">{strategy.total_cost_fire.toFixed(0)}火</span></span>
+                          <span>产出: <span className="text-green-500">{strategy.total_output_value.toFixed(0)}火</span></span>
+                          <span>难度: {strategy.difficulty}</span>
+                        </div>
+                        {strategy.costs.length > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-slate-700 mb-1.5 flex items-center gap-1">
+                              <Zap className="w-3 h-3 text-red-500" />
+                              消耗材料
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {strategy.costs.map((cost) => (
+                                <span key={cost.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-600 text-xs rounded">
+                                  <span className="font-medium">{cost.item_name || cost.item_id}</span>
+                                  <span className="text-red-400">×{cost.count}</span>
+                                  <span className="text-red-700">{cost.total_fire.toFixed(0)}火</span>
+                                  {cost.is_realtime && <span className="text-[10px] bg-green-100 text-green-600 px-1 rounded">实时</span>}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {strategy.outputs.length > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-slate-700 mb-1.5 flex items-center gap-1">
+                              <TrendingUp className="w-3 h-3 text-green-500" />
+                              产出收益
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {strategy.outputs.map((output) => (
+                                <span key={output.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-600 text-xs rounded">
+                                  <span className="font-medium">{output.item_name}</span>
+                                  <span className="text-green-400">×{output.count}</span>
+                                  <span className="text-green-700">{(output.realtime_value * output.count).toFixed(0)}火</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -966,6 +1022,24 @@ export default function StrategiesPage() {
                       </div>
                     </div>
 
+                    {strategy.image_url && (
+                      <div className="px-4 py-3 border-t border-slate-100">
+                        <div className="text-xs text-slate-500 mb-2 flex items-center gap-1">
+                          <Image className="w-3 h-3" />
+                          加点图片
+                        </div>
+                        <img
+                          src={strategy.image_url}
+                          alt="加点图"
+                          className="max-h-32 rounded-lg border border-slate-200 cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewImage(strategy.image_url);
+                          }}
+                        />
+                      </div>
+                    )}
+
                     <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
                       <div className="flex items-center gap-6">
                         <div className="flex items-center gap-1.5 text-sm">
@@ -1073,6 +1147,39 @@ export default function StrategiesPage() {
                 placeholder="可选备注信息"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">加点图片</label>
+              <label className="flex items-center gap-2 px-4 py-3 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 cursor-pointer w-full">
+                <Upload className="w-4 h-4" />
+                <span className="text-sm">上传加点截图</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      const base64 = ev.target?.result as string;
+                      setEditForm(prev => ({ ...prev, image_url: base64 }));
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </label>
+              {editForm.image_url && (
+                <div className="mt-2 p-2 border border-slate-200 rounded-lg bg-slate-50 flex items-center gap-3">
+                  <img src={editForm.image_url} alt="加点图预览" className="max-h-24 rounded" />
+                  <button
+                    onClick={() => setEditForm(prev => ({ ...prev, image_url: "" }))}
+                    className="text-red-500 hover:text-red-700 text-xs"
+                  >
+                    删除图片
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
             <button onClick={() => setShowCreateDialog(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg">取消</button>
@@ -1141,6 +1248,39 @@ export default function StrategiesPage() {
                 onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })}
                 placeholder="可选备注信息"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">加点图片</label>
+              <label className="flex items-center gap-2 px-4 py-3 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 cursor-pointer w-full">
+                <Upload className="w-4 h-4" />
+                <span className="text-sm">上传加点截图</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      const base64 = ev.target?.result as string;
+                      setEditForm(prev => ({ ...prev, image_url: base64 }));
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </label>
+              {editForm.image_url && (
+                <div className="mt-2 p-2 border border-slate-200 rounded-lg bg-slate-50 flex items-center gap-3">
+                  <img src={editForm.image_url} alt="加点图预览" className="max-h-24 rounded" />
+                  <button
+                    onClick={() => setEditForm(prev => ({ ...prev, image_url: "" }))}
+                    className="text-red-500 hover:text-red-700 text-xs"
+                  >
+                    删除图片
+                  </button>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
@@ -1269,8 +1409,26 @@ export default function StrategiesPage() {
           </div>
         </div>
       </Dialog>
+
         </>
       )}
+
+      <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-slate-800">加点图片预览</h3>
+            <button onClick={() => setPreviewImage(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+          </div>
+          {previewImage && (
+            <img
+              src={previewImage}
+              alt="加点图"
+              className="w-full rounded-lg"
+              style={{ maxHeight: '70vh', objectFit: 'contain' }}
+            />
+          )}
+        </div>
+      </Dialog>
     </div>
   );
 }

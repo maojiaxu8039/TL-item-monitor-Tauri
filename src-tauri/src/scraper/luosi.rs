@@ -1,9 +1,22 @@
 use crate::core::errors::AppError;
 use crate::db::models::Item;
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::collections::HashMap;
 
 const LUOSI_BASE_URL: &str = "http://115.231.176.101:8080/get";
+
+static LUOSI_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(45))
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .pool_max_idle_per_host(4)
+        .build()
+        .unwrap_or_else(|e| {
+            tracing::error!("Failed to create Luosi HTTP client: {}, using default client", e);
+            reqwest::Client::new()
+        })
+});
 
 #[derive(Debug, Deserialize)]
 struct LuosiItem {
@@ -55,52 +68,51 @@ async fn scrape_by_season_id(
 ) -> Result<Vec<Item>, AppError> {
     let url = format!("{}?season_id={}", LUOSI_BASE_URL, api_season_id);
 
-    tracing::info!("[LUOSI] Creating reqwest client for URL: {}", url);
-    
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| AppError::Scrape(format!("reqwest build error: {}", e)))?;
-
     tracing::info!("[LUOSI] Sending HTTP request to: {}", url);
-    
-    let resp = client
+
+    let resp = LUOSI_CLIENT
         .get(&url)
+        .timeout(std::time::Duration::from_secs(30))
         .send()
         .await
         .map_err(|e| {
             tracing::error!("[LUOSI] HTTP request failed: {}", e);
             AppError::Scrape(format!("request failed: {}", e))
         })?;
-    
-    tracing::info!("[LUOSI] Response received, status: {}", resp.status());
-    
-    if !resp.status().is_success() {
-        let status = resp.status();
-        return Err(AppError::Scrape(format!("API returned error status: {}", status)));
-    }
-    
-    let body = resp
-        .text()
-        .await
-        .map_err(|e| {
-            tracing::error!("[LUOSI] Failed to read response: {}", e);
-            AppError::Scrape(format!("failed to read response: {}", e))
-        })?;
-    
+
+    let status = resp.status();
+    tracing::info!("[LUOSI] Response received, status: {}", status);
+
+    let body = resp.text().await.map_err(|e| {
+        tracing::error!("[LUOSI] Failed to read response: {}", e);
+        AppError::Scrape(format!("failed to read response: {}", e))
+    })?;
+
     tracing::info!("[LUOSI] Response body: {} bytes", body.len());
-    
-    if body.len() < 100 {
-        tracing::warn!("[LUOSI] Response body too small, might be an error: {}", body);
-        return Err(AppError::Scrape(format!("API returned empty or invalid response: {}", body)));
+
+    if !status.is_success() {
+        return Err(AppError::Scrape(format!(
+            "API returned error status: {}, body: {}",
+            status,
+            &body[..body.len().min(200)]
+        )));
     }
-    
-    let map: HashMap<String, LuosiItem> = serde_json::from_str(&body)
-        .map_err(|e| {
-            tracing::error!("[LUOSI] JSON parse error: {}", e);
-            AppError::Scrape(format!("failed to parse JSON: {}", e))
-        })?;
+
+    if body.len() < 100 {
+        tracing::warn!(
+            "[LUOSI] Response body too small, might be an error: {}",
+            body
+        );
+        return Err(AppError::Scrape(format!(
+            "API returned empty or invalid response: {}",
+            body
+        )));
+    }
+
+    let map: HashMap<String, LuosiItem> = serde_json::from_str(&body).map_err(|e| {
+        tracing::error!("[LUOSI] JSON parse error: {}", e);
+        AppError::Scrape(format!("failed to parse JSON: {}", e))
+    })?;
 
     tracing::info!("[LUOSI] Parsed {} items from API", map.len());
 
@@ -120,6 +132,11 @@ async fn scrape_by_season_id(
         })
         .collect();
 
-    tracing::info!("[LUOSI] Transformed {} items for {}/{}", items.len(), season_id, market_mode);
+    tracing::info!(
+        "[LUOSI] Transformed {} items for {}/{}",
+        items.len(),
+        season_id,
+        market_mode
+    );
     Ok(items)
 }

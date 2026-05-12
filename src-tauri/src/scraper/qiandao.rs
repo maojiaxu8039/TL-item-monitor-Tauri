@@ -350,33 +350,19 @@ fn round_to_4(value: f64) -> f64 {
     (value * 10000.0).round() / 10000.0
 }
 
-fn parse_optional_f64(value: serde_json::Value) -> Option<f64> {
-    match value {
+fn deserialize_optional_f64<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.and_then(|v| match v {
         serde_json::Value::Number(n) => n.as_f64(),
         serde_json::Value::String(s) => {
             let normalized = s.trim().trim_end_matches('%').replace(',', "");
             normalized.parse::<f64>().ok()
         }
         _ => None,
-    }
-}
-
-fn parse_optional_string(value: serde_json::Value) -> Option<String> {
-    match value {
-        serde_json::Value::Null => None,
-        serde_json::Value::String(s) => Some(s),
-        serde_json::Value::Number(n) => Some(n.to_string()),
-        serde_json::Value::Bool(b) => Some(b.to_string()),
-        _ => None,
-    }
-}
-
-fn deserialize_optional_f64<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
-    Ok(value.and_then(parse_optional_f64))
+    }))
 }
 
 fn deserialize_optional_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
@@ -384,23 +370,27 @@ where
     D: serde::Deserializer<'de>,
 {
     let value = Option::<serde_json::Value>::deserialize(deserializer)?;
-    Ok(value.and_then(parse_optional_string))
+    Ok(value.and_then(|v| match v {
+        serde_json::Value::Null => None,
+        serde_json::Value::String(s) => Some(s),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::Bool(b) => Some(b.to_string()),
+        _ => None,
+    }))
 }
 
 fn deserialize_f64<'de, D>(deserializer: D) -> Result<f64, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
-    Ok(value.and_then(parse_optional_f64).unwrap_or_default())
+    deserialize_optional_f64(deserializer).map(|opt| opt.unwrap_or_default())
 }
 
 fn deserialize_string<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
-    Ok(value.and_then(parse_optional_string).unwrap_or_default())
+    deserialize_optional_string(deserializer).map(|opt| opt.unwrap_or_default())
 }
 
 #[derive(Debug, serde::Deserialize)]

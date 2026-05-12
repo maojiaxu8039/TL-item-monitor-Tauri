@@ -102,7 +102,7 @@ export function TopBar() {
         </span>
         <span className="text-slate-400">元/万火</span>
         {summary?.fire?.increase_ratio !== null && summary?.fire?.increase_ratio !== undefined && (
-          <span className={`text-xs font-medium ${summary.fire.increase_ratio >= 0 ? "text-green-500" : "text-red-500"}`}>
+          <span className={`text-xs font-medium ${summary.fire.increase_ratio >= 0 ? "text-red-500" : "text-green-500"}`}>
             {summary.fire.increase_ratio >= 0 ? "↑" : "↓"}{Math.abs(summary.fire.increase_ratio).toFixed(2)}%
           </span>
         )}

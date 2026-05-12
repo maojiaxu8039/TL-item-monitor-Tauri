@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,42 +55,45 @@ fn parse_frontmatter(content: &str) -> (String, String) {
     (name, description)
 }
 
-fn read_skills_from_dir(dir_path: &PathBuf, source: &str) -> Vec<SkillInfo> {
+async fn read_skills_from_dir(dir_path: &PathBuf, source: &str) -> Vec<SkillInfo> {
     let mut skills = Vec::new();
 
     if !dir_path.exists() {
         return skills;
     }
 
-    if let Ok(entries) = fs::read_dir(dir_path) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                let skill_md = path.join("SKILL.md");
-                if skill_md.exists() {
-                    if let Ok(content) = fs::read_to_string(&skill_md) {
-                        let (name, description) = parse_frontmatter(&content);
-                        let skill_name = if name.is_empty() {
-                            path.file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or("unknown")
-                                .to_string()
-                        } else {
-                            name
-                        };
+    let mut entries = match tokio::fs::read_dir(dir_path).await {
+        Ok(e) => e,
+        Err(_) => return skills,
+    };
 
-                        skills.push(SkillInfo {
-                            name: skill_name,
-                            description: if description.is_empty() {
-                                "No description".to_string()
-                            } else {
-                                description
-                            },
-                            path: path.to_string_lossy().to_string(),
-                            source: source.to_string(),
-                            enabled: false,
-                        });
-                    }
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        if path.is_dir() {
+            let skill_md = path.join("SKILL.md");
+            if skill_md.exists() {
+                if let Ok(content) = tokio::fs::read_to_string(&skill_md).await {
+                    let (name, description) = parse_frontmatter(&content);
+                    let skill_name = if name.is_empty() {
+                        path.file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("unknown")
+                            .to_string()
+                    } else {
+                        name
+                    };
+
+                    skills.push(SkillInfo {
+                        name: skill_name,
+                        description: if description.is_empty() {
+                            "No description".to_string()
+                        } else {
+                            description
+                        },
+                        path: path.to_string_lossy().to_string(),
+                        source: source.to_string(),
+                        enabled: false,
+                    });
                 }
             }
         }
@@ -101,15 +103,15 @@ fn read_skills_from_dir(dir_path: &PathBuf, source: &str) -> Vec<SkillInfo> {
 }
 
 #[tauri::command]
-pub fn get_installed_skills() -> Vec<SkillInfo> {
+pub async fn get_installed_skills() -> Vec<SkillInfo> {
     let mut all_skills = Vec::new();
 
     if let Some(openclaw_dir) = get_openclaw_dir() {
         let system_skills_dir = openclaw_dir.join("skills");
         let workspace_skills_dir = openclaw_dir.join("workspace").join("skills");
 
-        let system_skills = read_skills_from_dir(&system_skills_dir, "system");
-        let workspace_skills = read_skills_from_dir(&workspace_skills_dir, "workspace");
+        let system_skills = read_skills_from_dir(&system_skills_dir, "system").await;
+        let workspace_skills = read_skills_from_dir(&workspace_skills_dir, "workspace").await;
 
         all_skills.extend(system_skills);
         all_skills.extend(workspace_skills);

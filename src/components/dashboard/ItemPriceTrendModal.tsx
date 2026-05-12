@@ -247,7 +247,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
                 </div>
                 <div className="bg-white rounded-xl border border-slate-100 p-3">
                   <div className="text-xs text-slate-400 mb-1">溢价率</div>
-                  <div className={`text-lg font-bold ${(stats.premiumRate ?? 0) > 0 ? "text-red-500" : "text-green-500"}`}>
+                  <div className={`text-lg font-bold ${(stats.premiumRate ?? 0) > 0 ? "text-green-500" : "text-red-500"}`}>
                     {(stats.premiumRate ?? 0) > 0 ? "↑" : "↓"} {Math.abs(stats.premiumRate ?? 0).toFixed(1)}%
                   </div>
                   <div className="text-xs text-slate-400">vs 历史</div>

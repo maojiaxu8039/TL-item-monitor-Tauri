@@ -1,15 +1,17 @@
 // core/state.rs — Application state using sqlx
 use parking_lot::RwLock;
 use sqlx::SqlitePool;
+use std::sync::Arc;
 
 pub struct AppState {
     pub db: SqlitePool,
     pub config: RwLock<AppConfig>,
     pub fire_price: RwLock<Option<FirePriceSnapshot>>,
-    pub items_cache: RwLock<Vec<crate::db::models::Item>>,
+    pub items_cache: RwLock<Arc<Vec<crate::db::models::Item>>>,
     pub active_context: RwLock<MarketContext>,
     pub task_status: RwLock<TaskStatus>,
     pub scheduler_handle: RwLock<Option<crate::scheduler::SchedulerHandle>>,
+    pub snapshot_running: RwLock<bool>,
 }
 
 impl Clone for AppState {
@@ -22,6 +24,24 @@ impl Clone for AppState {
             active_context: RwLock::new(self.active_context.read().clone()),
             task_status: RwLock::new(self.task_status.read().clone()),
             scheduler_handle: RwLock::new(None),
+            snapshot_running: RwLock::new(*self.snapshot_running.read()),
+        }
+    }
+}
+
+impl AppState {
+    /// Create a lightweight clone for use in spawned tasks.
+    /// This avoids cloning large data structures when only the Arc reference is needed.
+    pub fn clone_for_task(&self) -> Self {
+        Self {
+            db: self.db.clone(),
+            config: RwLock::new(self.config.read().clone()),
+            fire_price: RwLock::new(self.fire_price.read().clone()),
+            items_cache: RwLock::new(self.items_cache.read().clone()),
+            active_context: RwLock::new(self.active_context.read().clone()),
+            task_status: RwLock::new(self.task_status.read().clone()),
+            scheduler_handle: RwLock::new(None),
+            snapshot_running: RwLock::new(*self.snapshot_running.read()),
         }
     }
 }

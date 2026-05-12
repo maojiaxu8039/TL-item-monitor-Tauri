@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingDown, TrendingUp, Loader2, Settings, RefreshCw, Package } from "lucide-react";
 import { cmd, type FirePriceChangeItem } from "@/lib/commands";
@@ -10,20 +10,20 @@ interface FireChangeCardProps {
 }
 
 function FireChangeCard({ item, isRising }: FireChangeCardProps) {
-  const maxChange = Math.max(
+  const maxChange = useMemo(() => Math.max(
     Math.abs(item.change_rate_3h ?? 0),
     Math.abs(item.change_rate_1h ?? 0),
     Math.abs(item.change_rate_30m ?? 0),
     Math.abs(item.change_rate_5m ?? 0)
-  );
+  ), [item.change_rate_3h, item.change_rate_1h, item.change_rate_30m, item.change_rate_5m]);
   
   return (
     <div className={`bg-white rounded-lg border p-3 transition-colors hover:shadow-sm ${
-      isRising ? "border-red-100 hover:border-red-200" : "border-green-100 hover:border-green-200"
+      isRising ? "border-green-100 hover:border-green-200" : "border-red-100 hover:border-red-200"
     }`}>
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
-          <Package className={`w-4 h-4 ${isRising ? "text-red-500" : "text-green-500"}`} />
+          <Package className={`w-4 h-4 ${isRising ? "text-green-500" : "text-red-500"}`} />
           <div>
             <div className="text-sm font-medium text-slate-900">{item.name}</div>
             <div className="text-xs text-slate-400">
@@ -34,7 +34,7 @@ function FireChangeCard({ item, isRising }: FireChangeCardProps) {
           </div>
         </div>
         <div className={`text-xs font-bold px-2 py-0.5 rounded ${
-          isRising ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
+          isRising ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
         }`}>
           {item.trend === "sharp_rise" ? "暴涨" : item.trend === "rise" ? "上涨" : item.trend === "sharp_fall" ? "暴跌" : item.trend === "fall" ? "下跌" : "平稳"}
         </div>
@@ -43,25 +43,25 @@ function FireChangeCard({ item, isRising }: FireChangeCardProps) {
       <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
         <div className="text-center p-1.5 bg-slate-50 rounded">
           <div className="text-slate-400">5m</div>
-          <div className={`font-medium ${(item.change_rate_5m ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
+          <div className={`font-medium ${(item.change_rate_5m ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
             {item.change_rate_5m !== null ? `${(item.change_rate_5m ?? 0) >= 0 ? "+" : ""}${item.change_rate_5m?.toFixed(1)}%` : "-"}
           </div>
         </div>
         <div className="text-center p-1.5 bg-slate-50 rounded">
           <div className="text-slate-400">30m</div>
-          <div className={`font-medium ${(item.change_rate_30m ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
+          <div className={`font-medium ${(item.change_rate_30m ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
             {item.change_rate_30m !== null ? `${(item.change_rate_30m ?? 0) >= 0 ? "+" : ""}${item.change_rate_30m?.toFixed(1)}%` : "-"}
           </div>
         </div>
         <div className="text-center p-1.5 bg-slate-50 rounded">
           <div className="text-slate-400">1h</div>
-          <div className={`font-medium ${(item.change_rate_1h ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
+          <div className={`font-medium ${(item.change_rate_1h ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
             {item.change_rate_1h !== null ? `${(item.change_rate_1h ?? 0) >= 0 ? "+" : ""}${item.change_rate_1h?.toFixed(1)}%` : "-"}
           </div>
         </div>
         <div className="text-center p-1.5 bg-slate-50 rounded">
           <div className="text-slate-400">3h</div>
-          <div className={`font-medium ${(item.change_rate_3h ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
+          <div className={`font-medium ${(item.change_rate_3h ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
             {item.change_rate_3h !== null ? `${(item.change_rate_3h ?? 0) >= 0 ? "+" : ""}${item.change_rate_3h?.toFixed(1)}%` : "-"}
           </div>
         </div>
@@ -100,10 +100,10 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-red-500" />
+                <TrendingUp className="w-4 h-4 text-green-500" />
                 <span className="text-sm font-medium text-slate-700">出货阈值</span>
               </div>
-              <span className="text-sm font-medium text-red-600">{riseThreshold}%</span>
+              <span className="text-sm font-medium text-green-600">{riseThreshold}%</span>
             </div>
             <div className="pl-6">
               <div className="text-xs text-slate-500 mb-1.5">涨幅超过此百分比时显示为出货机会</div>
@@ -114,7 +114,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
                 step={1}
                 value={riseThreshold}
                 onChange={(e) => setRiseThreshold(Number(e.target.value))}
-                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-500"
+                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-green-500"
               />
               <div className="flex justify-between text-xs text-slate-400 mt-1">
                 <span>1%</span>
@@ -126,10 +126,10 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <TrendingDown className="w-4 h-4 text-green-500" />
+                <TrendingDown className="w-4 h-4 text-red-500" />
                 <span className="text-sm font-medium text-slate-700">捡漏阈值</span>
               </div>
-              <span className="text-sm font-medium text-green-600">{fallThreshold}%</span>
+              <span className="text-sm font-medium text-red-600">{fallThreshold}%</span>
             </div>
             <div className="pl-6">
               <div className="text-xs text-slate-500 mb-1.5">跌幅超过此百分比时显示为捡漏机会</div>
@@ -140,7 +140,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
                 step={1}
                 value={fallThreshold}
                 onChange={(e) => setFallThreshold(Number(e.target.value))}
-                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-green-500"
+                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-500"
               />
               <div className="flex justify-between text-xs text-slate-400 mt-1">
                 <span>1%</span>

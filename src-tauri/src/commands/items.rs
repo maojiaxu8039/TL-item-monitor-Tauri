@@ -5,7 +5,6 @@ use crate::db::repo_items;
 use crate::db::repo_item_realtime_prices;
 use crate::scraper;
 use crate::services::send_notification;
-use std::process::Command;
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 use tauri_plugin_notification::{NotificationExt, PermissionState};
@@ -55,6 +54,10 @@ pub async fn get_items_stats(state: State<'_, Arc<AppState>>) -> Result<ItemsSta
     let total_items =
         repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str())
             .await
+            .map_err(|e| {
+                tracing::warn!("get_items_count failed: {}, returning 0", e);
+                e
+            })
             .unwrap_or(0);
     let status = state.task_status.read().clone();
     Ok(ItemsStats {
@@ -176,7 +179,7 @@ pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats,
 
     {
         let mut cache = state.items_cache.write();
-        *cache = items;
+        *cache = Arc::new(items);
     }
     {
         let mut status = state.task_status.write();
@@ -193,18 +196,32 @@ pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats,
 pub async fn get_db_stats(state: State<'_, Arc<AppState>>) -> Result<DbStats, String> {
     let ctx = state.active_context.read().clone();
     let item_count =
-        repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await;
+        repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str())
+            .await
+            .map_err(|e| {
+                tracing::warn!("get_items_count failed: {}, returning 0", e);
+                e
+            })
+            .unwrap_or(0);
     let db_record_count = repo_items::get_db_record_count(&state.db)
         .await
+        .map_err(|e| {
+            tracing::warn!("get_db_record_count failed: {}, returning 0", e);
+            e
+        })
         .unwrap_or(0);
 
     let db_path = crate::core::paths::db_path();
     let db_size_kb = std::fs::metadata(&db_path)
         .map(|m| m.len() as f64 / 1024.0)
+        .map_err(|e| {
+            tracing::warn!("Failed to get db metadata: {}, returning 0", e);
+            e
+        })
         .unwrap_or(0.0);
 
     Ok(DbStats {
-        item_count: item_count.unwrap_or(0),
+        item_count,
         db_record_count,
         db_size_kb,
     })
@@ -237,7 +254,7 @@ pub async fn clear_items_database(state: State<'_, Arc<AppState>>) -> Result<Str
 
     {
         let mut cache = state.items_cache.write();
-        cache.clear();
+        *cache = Arc::new(Vec::new());
     }
 
     Ok("物品数据库已清空".to_string())
@@ -271,8 +288,9 @@ pub async fn trigger_price_alert(
             } else {
                 0
             };
+            let item_name = item.item_name.unwrap_or_else(|| item.item_id.clone());
             serde_json::json!({
-                "item_name": item.item_name.unwrap_or_else(|| item.item_id.clone()),
+                "item_name": item_name,
                 "current_price": format!("{:.2}", current_price),
                 "purchase_price": format!("{:.2}", purchase_price),
                 "savings": format!("-{:.0} ({:.0}%)", savings, savings_pct),
@@ -290,15 +308,9 @@ pub async fn trigger_price_alert(
         worth_items
             .iter()
             .map(|item| {
-                let name = item
-                    .get("item_name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("未知");
-                let current = item
-                    .get("current_price")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("-");
-                let savings = item.get("savings").and_then(|v| v.as_str()).unwrap_or("-");
+                let name = item["item_name"].as_str().unwrap_or("未知");
+                let current = item["current_price"].as_str().unwrap_or("-");
+                let savings = item["savings"].as_str().unwrap_or("-");
                 format!("• {} | 当前: {} | 节省: {}\n", name, current, savings)
             })
             .collect::<Vec<_>>()
@@ -308,11 +320,8 @@ pub async fn trigger_price_alert(
             .iter()
             .take(3)
             .map(|item| {
-                let name = item
-                    .get("item_name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("未知");
-                let savings = item.get("savings").and_then(|v| v.as_str()).unwrap_or("-");
+                let name = item["item_name"].as_str().unwrap_or("未知");
+                let savings = item["savings"].as_str().unwrap_or("-");
                 format!("• {} ({})", name, savings)
             })
             .collect();
@@ -332,14 +341,14 @@ pub async fn trigger_price_alert(
     if config.notification.voice_alert_enabled && !config.notification.voice_alert_path.is_empty() {
         let voice_path = config.notification.voice_alert_path.clone();
         if std::path::Path::new(&voice_path).exists() {
-            std::thread::spawn(move || {
+            tokio::spawn(async move {
                 #[cfg(target_os = "macos")]
                 {
-                    let _ = Command::new("afplay").arg(&voice_path).spawn();
+                    let _ = tokio::process::Command::new("afplay").arg(&voice_path).spawn();
                 }
                 #[cfg(target_os = "windows")]
                 {
-                    let _ = Command::new("powershell")
+                    let _ = tokio::process::Command::new("powershell")
                         .args(["-c", "[System.Media.SystemSounds]::Hand.Play()"])
                         .spawn();
                 }

@@ -155,13 +155,14 @@ pub async fn refresh_strategy_fire_prices(
     state: State<'_, Arc<AppState>>,
     strategy_id: String,
 ) -> Result<StrategyWithCosts, String> {
+    let ctx = state.active_context.read().clone();
     let costs = repo_strategy_detail::get_strategy_costs(&state.db, &strategy_id)
         .await
         .map_err(|e| e.to_string())?;
 
     for cost in costs {
         if cost.is_realtime {
-            let fire_price = match repo_fire::get_latest_fire(&state.db, "ss12", "season_normal").await {
+            let fire_price = match repo_fire::get_latest_fire(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await {
                 Ok(Some(record)) => record.fire_per_rmb,
                 _ => cost.fire_price,
             };

@@ -97,62 +97,31 @@ pub async fn get_section_items(
     pool: &SqlitePool,
     section_id: &str,
 ) -> Result<Vec<SectionItem>, crate::core::errors::AppError> {
-    let section_item_rows: Vec<(String, String, String)> = sqlx::query_as(
+    let rows: Vec<SectionItem> = sqlx::query_as(
         r#"
-        SELECT id, season_id, market_mode 
-        FROM section_items 
-        WHERE section_id = ?
-        ORDER BY sort_order, created_at
+        SELECT
+            si.id, si.section_id, si.season_id, si.market_mode, si.item_id,
+            COALESCE(n.name, e.name) as item_name,
+            COALESCE(n.item_type, e.item_type) as item_type,
+            COALESCE(n.price, e.price) as current_price,
+            si.purchase_fire_price, si.count, si.more_value, si.sort_order,
+            CASE WHEN COALESCE(n.last_time, e.last_time) IS NOT NULL
+                 THEN CAST(COALESCE(n.last_time, e.last_time) AS TEXT)
+                 ELSE NULL
+            END as last_time,
+            si.created_at, si.updated_at
+        FROM section_items si
+        LEFT JOIN items_normal n ON si.item_id = n.item_id
+        LEFT JOIN items_expert e ON si.item_id = e.item_id
+        WHERE si.section_id = ?
+        ORDER BY si.sort_order, si.created_at
         "#,
     )
     .bind(section_id)
     .fetch_all(pool)
     .await?;
 
-    if section_item_rows.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let mut items = Vec::new();
-    let mut processed_keys = std::collections::HashSet::new();
-
-    for (_item_id, season_id, market_mode) in section_item_rows {
-        let key = format!("{}:{}", season_id, market_mode);
-
-        if processed_keys.contains(&key) {
-            continue;
-        }
-        processed_keys.insert(key);
-
-        let items_table = TableResolver::items_table(&season_id, &market_mode);
-
-        let rows: Vec<SectionItem> = sqlx::query_as(
-            &format!(
-                r#"
-                SELECT
-                    si.id, si.section_id, si.season_id, si.market_mode, si.item_id,
-                    i.name as item_name, i.item_type as item_type, i.price as current_price,
-                    si.purchase_fire_price, si.count, si.more_value, si.sort_order,
-                    CASE WHEN i.last_time IS NOT NULL THEN CAST(i.last_time AS TEXT) ELSE NULL END as last_time,
-                    si.created_at, si.updated_at
-                FROM section_items si
-                LEFT JOIN {} i ON si.item_id = i.item_id
-                WHERE si.section_id = ? AND si.season_id = ? AND si.market_mode = ?
-                ORDER BY si.sort_order, si.created_at
-                "#,
-                items_table
-            )
-        )
-        .bind(section_id)
-        .bind(&season_id)
-        .bind(&market_mode)
-        .fetch_all(pool)
-        .await?;
-
-        items.extend(rows);
-    }
-
-    Ok(items)
+    Ok(rows)
 }
 
 #[allow(clippy::too_many_arguments)]

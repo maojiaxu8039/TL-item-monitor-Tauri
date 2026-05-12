@@ -18,7 +18,7 @@ pub async fn save_config(
     state: State<'_, Arc<AppState>>,
     config: crate::core::state::AppConfig,
 ) -> Result<OkResponse, String> {
-    crate::core::config::save_config(&config)?;
+    // Update memory first for immediate consistency
     {
         let mut cfg = state.config.write();
         *cfg = config.clone();
@@ -28,6 +28,8 @@ pub async fn save_config(
         let mut ctx = state.active_context.write();
         ctx.season_id = config.app.season_id.clone();
     }
+    // Then persist to disk
+    crate::core::config::save_config(&config)?;
     Ok(OkResponse::success("Config saved"))
 }
 

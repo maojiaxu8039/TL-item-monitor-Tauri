@@ -117,15 +117,9 @@ async fn calculate_real_alerts(
         }
 
         // Try 1h comparison first, fallback to 24h
-        let (baseline_price, _window_desc, sample_count) =
-            if let Some(recent) = recent_map.get(&item_id) {
-                (*recent, "1h", 1)
-            } else if let Some(prev) = prev_map.get(&item_id) {
-                (*prev, "24h", 1)
-            } else {
-                // No baseline - skip this item
-                continue;
-            };
+        let baseline_price = recent_map.get(&item_id).copied()
+            .or_else(|| prev_map.get(&item_id).copied())
+            .unwrap_or(0.0);
 
         if baseline_price <= 0.0 {
             continue;
@@ -139,13 +133,15 @@ async fn calculate_real_alerts(
             continue;
         }
 
-        // Calculate confidence based on sample size and price stability
-        let confidence = if sample_count >= 3 {
+        // Calculate confidence based on data availability
+        let has_recent = recent_map.contains_key(&item_id);
+        let has_prev = prev_map.contains_key(&item_id);
+        let confidence = if has_recent && has_prev {
             85.0
-        } else if sample_count >= 1 {
-            70.0
+        } else if has_recent || has_prev {
+            75.0
         } else {
-            50.0
+            60.0
         };
 
         let alert = DealAlert {

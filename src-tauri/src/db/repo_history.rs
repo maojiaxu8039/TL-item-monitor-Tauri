@@ -4,9 +4,7 @@ use crate::core::constants::{
 use crate::core::errors::AppError;
 use crate::core::state::FirePriceSnapshot;
 use crate::db::models::Item;
-use crate::db::repo_fire::{
-    get_season_start as get_season_start_from_db, get_season_start_from_db as get_season_start,
-};
+use crate::db::repo_fire::get_season_start_from_db;
 use crate::db::table_resolver::TableResolver;
 use chrono::Utc;
 use serde::Serialize;
@@ -44,7 +42,7 @@ pub async fn insert_item_price_snapshots(
     }
 
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
-    let season_start = get_season_start(pool, season_id).await?;
+    let season_start = get_season_start_from_db(pool, season_id).await?;
     let season_day = calculate_season_day(snapshot_at, season_start);
     let mut tx = pool.begin().await?;
     let mut inserted = 0usize;
@@ -80,7 +78,7 @@ pub async fn insert_fire_snapshot(
     scraped_at: i64,
 ) -> Result<(), crate::core::errors::AppError> {
     let now = Utc::now().timestamp();
-    let season_start = get_season_start(pool, season_id).await?;
+    let season_start = get_season_start_from_db(pool, season_id).await?;
     let season_day = calculate_season_day(scraped_at, season_start);
 
     // 1. Write to real-time fire_price table (latest price)
@@ -149,7 +147,7 @@ pub async fn insert_fire_snapshots_batch(
     }
 
     let now = Utc::now().timestamp();
-    let season_start = get_season_start(pool, season_id).await?;
+    let season_start = get_season_start_from_db(pool, season_id).await?;
     let realtime_table = TableResolver::fire_price_table(season_id, market_mode);
     let snapshots_table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
     
@@ -282,7 +280,7 @@ pub async fn get_item_history_by_day(
     season_day: i32,
 ) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
-    let season_start = get_season_start(pool, season_id).await?;
+    let season_start = get_season_start_from_db(pool, season_id).await?;
 
     let day_start = season_start + ((season_day - 1) as i64 * SECONDS_PER_DAY);
     let day_end = day_start + SECONDS_PER_DAY;
@@ -295,11 +293,13 @@ pub async fn get_item_history_by_day(
     let records = sqlx::query_as::<_, ItemHistoryRecord>(&format!(
         "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at \
              FROM {} \
-             WHERE item_id = ? AND scraped_at >= {} AND scraped_at < {} \
+             WHERE item_id = ? AND scraped_at >= ? AND scraped_at < ? \
              ORDER BY scraped_at ASC",
-        season_id, market_mode, table, day_start, day_end
+        season_id, market_mode, table
     ))
     .bind(item_id)
+    .bind(day_start)
+    .bind(day_end)
     .fetch_all(pool)
     .await?;
 
@@ -375,14 +375,17 @@ pub async fn get_items_price_compare(
                 "SELECT s.item_id, s.name, s.fire_price as price \
                  FROM {} s \
                  INNER JOIN ( \
-                     SELECT item_id, MIN(scraped_at) as min_scraped_at \
+                     SELECT item_id, MAX(scraped_at) as max_scraped_at \
                      FROM {} \
-                     WHERE season_day = {} AND scraped_at >= {} AND scraped_at < {} \
+                     WHERE season_day = ? AND scraped_at >= ? AND scraped_at < ? \
                      GROUP BY item_id \
-                 ) earliest ON s.item_id = earliest.item_id AND s.scraped_at = earliest.min_scraped_at",
-                current_snapshots_table, current_snapshots_table, day, cs_day_start, cs_day_end
+                 ) latest ON s.item_id = latest.item_id AND s.scraped_at = latest.max_scraped_at",
+                current_snapshots_table, current_snapshots_table
             )
         )
+        .bind(day)
+        .bind(cs_day_start)
+        .bind(cs_day_end)
         .fetch_all(pool)
         .await?
     } else {
@@ -391,10 +394,10 @@ pub async fn get_items_price_compare(
                 "SELECT s.item_id, s.name, s.fire_price as price \
                  FROM {} s \
                  INNER JOIN ( \
-                     SELECT item_id, MIN(scraped_at) as min_scraped_at \
+                     SELECT item_id, MAX(scraped_at) as max_scraped_at \
                      FROM {} \
                      GROUP BY item_id \
-                 ) earliest ON s.item_id = earliest.item_id AND s.scraped_at = earliest.min_scraped_at",
+                 ) latest ON s.item_id = latest.item_id AND s.scraped_at = latest.max_scraped_at",
                 current_snapshots_table, current_snapshots_table
             )
         )
@@ -411,9 +414,11 @@ pub async fn get_items_price_compare(
         sqlx::query_as::<_, HistoryPriceRow>(&format!(
             "SELECT item_id, name, fire_price as avg_price \
                  FROM {} \
-                 WHERE scraped_at >= {} AND scraped_at < {}",
-            history_snapshots_table, day_start, day_end
+                 WHERE scraped_at >= ? AND scraped_at < ?",
+            history_snapshots_table
         ))
+        .bind(day_start)
+        .bind(day_end)
         .fetch_all(pool)
         .await?
     } else {
@@ -422,10 +427,10 @@ pub async fn get_items_price_compare(
                 "SELECT h.item_id, h.name, h.fire_price as avg_price \
                  FROM {} h \
                  INNER JOIN ( \
-                     SELECT item_id, MIN(scraped_at) as min_scraped_at \
+                     SELECT item_id, MAX(scraped_at) as max_scraped_at \
                      FROM {} \
                      GROUP BY item_id \
-                 ) earliest ON h.item_id = earliest.item_id AND h.scraped_at = earliest.min_scraped_at",
+                 ) latest ON h.item_id = latest.item_id AND h.scraped_at = latest.max_scraped_at",
                 history_snapshots_table, history_snapshots_table
             )
         )
@@ -691,7 +696,7 @@ pub async fn insert_item_snapshot(
     recorded_at: i64,
 ) -> Result<(), AppError> {
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
-    let season_start = get_season_start(pool, season_id).await?;
+    let season_start = get_season_start_from_db(pool, season_id).await?;
     let season_day = calculate_season_day(recorded_at, season_start);
     sqlx::query(&format!(
         r#"INSERT OR IGNORE INTO {} (item_id, name, item_type, fire_price, scraped_at, season_day)
@@ -730,9 +735,10 @@ pub async fn insert_item_snapshots_batch(
     }
 
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
-    let season_start = get_season_start(pool, season_id).await?;
+    let season_start = get_season_start_from_db(pool, season_id).await?;
 
     let mut inserted = 0usize;
+    let mut tx = pool.begin().await?;
     for chunk in items.chunks(BATCH_SIZE_LARGE) {
         let mut qb: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
             sqlx::query_builder::QueryBuilder::new(&format!(
@@ -750,9 +756,10 @@ pub async fn insert_item_snapshots_batch(
                 .push_bind(season_day);
         });
 
-        let result = qb.build().execute(pool).await?;
+        let result = qb.build().execute(&mut *tx).await?;
         inserted += result.rows_affected() as usize;
     }
+    tx.commit().await?;
 
     Ok(inserted)
 }
