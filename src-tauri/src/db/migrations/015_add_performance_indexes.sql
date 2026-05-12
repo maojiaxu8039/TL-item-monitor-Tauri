@@ -10,12 +10,12 @@ CREATE INDEX IF NOT EXISTS idx_strategy_details_label_difficulty ON strategy_det
 CREATE INDEX IF NOT EXISTS idx_arbitrage_recipes_enabled ON arbitrage_recipes(enabled);
 CREATE INDEX IF NOT EXISTS idx_arbitrage_recipes_type_enabled ON arbitrage_recipes(recipe_type, enabled);
 
--- Strategy costs indexes (for realtime price lookups)
-CREATE INDEX IF NOT EXISTS idx_strategy_costs_strategy_realtime ON strategy_costs(strategy_id, is_realtime);
-CREATE INDEX IF NOT EXISTS idx_strategy_costs_item_id ON strategy_costs(item_id);
+-- Strategy detail costs indexes (for realtime price lookups)
+CREATE INDEX IF NOT EXISTS idx_strategy_detail_costs_strategy_realtime ON strategy_detail_costs(strategy_id, is_realtime);
+CREATE INDEX IF NOT EXISTS idx_strategy_detail_costs_item_id ON strategy_detail_costs(item_id);
 
--- Strategy outputs indexes
-CREATE INDEX IF NOT EXISTS idx_strategy_outputs_strategy_name ON strategy_outputs(strategy_id, item_name);
+-- Strategy detail outputs indexes
+CREATE INDEX IF NOT EXISTS idx_strategy_detail_outputs_strategy_name ON strategy_detail_outputs(strategy_id, item_name);
 
 -- Section items composite index for common lookups
 CREATE INDEX IF NOT EXISTS idx_section_items_composite ON section_items(section_id, season_id, market_mode, item_id);

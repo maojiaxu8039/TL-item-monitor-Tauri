@@ -169,7 +169,7 @@ pub async fn refresh_strategy_fire_prices(
             let total_fire = cost.count * fire_price;
 
             sqlx::query(
-                "UPDATE strategy_costs SET fire_price=?, total_fire=?, updated_at=? WHERE id=?",
+                "UPDATE strategy_detail_costs SET fire_price=?, total_fire=?, updated_at=? WHERE id=?",
             )
             .bind(fire_price)
             .bind(total_fire)

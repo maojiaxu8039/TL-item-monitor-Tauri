@@ -87,12 +87,12 @@ pub async fn delete_strategy_detail(
 ) -> Result<(), crate::core::errors::AppError> {
     let mut tx = pool.begin().await?;
 
-    sqlx::query("DELETE FROM strategy_costs WHERE strategy_id=?")
+    sqlx::query("DELETE FROM strategy_detail_costs WHERE strategy_id=?")
         .bind(id)
         .execute(&mut *tx)
         .await?;
 
-    sqlx::query("DELETE FROM strategy_outputs WHERE strategy_id=?")
+    sqlx::query("DELETE FROM strategy_detail_outputs WHERE strategy_id=?")
         .bind(id)
         .execute(&mut *tx)
         .await?;
@@ -112,7 +112,7 @@ pub async fn get_strategy_costs(
 ) -> Result<Vec<StrategyCost>, crate::core::errors::AppError> {
     let costs = sqlx::query_as::<_, StrategyCost>(
         "SELECT id, strategy_id, cost_type, item_id, item_name, count, fire_price, total_fire, is_realtime, created_at, updated_at 
-         FROM strategy_costs WHERE strategy_id = ? ORDER BY cost_type, created_at"
+         FROM strategy_detail_costs WHERE strategy_id = ? ORDER BY cost_type, created_at"
     )
     .bind(strategy_id)
     .fetch_all(pool)
@@ -132,7 +132,7 @@ pub async fn get_strategy_costs_batch(
     let placeholders: Vec<String> = strategy_ids.iter().map(|_| "?".to_string()).collect();
     let sql = format!(
         "SELECT id, strategy_id, cost_type, item_id, item_name, count, fire_price, total_fire, is_realtime, created_at, updated_at 
-         FROM strategy_costs WHERE strategy_id IN ({}) ORDER BY cost_type, created_at",
+         FROM strategy_detail_costs WHERE strategy_id IN ({}) ORDER BY cost_type, created_at",
         placeholders.join(", ")
     );
 
@@ -171,7 +171,7 @@ pub async fn add_strategy_cost(
     let total_fire = req.count * fire_price;
 
     sqlx::query(
-        "INSERT INTO strategy_costs (id, strategy_id, cost_type, item_id, item_name, count, fire_price, total_fire, is_realtime, created_at, updated_at)
+        "INSERT INTO strategy_detail_costs (id, strategy_id, cost_type, item_id, item_name, count, fire_price, total_fire, is_realtime, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&id)
@@ -197,7 +197,7 @@ pub async fn update_strategy_cost(
 ) -> Result<(), crate::core::errors::AppError> {
     let now = Utc::now().timestamp();
 
-    let cost = sqlx::query_as::<_, StrategyCost>("SELECT * FROM strategy_costs WHERE id = ?")
+    let cost = sqlx::query_as::<_, StrategyCost>("SELECT * FROM strategy_detail_costs WHERE id = ?")
         .bind(&req.id)
         .fetch_optional(pool)
         .await?
@@ -215,7 +215,7 @@ pub async fn update_strategy_cost(
     let total_fire = req.count * fire_price;
 
     sqlx::query(
-        "UPDATE strategy_costs SET count=?, fire_price=?, total_fire=?, is_realtime=?, updated_at=? WHERE id=?"
+        "UPDATE strategy_detail_costs SET count=?, fire_price=?, total_fire=?, is_realtime=?, updated_at=? WHERE id=?"
     )
     .bind(req.count)
     .bind(fire_price)
@@ -233,7 +233,7 @@ pub async fn delete_strategy_cost(
     pool: &SqlitePool,
     id: &str,
 ) -> Result<(), crate::core::errors::AppError> {
-    sqlx::query("DELETE FROM strategy_costs WHERE id=?")
+    sqlx::query("DELETE FROM strategy_detail_costs WHERE id=?")
         .bind(id)
         .execute(pool)
         .await?;
@@ -247,7 +247,7 @@ pub async fn get_strategy_outputs(
     let outputs = sqlx::query_as::<_, StrategyOutput>(
         "SELECT id, strategy_id, item_name, item_type, count, estimated_value,
          COALESCE(realtime_value, 0) as realtime_value, remark, created_at, updated_at
-         FROM strategy_outputs WHERE strategy_id = ? ORDER BY created_at",
+         FROM strategy_detail_outputs WHERE strategy_id = ? ORDER BY created_at",
     )
     .bind(strategy_id)
     .fetch_all(pool)
@@ -268,7 +268,7 @@ pub async fn get_strategy_outputs_batch(
     let sql = format!(
         "SELECT id, strategy_id, item_name, item_type, count, estimated_value,
          COALESCE(realtime_value, 0) as realtime_value, remark, created_at, updated_at
-         FROM strategy_outputs WHERE strategy_id IN ({}) ORDER BY created_at",
+         FROM strategy_detail_outputs WHERE strategy_id IN ({}) ORDER BY created_at",
         placeholders.join(", ")
     );
 
@@ -296,7 +296,7 @@ pub async fn add_strategy_output(
     let now = Utc::now().timestamp();
 
     sqlx::query(
-        "INSERT INTO strategy_outputs (id, strategy_id, item_name, item_type, count, estimated_value, realtime_value, remark, created_at, updated_at)
+        "INSERT INTO strategy_detail_outputs (id, strategy_id, item_name, item_type, count, estimated_value, realtime_value, remark, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)"
     )
     .bind(&id)
@@ -321,7 +321,7 @@ pub async fn update_strategy_output(
     let now = Utc::now().timestamp();
 
     sqlx::query(
-        "UPDATE strategy_outputs SET count=?, estimated_value=?, remark=?, updated_at=? WHERE id=?",
+        "UPDATE strategy_detail_outputs SET count=?, estimated_value=?, remark=?, updated_at=? WHERE id=?",
     )
     .bind(req.count)
     .bind(req.estimated_value)
@@ -338,7 +338,7 @@ pub async fn delete_strategy_output(
     pool: &SqlitePool,
     id: &str,
 ) -> Result<(), crate::core::errors::AppError> {
-    sqlx::query("DELETE FROM strategy_outputs WHERE id=?")
+    sqlx::query("DELETE FROM strategy_detail_outputs WHERE id=?")
         .bind(id)
         .execute(pool)
         .await?;

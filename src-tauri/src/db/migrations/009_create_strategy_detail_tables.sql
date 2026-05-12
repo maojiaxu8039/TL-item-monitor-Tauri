@@ -1,4 +1,7 @@
 -- Migration v9: Create strategy_detail tables for game strategy analysis
+-- NOTE: These tables use a different schema than the legacy strategy_costs/strategy_outputs
+-- in 001_initial.sql. The legacy tables are used by the strategies module.
+-- These new tables are used by the strategy_detail module (打宝策略分析).
 
 -- Strategy details table - main strategy info
 CREATE TABLE IF NOT EXISTS strategy_details (
@@ -14,7 +17,8 @@ CREATE TABLE IF NOT EXISTS strategy_details (
 );
 
 -- Strategy costs table - cost items (回响、信标、探针、罗盘等)
-CREATE TABLE IF NOT EXISTS strategy_costs (
+-- This is a NEW table with a different schema than the legacy strategy_costs
+CREATE TABLE IF NOT EXISTS strategy_detail_costs (
     id TEXT PRIMARY KEY,
     strategy_id TEXT NOT NULL,
     cost_type TEXT NOT NULL,
@@ -30,7 +34,8 @@ CREATE TABLE IF NOT EXISTS strategy_costs (
 );
 
 -- Strategy outputs table - output items
-CREATE TABLE IF NOT EXISTS strategy_outputs (
+-- This is a NEW table with a different schema than the legacy strategy_outputs
+CREATE TABLE IF NOT EXISTS strategy_detail_outputs (
     id TEXT PRIMARY KEY,
     strategy_id TEXT NOT NULL,
     item_name TEXT NOT NULL,
@@ -44,6 +49,6 @@ CREATE TABLE IF NOT EXISTS strategy_outputs (
 );
 
 -- Create indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_strategy_costs_strategy_id ON strategy_costs(strategy_id);
-CREATE INDEX IF NOT EXISTS idx_strategy_outputs_strategy_id ON strategy_outputs(strategy_id);
-CREATE INDEX IF NOT EXISTS idx_strategy_costs_cost_type ON strategy_costs(cost_type);
+CREATE INDEX IF NOT EXISTS idx_strategy_detail_costs_strategy_id ON strategy_detail_costs(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_strategy_detail_outputs_strategy_id ON strategy_detail_outputs(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_strategy_detail_costs_cost_type ON strategy_detail_costs(cost_type);
