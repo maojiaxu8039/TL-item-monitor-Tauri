@@ -38,6 +38,7 @@ export default function SettingsPage() {
   const [itemsEnabled, setItemsEnabled] = useState(false);
   const [itemsInterval, setItemsInterval] = useState(300);
   const [itemsSource, setItemsSource] = useState("api");
+  const [expertEnabled, setExpertEnabled] = useState(false);
   const [jsonPath, setJsonPath] = useState("");
   const [jsonPathValidation, setJsonPathValidation] = useState<JsonFileValidationResult | null>(null);
   const [seasonId, setSeasonId] = useState("ss12");
@@ -219,6 +220,7 @@ export default function SettingsPage() {
         setItemsEnabled(cfg.scrape.auto_reload);
         setItemsInterval(cfg.scrape.items_reload_interval);
         setItemsSource(cfg.scrape.items_source);
+        setExpertEnabled(cfg.scrape.expert_enabled ?? false);
         setJsonPath(cfg.scrape.items_json_path || defaultPath);
         setSeasonId(cfg.app.season_id);
         setPriceAlertEnabled(cfg.notification.price_alert_enabled);
@@ -279,6 +281,7 @@ export default function SettingsPage() {
         items_json_path: jsonPath,
         items_reload_interval: itemsInterval,
         auto_reload: itemsEnabled,
+        expert_enabled: expertEnabled,
       },
       desktop: {
         auto_start: false,
@@ -813,6 +816,22 @@ export default function SettingsPage() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-slate-700">同步专家服数据</div>
+              <div className="text-xs text-slate-400 mt-0.5">同时抓取赛季专家的物品价格数据</div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={expertEnabled}
+                onChange={(e) => setExpertEnabled(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+            </label>
           </div>
 
           <div className={`flex items-center justify-between ${itemsSource === 'local' ? 'opacity-100' : 'opacity-50'}`}>

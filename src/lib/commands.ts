@@ -211,6 +211,7 @@ export interface ScrapeSettings {
   items_json_path: string;
   items_reload_interval: number;
   auto_reload: boolean;
+  expert_enabled: boolean;
 }
 
 export interface DesktopSettings {
