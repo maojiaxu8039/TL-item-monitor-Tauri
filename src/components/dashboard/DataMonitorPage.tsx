@@ -556,12 +556,12 @@ export default function DataMonitorPage() {
             {connectionStatus === "connected" ? (
               <>
                 <Wifi className="w-5 h-5 text-green-500" />
-                <span className="text-green-600">已连接</span>
+                <span className="text-[var(--color-success)]">已连接</span>
               </>
             ) : connectionStatus === "error" ? (
               <>
                 <AlertCircle className="w-5 h-5 text-yellow-500" />
-                <span className="text-yellow-600">连接错误</span>
+                <span className="text-[var(--color-brand-gold)]">连接错误</span>
               </>
             ) : (
               <>
@@ -844,8 +844,8 @@ export default function DataMonitorPage() {
                 />
               </div>
               <div className="flex gap-4 text-xs">
-                <span className="text-green-600">成功: {syncJob.success.toLocaleString()}</span>
-                <span className="text-red-600">失败: {syncJob.failed.toLocaleString()}</span>
+                <span className="text-[var(--color-success)]">成功: {syncJob.success.toLocaleString()}</span>
+                <span className="text-[var(--color-danger)]">失败: {syncJob.failed.toLocaleString()}</span>
                 <span className="text-[var(--color-text-subtle)]">总计: {syncJob.total.toLocaleString()}</span>
               </div>
             </div>
@@ -853,9 +853,9 @@ export default function DataMonitorPage() {
 
           {syncJob && syncJob.status !== "idle" && syncJob.status !== "running" && (
             <div className={`p-4 rounded-lg border ${
-              syncJob.status === "success" ? "bg-[rgba(34,197,94,0.1)] border-green-200" :
-              syncJob.status === "partial" ? "bg-yellow-50 border-yellow-200" :
-              "bg-[rgba(239,68,68,0.1)] border-red-200"
+              syncJob.status === "success" ? "bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.25)]" :
+              syncJob.status === "partial" ? "bg-yellow-50 border-[rgba(255,184,0,0.25)]" :
+              "bg-[rgba(239,68,68,0.1)] border-[rgba(239,68,68,0.25)]"
             }`}>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium">
@@ -870,11 +870,11 @@ export default function DataMonitorPage() {
               </div>
               <div className="grid grid-cols-3 gap-4 text-sm">
                 <div className="text-center">
-                  <div className="text-lg font-semibold text-green-600">{syncJob.success}</div>
+                  <div className="text-lg font-semibold text-[var(--color-success)]">{syncJob.success}</div>
                   <div className="text-xs text-[var(--color-text-subtle)]">成功</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-lg font-semibold text-red-600">{syncJob.failed}</div>
+                  <div className="text-lg font-semibold text-[var(--color-danger)]">{syncJob.failed}</div>
                   <div className="text-xs text-[var(--color-text-subtle)]">失败</div>
                 </div>
                 <div className="text-center">
@@ -883,7 +883,7 @@ export default function DataMonitorPage() {
                 </div>
               </div>
               {syncJob.firstError && (
-                <div className="mt-3 text-xs text-red-600">
+                <div className="mt-3 text-xs text-[var(--color-danger)]">
                   第一条错误: {syncJob.firstError}
                 </div>
               )}
@@ -915,7 +915,7 @@ export default function DataMonitorPage() {
 
       {connectionStatus !== "connected" && (
         <Surface padding="lg" className="text-center">
-          <WifiOff className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <WifiOff className="w-12 h-12 text-[var(--color-text-subtle)] mx-auto mb-4" />
           <h3 className="text-lg font-medium text-[var(--color-text-muted)] mb-2">未连接到服务器</h3>
           <p className="text-sm text-[var(--color-text-subtle)]">
             请确保服务器采集器正在运行，并检查服务器地址是否正确

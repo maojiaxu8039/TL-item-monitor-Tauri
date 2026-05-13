@@ -187,9 +187,9 @@ export default function ImportExportPage() {
           </div>
 
           {importResult && (
-            <Surface padding="md" className={importResult.errors.length > 0 ? "bg-amber-50 border-amber-200" : "bg-[rgba(34,197,94,0.1)] border-green-200"}>
+            <Surface padding="md" className={importResult.errors.length > 0 ? "bg-amber-50 border-amber-200" : "bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.25)]"}>
               <div className="flex items-center gap-2 mb-2">
-                <span className={`text-sm font-medium ${importResult.errors.length > 0 ? "text-amber-700" : "text-green-700"}`}>
+                <span className={`text-sm font-medium ${importResult.errors.length > 0 ? "text-[var(--color-brand-gold)]" : "text-[var(--color-success)]"}`}>
                   导入完成：成功 {importResult.imported} 条
                   {importResult.errors.length > 0 && `，失败 ${importResult.errors.length} 条`}
                 </span>
@@ -199,7 +199,7 @@ export default function ImportExportPage() {
                 <>
                   <button
                     onClick={() => setShowImportDetails(!showImportDetails)}
-                    className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700"
+                    className="flex items-center gap-1 text-xs text-amber-600 hover:text-[var(--color-brand-gold)]"
                   >
                     {showImportDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                     {showImportDetails ? "收起详情" : "查看失败详情"}

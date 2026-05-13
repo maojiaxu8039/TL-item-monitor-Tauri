@@ -110,7 +110,7 @@ function HoardCard({
   const getConfig = () => {
     if (isBuy)
       return {
-        border: "border-green-200",
+        border: "border-[rgba(34,197,94,0.25)]",
         bg: "bg-[rgba(34,197,94,0.1)]",
         badge: "success",
         icon: ShoppingCart,
@@ -118,7 +118,7 @@ function HoardCard({
       };
     if (isSell)
       return {
-        border: "border-red-200",
+        border: "border-[rgba(239,68,68,0.25)]",
         bg: "bg-[rgba(239,68,68,0.1)]",
         badge: "danger",
         icon: DollarSign,
@@ -141,7 +141,7 @@ function HoardCard({
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className={cn("p-2 rounded-lg", config.bg)}>
-            <Icon className={`w-5 h-5 ${isBuy ? "text-green-600" : isSell ? "text-red-600" : "text-amber-600"}`} />
+            <Icon className={`w-5 h-5 ${isBuy ? "text-[var(--color-success)]" : isSell ? "text-[var(--color-danger)]" : "text-amber-600"}`} />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -190,7 +190,7 @@ function HoardCard({
         </Surface>
         <Surface padding="sm" className="bg-[var(--color-panel-soft)]">
           <div className="text-xs text-[var(--color-text-subtle)] mb-1">趋势</div>
-          <div className={`text-sm font-bold ${analysis.trend_percent > 0 ? "text-red-600" : analysis.trend_percent < 0 ? "text-green-600" : "text-[var(--color-text)]"}`}>
+          <div className={`text-sm font-bold ${analysis.trend_percent > 0 ? "text-[var(--color-danger)]" : analysis.trend_percent < 0 ? "text-[var(--color-success)]" : "text-[var(--color-text)]"}`}>
             {analysis.trend_percent > 0 ? "+" : ""}{analysis.trend_percent.toFixed(1)}%
           </div>
         </Surface>
@@ -311,7 +311,7 @@ export default function PriceAnalysisPage() {
           iconBg="bg-[rgba(34,197,94,0.1)]"
           iconColor="text-green-500"
           helper={<span className="text-xs text-green-500">件物品</span>}
-          className="border-green-100"
+          className="border-[rgba(34,197,94,0.2)]"
         />
         <MetricCard
           label="建议出手"
@@ -372,7 +372,7 @@ export default function PriceAnalysisPage() {
       {analysisLoading ? (
         <Surface padding="md">
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-slate-300 animate-spin" />
+            <Loader2 className="w-8 h-8 text-[var(--color-text-subtle)] animate-spin" />
             <span className="ml-2 text-sm text-[var(--color-text-subtle)]">分析中...</span>
           </div>
         </Surface>

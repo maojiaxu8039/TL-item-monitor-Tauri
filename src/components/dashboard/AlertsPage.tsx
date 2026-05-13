@@ -291,11 +291,11 @@ export default function AlertsPage() {
                       {rule.enabled === 1 ? (
                         <CheckCircle className="w-5 h-5 text-green-500" />
                       ) : (
-                        <X className="w-5 h-5 text-slate-300" />
+                        <X className="w-5 h-5 text-[var(--color-text-subtle)]" />
                       )}
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-slate-900">
+                          <span className="font-medium text-[var(--color-text)]">
                             {getRuleTypeLabel(rule.rule_type)} {rule.threshold}
                             {rule.rule_type === "price_drop_percent" ? "%" : "火"}
                           </span>
@@ -398,11 +398,11 @@ export default function AlertsPage() {
             <div>
               <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">物品名称</label>
               {selectedItemName ? (
-                <div className="flex items-center gap-2 px-3 py-2 bg-[rgba(34,197,94,0.1)] rounded-lg border border-green-200">
-                  <span className="flex-1 text-sm text-green-700 font-medium">{selectedItemName}</span>
+                <div className="flex items-center gap-2 px-3 py-2 bg-[rgba(34,197,94,0.1)] rounded-lg border border-[rgba(34,197,94,0.25)]">
+                  <span className="flex-1 text-sm text-[var(--color-success)] font-medium">{selectedItemName}</span>
                   <button
                     onClick={clearSelectedItem}
-                    className="text-green-500 hover:text-green-700"
+                    className="text-green-500 hover:text-[var(--color-success)]"
                   >
                     <X className="w-4 h-4" />
                   </button>

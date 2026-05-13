@@ -25,7 +25,7 @@ export function Switch({ checked, onChange, disabled = false, className }: Switc
           : "bg-[var(--color-panel-soft)] border border-[var(--color-border)]",
         "after:content-[''] after:absolute after:top-[2px] after:left-[2px]",
         "after:bg-[var(--color-text)] after:rounded-full after:h-4 after:w-4 after:transition-all",
-        checked && "after:translate-x-full after:bg-white after:border-white/30"
+        checked && "after:translate-x-full after:bg-[var(--color-brand-gold)]"
       )} />
     </label>
   );

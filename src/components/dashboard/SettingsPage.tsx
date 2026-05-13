@@ -386,7 +386,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="bg-[var(--color-panel-soft)] rounded-lg p-3 border border-[var(--color-border-soft)]">
                   <div className="text-xs text-[var(--color-text-subtle)] mb-1">赛季状态</div>
-                  <div className="text-sm font-medium text-green-600">
+                  <div className="text-sm font-medium text-[var(--color-success)]">
                     {currentSeason.ended_at 
                       ? `已结束 (${new Date(currentSeason.ended_at * 1000).toLocaleDateString('zh-CN')})`
                       : '进行中'
@@ -907,7 +907,7 @@ export default function SettingsPage() {
                 size="sm"
                 onClick={() => setConfirmClearOpen(true)}
                 disabled={clearMutation.isPending}
-                className="border-red-200 text-red-500 hover:bg-[rgba(239,68,68,0.1)]"
+                className="border-[rgba(239,68,68,0.25)] text-red-500 hover:bg-[rgba(239,68,68,0.1)]"
                 title="清空物品数据库，重新抓取"
               >
                 <Trash2 className={`w-3.5 h-3.5 ${clearMutation.isPending ? "animate-spin" : ""} mr-1.5`} />

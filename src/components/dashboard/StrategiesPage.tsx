@@ -26,7 +26,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { cmd, StrategyWithCosts, ItemData } from "@/lib/commands";
-import { useToast } from "@/hooks/useToast";
+import { toast } from "sonner";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -97,7 +97,6 @@ export interface StrategyRecommendation {
 }
 
 export default function StrategiesPage() {
-  const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState<StrategyTab>("strategies");
   const [strategies, setStrategies] = useState<StrategyWithCosts[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -154,7 +153,7 @@ export default function StrategiesPage() {
     } catch (e) {
       if (!mountedRef.current) return;
       console.error("Failed to load strategies:", e);
-      addToast("error", "加载策略失败");
+      toast.error("加载策略失败");
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -195,7 +194,7 @@ export default function StrategiesPage() {
 
   const handleCreate = async () => {
     if (!editForm.name.trim()) {
-      addToast("warning", "请输入策略名称");
+      toast.warning("请输入策略名称");
       return;
     }
     try {
@@ -208,13 +207,13 @@ export default function StrategiesPage() {
         remark: editForm.remark || null,
         image_url: editForm.image_url || null,
       });
-      addToast("success", "策略创建成功");
+      toast.success("策略创建成功");
       setShowCreateDialog(false);
       resetForm();
       loadStrategies();
     } catch (e) {
       console.error("Failed to create strategy:", e);
-      addToast("error", `创建策略失败: ${e}`);
+      toast.error(`创建策略失败: ${e}`);
     }
   };
 
@@ -234,7 +233,7 @@ export default function StrategiesPage() {
 
   const handleUpdate = async () => {
     if (!editForm.id || !editForm.name.trim()) {
-      addToast("warning", "请输入策略名称");
+      toast.warning("请输入策略名称");
       return;
     }
     try {
@@ -248,13 +247,13 @@ export default function StrategiesPage() {
         remark: editForm.remark || null,
         image_url: editForm.image_url || null,
       });
-      addToast("success", "策略更新成功");
+      toast.success("策略更新成功");
       setShowEditDialog(false);
       resetForm();
       loadStrategies();
     } catch (e) {
       console.error("Failed to update strategy:", e);
-      addToast("error", `更新策略失败: ${e}`);
+      toast.error(`更新策略失败: ${e}`);
     }
   };
 
@@ -262,17 +261,17 @@ export default function StrategiesPage() {
     if (!confirm("确定要删除这个策略吗？")) return;
     try {
       await cmd.deleteStrategyDetail(id);
-      addToast("success", "策略已删除");
+      toast.success("策略已删除");
       loadStrategies();
     } catch (e) {
       console.error("Failed to delete strategy:", e);
-      addToast("error", "删除策略失败");
+      toast.error("删除策略失败");
     }
   };
 
   const handleAddCost = async () => {
     if (!costForm.item_id.trim() && !costForm.item_name.trim()) {
-      addToast("warning", "请选择或输入物品");
+      toast.warning("请选择或输入物品");
       return;
     }
     try {
@@ -284,19 +283,19 @@ export default function StrategiesPage() {
         count: costForm.count,
         is_realtime: costForm.is_realtime,
       });
-      addToast("success", "成本添加成功");
+      toast.success("成本添加成功");
       setShowCostDialog(null);
       resetCostForm();
       loadStrategies();
     } catch (e) {
       console.error("Failed to add cost:", e);
-      addToast("error", "添加成本失败");
+      toast.error("添加成本失败");
     }
   };
 
   const handleAddOutput = async () => {
     if (!outputForm.item_name.trim()) {
-      addToast("warning", "请选择物品");
+      toast.warning("请选择物品");
       return;
     }
     try {
@@ -308,35 +307,35 @@ export default function StrategiesPage() {
         estimated_value: 0,
         remark: null,
       });
-      addToast("success", "产出添加成功");
+      toast.success("产出添加成功");
       setShowOutputDialog(null);
       resetOutputForm();
       loadStrategies();
     } catch (e) {
       console.error("Failed to add output:", e);
-      addToast("error", "添加产出失败");
+      toast.error("添加产出失败");
     }
   };
 
   const handleDeleteCost = async (id: string) => {
     try {
       await cmd.deleteStrategyCost(id);
-      addToast("success", "成本已删除");
+      toast.success("成本已删除");
       loadStrategies();
     } catch (e) {
       console.error("Failed to delete cost:", e);
-      addToast("error", "删除成本失败");
+      toast.error("删除成本失败");
     }
   };
 
   const handleDeleteOutput = async (id: string) => {
     try {
       await cmd.deleteStrategyOutput(id);
-      addToast("success", "产出已删除");
+      toast.success("产出已删除");
       loadStrategies();
     } catch (e) {
       console.error("Failed to delete output:", e);
-      addToast("error", "删除产出失败");
+      toast.error("删除产出失败");
     }
   };
 
@@ -344,11 +343,11 @@ export default function StrategiesPage() {
     setRefreshing(strategyId);
     try {
       await cmd.refreshStrategyFirePrices(strategyId);
-      addToast("success", "火价已刷新");
+      toast.success("火价已刷新");
       loadStrategies();
     } catch (e) {
       console.error("Failed to refresh prices:", e);
-      addToast("error", "刷新火价失败");
+      toast.error("刷新火价失败");
     } finally {
       setRefreshing(null);
     }
@@ -443,28 +442,28 @@ export default function StrategiesPage() {
 
   const getLabelColor = (label: string) => {
     switch (label) {
-      case "K7": return "bg-[var(--color-success)]/20 text-[var(--color-success)]";
-      case "K8-1": return "bg-orange-100 text-[var(--color-brand-gold)]";
-      case "K8-2": return "bg-red-100 text-red-600";
-      case "U8": return "bg-purple-100 text-[var(--color-ai)]";
-      case "深空": return "bg-blue-100 text-[var(--color-brand)]";
-      case "九红深空": return "bg-yellow-100 text-yellow-700";
+      case "K7": return "bg-[rgba(34,197,94,0.15)] text-[var(--color-success)]";
+      case "K8-1": return "bg-[rgba(255,184,0,0.15)] text-[var(--color-brand-gold)]";
+      case "K8-2": return "bg-[rgba(239,68,68,0.15)] text-[var(--color-danger)]";
+      case "U8": return "bg-[rgba(167,139,250,0.15)] text-[var(--color-ai)]";
+      case "深空": return "bg-[rgba(255,106,0,0.15)] text-[var(--color-brand)]";
+      case "九红深空": return "bg-[rgba(255,184,0,0.12)] text-[var(--color-brand-gold)]";
       default: return "bg-[var(--color-panel)] text-[var(--color-text-muted)]";
     }
   };
 
   const getProfitColor = (ratio: number) => {
-    if (ratio > 0) return "text-red-600";
-    if (ratio < 0) return "text-green-600";
+    if (ratio > 0) return "text-[var(--color-danger)]";
+    if (ratio < 0) return "text-[var(--color-success)]";
     return "text-[var(--color-text-muted)]";
   };
 
   const getRecommendationLevelColor = (level: StrategyRecommendation["level"]) => {
     switch (level) {
-      case "strong": return "bg-green-100 text-green-700 border-green-200";
-      case "good": return "bg-[var(--color-brand)]/20 text-[var(--color-brand)] border-[var(--color-brand)]/30";
-      case "watch": return "bg-yellow-100 text-yellow-700 border-yellow-200";
-      case "avoid": return "bg-red-100 text-red-700 border-red-200";
+      case "strong": return "bg-[rgba(34,197,94,0.12)] text-[var(--color-success)] border-[rgba(34,197,94,0.25)]";
+      case "good": return "bg-[var(--color-brand)]/15 text-[var(--color-brand)] border-[var(--color-brand)]/30";
+      case "watch": return "bg-[rgba(255,184,0,0.12)] text-[var(--color-brand-gold)] border-[rgba(255,184,0,0.25)]";
+      case "avoid": return "bg-[rgba(239,68,68,0.12)] text-[var(--color-danger)] border-[rgba(239,68,68,0.25)]";
     }
   };
 
@@ -479,9 +478,9 @@ export default function StrategiesPage() {
 
   const getRiskColor = (risk: StrategyRecommendation["risk_level"]) => {
     switch (risk) {
-      case "low": return "text-green-600 bg-[rgba(34,197,94,0.1)]";
-      case "medium": return "text-yellow-600 bg-yellow-50";
-      case "high": return "text-red-600 bg-[rgba(239,68,68,0.1)]";
+      case "low": return "text-[var(--color-success)] bg-[rgba(34,197,94,0.1)]";
+      case "medium": return "text-[var(--color-brand-gold)] bg-[rgba(255,184,0,0.1)]";
+      case "high": return "text-[var(--color-danger)] bg-[rgba(239,68,68,0.1)]";
     }
   };
 
@@ -642,7 +641,7 @@ export default function StrategiesPage() {
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h3 className="font-medium text-slate-900">{template.name}</h3>
+                    <h3 className="font-medium text-[var(--color-text)]">{template.name}</h3>
                     <p className="text-xs text-[var(--color-text-subtle)] mt-1">{template.description}</p>
                   </div>
                   <span className={`px-2 py-0.5 text-xs rounded ${getLabelColor(template.label)}`}>
@@ -659,7 +658,7 @@ export default function StrategiesPage() {
                 </div>
                 <div className="flex flex-wrap gap-1 mb-3">
                   {template.costs.slice(0, 3).map((cost, i) => (
-                    <span key={i} className="px-1.5 py-0.5 bg-[rgba(239,68,68,0.1)] text-red-600 text-xs rounded">
+                    <span key={i} className="px-1.5 py-0.5 bg-[rgba(239,68,68,0.1)] text-[var(--color-danger)] text-xs rounded">
                       {cost.cost_type}
                     </span>
                   ))}
@@ -702,15 +701,15 @@ export default function StrategiesPage() {
                           remark: null,
                         });
                       }
-                      addToast("success", `已从模板 "${template.name}" 创建策略`);
+                      toast.success(`已从模板 "${template.name}" 创建策略`);
                       setActiveTab("strategies");
                       loadStrategies();
                     } catch (e) {
                       console.error("Failed to create from template:", e);
-                      addToast("error", `从模板创建失败: ${e}`);
+                      toast.error(`从模板创建失败: ${e}`);
                     }
                   }}
-                  className="w-full px-3 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90 transition-opacity"
+                  className="w-full px-3 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90 transition-opacity"
                 >
                   一键创建
                 </button>
@@ -724,13 +723,13 @@ export default function StrategiesPage() {
         <div className="space-y-4">
           {strategies.length === 0 ? (
             <div className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] py-12 text-center">
-              <Award className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+              <Award className="w-12 h-12 text-[var(--color-text-subtle)] mx-auto mb-3" />
               <div className="text-sm text-[var(--color-text-subtle)]">暂无策略</div>
               <div className="text-xs text-[var(--color-text-subtle)] mt-1">请先创建策略后查看推荐</div>
             </div>
           ) : calculateRecommendations.length === 0 ? (
             <div className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] py-12 text-center">
-              <Info className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+              <Info className="w-12 h-12 text-[var(--color-text-subtle)] mx-auto mb-3" />
               <div className="text-sm text-[var(--color-text-subtle)]">策略数据不足</div>
               <div className="text-xs text-[var(--color-text-subtle)] mt-1">请添加成本和产出后查看推荐</div>
             </div>
@@ -745,16 +744,16 @@ export default function StrategiesPage() {
                   >
                     <div className="flex items-center gap-4">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
-                        index === 0 ? "bg-yellow-100 text-yellow-600" :
-                        index === 1 ? "bg-[var(--color-panel)] text-[var(--color-text-subtle)]" :
-                        index === 2 ? "bg-orange-100 text-[var(--color-brand-gold)]" :
+                        index === 0 ? "bg-[rgba(255,184,0,0.15)] text-[var(--color-brand-gold)]" :
+                        index === 1 ? "bg-[var(--color-panel-soft)] text-[var(--color-text-subtle)]" :
+                        index === 2 ? "bg-[rgba(255,106,0,0.15)] text-[var(--color-brand)]" :
                         "bg-[var(--color-panel-soft)] text-[var(--color-text-subtle)]"
                       }`}>
                         {index + 1}
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-slate-900">{rec.strategy_name}</span>
+                          <span className="font-medium text-[var(--color-text)]">{rec.strategy_name}</span>
                           <span className={`px-2 py-0.5 text-xs rounded border ${getRecommendationLevelColor(rec.level)}`}>
                             {getRecommendationLevelText(rec.level)}
                           </span>
@@ -764,10 +763,10 @@ export default function StrategiesPage() {
                         </div>
                         <div className="flex items-center gap-4 mt-1 text-xs text-[var(--color-text-subtle)]">
                           <span>评分: <span className="font-medium">{rec.score}</span></span>
-                          <span>收益率: <span className={`font-medium ${rec.profit_ratio >= 0 ? "text-red-600" : "text-green-600"}`}>
+                          <span>收益率: <span className={`font-medium ${rec.profit_ratio >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
                             {rec.profit_ratio >= 0 ? "+" : ""}{rec.profit_ratio.toFixed(1)}%
                           </span></span>
-                          <span>预计收益: <span className={`font-medium ${rec.expected_profit_fire >= 0 ? "text-red-600" : "text-green-600"}`}>
+                          <span>预计收益: <span className={`font-medium ${rec.expected_profit_fire >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
                             {rec.expected_profit_fire >= 0 ? "+" : ""}{rec.expected_profit_fire.toFixed(0)}火
                           </span></span>
                         </div>
@@ -782,10 +781,10 @@ export default function StrategiesPage() {
                       )}
                       <div className="text-right">
                         <div className={`text-2xl font-bold ${
-                          rec.score >= 80 ? "text-red-600" :
+                          rec.score >= 80 ? "text-[var(--color-danger)]" :
                           rec.score >= 60 ? "text-[var(--color-brand-gold)]" :
-                          rec.score >= 40 ? "text-yellow-600" :
-                          "text-green-600"
+                          rec.score >= 40 ? "text-[var(--color-brand)]" :
+                          "text-[var(--color-success)]"
                         }`}>
                           {rec.score}
                         </div>
@@ -795,7 +794,7 @@ export default function StrategiesPage() {
                     {rec.reasons.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-1">
                         {rec.reasons.map((reason, i) => (
-                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(34,197,94,0.1)] text-green-700 text-xs rounded">
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(34,197,94,0.1)] text-[var(--color-success)] text-xs rounded">
                             <ThumbsUp className="w-3 h-3" />
                             {reason}
                           </span>
@@ -805,7 +804,7 @@ export default function StrategiesPage() {
                     {rec.warnings.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1">
                         {rec.warnings.map((warning, i) => (
-                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-50 text-yellow-700 text-xs rounded">
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(255,184,0,0.1)] text-[var(--color-brand-gold)] text-xs rounded">
                             <AlertTriangle className="w-3 h-3" />
                             {warning}
                           </span>
@@ -815,19 +814,19 @@ export default function StrategiesPage() {
                     {strategy && (
                       <div className="mt-3 pt-3 border-t border-[var(--color-border-soft)] space-y-3">
                         <div className="flex items-center gap-4 text-xs text-[var(--color-text-subtle)]">
-                          <span>成本: <span className="text-red-500">{strategy.total_cost_fire.toFixed(0)}火</span></span>
-                          <span>产出: <span className="text-green-500">{strategy.total_output_value.toFixed(0)}火</span></span>
+                          <span>成本: <span className="text-[var(--color-danger)]">{strategy.total_cost_fire.toFixed(0)}火</span></span>
+                          <span>产出: <span className="text-[var(--color-success)]">{strategy.total_output_value.toFixed(0)}火</span></span>
                           <span>难度: {strategy.difficulty}</span>
                         </div>
                         {strategy.costs.length > 0 && (
                           <div>
                             <div className="text-xs font-medium text-[var(--color-text)] mb-1.5 flex items-center gap-1">
-                              <Zap className="w-3 h-3 text-red-500" />
+                              <Zap className="w-3 h-3 text-[var(--color-danger)]" />
                               消耗材料
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {strategy.costs.map((cost) => (
-                                <span key={cost.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(239,68,68,0.1)] text-red-600 text-xs rounded">
+                                <span key={cost.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(239,68,68,0.1)] text-[var(--color-danger)] text-xs rounded">
                                   <span className="font-medium">{cost.item_name || cost.item_id}</span>
                                   <span className="text-red-400">×{cost.count}</span>
                                   <span className="text-red-700">{cost.total_fire.toFixed(0)}火</span>
@@ -840,12 +839,12 @@ export default function StrategiesPage() {
                         {strategy.outputs.length > 0 && (
                           <div>
                             <div className="text-xs font-medium text-[var(--color-text)] mb-1.5 flex items-center gap-1">
-                              <TrendingUp className="w-3 h-3 text-green-500" />
+                              <TrendingUp className="w-3 h-3 text-[var(--color-success)]" />
                               产出收益
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {strategy.outputs.map((output) => (
-                                <span key={output.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(34,197,94,0.1)] text-green-600 text-xs rounded">
+                                <span key={output.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(34,197,94,0.1)] text-[var(--color-success)] text-xs rounded">
                                   <span className="font-medium">{output.item_name}</span>
                                   <span className="text-green-400">×{output.count}</span>
                                   <span className="text-green-700">{(output.realtime_value * output.count).toFixed(0)}火</span>
@@ -868,7 +867,7 @@ export default function StrategiesPage() {
         <>
           {strategies.length === 0 ? (
             <div className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] py-16 text-center">
-              <Target className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+              <Target className="w-16 h-16 text-[var(--color-text-subtle)] mx-auto mb-4" />
               <div className="text-sm text-[var(--color-text-subtle)] mb-2">暂无策略</div>
               <div className="text-xs text-[var(--color-text-subtle)]">点击右上角"新建策略"开始分析</div>
             </div>
@@ -889,7 +888,7 @@ export default function StrategiesPage() {
                       ) : (
                         <ChevronRight className="w-4 h-4 text-[var(--color-text-subtle)]" />
                       )}
-                      <div className="text-lg font-semibold text-slate-900">{strategy.name}</div>
+                      <div className="text-lg font-semibold text-[var(--color-text)]">{strategy.name}</div>
                       <span className={`px-2 py-0.5 text-xs rounded-full ${getLabelColor(strategy.label)}`}>
                         {strategy.label}
                       </span>
@@ -921,8 +920,8 @@ export default function StrategiesPage() {
                     <div className="mt-2 text-sm text-[var(--color-text-subtle)] ml-7">{strategy.remark}</div>
                   )}
                   <div className="mt-2 flex items-center gap-6 ml-7 text-xs text-[var(--color-text-subtle)]">
-                    <span>成本: <span className="text-red-500">{strategy.total_cost_fire.toFixed(0)} 火</span></span>
-                    <span>产出: <span className="text-green-500">{strategy.total_output_value.toFixed(0)} 火</span></span>
+                    <span>成本: <span className="text-[var(--color-danger)]">{strategy.total_cost_fire.toFixed(0)} 火</span></span>
+                    <span>产出: <span className="text-[var(--color-success)]">{strategy.total_output_value.toFixed(0)} 火</span></span>
                   </div>
                 </div>
 
@@ -932,7 +931,7 @@ export default function StrategiesPage() {
                       <div>
                         <div className="flex items-center justify-between mb-3">
                           <div className="text-sm font-medium text-[var(--color-text)] flex items-center gap-1.5">
-                            <Zap className="w-4 h-4 text-red-500" />
+                            <Zap className="w-4 h-4 text-[var(--color-danger)]" />
                             成本消耗
                           </div>
                           <button
@@ -951,7 +950,7 @@ export default function StrategiesPage() {
                             {strategy.costs.map((cost) => (
                               <div key={cost.id} className="flex items-center justify-between p-2 bg-[var(--color-panel-soft)] rounded-lg text-sm">
                                 <div className="flex items-center gap-2">
-                                  <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded">
+                                  <span className="px-1.5 py-0.5 bg-[rgba(239,68,68,0.1)] text-[var(--color-danger)] text-xs rounded">
                                     {cost.cost_type}
                                   </span>
                                   <span className="text-[var(--color-text)]">{cost.item_name || cost.item_id}</span>
@@ -982,7 +981,7 @@ export default function StrategiesPage() {
                       <div>
                         <div className="flex items-center justify-between mb-3">
                           <div className="text-sm font-medium text-[var(--color-text)] flex items-center gap-1.5">
-                            <TrendingUp className="w-4 h-4 text-green-500" />
+                            <TrendingUp className="w-4 h-4 text-[var(--color-success)]" />
                             产出收益
                           </div>
                           <button
@@ -1152,7 +1151,7 @@ export default function StrategiesPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">加点图片</label>
-              <label className="flex items-center gap-2 px-4 py-3 bg-[var(--color-panel)] text-[var(--color-text-muted)] rounded-lg hover:bg-slate-200 cursor-pointer w-full">
+              <label className="flex items-center gap-2 px-4 py-3 bg-[var(--color-panel)] text-[var(--color-text-muted)] rounded-lg hover:bg-[var(--color-panel-soft)] cursor-pointer w-full">
                 <Upload className="w-4 h-4" />
                 <span className="text-sm">上传加点截图</span>
                 <input
@@ -1176,7 +1175,7 @@ export default function StrategiesPage() {
                   <img src={editForm.image_url} alt="加点图预览" className="max-h-24 rounded" />
                   <button
                     onClick={() => setEditForm(prev => ({ ...prev, image_url: "" }))}
-                    className="text-red-500 hover:text-red-700 text-xs"
+                    className="text-[var(--color-danger)] hover:text-red-700 text-xs"
                   >
                     删除图片
                   </button>
@@ -1186,7 +1185,7 @@ export default function StrategiesPage() {
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
             <button onClick={() => setShowCreateDialog(false)} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg">取消</button>
-            <button onClick={handleCreate} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90">创建</button>
+            <button onClick={handleCreate} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90">创建</button>
           </div>
         </div>
       </Dialog>
@@ -1254,7 +1253,7 @@ export default function StrategiesPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">加点图片</label>
-              <label className="flex items-center gap-2 px-4 py-3 bg-[var(--color-panel)] text-[var(--color-text-muted)] rounded-lg hover:bg-slate-200 cursor-pointer w-full">
+              <label className="flex items-center gap-2 px-4 py-3 bg-[var(--color-panel)] text-[var(--color-text-muted)] rounded-lg hover:bg-[var(--color-panel-soft)] cursor-pointer w-full">
                 <Upload className="w-4 h-4" />
                 <span className="text-sm">上传加点截图</span>
                 <input
@@ -1278,7 +1277,7 @@ export default function StrategiesPage() {
                   <img src={editForm.image_url} alt="加点图预览" className="max-h-24 rounded" />
                   <button
                     onClick={() => setEditForm(prev => ({ ...prev, image_url: "" }))}
-                    className="text-red-500 hover:text-red-700 text-xs"
+                    className="text-[var(--color-danger)] hover:text-red-700 text-xs"
                   >
                     删除图片
                   </button>
@@ -1288,7 +1287,7 @@ export default function StrategiesPage() {
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
             <button onClick={() => setShowEditDialog(false)} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg">取消</button>
-            <button onClick={handleUpdate} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90">保存</button>
+            <button onClick={handleUpdate} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90">保存</button>
           </div>
         </div>
       </Dialog>
@@ -1348,7 +1347,7 @@ export default function StrategiesPage() {
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
             <button onClick={() => setShowCostDialog(null)} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg">取消</button>
-            <button onClick={handleAddCost} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90">添加</button>
+            <button onClick={handleAddCost} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90">添加</button>
           </div>
         </div>
       </Dialog>
@@ -1408,7 +1407,7 @@ export default function StrategiesPage() {
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
             <button onClick={() => setShowOutputDialog(null)} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg">取消</button>
-            <button onClick={handleAddOutput} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90">添加</button>
+            <button onClick={handleAddOutput} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90">添加</button>
           </div>
         </div>
       </Dialog>

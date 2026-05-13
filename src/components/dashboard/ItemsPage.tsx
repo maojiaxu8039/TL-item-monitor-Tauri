@@ -136,7 +136,7 @@ function DayRangeInput({
         onChange={(e) => setInputValue(e.target.value)}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        className="pl-9 pr-3 py-2 w-28 border border-[var(--color-border)] rounded-lg text-sm bg-[var(--color-panel)] outline-none focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 placeholder:text-slate-300 transition-all"
+        className="pl-9 pr-3 py-2 w-28 border border-[var(--color-border)] rounded-lg text-sm bg-[var(--color-panel)] outline-none focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 placeholder:text-[var(--color-text-subtle)] transition-all"
       />
     </div>
   );
@@ -338,8 +338,8 @@ export default function ItemsPage() {
             <div className="flex items-center gap-2">
               <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${
                 isUp 
-                  ? "bg-[rgba(239,68,68,0.1)] text-red-600" 
-                  : "bg-[rgba(34,197,94,0.1)] text-green-600"
+                  ? "bg-[rgba(239,68,68,0.1)] text-[var(--color-danger)]" 
+                  : "bg-[rgba(34,197,94,0.1)] text-[var(--color-success)]"
               }`}>
                 {isUp ? (
                   <TrendingUp className="w-3 h-3" />
@@ -348,7 +348,7 @@ export default function ItemsPage() {
                 )}
                 {Math.abs(rate).toFixed(1)}%
               </div>
-              <span className={`text-xs ${isUp ? "text-red-600" : "text-green-600"}`}>
+              <span className={`text-xs ${isUp ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
                 {isUp ? "+" : ""}{diff.toFixed(2)}
               </span>
             </div>
@@ -550,7 +550,7 @@ export default function ItemsPage() {
                 <tr>
                   <td colSpan={6} className="text-center py-16">
                     <div className="flex flex-col items-center gap-3 text-[var(--color-text-subtle)]">
-                      <Package className="w-12 h-12 text-slate-300" />
+                      <Package className="w-12 h-12 text-[var(--color-text-subtle)]" />
                       <span className="text-sm">
                         {debouncedKeyword ? `未找到匹配"${debouncedKeyword}"的物品` : "暂无物品数据"}
                       </span>

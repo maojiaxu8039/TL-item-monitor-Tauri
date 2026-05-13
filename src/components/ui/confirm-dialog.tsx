@@ -26,10 +26,10 @@ const variantConfig = {
   },
   info: {
     icon: Info,
-    iconClass: "text-sky-300",
-    bgClass: "border-[rgba(56,189,248,0.28)] bg-[rgba(56,189,248,0.1)]",
-    borderClass: "border-[rgba(56,189,248,0.28)]",
-    confirmClass: "bg-sky-500 text-black hover:brightness-110",
+    iconClass: "text-[var(--color-brand-gold)]",
+    bgClass: "border-[rgba(255,184,0,0.28)] bg-[rgba(255,184,0,0.1)]",
+    borderClass: "border-[rgba(255,184,0,0.28)]",
+    confirmClass: "bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black hover:brightness-110",
   },
   danger: {
     icon: XCircle,

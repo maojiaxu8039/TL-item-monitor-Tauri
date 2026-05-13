@@ -287,40 +287,40 @@ export default function FirePriceComparePage() {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <Surface padding="md" className="bg-[rgba(34,197,94,0.1)] border-green-200">
+          <Surface padding="md" className="bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.25)]">
             <div className="flex items-center gap-2 mb-2">
-              <ArrowDownCircle className="w-5 h-5 text-green-600" />
-              <span className="text-sm font-medium text-green-700">最佳购买火时机</span>
+              <ArrowDownCircle className="w-5 h-5 text-[var(--color-success)]" />
+              <span className="text-sm font-medium text-[var(--color-success)]">最佳购买火时机</span>
             </div>
             <div className="text-xl font-bold text-green-800">
               第{bestBuyTime.day}天 {String(bestBuyTime.hour).padStart(2, '0')}:00
             </div>
-            <div className="text-sm text-green-600 font-medium mt-1">
+            <div className="text-sm text-[var(--color-success)] font-medium mt-1">
               ¥{bestBuyTime.price.toFixed(2)}/万火
             </div>
-            <div className="text-xs text-green-600 mt-1">
+            <div className="text-xs text-[var(--color-success)] mt-1">
               {bestBuyTime.reason}
             </div>
-            <div className="text-xs text-green-500 mt-2 pt-2 border-t border-green-200">
+            <div className="text-xs text-green-500 mt-2 pt-2 border-t border-[rgba(34,197,94,0.25)]">
               建议：火价低于均价时购入初火
             </div>
           </Surface>
 
-          <Surface padding="md" className="bg-[rgba(239,68,68,0.1)] border-red-200">
+          <Surface padding="md" className="bg-[rgba(239,68,68,0.1)] border-[rgba(239,68,68,0.25)]">
             <div className="flex items-center gap-2 mb-2">
-              <ArrowUpCircle className="w-5 h-5 text-red-600" />
-              <span className="text-sm font-medium text-red-700">最佳出售火时机</span>
+              <ArrowUpCircle className="w-5 h-5 text-[var(--color-danger)]" />
+              <span className="text-sm font-medium text-[var(--color-danger)]">最佳出售火时机</span>
             </div>
             <div className="text-xl font-bold text-red-800">
               第{bestSellTime.day}天 {String(bestSellTime.hour).padStart(2, '0')}:00
             </div>
-            <div className="text-sm text-red-600 font-medium mt-1">
+            <div className="text-sm text-[var(--color-danger)] font-medium mt-1">
               ¥{bestSellTime.price.toFixed(2)}/万火
             </div>
-            <div className="text-xs text-red-600 mt-1">
+            <div className="text-xs text-[var(--color-danger)] mt-1">
               {bestSellTime.reason}
             </div>
-            <div className="text-xs text-red-500 mt-2 pt-2 border-t border-red-200">
+            <div className="text-xs text-red-500 mt-2 pt-2 border-t border-[rgba(239,68,68,0.25)]">
               建议：火价高于均价时出售物品换RMB
             </div>
           </Surface>
@@ -335,11 +335,11 @@ export default function FirePriceComparePage() {
             </div>
             <div>
               <div className="text-xs text-[var(--color-text-subtle)]">最低价</div>
-              <div className="text-sm font-medium text-green-600">¥{minPrice.toFixed(2)}</div>
+              <div className="text-sm font-medium text-[var(--color-success)]">¥{minPrice.toFixed(2)}</div>
             </div>
             <div>
               <div className="text-xs text-[var(--color-text-subtle)]">最高价</div>
-              <div className="text-sm font-medium text-red-600">¥{maxPrice.toFixed(2)}</div>
+              <div className="text-sm font-medium text-[var(--color-danger)]">¥{maxPrice.toFixed(2)}</div>
             </div>
           </div>
         </div>
@@ -366,7 +366,7 @@ export default function FirePriceComparePage() {
             >
               <option value="ss11">SS11</option>
             </select>
-            <span className="text-sm text-slate-300">|</span>
+            <span className="text-sm text-[var(--color-text-subtle)]">|</span>
             <span className="text-sm font-medium text-[var(--color-text)]">{currentSeason.toUpperCase()}</span>
             <StatusBadge variant="primary">当前</StatusBadge>
           </div>
@@ -437,7 +437,7 @@ export default function FirePriceComparePage() {
           value={currentHigh > 0 ? (
             <span className="text-xl font-bold text-[var(--color-text)]">
               {currentHigh.toFixed(2)}
-              <span className="text-slate-300 mx-1">/</span>
+              <span className="text-[var(--color-text-subtle)] mx-1">/</span>
               {currentLow.toFixed(2)}
             </span>
           ) : "--"}
@@ -456,7 +456,7 @@ export default function FirePriceComparePage() {
           value={historyHigh > 0 ? (
             <span className="text-xl font-bold text-[var(--color-text-muted)]">
               {historyHigh.toFixed(2)}
-              <span className="text-slate-300 mx-1">/</span>
+              <span className="text-[var(--color-text-subtle)] mx-1">/</span>
               {historyLow.toFixed(2)}
             </span>
           ) : "--"}

@@ -211,7 +211,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
             <div className="max-h-40 overflow-auto">
               <div className="font-medium mb-1">导入完成，但有以下问题：</div>
               {errors.map((err, idx) => (
-                <div key={idx} className="text-xs text-red-600">{err}</div>
+                <div key={idx} className="text-xs text-[var(--color-danger)]">{err}</div>
               ))}
             </div>
           )

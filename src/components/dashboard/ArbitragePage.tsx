@@ -479,7 +479,7 @@ export default function ArbitragePage() {
           iconBg="bg-[rgba(34,197,94,0.1)]"
           iconColor="text-green-500"
           helper={<span className="text-xs text-green-500">个</span>}
-          className="border-green-100"
+          className="border-[rgba(34,197,94,0.2)]"
         />
         <MetricCard
           label="配方总数"
@@ -538,7 +538,7 @@ export default function ArbitragePage() {
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => toggleExpanded(result.recipe_id)}
-                      className="p-1 rounded-lg hover:bg-slate-200 transition-colors"
+                      className="p-1 rounded-lg hover:bg-[var(--color-panel-soft)] transition-colors"
                     >
                       {expandedIds.has(result.recipe_id) ? (
                         <ChevronDown className="h-4 w-4 text-[var(--color-text-subtle)]" />
@@ -559,7 +559,7 @@ export default function ArbitragePage() {
                   <div className="flex items-center gap-4">
                     <div className="text-right">
                       <div className="text-sm font-medium text-[var(--color-text-muted)]">
-                        利润: <span className={result.is_profitable ? "text-red-600" : "text-green-500"}>
+                        利润: <span className={result.is_profitable ? "text-[var(--color-danger)]" : "text-green-500"}>
                           {result.is_profitable ? "+" : ""}{formatPrice(result.profit)}
                         </span>
                       </div>
@@ -570,11 +570,11 @@ export default function ArbitragePage() {
                       </div>
                     </div>
                     {result.is_profitable ? (
-                      <div className="p-1.5 rounded-lg bg-red-100">
-                        <TrendingUp className="h-4 w-4 text-red-600" />
+                      <div className="p-1.5 rounded-lg bg-[rgba(239,68,68,0.12)]">
+                        <TrendingUp className="h-4 w-4 text-[var(--color-danger)]" />
                       </div>
                     ) : (
-                      <div className="p-1.5 rounded-lg bg-green-100">
+                      <div className="p-1.5 rounded-lg bg-[rgba(34,197,94,0.12)]">
                         <TrendingDown className="h-4 w-4 text-green-500" />
                       </div>
                     )}
@@ -584,14 +584,14 @@ export default function ArbitragePage() {
                           const recipe = recipes.find(r => r.id === result.recipe_id);
                           if (recipe) openEditDialog(recipe);
                         }}
-                        className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors text-[var(--color-text-subtle)] hover:text-[var(--color-brand)]"
+                        className="p-1.5 rounded-lg hover:bg-[var(--color-panel-soft)] transition-colors text-[var(--color-text-subtle)] hover:text-[var(--color-brand)]"
                         title="编辑配方"
                       >
                         <Edit3 className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => deleteRecipe(result.recipe_id)}
-                        className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors text-slate-300 hover:text-red-500"
+                        className="p-1.5 rounded-lg hover:bg-[var(--color-panel-soft)] transition-colors text-[var(--color-text-subtle)] hover:text-red-500"
                         title="删除配方"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -629,7 +629,7 @@ export default function ArbitragePage() {
                           ))}
                           <div className="pt-1 border-t border-[var(--color-border)] flex items-center justify-between font-medium">
                             <span className="text-[var(--color-text-muted)]">税后总收入</span>
-                            <span className="text-green-600">{formatPrice(result.total_output_value)}</span>
+                            <span className="text-[var(--color-success)]">{formatPrice(result.total_output_value)}</span>
                           </div>
                         </div>
                       </Surface>
@@ -688,7 +688,7 @@ export default function ArbitragePage() {
                       <span>{ing.item_name}</span>
                       <div className="flex items-center gap-2">
                         <span>× {ing.count}</span>
-                        <button onClick={() => removeNewIngredient(ing.item_name)} className="text-red-400 hover:text-red-600">
+                        <button onClick={() => removeNewIngredient(ing.item_name)} className="text-red-400 hover:text-[var(--color-danger)]">
                           <X className="h-4 w-4" />
                         </button>
                       </div>
@@ -719,7 +719,7 @@ export default function ArbitragePage() {
                 />
                 <button
                   onClick={addIngredientFromDraft}
-                  className="px-3 py-2 rounded-lg bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-slate-200"
+                  className="px-3 py-2 rounded-lg bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
                 >
                   添加
                 </button>
@@ -754,7 +754,7 @@ export default function ArbitragePage() {
                       <span>{out.item_name}</span>
                       <div className="flex items-center gap-2">
                         <span>× {out.count}</span>
-                        <button onClick={() => removeNewOutput(out.item_name)} className="text-red-400 hover:text-red-600">
+                        <button onClick={() => removeNewOutput(out.item_name)} className="text-red-400 hover:text-[var(--color-danger)]">
                           <X className="h-4 w-4" />
                         </button>
                       </div>
@@ -785,7 +785,7 @@ export default function ArbitragePage() {
                 />
                 <button
                   onClick={addOutputFromDraft}
-                  className="px-3 py-2 rounded-lg bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-slate-200"
+                  className="px-3 py-2 rounded-lg bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
                 >
                   添加
                 </button>
@@ -887,7 +887,7 @@ export default function ArbitragePage() {
                         className="w-16 px-2 py-1 rounded-lg border border-[var(--color-border)] text-sm text-center"
                         min="1"
                       />
-                      <button onClick={() => removeEditIngredient(ing.item_name)} className="text-red-400 hover:text-red-600">
+                      <button onClick={() => removeEditIngredient(ing.item_name)} className="text-red-400 hover:text-[var(--color-danger)]">
                         <X className="h-4 w-4" />
                       </button>
                     </div>
@@ -925,7 +925,7 @@ export default function ArbitragePage() {
                         className="w-16 px-2 py-1 rounded-lg border border-[var(--color-border)] text-sm text-center"
                         min="1"
                       />
-                      <button onClick={() => removeEditOutput(out.item_name)} className="text-red-400 hover:text-red-600">
+                      <button onClick={() => removeEditOutput(out.item_name)} className="text-red-400 hover:text-[var(--color-danger)]">
                         <X className="h-4 w-4" />
                       </button>
                     </div>
@@ -984,7 +984,7 @@ export default function ArbitragePage() {
                   className="w-20 px-2 py-1 rounded-lg border border-[var(--color-border)] text-sm text-center"
                   min="1"
                 />
-                <button onClick={() => removeEditIngredient(ing.item_name)} className="text-red-400 hover:text-red-600">
+                <button onClick={() => removeEditIngredient(ing.item_name)} className="text-red-400 hover:text-[var(--color-danger)]">
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -1052,7 +1052,7 @@ export default function ArbitragePage() {
                   className="w-20 px-2 py-1 rounded-lg border border-[var(--color-border)] text-sm text-center"
                   min="1"
                 />
-                <button onClick={() => removeEditOutput(out.item_name)} className="text-red-400 hover:text-red-600">
+                <button onClick={() => removeEditOutput(out.item_name)} className="text-red-400 hover:text-[var(--color-danger)]">
                   <X className="h-4 w-4" />
                 </button>
               </div>

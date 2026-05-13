@@ -103,7 +103,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
     return (
       <div className="bg-[var(--color-panel)] rounded-xl border border-[var(--color-border-soft)] shadow-[var(--shadow-sm)] p-5">
         <div className="flex items-center gap-2">
-          <Settings className="w-4 h-4 text-slate-300" />
+          <Settings className="w-4 h-4 text-[var(--color-text-subtle)]" />
           <span className="text-sm font-semibold text-[var(--color-text-subtle)]">服务器管理</span>
         </div>
         <p className="text-xs text-[var(--color-text-subtle)] mt-2">
@@ -298,7 +298,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
               </div>
 
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-xs text-amber-700">
+                <p className="text-xs text-[var(--color-brand-gold)]">
                   初始化新赛季会创建新的数据库表，请确保先归档当前赛季数据。
                   此操作需要服务器重启后才能生效。
                 </p>

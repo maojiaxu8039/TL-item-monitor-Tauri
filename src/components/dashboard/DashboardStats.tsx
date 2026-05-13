@@ -367,10 +367,10 @@ export function DashboardStats() {
                       </div>
                       <div className="mt-1 flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
                         <span>评分: <span className="font-medium">{rec.score}</span></span>
-                        <span>收益率: <span className={`font-medium ${rec.profit_ratio >= 0 ? "text-red-600" : "text-green-600"}`}>
+                        <span>收益率: <span className={`font-medium ${rec.profit_ratio >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
                           {rec.profit_ratio >= 0 ? "+" : ""}{rec.profit_ratio.toFixed(1)}%
                         </span></span>
-                        <span>预计收益: <span className={`font-medium ${rec.expected_profit_fire >= 0 ? "text-red-600" : "text-green-600"}`}>
+                        <span>预计收益: <span className={`font-medium ${rec.expected_profit_fire >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
                           {rec.expected_profit_fire >= 0 ? "+" : ""}{rec.expected_profit_fire.toFixed(0)}火
                         </span></span>
                       </div>
@@ -386,10 +386,10 @@ export function DashboardStats() {
                     </div>
                     <div className="text-right">
                       <div className={`text-xl font-bold ${
-                        rec.score >= 80 ? "text-red-600" :
+                        rec.score >= 80 ? "text-[var(--color-danger)]" :
                         rec.score >= 60 ? "text-[var(--color-brand-gold)]" :
-                        rec.score >= 40 ? "text-yellow-600" :
-                        "text-green-600"
+                        rec.score >= 40 ? "text-[var(--color-brand-gold)]" :
+                        "text-[var(--color-success)]"
                       }`}>
                         {rec.score}
                       </div>

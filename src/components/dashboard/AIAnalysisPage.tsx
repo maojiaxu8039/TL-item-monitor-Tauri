@@ -441,7 +441,7 @@ export default function AIAnalysisPage() {
           )}
           {isLoading && (
             <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-purple-100 text-[var(--color-ai)] flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 rounded-full bg-[rgba(167,139,250,0.12)] text-[var(--color-ai)] flex items-center justify-center flex-shrink-0">
                 <Bot className="w-4 h-4" />
               </div>
               <div className="bg-[var(--color-panel)] rounded-xl px-4 py-2.5">
