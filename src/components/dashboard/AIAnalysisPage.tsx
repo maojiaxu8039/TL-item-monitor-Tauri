@@ -53,21 +53,21 @@ function SettingsModal({
   const [localSettings, setLocalSettings] = useState<AISettings>(settings);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+      <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4 border border-[var(--color-border)]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
           <div className="flex items-center gap-2">
-            <Settings className="w-5 h-5 text-slate-600" />
-            <h3 className="text-sm font-semibold text-slate-800">OpenClaw Gateway 配置</h3>
+            <Settings className="w-5 h-5 text-[var(--color-text-muted)]" />
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">OpenClaw Gateway 配置</h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <button onClick={onClose} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text)]">
             ✕
           </button>
         </div>
 
         <div className="p-5 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
               Gateway WebSocket 地址
             </label>
             <input
@@ -80,15 +80,15 @@ function SettingsModal({
                 }))
               }
               placeholder="ws://localhost:18789"
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+              className="w-full text-sm border border-[var(--color-border)] rounded-lg px-3 py-2 bg-[var(--color-panel-soft)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-brand)]"
             />
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-[var(--color-text-subtle)]">
               使用 ws:// 协议，默认为 ws://localhost:18789
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
               Gateway Token
             </label>
             <input
@@ -100,18 +100,18 @@ function SettingsModal({
                   gatewayToken: e.target.value,
                 }))
               }
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+              className="w-full text-sm border border-[var(--color-border)] rounded-lg px-3 py-2 bg-[var(--color-panel-soft)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-brand)]"
             />
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-[var(--color-text-subtle)]">
               OpenClaw Gateway认证令牌
             </p>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg transition-colors"
           >
             取消
           </button>
@@ -120,7 +120,7 @@ function SettingsModal({
               onSave(localSettings);
               onClose();
             }}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90 transition-opacity"
           >
             <Save className="w-4 h-4" />
             保存
@@ -296,19 +296,19 @@ export default function AIAnalysisPage() {
 
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Brain className="w-5 h-5 text-purple-500" />
-          <h1 className="text-lg font-semibold text-slate-900">AI分析</h1>
-          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded-full">
+          <Brain className="w-5 h-5 text-[var(--color-ai)]" />
+          <h1 className="text-lg font-semibold text-[var(--color-text)]">AI分析</h1>
+          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-[var(--color-success)]/20 text-[var(--color-success)] rounded-full">
             <Server className="w-3 h-3" />
             OpenClaw
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)] cursor-pointer">
             <span className="text-xs">AI功能</span>
             <div
               className={`relative w-10 h-5 rounded-full transition-colors ${
-                aiEnabled ? "bg-blue-500" : "bg-slate-300"
+                aiEnabled ? "bg-gradient-to-r from-[var(--color-brand)] to-[var(--color-brand-gold)]" : "bg-[var(--color-panel-soft)] border border-[var(--color-border)]"
               }`}
               onClick={() => setAiEnabled(!aiEnabled)}
             >
@@ -318,28 +318,28 @@ export default function AIAnalysisPage() {
                 }`}
               />
             </div>
-            <span className={`text-xs ${aiEnabled ? "text-blue-600" : "text-slate-400"}`}>
+            <span className={`text-xs ${aiEnabled ? "text-[var(--color-brand-gold)]" : "text-[var(--color-text-subtle)]"}`}>
               {aiEnabled ? "开启" : "关闭"}
             </span>
           </label>
 
-          <div className="w-px h-4 bg-slate-200" />
+          <div className="w-px h-4 bg-[var(--color-border)]" />
           {connectionStatus === "connected" && (
-            <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded-full">
+            <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-[var(--color-success)]/20 text-[var(--color-success)] rounded-full">
               <Wifi className="w-3 h-3" />
               已连接
             </span>
           )}
 
           {connectionStatus === "connecting" && (
-            <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-yellow-100 text-yellow-600 rounded-full">
+            <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-[var(--color-brand-gold)]/20 text-[var(--color-brand-gold)] rounded-full">
               <Loader2 className="w-3 h-3 animate-spin" />
               连接中
             </span>
           )}
 
           {connectionStatus === "disconnected" && (
-            <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full">
+            <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-[var(--color-danger)]/20 text-[var(--color-danger)] rounded-full">
               <WifiOff className="w-3 h-3" />
               未连接
             </span>
@@ -348,7 +348,7 @@ export default function AIAnalysisPage() {
           {connectionStatus === "error" && (
             <button
               onClick={handleReconnect}
-              className="flex items-center gap-1 text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full hover:bg-red-200"
+              className="flex items-center gap-1 text-xs px-2 py-0.5 bg-[var(--color-danger)]/20 text-[var(--color-danger)] rounded-full hover:bg-[var(--color-danger)]/30"
             >
               <XCircle className="w-3 h-3" />
               重试
@@ -357,7 +357,7 @@ export default function AIAnalysisPage() {
 
           <button
             onClick={handleReconnect}
-            className="p-2 text-slate-400 hover:text-slate-600"
+            className="p-2 text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
             title="重新连接"
           >
             <RefreshCw className="w-4 h-4" />
@@ -365,7 +365,7 @@ export default function AIAnalysisPage() {
 
           <button
             onClick={() => setShowSettings(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm text-[var(--color-text-muted)] border border-[var(--color-border)] rounded-lg hover:bg-[var(--color-panel-soft)] transition-colors"
           >
             <Settings className="w-4 h-4" />
             配置
@@ -373,11 +373,11 @@ export default function AIAnalysisPage() {
         </div>
       </div>
 
-      <div className="flex-1 bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
+      <div className="flex-1 bg-[var(--color-panel)] rounded-xl border border-[var(--color-border)] overflow-hidden flex flex-col">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-slate-400">
-              <Sparkles className="w-12 h-12 text-slate-300 mb-3" />
+            <div className="flex flex-col items-center justify-center h-full text-[var(--color-text-subtle)]">
+              <Sparkles className="w-12 h-12 text-[var(--color-text-subtle)] mb-3" />
               <div className="text-sm font-medium">AI 经济分析助手</div>
               <div className="text-xs mt-1">
                 通过OpenClaw Gateway连接
@@ -392,7 +392,7 @@ export default function AIAnalysisPage() {
                   <button
                     key={q}
                     onClick={() => setInput(q)}
-                    className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-full text-xs text-slate-600 hover:bg-slate-100 transition-colors"
+                    className="px-3 py-1.5 bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full text-xs text-[var(--color-text-muted)] hover:bg-[var(--color-border)] transition-colors"
                   >
                     {q}
                   </button>
@@ -408,8 +408,8 @@ export default function AIAnalysisPage() {
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                     msg.role === "user"
-                      ? "bg-blue-100 text-blue-600"
-                      : "bg-purple-100 text-purple-600"
+                      ? "bg-[var(--color-brand)]/20 text-[var(--color-brand)]"
+                      : "bg-[var(--color-ai)]/20 text-[var(--color-ai)]"
                   }`}
                 >
                   {msg.role === "user" ? (

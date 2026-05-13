@@ -173,7 +173,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
   }, [currentData, historyData]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
       <div className="flex max-h-[85vh] w-[950px] flex-col overflow-hidden rounded-lg border border-[rgba(255,184,0,0.24)] bg-[var(--color-panel)] shadow-[var(--shadow-lg)]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border-soft)] px-6 py-4">
