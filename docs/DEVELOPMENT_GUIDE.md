@@ -3,9 +3,9 @@
 ## 1. 项目概述
 
 **项目名称**：TL 物品火价监控
-**版本**：v3.0
-**最后更新**：2026-05-06
-**状态**：核心功能稳定，新增 web-server 独立采集服务器、HERMES Skill 集成
+**版本**：v3.1
+**最后更新**：2026-05-13
+**状态**：核心功能稳定，UI组件系统统一，8大核心页面已完成视觉迁移
 
 基于 Tauri 2.0 + React + TypeScript + Rust + SQLite 的桌面应用，用于监控火炬之光（Torchlight）游戏中的物品价格和火价（游戏货币汇率）。
 
@@ -833,6 +833,18 @@ let trend = if change_rate > 5.0 "暴涨"
 
 ## 12. 更新日志
 
+### v3.1 (2026-05-13)
+
+- ✅ 完成8大核心页面UI组件迁移
+- ✅ 新增 `PageShell`、`PageHeader`、`Surface` 组件
+- ✅ 新增 `MetricCard`、`StatusBadge`、`EmptyState` 组件
+- ✅ 修复颜色逻辑：上涨红色，下跌绿色（符合A股习惯）
+- ✅ 修复策略推荐榜分数颜色逻辑
+- ✅ 修复 `DealsPage` 涨跌幅颜色逻辑
+- ✅ 统一所有页面视觉风格
+- ✅ 更新 `UI_VISUAL_UNIFICATION_PLAN.md` 设计文档
+- ✅ 更新 `DEVELOPMENT_GUIDE.md` 页面功能文档
+
 ### v3.0 (2026-05-06)
 
 - ✅ 新增独立 `web-server/` 模块（Axum Web 服务器）
@@ -1007,6 +1019,243 @@ cd src-tauri && cargo fmt
 - ✅ 新增服务器端采集器
 - ✅ 新增数据监控同步
 - ✅ 重构数据库结构（分表存储）
+
+***
+
+## 14. UI设计标准
+
+详细设计标准请参考 [UI_VISUAL_UNIFICATION_PLAN.md](./UI_VISUAL_UNIFICATION_PLAN.md)
+
+### 14.1 设计原则
+
+- **视觉统一**: 所有页面使用统一的组件系统
+- **语义化颜色**: 上涨红色，下跌绿色（符合A股习惯）
+- **组件化开发**: 使用 `PageShell`、`PageHeader`、`Surface` 等组件
+
+### 14.2 核心UI组件
+
+| 组件 | 用途 | 状态 |
+|------|------|------|
+| `PageShell` | 页面容器，控制最大宽度 | ✅ 已实现 |
+| `PageHeader` | 页面标题栏 | ✅ 已实现 |
+| `Surface` | 面板容器 | ✅ 已实现 |
+| `MetricCard` | 指标卡片 | ✅ 已实现 |
+| `StatusBadge` | 状态徽章 | ✅ 已实现 |
+| `EmptyState` | 空状态提示 | ✅ 已实现 |
+| `Toolbar` | 工具栏 | ✅ 已实现 |
+
+### 14.3 语义化颜色规则
+
+| 场景 | 颜色 | 示例 |
+|------|------|------|
+| 价格上涨 | `text-red-500` | +5.2% |
+| 价格下跌 | `text-green-500` | -3.1% |
+| 暴涨标签 | `StatusBadge variant="danger"` | 暴涨 |
+| 暴跌标签 | `StatusBadge variant="success"` | 暴跌 |
+| 出货机会 | 红色边框 | FireChangeCard |
+| 捡漏机会 | 绿色边框 | FireChangeCard |
+
+### 14.4 页面迁移状态
+
+| 页面 | 状态 | 使用的组件 |
+|------|------|------------|
+| `DealsPage.tsx` | ✅ 已迁移 | PageShell, PageHeader, Surface |
+| `DashboardStats.tsx` | ✅ 已迁移 | MetricCard, StatusBadge |
+| `ItemsPage.tsx` | ✅ 已迁移 | PageShell, PageHeader, MetricCard |
+| `DataMonitorPage.tsx` | ✅ 已迁移 | PageShell, PageHeader, Surface |
+| `ArbitragePage.tsx` | ✅ 已迁移 | PageShell, PageHeader, MetricCard |
+| `StrategiesPage.tsx` | ✅ 已迁移 | PageShell, PageHeader, Surface |
+| `AlertsPage.tsx` | ✅ 已迁移 | PageShell, PageHeader, Surface |
+| `SettingsPage.tsx` | ✅ 已迁移 | PageShell, PageHeader, Surface |
+
+### 14.5 开发规范
+
+1. **页面结构**: 使用 `PageShell` 包裹页面内容
+2. **页面头部**: 使用 `PageHeader` 组件
+3. **数据卡片**: 使用 `MetricCard` 组件
+4. **面板容器**: 使用 `Surface` 组件
+5. **颜色语义**: 上涨红色，下跌绿色
+
+***
+
+## 15. 页面功能详解
+
+详细页面功能逻辑和组件使用请参考 [UI_VISUAL_UNIFICATION_PLAN.md](./UI_VISUAL_UNIFICATION_PLAN.md)
+
+### 15.1 捡漏出货页面 (DealsPage)
+
+**功能**: 实时监控物品价格变化，检测涨跌机会
+
+**核心逻辑**:
+1. 每30秒从后端获取实时火价变化数据
+2. 根据阈值筛选出货（涨幅≥阈值）和捡漏（跌幅≥阈值）物品
+3. 显示5m/30m/1h/3h四个时间段的涨跌幅
+4. 计算最大变化率和趋势判断
+
+**颜色规则**:
+- 出货机会: 红色边框 + 红色图标
+- 捡漏机会: 绿色边框 + 绿色图标
+- 涨跌幅: 上涨红色，下跌绿色
+
+**组件使用**:
+```tsx
+<PageShell size="xl">
+  <PageHeader title="捡漏出货" icon={TrendingUp} />
+  <Surface>
+    {/* 出货列表 */}
+    <Surface interactive className="border-red-100">
+      {/* 红色边框表示出货 */}
+    </Surface>
+    {/* 捡漏列表 */}
+    <Surface interactive className="border-green-100">
+      {/* 绿色边框表示捡漏 */}
+    </Surface>
+  </Surface>
+</PageShell>
+```
+
+### 15.2 物品数据页面 (ItemsPage)
+
+**功能**: 搜索和浏览游戏物品价格
+
+**核心逻辑**:
+1. 支持关键词搜索（300ms防抖）
+2. 类型筛选（动态从数据库获取）
+3. 天数筛选（输入第几天）
+4. 赛季对比（当前赛季 vs 历史赛季）
+5. 价格变化计算和显示
+
+**颜色规则**:
+- 价格上涨: 红色
+- 价格下跌: 绿色
+- 走势箭头: 上涨红色，下跌绿色
+
+**组件使用**:
+```tsx
+<PageShell size="xl">
+  <PageHeader title="物价数据" icon={Database} />
+  <MetricCard label="平均价格" value={avg} icon={ArrowUpDown} />
+  <MetricCard label="最高价格" value={max} icon={ArrowUp} />
+  <MetricCard label="最低价格" value={min} icon={ArrowDown} />
+  <Surface padding="md">
+    <Toolbar>
+      {/* 筛选器 */}
+    </Toolbar>
+  </Surface>
+  <Surface padding="none">
+    {/* 数据表格 */}
+  </Surface>
+</PageShell>
+```
+
+### 15.3 数据监控页面 (DataMonitorPage)
+
+**功能**: 管理和监控服务器数据同步
+
+**核心逻辑**:
+1. 检测服务器连接状态
+2. 显示服务器采集状态（普通服/专家服）
+3. 支持数据同步操作
+4. 分页同步大数据量
+
+**组件使用**:
+```tsx
+<PageShell size="xl">
+  <PageHeader title="数据监控" icon={Database} />
+  <Surface padding="lg">
+    {/* 服务器连接状态 */}
+    <StatusBadge variant={connected ? "success" : "danger"} />
+  </Surface>
+  <Surface padding="lg">
+    {/* 采集状态卡片 */}
+  </Surface>
+  <Surface padding="lg">
+    {/* 同步操作面板 */}
+  </Surface>
+</PageShell>
+```
+
+### 15.4 套利比价页面 (ArbitragePage)
+
+**功能**: 分解、合成、材料兑换全场景比价分析
+
+**核心逻辑**:
+1. 管理配方（分解/合成/兑换）
+2. 计算配方成本和产出
+3. 计算利润率
+4. 按盈亏筛选显示
+
+**颜色规则**:
+- 盈利配方: 红色边框
+- 亏损配方: 绿色边框
+- 利润率: 正红色，负绿色
+
+### 15.5 策略管理页面 (StrategiesPage)
+
+**功能**: 管理游戏策略、成本和产出数据
+
+**核心逻辑**:
+1. 创建/编辑/删除策略
+2. 配置成本物品和产出物品
+3. 计算收益率和净收益
+4. 策略推荐榜排序
+
+**颜色规则**:
+- 高分策略(80+): 红色
+- 中高分(60-79): 橙色
+- 中等(40-59): 黄色
+- 低分(0-39): 绿色
+
+### 15.6 预警规则页面 (AlertsPage)
+
+**功能**: 设置和管理价格预警规则
+
+**核心逻辑**:
+1. 创建预警规则（价格高于/低于）
+2. 启用/禁用规则
+3. 查看预警事件历史
+
+**组件使用**:
+```tsx
+<PageShell size="xl">
+  <PageHeader title="预警规则" icon={Bell} />
+  <Surface padding="none">
+    {/* 筛选器 */}
+    <SegmentedControl />
+    {/* 规则列表 */}
+    <Surface interactive>
+      <StatusBadge variant={rule.enabled ? "success" : "default"} />
+    </Surface>
+  </Surface>
+</PageShell>
+```
+
+### 15.7 设置页面 (SettingsPage)
+
+**功能**: 配置应用参数
+
+**核心逻辑**:
+1. 赛季设置
+2. 火价监控设置
+3. 物品数据设置
+4. 价格预警设置
+5. 数据库管理
+
+**组件使用**:
+```tsx
+<PageShell size="lg">
+  <PageHeader title="系统设置" icon={Settings} />
+  <Surface padding="lg">
+    {/* 赛季设置 */}
+  </Surface>
+  <Surface padding="lg">
+    {/* 监控设置 */}
+  </Surface>
+  <Surface padding="lg">
+    {/* 预警设置 */}
+  </Surface>
+</PageShell>
+```
 
 ***
 

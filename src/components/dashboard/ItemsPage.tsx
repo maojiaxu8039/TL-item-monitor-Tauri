@@ -27,16 +27,22 @@ import {
   CalendarDays,
   GitCompare,
   ArrowUpDown,
+  ArrowDown,
+  ArrowUp,
   Tag,
   Database,
 } from "lucide-react";
 import { ItemPriceTrendModal } from "./ItemPriceTrendModal";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useToast } from "@/hooks/useToast";
+import { PageShell } from "@/components/ui/PageShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { MetricCard } from "@/components/ui/MetricCard";
+import { Surface } from "@/components/ui/Surface";
+import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
+import { Button } from "@/components/ui/button";
 
 const COLUMN_HELPER = createColumnHelper<ItemData>();
-
-// ─── Types ─────────────────────────────────────────────────────────────────
 
 interface ItemPriceCompare {
   item_id: string;
@@ -47,8 +53,6 @@ interface ItemPriceCompare {
   price_diff: number | null;
   percentile: number | null;
 }
-
-// ─── Section Picker ─────────────────────────────────────────────────────────
 
 function SectionPicker({
   sections,
@@ -96,46 +100,6 @@ function SectionPicker({
   );
 }
 
-// ─── Stat Card (参考 DashboardStats 风格) ──────────────────────────────────
-
-function StatCard({
-  icon,
-  label,
-  value,
-  unit,
-  valueColor = "text-slate-700",
-  prefix = "",
-  subValue = null,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  unit: string;
-  valueColor?: string;
-  prefix?: string;
-  subValue?: React.ReactNode | null;
-}) {
-  return (
-    <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="p-1.5 rounded-lg bg-slate-50">
-          {icon}
-        </div>
-        <span className="text-xs text-slate-500 font-medium">{label}</span>
-      </div>
-      <div className="flex items-baseline gap-1">
-        <span className={`text-xl font-bold ${valueColor}`}>{prefix}{value}</span>
-        <span className="text-xs text-slate-400">{unit}</span>
-      </div>
-      {subValue && (
-        <div className="mt-1">{subValue}</div>
-      )}
-    </div>
-  );
-}
-
-// ─── Day Range Input ────────────────────────────────────────────────────────
-
 function DayRangeInput({
   value,
   onChange,
@@ -179,8 +143,6 @@ function DayRangeInput({
   );
 }
 
-// ─── Main Page ──────────────────────────────────────────────────────────────
-
 export default function ItemsPage() {
   const [searchKeyword, setSearchKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
@@ -193,7 +155,6 @@ export default function ItemsPage() {
 
   const PAGE_SIZE = 50;
 
-  // ─── Debounce search ─────────────────────────────────────────────────────
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedKeyword(searchKeyword);
@@ -202,7 +163,6 @@ export default function ItemsPage() {
     return () => clearTimeout(timer);
   }, [searchKeyword]);
 
-  // ─── Data queries ───────────────────────────────────────────────────────
   const { marketContext } = useSectionRefresh();
   const queryClient = useQueryClient();
 
@@ -227,13 +187,11 @@ export default function ItemsPage() {
     queryFn: cmd.getSections,
   });
 
-  // 获取动态物品类型列表
   const { data: itemTypes = [] } = useQuery({
     queryKey: ["item-types"],
     queryFn: cmd.getItemTypes,
   });
 
-  // 获取物品价格对比数据
   const { data: priceCompareData, isLoading: isCompareLoading, error: compareError } = useQuery({
     queryKey: ["items-compare", marketContext.seasonId, historySeason, marketContext.marketMode, dayFilter],
     queryFn: async () => {
@@ -265,7 +223,6 @@ export default function ItemsPage() {
     },
   });
 
-  // ─── Filter and sort items client-side ───────────────────────────────────
   const compareMap = useMemo(() => {
     if (!priceCompareData) return new Map<string, ItemPriceCompare>();
     return new Map(priceCompareData.map((c: ItemPriceCompare) => [c.item_id, c]));
@@ -281,7 +238,6 @@ export default function ItemsPage() {
   const startItem = (page - 1) * PAGE_SIZE + 1;
   const endItem = Math.min(page * PAGE_SIZE, total);
 
-  // 统计信息
   const stats = useMemo(() => {
     if (!items.length) return null;
     const avgPrice = items.reduce((sum, item) => sum + item.price, 0) / items.length;
@@ -290,7 +246,6 @@ export default function ItemsPage() {
     return { avgPrice, maxPrice, minPrice };
   }, [items]);
 
-  // ─── Add item to section ─────────────────────────────────────────────────
   const addToSection = useCallback(
     (sectionId: string, item: ItemData) => {
       if (!item) return;
@@ -320,7 +275,6 @@ export default function ItemsPage() {
     [queryClient, marketContext.seasonId, marketContext.marketMode]
   );
 
-  // ─── Columns ─────────────────────────────────────────────────────────────
   const columns = useMemo(
     () => [
       COLUMN_HELPER.display({
@@ -395,7 +349,7 @@ export default function ItemsPage() {
                 )}
                 {Math.abs(rate).toFixed(1)}%
               </div>
-              <span className={`text-xs ${isUp ? "text-red-500" : "text-green-500"}`}>
+              <span className={`text-xs ${isUp ? "text-red-600" : "text-green-600"}`}>
                 {isUp ? "+" : ""}{diff.toFixed(2)}
               </span>
             </div>
@@ -449,7 +403,6 @@ export default function ItemsPage() {
     [sections, addToSection, getItemCompare]
   );
 
-  // ─── Table setup ────────────────────────────────────────────────────────
   const [sorting, setSorting] = useState<SortingState>([]);
   const table = useReactTable({
     data: items,
@@ -460,56 +413,63 @@ export default function ItemsPage() {
     getSortedRowModel: getSortedRowModel(),
   });
 
-  // ─── Reset page when filters change ────────────────────────────────────
   useEffect(() => {
     setPage(1);
   }, [debouncedKeyword, typeFilter, dayFilter]);
 
   return (
-    <div className="p-6 space-y-5 max-w-6xl mx-auto">
-      {/* Toast notifications */}
+    <PageShell size="xl" className="space-y-5">
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* ── Page header (参考火价分析风格) ── */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-          <Database className="w-5 h-5 text-blue-600" />
-        </div>
-        <div>
-          <h1 className="text-lg font-semibold text-slate-800">物价数据</h1>
-          <p className="text-xs text-slate-400">查看和管理游戏物品价格信息</p>
-        </div>
-      </div>
+      <PageHeader
+        title="物价数据"
+        description="查看和管理游戏物品价格信息"
+        icon={Database}
+        iconBg="bg-blue-50"
+        iconColor="text-blue-500"
+        actions={
+          <ToolbarActions>
+            <Button variant="outline" size="sm" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending}>
+              <RefreshCw className={`w-4 h-4 mr-1.5 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
+              获取物品信息
+            </Button>
+          </ToolbarActions>
+        }
+      />
 
-      {/* ── Stats cards (参考 DashboardStats 风格) ── */}
       {stats && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard
-            icon={<ArrowUpDown className="w-4 h-4 text-blue-500" />}
+        <div className="grid grid-cols-4 gap-3">
+          <MetricCard
             label="平均价格"
             value={stats.avgPrice.toFixed(2)}
-            unit="火"
+            icon={ArrowUpDown}
+            iconBg="bg-blue-50"
+            iconColor="text-blue-500"
+            helper={<span className="text-xs text-slate-400">火</span>}
           />
-          <StatCard
-            icon={<TrendingUp className="w-4 h-4 text-green-500" />}
+          <MetricCard
             label="最高价格"
             value={stats.maxPrice.toFixed(2)}
-            unit="火"
-            valueColor="text-green-600"
+            icon={ArrowUp}
+            iconBg="bg-red-50"
+            iconColor="text-red-500"
+            helper={<span className="text-xs text-slate-400">火</span>}
           />
-          <StatCard
-            icon={<TrendingDown className="w-4 h-4 text-red-500" />}
+          <MetricCard
             label="最低价格"
             value={stats.minPrice.toFixed(2)}
-            unit="火"
-            valueColor="text-red-600"
+            icon={ArrowDown}
+            iconBg="bg-green-50"
+            iconColor="text-green-500"
+            helper={<span className="text-xs text-slate-400">火</span>}
           />
-          <StatCard
-            icon={<Tag className="w-4 h-4 text-purple-500" />}
+          <MetricCard
             label="物品总数"
             value={total.toString()}
-            unit="件"
-            subValue={
+            icon={Tag}
+            iconBg="bg-purple-50"
+            iconColor="text-purple-500"
+            helper={
               <span className="text-xs text-slate-400">
                 本页 {startItem}-{endItem}
               </span>
@@ -518,14 +478,10 @@ export default function ItemsPage() {
         </div>
       )}
 
-      {/* ── Filter bar (参考火价分析 Controls Bar 风格) ── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* Day filter */}
+      <Surface padding="md">
+        <Toolbar>
+          <div className="flex items-center gap-3 flex-wrap flex-1">
             <DayRangeInput value={dayFilter} onChange={setDayFilter} />
-
-            {/* History season compare */}
             <div className="relative">
               <GitCompare className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <select
@@ -536,8 +492,6 @@ export default function ItemsPage() {
                 <option value="ss11">对比赛季 SS11</option>
               </select>
             </div>
-
-            {/* Type filter */}
             <div className="relative">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <select
@@ -553,8 +507,6 @@ export default function ItemsPage() {
                 ))}
               </select>
             </div>
-
-            {/* Search */}
             <div className="relative min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
@@ -565,27 +517,14 @@ export default function ItemsPage() {
                 className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/30 transition-all w-full"
               />
             </div>
-
-            {/* Debug info */}
             <div className="text-xs text-slate-500">
               {isCompareLoading ? "加载中..." : compareError ? `错误: ${typeof compareError === 'string' ? compareError : compareError?.message || String(compareError)}` : `对比数据: ${priceCompareData?.length ?? 0} 条`}
             </div>
           </div>
+        </Toolbar>
+      </Surface>
 
-          {/* Refresh button */}
-          <button
-            onClick={() => refreshMutation.mutate()}
-            disabled={refreshMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 disabled:opacity-50 transition-colors shadow-sm"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
-            获取物品信息
-          </button>
-        </div>
-      </div>
-
-      {/* ── Table card ── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <Surface padding="none" className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -642,7 +581,6 @@ export default function ItemsPage() {
           </table>
         </div>
 
-        {/* ── Pagination ── */}
         {total > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
             <span className="text-xs text-slate-500">
@@ -671,9 +609,8 @@ export default function ItemsPage() {
             </div>
           </div>
         )}
-      </div>
+      </Surface>
 
-      {/* ── Trend Modal ── */}
       {trendItem && (
         <ItemPriceTrendModal
           itemId={trendItem.itemId}
@@ -683,6 +620,6 @@ export default function ItemsPage() {
           onClose={() => setTrendItem(null)}
         />
       )}
-    </div>
+    </PageShell>
   );
 }

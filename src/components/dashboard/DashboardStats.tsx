@@ -386,10 +386,10 @@ export function DashboardStats() {
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
                         <span>评分: <span className="font-medium">{rec.score}</span></span>
-                        <span>收益率: <span className={`font-medium ${rec.profit_ratio >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        <span>收益率: <span className={`font-medium ${rec.profit_ratio >= 0 ? "text-red-600" : "text-green-600"}`}>
                           {rec.profit_ratio >= 0 ? "+" : ""}{rec.profit_ratio.toFixed(1)}%
                         </span></span>
-                        <span>预计收益: <span className={`font-medium ${rec.expected_profit_fire >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        <span>预计收益: <span className={`font-medium ${rec.expected_profit_fire >= 0 ? "text-red-600" : "text-green-600"}`}>
                           {rec.expected_profit_fire >= 0 ? "+" : ""}{rec.expected_profit_fire.toFixed(0)}火
                         </span></span>
                       </div>
@@ -405,10 +405,10 @@ export function DashboardStats() {
                     </div>
                     <div className="text-right">
                       <div className={`text-xl font-bold ${
-                        rec.score >= 80 ? "text-green-600" :
-                        rec.score >= 60 ? "text-blue-600" :
+                        rec.score >= 80 ? "text-red-600" :
+                        rec.score >= 60 ? "text-orange-600" :
                         rec.score >= 40 ? "text-yellow-600" :
-                        "text-red-600"
+                        "text-green-600"
                       }`}>
                         {rec.score}
                       </div>

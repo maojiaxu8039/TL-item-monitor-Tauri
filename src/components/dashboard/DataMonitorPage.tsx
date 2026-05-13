@@ -7,6 +7,12 @@ import { useSyncContext } from "@/contexts/SyncContext";
 import { toast } from "sonner";
 import ServerAdminPanel from "./ServerAdminPanel";
 import type { SyncJobState, SyncFailure } from "@/lib/commands";
+import { PageShell } from "@/components/ui/PageShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Surface } from "@/components/ui/Surface";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
+import { Button } from "@/components/ui/button";
 
 interface ServerStatus {
   server: string;
@@ -469,59 +475,37 @@ export default function DataMonitorPage() {
     return `${(ms / 60000).toFixed(1)}分钟`;
   };
 
-  const getStatusIcon = () => {
-    switch (connectionStatus) {
-      case "connected":
-        return <Wifi className="w-5 h-5 text-green-500" />;
-      case "error":
-        return <AlertCircle className="w-5 h-5 text-yellow-500" />;
-      default:
-        return <WifiOff className="w-5 h-5 text-slate-400" />;
-    }
-  };
-
-  const getStatusText = () => {
-    switch (connectionStatus) {
-      case "connected":
-        return <span className="text-green-600">已连接</span>;
-      case "error":
-        return <span className="text-yellow-600">连接错误</span>;
-      default:
-        return <span className="text-slate-400">未连接</span>;
-    }
-  };
-
   const getSyncStatusBadge = () => {
     if (!syncJob) return null;
 
     switch (syncJob.status) {
       case "running":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+          <StatusBadge variant="info">
             <Loader2 className="w-3 h-3 animate-spin" />
             同步中
-          </span>
+          </StatusBadge>
         );
       case "success":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
+          <StatusBadge variant="success">
             <CheckCircle className="w-3 h-3" />
             成功
-          </span>
+          </StatusBadge>
         );
       case "partial":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">
+          <StatusBadge variant="warning">
             <AlertCircle className="w-3 h-3" />
             部分成功
-          </span>
+          </StatusBadge>
         );
       case "failed":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded">
+          <StatusBadge variant="danger">
             <XCircle className="w-3 h-3" />
             失败
-          </span>
+          </StatusBadge>
         );
       default:
         return null;
@@ -547,21 +531,44 @@ export default function DataMonitorPage() {
   const isSyncing = syncMutation.isPending || (syncJob?.status === "running");
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <Database className="w-5 h-5 text-slate-600" />
-        <h1 className="text-lg font-semibold text-slate-800">数据监控</h1>
-      </div>
+    <PageShell size="xl" className="space-y-5">
+      <PageHeader
+        title="数据监控"
+        description="管理与服务器的数据同步"
+        icon={Database}
+        iconBg="bg-blue-50"
+        iconColor="text-blue-500"
+        actions={
+          <ToolbarActions>
+            <Button variant="outline" size="sm" onClick={() => refetchStatus()}>
+              <RefreshCw className="w-4 h-4 mr-1.5" />
+              刷新
+            </Button>
+          </ToolbarActions>
+        }
+      />
 
-      {/* Server Connection */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+      <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
           <Server className="w-4 h-4 text-blue-500" />
           <h2 className="text-sm font-semibold text-slate-700">服务器连接</h2>
           <div className="ml-auto flex items-center gap-2">
-            {getStatusIcon()}
-            {getStatusText()}
+            {connectionStatus === "connected" ? (
+              <>
+                <Wifi className="w-5 h-5 text-green-500" />
+                <span className="text-green-600">已连接</span>
+              </>
+            ) : connectionStatus === "error" ? (
+              <>
+                <AlertCircle className="w-5 h-5 text-yellow-500" />
+                <span className="text-yellow-600">连接错误</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-5 h-5 text-slate-400" />
+                <span className="text-slate-400">未连接</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -582,13 +589,6 @@ export default function DataMonitorPage() {
               className="mt-5 px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
             >
               保存
-            </button>
-            <button
-              onClick={() => refetchStatus()}
-              className="mt-5 p-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-              title="刷新状态"
-            >
-              <RefreshCw className="w-4 h-4 text-slate-500" />
             </button>
           </div>
 
@@ -615,14 +615,12 @@ export default function DataMonitorPage() {
             </div>
           )}
         </div>
-      </div>
+      </Surface>
 
-      {/* Collection Status */}
       <div className="grid grid-cols-2 gap-4">
-        {/* Normal Mode */}
-        <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+        <Surface padding="lg">
           <div className="flex items-center gap-2 mb-4">
-            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">普通服</span>
+            <StatusBadge variant="info">普通服</StatusBadge>
           </div>
 
           {normalStatus ? (
@@ -656,12 +654,11 @@ export default function DataMonitorPage() {
           ) : (
             <div className="text-sm text-slate-400 text-center py-4">暂无数据</div>
           )}
-        </div>
+        </Surface>
 
-        {/* Expert Mode */}
-        <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+        <Surface padding="lg">
           <div className="flex items-center gap-2 mb-4">
-            <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded">专家服</span>
+            <StatusBadge variant="default">专家服</StatusBadge>
           </div>
 
           {expertStatus ? (
@@ -695,11 +692,10 @@ export default function DataMonitorPage() {
           ) : (
             <div className="text-sm text-slate-400 text-center py-4">暂无数据</div>
           )}
-        </div>
+        </Surface>
       </div>
 
-      {/* Data Sync */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+      <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
           <Download className="w-4 h-4 text-green-500" />
           <h2 className="text-sm font-semibold text-slate-700">数据同步</h2>
@@ -707,7 +703,6 @@ export default function DataMonitorPage() {
         </div>
 
         <div className="space-y-4">
-          {/* Data Type */}
           <div className="flex items-center gap-2">
             <label className="text-xs text-slate-500">数据类型</label>
             <div className="flex rounded-lg border border-slate-200 overflow-hidden">
@@ -736,7 +731,6 @@ export default function DataMonitorPage() {
             </div>
           </div>
 
-          {/* Mode */}
           <div className="flex items-center gap-2">
             <label className="text-xs text-slate-500">服务器模式</label>
             <div className="flex rounded-lg border border-slate-200 overflow-hidden">
@@ -765,7 +759,6 @@ export default function DataMonitorPage() {
             </div>
           </div>
 
-          {/* Time Range */}
           <div className="flex items-center gap-2">
             <label className="text-xs text-slate-500">时间范围</label>
             <select
@@ -782,7 +775,6 @@ export default function DataMonitorPage() {
             </select>
           </div>
 
-          {/* Pagination Option */}
           <div className="flex items-center gap-2">
             <label className={`flex items-center gap-2 text-xs cursor-pointer ${timeRange !== "season" ? "text-slate-400" : "text-slate-500"}`}>
               <input
@@ -797,7 +789,6 @@ export default function DataMonitorPage() {
             </label>
           </div>
 
-          {/* Sync Button */}
           <div className="flex items-center gap-4 pt-2">
             <button
               onClick={handleSync}
@@ -822,7 +813,6 @@ export default function DataMonitorPage() {
             </span>
           </div>
 
-          {/* Progress Bar */}
           {syncJob && syncJob.status === "running" && (
             <div className="space-y-2">
               <div className="flex justify-between text-xs text-slate-500">
@@ -843,7 +833,6 @@ export default function DataMonitorPage() {
             </div>
           )}
 
-          {/* Sync Result Summary */}
           {syncJob && syncJob.status !== "idle" && syncJob.status !== "running" && (
             <div className={`p-4 rounded-lg border ${
               syncJob.status === "success" ? "bg-green-50 border-green-200" :
@@ -904,11 +893,10 @@ export default function DataMonitorPage() {
             </div>
           )}
         </div>
-      </div>
+      </Surface>
 
-      {/* Not Connected State */}
       {connectionStatus !== "connected" && (
-        <div className="bg-slate-50 rounded-xl border border-slate-200 p-8 text-center">
+        <Surface padding="lg" className="text-center">
           <WifiOff className="w-12 h-12 text-slate-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-slate-600 mb-2">未连接到服务器</h3>
           <p className="text-sm text-slate-400">
@@ -917,15 +905,14 @@ export default function DataMonitorPage() {
           <p className="text-xs text-slate-400 mt-2">
             服务器采集器运行命令：./server --port 8080
           </p>
-        </div>
+        </Surface>
       )}
 
-      {/* Server Admin Panel */}
       <ServerAdminPanel
         serverUrl={serverUrl}
         connectionStatus={connectionStatus}
         serverStatus={serverStatus}
       />
-    </div>
+    </PageShell>
   );
 }

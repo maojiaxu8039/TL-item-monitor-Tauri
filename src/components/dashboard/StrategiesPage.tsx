@@ -31,6 +31,11 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { strategyTemplates, type StrategyTemplate } from "@/lib/strategyTemplates";
+import { PageShell } from "@/components/ui/PageShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Surface } from "@/components/ui/Surface";
+import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
+import { Button } from "@/components/ui/button";
 
 
 
@@ -576,26 +581,26 @@ export default function StrategiesPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-            <Shield className="w-5 h-5 text-blue-500" />
-            策略管理
-          </h2>
-        </div>
-        {activeTab === "strategies" && (
-          <button
-            onClick={() => { resetForm(); setShowCreateDialog(true); }}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            新建策略
-          </button>
-        )}
-      </div>
+    <PageShell size="xl" className="space-y-5">
+      <PageHeader
+        title="策略管理"
+        description="管理游戏策略、成本和产出数据"
+        icon={Shield}
+        iconBg="bg-blue-50"
+        iconColor="text-blue-500"
+        actions={
+          activeTab === "strategies" && (
+            <ToolbarActions>
+              <Button variant="default" size="sm" onClick={() => { resetForm(); setShowCreateDialog(true); }}>
+                <Plus className="w-4 h-4 mr-1.5" />
+                新建策略
+              </Button>
+            </ToolbarActions>
+          )
+        }
+      />
 
-      <div className="flex border-b border-slate-200">
+      <Surface padding="none">
         <button
           onClick={() => setActiveTab("strategies")}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
@@ -626,7 +631,7 @@ export default function StrategiesPage() {
         >
           推荐榜
         </button>
-      </div>
+      </Surface>
 
       {activeTab === "templates" && (
         <div className="space-y-4">
@@ -779,10 +784,10 @@ export default function StrategiesPage() {
                       )}
                       <div className="text-right">
                         <div className={`text-2xl font-bold ${
-                          rec.score >= 80 ? "text-green-600" :
-                          rec.score >= 60 ? "text-blue-600" :
+                          rec.score >= 80 ? "text-red-600" :
+                          rec.score >= 60 ? "text-orange-600" :
                           rec.score >= 40 ? "text-yellow-600" :
-                          "text-red-600"
+                          "text-green-600"
                         }`}>
                           {rec.score}
                         </div>
@@ -1429,6 +1434,6 @@ export default function StrategiesPage() {
           )}
         </div>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

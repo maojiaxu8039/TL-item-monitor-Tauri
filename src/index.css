@@ -79,7 +79,8 @@
   }
 
   .surface-interactive:hover {
-    border-color: var(--color-border-soft);
+    border-color: var(--color-border);
+    box-shadow: var(--shadow-md);
   }
 
   /* Page Shell */

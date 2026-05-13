@@ -19,6 +19,12 @@ import { cmd, ArbitrageRecipe, ArbitrageCalculationResult, ItemSearchResult, Cre
 import { useToast } from "@/hooks/useToast";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { PageShell } from "@/components/ui/PageShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Surface } from "@/components/ui/Surface";
+import { MetricCard } from "@/components/ui/MetricCard";
+import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
+import { Button } from "@/components/ui/button";
 
 const RECIPE_TYPES = [
   { value: "decompose", label: "分解" },
@@ -431,44 +437,29 @@ export default function ArbitragePage() {
   }, []);
 
   return (
-    <div className="p-6 space-y-5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 shadow-sm">
-            <Calculator className="h-6 w-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">套利比价</h1>
-            <p className="text-xs text-slate-400">分解、合成、材料兑换 全场景比价分析</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={refreshPrices}
-            disabled={refreshingPrice || calculating}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ${refreshingPrice || calculating ? "animate-spin" : ""}`} />
-            刷新价格
-          </button>
-          <button
-            onClick={toggleShowAll}
-            disabled={calculating}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-colors disabled:opacity-50 ${
-              showAllRecipes ? "bg-orange-100 text-orange-600 hover:bg-orange-200" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            {showAllRecipes ? "显示全部" : "只看盈利"}
-          </button>
-          <button
-            onClick={() => setShowCreateDialog(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500 text-white hover:bg-blue-600 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            新增配方
-          </button>
-        </div>
-      </div>
+    <PageShell size="xl" className="space-y-5">
+      <PageHeader
+        title="套利比价"
+        description="分解、合成、材料兑换 全场景比价分析"
+        icon={Calculator}
+        iconBg="bg-green-50"
+        iconColor="text-green-500"
+        actions={
+          <ToolbarActions>
+            <Button variant="outline" size="sm" onClick={refreshPrices} disabled={refreshingPrice || calculating}>
+              <RefreshCw className={`w-4 h-4 mr-1.5 ${refreshingPrice || calculating ? "animate-spin" : ""}`} />
+              刷新价格
+            </Button>
+            <Button variant="outline" size="sm" onClick={toggleShowAll} disabled={calculating}>
+              {showAllRecipes ? "显示全部" : "只看盈利"}
+            </Button>
+            <Button variant="default" size="sm" onClick={() => setShowCreateDialog(true)}>
+              <Plus className="w-4 h-4 mr-1.5" />
+              新增配方
+            </Button>
+          </ToolbarActions>
+        }
+      />
 
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
@@ -1115,6 +1106,6 @@ export default function ArbitragePage() {
           </div>
         </div>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

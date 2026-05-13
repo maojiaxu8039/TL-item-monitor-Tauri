@@ -5,6 +5,12 @@ import { RefreshCw, Save, Settings, Bell, Database, Globe, AlertTriangle, Trash2
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PageShell } from "@/components/ui/PageShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Surface } from "@/components/ui/Surface";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
+import { Button } from "@/components/ui/button";
 
 const INTERVAL_OPTIONS = [
   { label: "5 分钟", value: 300 },
@@ -330,20 +336,24 @@ export default function SettingsPage() {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="max-w-2xl mx-auto space-y-4"
-    >
-      {/* Page title */}
-      <div className="flex items-center gap-2 mb-2">
-        <Settings className="w-5 h-5 text-slate-600" />
-        <h1 className="text-[15px] font-semibold text-slate-800">系统设置</h1>
-      </div>
+    <PageShell size="lg" className="space-y-5">
+      <PageHeader
+        title="系统设置"
+        description="配置应用参数、赛季信息和数据管理"
+        icon={Settings}
+        iconBg="bg-slate-100"
+        iconColor="text-slate-600"
+        actions={
+          <ToolbarActions>
+            <Button variant="default" size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
+              <Save className="w-4 h-4 mr-1.5" />
+              保存设置
+            </Button>
+          </ToolbarActions>
+        }
+      />
 
-      {/* Season settings */}
-      <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+      <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
           <Globe className="w-4 h-4 text-purple-500" />
           <h2 className="text-sm font-semibold text-slate-700">赛季设置</h2>
@@ -609,10 +619,10 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
-      </section>
+      </Surface>
 
       {/* Price Alert settings */}
-      <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+      <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
           <AlertTriangle className="w-4 h-4 text-amber-500" />
           <h2 className="text-sm font-semibold text-slate-700">价格预警设置</h2>
@@ -710,10 +720,10 @@ export default function SettingsPage() {
 
 
         </div>
-      </section>
+      </Surface>
 
       {/* Fire price settings */}
-      <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+      <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
           <Bell className="w-4 h-4 text-red-500" />
           <h2 className="text-sm font-semibold text-slate-700">火价监控</h2>
@@ -755,10 +765,10 @@ export default function SettingsPage() {
             </select>
           </div>
         </div>
-      </section>
+      </Surface>
 
       {/* Items data settings */}
-      <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+      <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
           <Database className="w-4 h-4 text-blue-500" />
           <h2 className="text-sm font-semibold text-slate-700">物品数据</h2>
@@ -890,10 +900,10 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
-      </section>
+      </Surface>
 
       {/* Version */}
-      <section className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+      <Surface padding="lg">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-medium text-slate-700">当前版本</div>
@@ -906,7 +916,7 @@ export default function SettingsPage() {
             检查更新
           </button>
         </div>
-      </section>
+      </Surface>
 
       <ConfirmDialog
         open={confirmClearOpen}
@@ -964,6 +974,6 @@ export default function SettingsPage() {
           {saveMutation.isPending ? "保存中…" : "保存设置"}
         </button>
       </div>
-    </motion.div>
+    </PageShell>
   );
 }

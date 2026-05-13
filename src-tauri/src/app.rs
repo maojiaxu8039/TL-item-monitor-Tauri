@@ -526,16 +526,8 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         )
         .await?;
     }
-    // Fix strategy_detail tables BEFORE v15 (which depends on them)
-    // Use version 16 but place BEFORE version 15 to ensure tables exist
-    if current_version < 16 {
-        apply_sql_migration(
-            pool,
-            16,
-            include_str!("db/migrations/016_fix_strategy_detail_tables.sql"),
-        )
-        .await?;
-    }
+    // v15 now includes table creation to ensure indexes can be created
+    // even if v9 failed to create the strategy_detail_costs and strategy_detail_outputs tables
     if current_version < 15 {
         apply_sql_migration(
             pool,

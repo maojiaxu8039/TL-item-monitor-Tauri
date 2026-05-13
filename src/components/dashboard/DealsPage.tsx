@@ -52,25 +52,25 @@ function FireChangeCard({ item, isRising }: FireChangeCardProps) {
       <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
         <div className="text-center p-1.5 bg-slate-50 rounded">
           <div className="text-slate-400">5m</div>
-          <div className={`font-medium ${(item.change_rate_5m ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+          <div className={`font-medium ${(item.change_rate_5m ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
             {item.change_rate_5m !== null ? `${(item.change_rate_5m ?? 0) >= 0 ? "+" : ""}${item.change_rate_5m?.toFixed(1)}%` : "-"}
           </div>
         </div>
         <div className="text-center p-1.5 bg-slate-50 rounded">
           <div className="text-slate-400">30m</div>
-          <div className={`font-medium ${(item.change_rate_30m ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+          <div className={`font-medium ${(item.change_rate_30m ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
             {item.change_rate_30m !== null ? `${(item.change_rate_30m ?? 0) >= 0 ? "+" : ""}${item.change_rate_30m?.toFixed(1)}%` : "-"}
           </div>
         </div>
         <div className="text-center p-1.5 bg-slate-50 rounded">
           <div className="text-slate-400">1h</div>
-          <div className={`font-medium ${(item.change_rate_1h ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+          <div className={`font-medium ${(item.change_rate_1h ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
             {item.change_rate_1h !== null ? `${(item.change_rate_1h ?? 0) >= 0 ? "+" : ""}${item.change_rate_1h?.toFixed(1)}%` : "-"}
           </div>
         </div>
         <div className="text-center p-1.5 bg-slate-50 rounded">
           <div className="text-slate-400">3h</div>
-          <div className={`font-medium ${(item.change_rate_3h ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+          <div className={`font-medium ${(item.change_rate_3h ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
             {item.change_rate_3h !== null ? `${(item.change_rate_3h ?? 0) >= 0 ? "+" : ""}${item.change_rate_3h?.toFixed(1)}%` : "-"}
           </div>
         </div>

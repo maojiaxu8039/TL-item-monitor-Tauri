@@ -46,27 +46,29 @@ Centralize these in `src/index.css` and use them through Tailwind-compatible uti
 
 Recommended semantic palette:
 
-- `--color-app-bg`: `#f7f8fb`
-- `--color-panel`: `#ffffff`
-- `--color-border`: `#e2e8f0`
-- `--color-border-soft`: `#eef2f7`
-- `--color-text`: `#0f172a`
-- `--color-text-muted`: `#64748b`
-- `--color-text-subtle`: `#94a3b8`
-- `--color-primary`: `#2563eb`
-- `--color-primary-soft`: `#eff6ff`
-- `--color-brand`: `#f97316`
-- `--color-danger`: `#ef4444`
-- `--color-success`: `#22c55e`
-- `--color-warning`: `#f59e0b`
-- `--color-ai`: `#8b5cf6`
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--color-app-bg` | `#f7f8fb` | App canvas background |
+| `--color-panel` | `#ffffff` | Panel/card backgrounds |
+| `--color-border` | `#e2e8f0` | Default borders |
+| `--color-border-soft` | `#eef2f7` | Hover/soft borders |
+| `--color-text` | `#0f172a` | Primary text |
+| `--color-text-muted` | `#64748b` | Secondary text |
+| `--color-text-subtle` | `#94a3b8` | Tertiary text |
+| `--color-primary` | `#2563eb` | Primary actions |
+| `--color-primary-soft` | `#eff6ff` | Primary soft backgrounds |
+| `--color-brand` | `#f97316` | Brand/flame icon |
+| `--color-danger` | `#ef4444` | Rising price/sell |
+| `--color-success` | `#22c55e` | Down price/bargain/success |
+| `--color-warning` | `#f59e0b` | Warning only |
+| `--color-ai` | `#8b5cf6` | AI/expert only |
 
 Semantic use:
 
 - Primary buttons, selected navigation, active filters: blue.
 - Brand icon only: orange/red flame.
-- Price up/sell/opportunity: red/orange-red.
-- Price down/bargain/success: green.
+- Price up/sell/opportunity: **red** (符合A股习惯)
+- Price down/bargain/success: **green**
 - Warnings and attention required: amber.
 - AI page/gateway: purple, but keep primary actions blue unless the action is AI-specific.
 
@@ -74,10 +76,12 @@ Semantic use:
 
 Use only these radii unless a component has a strong reason:
 
-- `--radius-sm`: `6px` for small badges and table pills.
-- `--radius-md`: `8px` for buttons, inputs, selects, tabs, table rows.
-- `--radius-lg`: `10px` for regular cards/panels.
-- `--radius-xl`: `12px` for dialogs and large panels.
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--radius-sm` | `6px` | Small badges, table pills |
+| `--radius-md` | `8px` | Buttons, inputs, selects, tabs, table rows |
+| `--radius-lg` | `10px` | Regular cards/panels |
+| `--radius-xl` | `12px` | Dialogs and large panels |
 
 Current project uses many `rounded-xl` and some `rounded-2xl`. Consolidate most normal cards to `rounded-lg` or a token-backed `rounded-[var(--radius-lg)]`.
 
@@ -85,6 +89,13 @@ Current project uses many `rounded-xl` and some `rounded-2xl`. Consolidate most 
 
 Desktop data apps should be quiet. Prefer borders over shadows.
 
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--shadow-sm` | `0 1px 2px 0 rgb(0 0 0 / 0.05)` | Default subtle shadow |
+| `--shadow-md` | `0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)` | Floating elements |
+| `--shadow-lg` | `0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)` | Dropdowns/dialogs |
+
+Rules:
 - Default panel: `border`, no visible shadow or very subtle `shadow-sm`.
 - Floating dropdown/dialog: `shadow-lg`.
 - Avoid custom shadows like `shadow-[0_1px_3px_rgba(...)]` in page files. Put them behind component variants.
@@ -94,1024 +105,439 @@ Desktop data apps should be quiet. Prefer borders over shadows.
 
 Page and panel spacing should be predictable:
 
-- App shell `main`: owns outer page padding.
-- Individual pages should not start with another full `p-6` unless they opt out of shell padding.
-- Page vertical rhythm: `space-y-5`.
-- Header to first panel: `16px` or `20px`.
-- Panel padding: `16px` for dense panels, `20px` for forms.
-- Metric card padding: `16px`.
-- Table cell padding: `12px 16px`.
+| Token | Value | Usage |
+|-------|-------|-------|
+| Page vertical rhythm | `space-y-5` (20px) | Between sections |
+| Header to first panel | `16px` or `20px` | Page header spacing |
+| Panel padding (dense) | `16px` | Dense data panels |
+| Panel padding (form) | `20px` | Form layouts |
+| Metric card padding | `16px` | Dashboard metrics |
+| Table cell padding | `12px 16px` | Table rows |
 
 ### 3.5 Typography
 
-- Page title: `18px`, `font-semibold`, slate-900.
-- Page subtitle: `12px`, slate-400/500.
-- Section title: `14px`, `font-semibold`, slate-700/800.
-- Card metric value: `24px` for dashboard-level metrics, `20px` for secondary metrics.
-- Table and controls: `13px` or `14px`.
-- Footer/legal text: `11px`.
+| Element | Size | Weight | Color |
+|---------|------|--------|-------|
+| Page title | `18px` | `font-semibold` | slate-900 |
+| Page subtitle | `12px` | - | slate-400 |
+| Section title | `14px` | `font-semibold` | slate-700/800 |
+| Card metric (primary) | `24px` | `font-bold` | slate-900 |
+| Card metric (secondary) | `20px` | `font-bold` | slate-700 |
+| Table and controls | `13px` or `14px` | - | slate-600 |
+| Footer/legal text | `11px` | - | slate-400 |
 
 Do not use `text-2xl` for normal internal pages.
 
-## 4. Component Strategy
+## 4. Component Architecture
 
-Prefer extending the existing local UI layer over replacing the project with a heavy library.
+### 4.1 Component Hierarchy
 
-### 4.1 Keep And Improve
+```
+src/components/ui/
+├── button.tsx           # 按钮组件
+├── input.tsx            # 输入框组件
+├── select.tsx           # 选择器组件
+├── dialog.tsx           # 对话框组件
+├── Card.tsx             # 卡片组件
+├── confirm-dialog.tsx    # 确认对话框
+├── danger-button.tsx    # 危险操作按钮
+├── Toast.tsx            # Toast通知
+│
+├── PageShell.tsx        # 📌 页面容器 (NEW)
+├── PageHeader.tsx       # 📌 页面头部 (NEW)
+├── Surface.tsx          # 📌 面板容器 (NEW)
+├── MetricCard.tsx      # 📌 指标卡片 (NEW)
+├── StatusBadge.tsx      # 📌 状态徽章 (NEW)
+├── EmptyState.tsx       # 📌 空状态 (NEW)
+├── Toolbar.tsx          # 📌 工具栏 (NEW)
+├── FormField.tsx        # 📌 表单字段 (NEW)
+├── InlineAlert.tsx      # 📌 内联警告 (NEW)
+└── SegmentedControl.tsx # 📌 分段控制 (NEW)
+```
 
-Keep:
+### 4.2 Core Components
 
-- `lucide-react` for icons.
-- `recharts` for charts.
-- `@tanstack/react-table` for complex tables.
-- `framer-motion` only where motion adds useful continuity; remove ornamental repeated entrance delays if they make navigation feel busy.
-- `sonner` as the single toast system.
-
-Improve:
-
-- `Button`: add more variants and standardize focus.
-- `Card`: add variants for `panel`, `metric`, `interactive`, `subtle`, and remove default hover shadow unless requested.
-- `Input` and `Select`: support left icons, sizes, invalid state, and consistent focus.
-- `Dialog`: migrate to Radix Dialog or tighten current custom implementation for accessibility.
-
-### 4.2 Recommended New Local Components
-
-Create these in `src/components/ui` or `src/components/layout` before page migration:
-
-#### `PageShell`
+#### PageShell
 
 Purpose: standardize max width, page spacing, and optional full-height layout.
 
-Suggested API:
-
 ```tsx
-type PageShellProps = {
+interface PageShellProps {
   children: React.ReactNode;
-  width?: "md" | "lg" | "xl" | "full";
-  mode?: "document" | "workbench" | "chat";
+  size?: "md" | "lg" | "xl" | "full";
   className?: string;
-};
+}
 ```
 
 Rules:
-
 - `md`: settings/import/help pages, max width around `672px`.
 - `lg`: forms and moderate content, max width around `960px`.
 - `xl`: most analytical data pages, max width around `1152px`.
 - `full`: pages that need the full workstation area.
-- `workbench`: no extra nested `p-6`; uses shell padding and fills height.
 
-#### `PageHeader`
+#### PageHeader
 
 Purpose: standardize page title, subtitle, icon tile, and actions.
 
-Suggested API:
-
 ```tsx
-type PageHeaderProps = {
-  icon?: React.ElementType;
-  iconTone?: "primary" | "brand" | "success" | "warning" | "danger" | "ai" | "neutral";
+interface PageHeaderProps {
   title: string;
   description?: string;
-  actions?: React.ReactNode;
-};
+  icon?: ElementType;
+  iconBg?: string;      // e.g., "bg-blue-50"
+  iconColor?: string;   // e.g., "text-blue-500"
+  actions?: ReactNode;
+  className?: string;
+}
 ```
 
 Rules:
-
-- Always use `h1`.
+- Always use `h1` for title.
 - Icon tile size: `40px`.
 - Title: `text-lg font-semibold`.
 - Description: `text-xs text-slate-400`.
 - Header actions use `Button`, not raw `button`.
 
-#### `Surface` / `Panel`
+#### Surface
 
 Purpose: one wrapper for white bordered UI blocks.
 
-Suggested API:
-
 ```tsx
-type SurfaceProps = {
-  children: React.ReactNode;
-  padding?: "none" | "sm" | "md" | "lg";
-  interactive?: boolean;
+interface SurfaceProps {
+  children: ReactNode;
   className?: string;
-};
+  interactive?: boolean;
+  padding?: "none" | "sm" | "md" | "lg";
+}
 ```
 
-Use this instead of repeatedly writing:
-
+Usage:
 ```tsx
-<div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+// Basic
+<Surface padding="md">
+  Content here
+</Surface>
+
+// Interactive (hover effect)
+<Surface padding="sm" interactive>
+  Clickable content
+</Surface>
+
+// No padding
+<Surface padding="none" className="overflow-hidden">
+  Table content
+</Surface>
 ```
 
-#### `MetricCard`
+#### MetricCard
 
 Purpose: unify dashboard metric cards.
 
-Suggested API:
-
 ```tsx
-type MetricCardProps = {
-  icon?: React.ElementType;
-  label: string;
-  value: React.ReactNode;
-  unit?: string;
-  tone?: "neutral" | "primary" | "brand" | "success" | "danger" | "warning" | "ai";
-  helper?: React.ReactNode;
-};
+interface MetricCardProps {
+  label: string;           // Metric label
+  value: string | number;   // Metric value
+  icon?: ElementType;
+  iconBg?: string;          // Icon background
+  iconColor?: string;        // Icon color
+  helper?: ReactNode;        // Helper text/additional info
+  className?: string;
+}
 ```
 
-Use for dashboard stats, fire price analysis stats, item stats, arbitrage stats, price analysis stats.
-
-#### `Toolbar`
-
-Purpose: unify filter/search/action bars.
-
-Suggested API:
-
+Usage:
 ```tsx
-type ToolbarProps = {
-  filters?: React.ReactNode;
-  actions?: React.ReactNode;
-  status?: React.ReactNode;
-};
-```
-
-Rules:
-
-- Error/debug text does not live inline inside filters. Use `InlineAlert`, toast, or a separate status row.
-- On narrower widths, filters wrap before actions.
-
-#### `SegmentedControl`
-
-Purpose: replace custom tab/segmented button clusters.
-
-Suggested API:
-
-```tsx
-type SegmentOption<T extends string> = {
-  label: string;
-  value: T;
-  count?: number;
-  tone?: "neutral" | "primary" | "success" | "danger" | "warning" | "ai";
-};
-```
-
-Use for:
-
-- Fire time range buttons.
-- Strategy tabs.
-- Alert filters.
-- Data monitor type/mode selectors.
-- Arbitrage result filters.
-- Price analysis sort toggles.
-
-#### `StatusBadge`
-
-Purpose: unify all pills/status labels.
-
-Tones:
-
-- `neutral`
-- `primary`
-- `success`
-- `danger`
-- `warning`
-- `ai`
-- `muted`
-
-Use for:
-
-- Network/local data source.
-- Notification state.
-- Current season.
-- Enabled/disabled rules.
-- Server connection.
-- Normal/expert mode.
-
-#### `EmptyState`
-
-Purpose: unify empty states across dashboard, tables, analysis pages, and config pages.
-
-Suggested API:
-
-```tsx
-type EmptyStateProps = {
-  icon?: React.ElementType;
-  title: string;
-  description?: string;
-  action?: React.ReactNode;
-  size?: "sm" | "md" | "lg";
-};
-```
-
-Rules:
-
-- Icon size: 48 or 56, never random 64 unless page is fully empty.
-- Empty state text should be actionable but not instructional clutter.
-- Put the empty state inside a `Surface` unless the entire page is intentionally empty.
-
-#### `DataTable`
-
-Purpose: wrap table header/body/empty/loading styles.
-
-Use existing `@tanstack/react-table` where sorting or complex cells exist.
-
-Suggested features:
-
-- `loading`
-- `empty`
-- consistent `thead`, row hover, sticky header option
-- horizontal overflow
-- optional compact density
-
-#### `FormField`
-
-Purpose: standardize labels, descriptions, validation, and form control layout.
-
-Use in Settings, Data Monitor, Dialogs, Server Admin, Import/Export.
-
-#### `InlineAlert`
-
-Purpose: show fetch errors, validation warnings, and blocked state inside panels.
-
-Tones:
-
-- `info`
-- `warning`
-- `danger`
-- `success`
-
-Use instead of raw text such as `错误: Cannot read properties...` in toolbars.
-
-## 5. Better Component Recommendations
-
-### 5.1 Do Not Move To Ant Design Or MUI
-
-Do not replace the app with Ant Design, MUI, or a full enterprise UI kit unless the product direction changes. Those libraries would solve consistency, but they will also impose a generic web-admin look and add migration weight.
-
-### 5.2 Add Radix Primitives Selectively
-
-The project already uses `@radix-ui/react-slot`. Add Radix primitives only where they solve accessibility and consistency:
-
-- `@radix-ui/react-dialog`: replace custom dialogs and modal overlays.
-- `@radix-ui/react-tabs`: strategy tabs, alert filters if tabs are semantic.
-- `@radix-ui/react-select`: better select popovers than native select when styling consistency matters.
-- `@radix-ui/react-dropdown-menu`: row actions, group card more menu, section picker.
-- `@radix-ui/react-switch`: settings toggles and AI enable toggle.
-- `@radix-ui/react-tooltip`: icon-only buttons.
-- `@radix-ui/react-scroll-area`: scrollable panels if native scrollbars become visually noisy.
-
-Use a shadcn-like local wrapper pattern, not direct Radix imports in every page.
-
-### 5.3 Add `@tanstack/react-virtual` If Large Tables Lag
-
-For item tables, history lists, and analysis lists, add virtualization only when there are real performance issues. Recommended package:
-
-- `@tanstack/react-virtual`
-
-Do not virtualize short panels or cards prematurely.
-
-### 5.4 Unify Toasts On Sonner
-
-Remove or stop using `src/components/ui/Toast.tsx` after migration. Use `sonner` everywhere because `App.tsx` already mounts `Toaster`.
-
-### 5.5 Keep Recharts, Add A Chart Wrapper
-
-Keep `recharts`. Add local chart wrappers:
-
-- `ChartPanel`
-- `ChartLegend`
-- `ChartEmptyState`
-- shared tooltip style
-- shared axis/tick colors
-
-This is enough for the current analytical pages.
-
-### 5.6 Use `cmdk` Only If Global Search Is Added
-
-If the app later adds a command palette or global item search, use `cmdk`. Do not add it only for local table search fields.
-
-## 6. Global Layout Changes
-
-### 6.1 `App.tsx`
-
-Current issue:
-
-- `main` has `px-6 py-5`, and pages often add their own `p-6`.
-
-Target:
-
-- `App.tsx` should own only the app frame.
-- `main` should provide a consistent scroll container and baseline background.
-- Pages should use `PageShell` for max width and spacing.
-
-Suggested direction:
-
-```tsx
-<main className="flex-1 overflow-auto bg-app px-6 py-5">
-  <LazyPage>...</LazyPage>
-</main>
-```
-
-Then each page starts with:
-
-```tsx
-<PageShell width="xl">
-  <PageHeader ... />
-  ...
-</PageShell>
-```
-
-For full-height pages:
-
-```tsx
-<PageShell width="full" mode="workbench">
-  ...
-</PageShell>
-```
-
-### 6.2 Sidebar
-
-Current issue:
-
-- Active state is good but focus outline can conflict with active style.
-- Brand icon uses an orange/red gradient while selected nav uses blue; this is acceptable if brand stays limited.
-- Bottom small-window icon is hand-written SVG.
-
-Target:
-
-- Use `Monitor` or another Lucide icon for small-window mode.
-- Add consistent focus-visible ring.
-- Consider grouping nav items into primary, analysis, admin, support sections if navigation grows.
-- Keep width at `200px` for now.
-
-Recommended selected style:
-
-- Background: primary soft.
-- Text/icon: primary.
-- Left indicator: primary.
-- No custom orange focus ring.
-
-### 6.3 TopBar
-
-Current issue:
-
-- Top bar is useful but visually dense.
-- Status chips are local ad hoc spans.
-
-Target:
-
-- Use `StatusBadge` for network and notification.
-- Use `Button` for refresh, with a standard loading icon state.
-- Use compact separators between fire price metrics.
-- Consider making "current fire price" more prominent only if it is the main global context.
-
-## 7. Page-By-Page Modification Plan
-
-### 7.1 Dashboard / Monitor Home
-
-Files:
-
-- `src/components/dashboard/DashboardContent.tsx`
-- `src/components/dashboard/DashboardStats.tsx`
-- `src/components/dashboard/SearchBar.tsx`
-- `src/components/dashboard/GroupCard.tsx`
-- `src/components/dashboard/SortableGroupCard.tsx`
-- `src/components/dashboard/AddSectionDialog.tsx`
-
-Current:
-
-- Strongest page visually.
-- Uses consistent compact cards, but card and toolbar styles are custom.
-- Empty dashboard is functional but sparse.
-
-Changes:
-
-- Wrap page with `PageShell width="xl"`.
-- Convert stats to `MetricCard`.
-- Convert search/import/export filter row to `Toolbar`.
-- Convert add group CTA to a standard dashed `Button` variant or `EmptyAction`.
-- Convert group cards to `Surface` plus `DataTable` style table.
-- Replace manual input focus styles in editable cells with `Input` or a compact inline edit class.
-
-Acceptance:
-
-- Dashboard has one consistent max width.
-- Stats, search toolbar, group cards align exactly.
-- Empty state has clear action and no layout jump.
-
-### 7.2 Fire Price Analysis
-
-File:
-
-- `src/components/dashboard/FirePriceComparePage.tsx`
-
-Current:
-
-- Good candidate for the standard page pattern.
-- Header, controls, stats, chart are clean but custom.
-
-Changes:
-
-- Use `PageShell width="xl"`.
-- Use `PageHeader` with `BarChart2` and brand tone.
-- Convert controls panel to `Toolbar`.
-- Convert time range buttons to `SegmentedControl`.
-- Convert stat cards to `MetricCard`.
-- Use `ChartPanel` and shared Recharts styling.
-- Replace custom day range inputs with `Input size="sm"` inside `FormField` or compact inline range.
-
-Acceptance:
-
-- Same header structure as Items, Data Monitor, Arbitrage.
-- Chart empty/loading states use `EmptyState`.
-- No raw repeated card shell classes remain in page JSX except exceptional chart layout.
-
-### 7.3 Items / Price Data
-
-File:
-
-- `src/components/dashboard/ItemsPage.tsx`
-
-Current:
-
-- Header and table are close to target.
-- Filter row displays error/debug text inline.
-- Native selects and inputs are manually styled.
-- Uses local `ToastContainer` while the app already has `sonner`.
-
-Changes:
-
-- Use `PageShell width="xl"`.
-- Use `PageHeader`.
-- Convert stats to `MetricCard`.
-- Convert filters to `Toolbar`.
-- Move compare errors to `InlineAlert tone="danger"` below toolbar or to `toast.error`.
-- Convert refresh action to `Button`.
-- Replace local `ToastContainer` with `sonner`.
-- Wrap table in `DataTable`.
-- If item count becomes high, add table virtualization as a separate performance PR.
-
-Acceptance:
-
-- No raw `错误: ...` text inside toolbar.
-- Table loading and empty rows match the rest of the app.
-- Filters wrap cleanly at narrower widths.
-
-### 7.4 Deals / Bargain And Sell
-
-File:
-
-- `src/components/dashboard/DealsPage.tsx`
-
-Current:
-
-- Uses a full-height workbench layout, but its header is a white strip inside the page, unlike most other pages.
-- Settings modal is custom and uses `rounded-2xl`.
-
-Changes:
-
-- Use `PageShell width="full" mode="workbench"`.
-- Use `PageHeader` with actions.
-- Convert summary chips to `StatusBadge`.
-- Use `Surface` for the two columns when data exists.
-- Use `EmptyState` for no data.
-- Replace settings modal with shared `Dialog`, `FormField`, `Button`, and `Input`/range field components.
-
-Acceptance:
-
-- Header aligns with other pages.
-- Empty state is centered in a panel, not floating in blank canvas.
-- Modal style matches strategy/alert/arbitrage dialogs.
-
-### 7.5 Strategies
-
-File:
-
-- `src/components/dashboard/StrategiesPage.tsx`
-
-Current:
-
-- Lots of repeated local buttons, cards, dialogs, tabs.
-- Good candidate for biggest component payoff.
-
-Changes:
-
-- Use `PageShell width="full"` or `width="xl"` depending on list density.
-- Use `PageHeader` with `Shield`.
-- Replace tab strip with `SegmentedControl` or Radix Tabs wrapper.
-- Convert strategy/template cards to `Surface`.
-- Convert dialogs to shared `Dialog`.
-- Replace raw form controls with `FormField`, `Input`, `Select`, `Button`.
-- Standardize badges for label, difficulty, enabled, recommendation score.
-- Keep business calculations unchanged.
-
-Acceptance:
-
-- All modal headers, footers, buttons, and fields follow the same dialog layout.
-- Strategy cards and template cards share panel styling.
-- Tab style matches alert/arbitrage segmented controls.
-
-### 7.6 Alerts
-
-File:
-
-- `src/components/dashboard/AlertsPage.tsx`
-
-Current:
-
-- Similar to Strategies but smaller.
-- Amber is used as the page action color. It should be warning tone, not the global primary action, unless the action is explicitly warning-related.
-
-Changes:
-
-- Use `PageShell width="xl"`.
-- Use `PageHeader` with `Bell`, warning icon tone.
-- Make "New Rule" a primary blue `Button`; warning color remains in icon/badges.
-- Replace filter pills with `SegmentedControl`.
-- Convert empty state to `EmptyState`.
-- Convert rule rows to `Surface`.
-- Convert create dialog to shared `Dialog` and `FormField`.
-
-Acceptance:
-
-- Alert page no longer feels like a separate amber-themed app.
-- Enabled/disabled states use `StatusBadge`.
-
-### 7.7 Arbitrage
-
-File:
-
-- `src/components/dashboard/ArbitragePage.tsx`
-
-Current:
-
-- Visually richer than other pages.
-- Uses green gradient icon and many raw dialog/form controls.
-
-Changes:
-
-- Use `PageShell width="xl"` or `width="full"` if result rows need width.
-- Use `PageHeader` with `Calculator`, success tone.
-- Convert stats to `MetricCard`.
-- Convert result filters to `SegmentedControl`.
-- Convert result container to `DataPanel`/`Surface`.
-- Convert create/edit ingredient/output dialogs to shared `Dialog` plus `FormField`.
-- Use `DropdownMenu` for row actions if Radix is added.
-
-Acceptance:
-
-- Arbitrage page keeps its operational personality but no longer uses a unique component style.
-- Dialog forms match Strategies and Alerts.
-
-### 7.8 Price Analysis
-
-File:
-
-- `src/components/dashboard/PriceAnalysisPage.tsx`
-
-Current:
-
-- Similar purpose to Items/FirePrice analysis but looser structure.
-- Filter controls use smaller radius and less consistent focus.
-
-Changes:
-
-- Use `PageShell width="xl"`.
-- Use `PageHeader`.
-- Convert stats to `MetricCard`.
-- Put filters/sort controls in `Toolbar`.
-- Convert sorting pills to `SegmentedControl`.
-- Convert result cards to `Surface` with a shared recommendation badge style.
-- Use `EmptyState`.
-- Replace `ToastContainer` with `sonner`.
-
-Acceptance:
-
-- Analysis cards scan as a data list, not independent mini cards with unique styling.
-- Sort/filter controls match Items page.
-
-### 7.9 AI Analysis
-
-File:
-
-- `src/components/dashboard/AIAnalysisPage.tsx`
-
-Current:
-
-- Chat/workbench page with unique purple styling.
-- Needs a different layout, but should still share headers, badges, and buttons.
-
-Changes:
-
-- Use `PageShell width="full" mode="chat"`.
-- Use `PageHeader` with `Brain`, AI tone, actions.
-- Use `StatusBadge` for OpenClaw and connection state.
-- Replace custom toggle with `Switch`.
-- Keep chat bubbles, but route colors through semantic tones.
-- Use `Button size="icon"` for reconnect and send actions, with tooltips.
-- Replace config modal with shared `Dialog`.
-
-Acceptance:
-
-- AI page remains clearly AI-specific but not visually detached from the app.
-
-### 7.10 Data Monitor
-
-File:
-
-- `src/components/dashboard/DataMonitorPage.tsx`
-- `src/components/dashboard/ServerAdminPanel.tsx`
-
-Current:
-
-- Good information architecture.
-- Many repeated panels, fields, segmented controls, and status badges.
-
-Changes:
-
-- Use `PageShell width="xl"`.
-- Use `PageHeader`.
-- Convert server connection card to `Surface`.
-- Use `FormField` for server URL.
-- Use `StatusBadge` for connection and modes.
-- Use `SegmentedControl` for data type and server mode.
-- Use shared `Select`.
-- Convert normal/expert collection status cards to `MetricCard` or `Surface`.
-- Use `InlineAlert` for "not connected" guidance.
-- Refactor `ServerAdminPanel` to consume shared panels, tabs, and fields.
-
-Acceptance:
-
-- Controls line up and use the same height.
-- Connection status is visible but not oversized.
-- Admin panel does not introduce a separate amber visual system.
-
-### 7.11 Settings
-
-File:
-
-- `src/components/dashboard/SettingsPage.tsx`
-
-Current:
-
-- Very dense and useful.
-- `max-w-2xl` is reasonable.
-- Many repeated toggles, fields, and section panels.
-
-Changes:
-
-- Use `PageShell width="md"`.
-- Use `PageHeader`.
-- Use `Surface` for each settings section.
-- Replace custom switch markup with shared `Switch`.
-- Use `FormField` for every labeled input/select.
-- Use `Button` variants for destructive and secondary actions.
-- Use `InlineAlert` for warning and validation states.
-- Keep `ConfirmDialog`, but align its style with shared `Dialog`.
-
-Acceptance:
-
-- Section spacing and field labels are consistent.
-- Toggle visuals are identical across all settings sections.
-- Destructive actions are clearly separated.
-
-### 7.12 Import / Export
-
-File:
-
-- `src/components/dashboard/ImportExportPage.tsx`
-
-Current:
-
-- Good compact page, but adds its own `bg-slate-50` inside the app canvas.
-
-Changes:
-
-- Use `PageShell width="md"`.
-- Use `PageHeader`.
-- Convert database info to `MetricCard` or `Surface`.
-- Use `Surface` sections for import/export.
-- Use `Button` variants and `InlineAlert` for import results.
-- Remove duplicate page background class.
-
-Acceptance:
-
-- Import/export visually matches Settings and Help.
-
-### 7.13 Help
-
-File:
-
-- `src/components/dashboard/HelpPage.tsx`
-
-Current:
-
-- Uses larger web-document heading scale.
-
-Changes:
-
-- Use `PageShell width="lg"`.
-- Use `PageHeader`.
-- Convert version info to `InlineAlert tone="info"` or `Surface`.
-- Convert FAQ rows to `Surface`.
-- Keep content simple.
-
-Acceptance:
-
-- Help looks like an internal app page, not a standalone docs webpage.
-
-## 8. Implementation Phases
-
-### Phase 0: Guardrails
-
-Do before any visual refactor:
-
-- Create or update this document.
-- Confirm no unrelated user changes are reverted.
-- Run `git status --short` before and after changes.
-- Keep each phase in a small, reviewable patch.
-
-### Phase 1: Component Foundation
-
-Add or refactor:
-
-- `PageShell`
-- `PageHeader`
-- `Surface`
-- `MetricCard`
-- `Toolbar`
-- `SegmentedControl`
-- `StatusBadge`
-- `EmptyState`
-- `InlineAlert`
-- `FormField`
-
-Update:
-
-- `Button`
-- `Card`
-- `Input`
-- `Select`
-- `Dialog`
-
-Do not migrate all pages in this phase. Add primitives first.
-
-### Phase 2: High-Visibility Pages
-
-Migrate:
-
-1. Dashboard
-2. Fire Price Analysis
-3. Items
-4. Data Monitor
-
-These pages define the visual language for most users.
-
-### Phase 3: Workflow Pages
-
-Migrate:
-
-1. Deals
-2. Strategies
-3. Alerts
-4. Arbitrage
-
-This phase handles dialog and form consistency.
-
-### Phase 4: Secondary Pages
-
-Migrate:
-
-1. Price Analysis
-2. AI Analysis
-3. Settings
-4. Import/Export
-5. Help
-
-Settings can be moved earlier if the team prioritizes configuration clarity.
-
-### Phase 5: Cleanup
-
-Remove or reduce:
-
-- Raw page-level `bg-white rounded-* border ...` class repetition.
-- `ToastContainer` usage.
-- Duplicate custom modal shells.
-- Duplicate hand-written switches and segmented controls.
-- Debug text in UI.
-- Unused CSS component classes in `index.css` if replaced by React primitives.
-
-## 9. AI Agent Execution Instructions
-
-Future AI agents should follow these rules when using this document.
-
-### 9.1 Before Editing
-
-1. Read this document.
-2. Run `git status --short`.
-3. Inspect the page file and any shared component it uses.
-4. Identify whether the current task is foundation, page migration, or cleanup.
-5. Do not change Rust/Tauri command behavior for visual-only tasks.
-6. Do not rewrite business logic, query keys, mutations, or data calculations unless explicitly requested.
-
-### 9.2 Editing Rules
-
-- Prefer shared components over page-local class strings.
-- Keep changes scoped to the current phase/page.
-- Do not introduce a new visual style that is not described here.
-- Use `lucide-react` icons.
-- Use `Button`, `Input`, `Select`, and new UI primitives instead of raw controls.
-- If a component needs a new variant, add it to the shared component rather than patching a one-off class into a page.
-- Keep Chinese UI copy concise.
-- Use `sonner` for toast messages.
-- Avoid nested cards. A section can contain repeated cards, but do not put decorative cards inside decorative cards.
-- Use component props for tone, size, and state instead of hard-coded colors where practical.
-
-### 9.3 Verification
-
-After each page migration:
-
-1. Run `npm run typecheck`.
-2. Run `npm run vite:dev`.
-3. Open `http://localhost:5173/`.
-4. Visually check desktop viewport around `1280x720`.
-5. Check at least one narrower viewport around `900x700` if the page has filters/tables.
-6. Confirm there is no horizontal overflow except intentional table scrolling.
-7. Confirm text does not overlap buttons or badges.
-8. Confirm loading, empty, and error states still render.
-
-If browser-only Vite cannot call Tauri commands, this is acceptable for visual verification. Do not treat missing Tauri invoke as a business logic regression unless the Tauri app itself is being tested.
-
-### 9.4 Acceptance Checklist
-
-A migrated page is done when:
-
-- It uses `PageShell`.
-- It uses `PageHeader`.
-- Primary actions use `Button`.
-- Status labels use `StatusBadge`.
-- Empty states use `EmptyState`.
-- Filter/action rows use `Toolbar` or `SegmentedControl`.
-- Tables use `DataTable` or the shared table classes.
-- Dialogs use the shared dialog pattern.
-- No debug text appears in the normal UI.
-- Colors follow the semantic rules in this document.
-- Typecheck passes.
-
-## 10. Class Replacement Guide
-
-Use this guide for mechanical refactors.
-
-### 10.1 Page Wrappers
-
-Replace:
-
-```tsx
-<div className="p-6 space-y-6 max-w-6xl mx-auto">
-```
-
-With:
-
-```tsx
-<PageShell width="xl">
-```
-
-Replace:
-
-```tsx
-<div className="h-full flex flex-col overflow-hidden">
-```
-
-With:
-
-```tsx
-<PageShell width="full" mode="workbench">
-```
-
-### 10.2 Headers
-
-Replace page-local header blocks with:
-
-```tsx
-<PageHeader
-  icon={Database}
-  iconTone="primary"
-  title="物价数据"
-  description="查看和管理游戏物品价格信息"
-  actions={<Button>获取物品信息</Button>}
+<MetricCard
+  label="监控物品"
+  value={123}
+  icon={Package}
+  iconBg="bg-blue-50"
+  iconColor="text-blue-500"
+  helper={<span className="text-xs text-slate-400">个</span>}
 />
 ```
 
-### 10.3 Cards
+#### StatusBadge
 
-Replace:
-
-```tsx
-<div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-```
-
-With:
+Purpose: unify all pills/status labels.
 
 ```tsx
-<Surface padding="md">
+interface StatusBadgeProps {
+  children: ReactNode;
+  variant?: "default" | "success" | "warning" | "danger" | "info" | "primary";
+  size?: "sm" | "md";
+  className?: string;
+}
 ```
 
-### 10.4 Metric Cards
+Variants:
+| Variant | Background | Text | Usage |
+|---------|------------|------|-------|
+| `default` | slate-100 | slate-700 | Default state |
+| `success` | green-50 | green-700 | Success, down price |
+| `warning` | amber-50 | amber-700 | Warning |
+| `danger` | red-50 | red-700 | Rising price, error |
+| `info` | blue-50 | blue-700 | Information |
+| `primary` | slate-900 | white | Primary action |
 
-Replace page-local stat cards with `MetricCard`.
+#### EmptyState
 
-### 10.5 Raw Buttons
-
-Replace:
+Purpose: unify empty states across dashboard, tables, analysis pages, and config pages.
 
 ```tsx
-<button className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg ...">
+interface EmptyStateProps {
+  title?: string;
+  description?: string;
+  icon?: ElementType;
+  action?: ReactNode;
+  className?: string;
+}
 ```
 
-With:
+Usage:
+```tsx
+<EmptyState
+  title="暂无数据"
+  description="请先在数据监控页面同步物品数据"
+  icon={Package}
+/>
+```
+
+### 4.3 Semantic Color Rules
+
+#### Price Display
+
+| Scenario | Color | Example |
+|----------|-------|---------|
+| 价格上涨 | `text-red-500` / `text-red-600` | +5.2% |
+| 价格下跌 | `text-green-500` / `text-green-600` | -3.1% |
+| 暴涨/暴跌标签 | `StatusBadge variant="danger"` (涨) / `StatusBadge variant="success"` (跌) | 暴涨、暴跌 |
+| 出货机会 | 红色边框 + 红色图标 | FireChangeCard |
+| 捡漏机会 | 绿色边框 + 绿色图标 | FireChangeCard |
+
+#### Score Display
+
+| Score Range | Color | Meaning |
+|-------------|-------|---------|
+| 80-100 | `text-red-600` | 高分，推荐 |
+| 60-79 | `text-orange-600` | 中高分 |
+| 40-59 | `text-yellow-600` | 中等 |
+| 0-39 | `text-green-600` | 低分 |
+
+#### Trend Indicators
 
 ```tsx
-<Button>
-  <RefreshCw className="w-4 h-4" />
-  获取物品信息
-</Button>
+// Rising
+<TrendingUp className="text-red-500" />
+
+// Falling
+<TrendingDown className="text-green-500" />
+
+// Arrow indicators
+<span className={isUp ? "text-red-500" : "text-green-500"}>
+  {isUp ? "↑" : "↓"}
+</span>
 ```
 
-### 10.6 Filter Pills
+### 4.4 Component Migration Status
 
-Replace clusters of small conditional buttons with `SegmentedControl`.
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `PageShell` | ✅ Implemented | Core layout component |
+| `PageHeader` | ✅ Implemented | Standard page header |
+| `Surface` | ✅ Implemented | Card/panel wrapper |
+| `MetricCard` | ✅ Implemented | Dashboard stats |
+| `StatusBadge` | ✅ Implemented | Status pills |
+| `EmptyState` | ✅ Implemented | No-data states |
+| `Toolbar` | ✅ Implemented | Filter/action bars |
+| `FormField` | ✅ Implemented | Form labels |
+| `InlineAlert` | ✅ Implemented | Error/warning display |
+| `SegmentedControl` | ⏳ Pending | Tab controls |
 
-### 10.7 Error Text
+## 5. Page Migration Status
 
-Replace:
+### 5.1 Completed Pages ✅
+
+| Page | Components Used | Notes |
+|------|----------------|-------|
+| `DealsPage.tsx` | PageShell, PageHeader, Surface, StatusBadge, EmptyState | Rising=fail, falling=green |
+| `DashboardStats.tsx` | MetricCard, StatusBadge | Color logic fixed |
+| `ItemsPage.tsx` | PageShell, PageHeader, MetricCard, Surface, Toolbar | All price colors correct |
+| `DataMonitorPage.tsx` | PageShell, PageHeader, Surface, StatusBadge | Server status cards |
+| `ArbitragePage.tsx` | PageShell, PageHeader, Surface, MetricCard | Calculator page |
+| `StrategiesPage.tsx` | PageShell, PageHeader, Surface | Strategy management |
+| `AlertsPage.tsx` | PageShell, PageHeader, Surface, StatusBadge | Alert rules |
+| `SettingsPage.tsx` | PageShell, PageHeader, Surface, StatusBadge | Dense settings |
+
+### 5.2 Pending Pages ⏳
+
+| Page | Priority | Notes |
+|------|----------|-------|
+| `PriceAnalysisPage.tsx` | Medium | Analysis filters |
+| `AIAnalysisPage.tsx` | Medium | Chat interface |
+| `ImportExportPage.tsx` | Low | Import/export |
+| `HelpPage.tsx` | Low | Help docs |
+| `FirePriceComparePage.tsx` | High | Chart page |
+
+## 6. Implementation Phases
+
+### Phase 1: Foundation (Completed ✅)
+- Created UI components in `src/components/ui/`
+- Implemented design tokens in `src/index.css`
+- Added color semantic rules
+
+### Phase 2: High-Visibility Pages (Completed ✅)
+- Dashboard home
+- Items page
+- Data Monitor
+- Deals page
+
+### Phase 3: Workflow Pages (Completed ✅)
+- Strategies page
+- Arbitrage page
+- Alerts page
+- Settings page
+
+### Phase 4: Secondary Pages (Pending ⏳)
+- Price Analysis
+- AI Analysis
+- Import/Export
+- Help
+- Fire Price Compare
+
+## 7. Verification Checklist
+
+After each page migration, verify:
+
+- [ ] Uses `PageShell`
+- [ ] Uses `PageHeader`
+- [ ] Primary actions use `Button`
+- [ ] Status labels use `StatusBadge`
+- [ ] Empty states use `EmptyState`
+- [ ] Filter/action rows use `Toolbar`
+- [ ] Rising price uses red, falling price uses green
+- [ ] No debug text in normal UI
+- [ ] Colors follow semantic rules
+- [ ] `npm run typecheck` passes
+
+## 8. Common Patterns
+
+### 8.1 Page Structure
 
 ```tsx
-<div className="text-xs text-slate-500">错误: ...</div>
+export default function PageName() {
+  return (
+    <PageShell size="xl" className="space-y-5">
+      <PageHeader
+        title="页面标题"
+        description="页面描述"
+        icon={IconName}
+        iconBg="bg-blue-50"
+        iconColor="text-blue-500"
+        actions={
+          <ToolbarActions>
+            <Button variant="default" size="sm" onClick={handler}>
+              <Icon className="w-4 h-4 mr-1.5" />
+              操作
+            </Button>
+          </ToolbarActions>
+        }
+      />
+      
+      <Surface padding="md">
+        {/* Content */}
+      </Surface>
+      
+      <Surface padding="none" className="overflow-hidden">
+        {/* Table or list */}
+      </Surface>
+    </PageShell>
+  );
+}
 ```
 
-With:
+### 8.2 Color Usage Examples
 
 ```tsx
-<InlineAlert tone="danger">...</InlineAlert>
+// Price change display
+const isRising = change > 0;
+<span className={isRising ? "text-red-500" : "text-green-500"}>
+  {isRising ? "↑" : "↓"}{Math.abs(change).toFixed(1)}%
+</span>
+
+// Trend badge
+<StatusBadge variant={isRising ? "danger" : "success"}>
+  {isRising ? "上涨" : "下跌"}
+</StatusBadge>
+
+// Score display
+<div className={`text-xl font-bold ${
+  score >= 80 ? "text-red-600" :
+  score >= 60 ? "text-orange-600" :
+  score >= 40 ? "text-yellow-600" :
+  "text-green-600"
+}`}>
+  {score}
+</div>
 ```
 
-or a `toast.error(...)` if the message is transient.
+### 8.3 Interactive Card
 
-## 11. Component Backlog
+```tsx
+<Surface interactive padding="sm" className="hover:shadow-md">
+  <div className="...">
+    Content
+  </div>
+</Surface>
+```
 
-Priority order:
+## 9. Migration Guide
 
-1. `PageShell`
-2. `PageHeader`
-3. `Surface`
-4. `MetricCard`
-5. `StatusBadge`
-6. `EmptyState`
-7. `Toolbar`
-8. `SegmentedControl`
-9. `InlineAlert`
-10. `FormField`
-11. `DataTable`
-12. `Switch`
-13. `Tooltip`
-14. `DropdownMenu`
+### Before: Raw Page
 
-Optional external dependencies:
+```tsx
+return (
+  <div className="p-6 space-y-5 max-w-6xl mx-auto">
+    <div className="flex items-center gap-3">
+      <div className="p-2 rounded-xl bg-blue-100">
+        <Icon className="h-6 w-6 text-blue-600" />
+      </div>
+      <div>
+        <h1 className="text-xl font-bold">标题</h1>
+        <p className="text-xs text-slate-400">描述</p>
+      </div>
+    </div>
+    
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+      Content
+    </div>
+  </div>
+);
+```
 
-- Add Radix Dialog/Switch/Tabs/Dropdown/Tooltip when accessibility or behavior is needed.
-- Add `@tanstack/react-virtual` only after confirming large-list performance issues.
-- Add `cmdk` only for a global command palette.
+### After: Unified Components
 
-## 12. Risks And Mitigations
+```tsx
+return (
+  <PageShell size="xl" className="space-y-5">
+    <PageHeader
+      title="标题"
+      description="描述"
+      icon={Icon}
+      iconBg="bg-blue-50"
+      iconColor="text-blue-500"
+    />
+    
+    <Surface padding="lg">
+      Content
+    </Surface>
+  </PageShell>
+);
+```
 
-Risk: visual refactor accidentally changes behavior.  
-Mitigation: keep query logic and command calls untouched; only move JSX and classes.
+## 10. Document Changelog
 
-Risk: one large patch becomes unreviewable.  
-Mitigation: migrate one page or one component family per patch.
-
-Risk: new components become too generic.  
-Mitigation: design APIs around current app patterns, not theoretical future needs.
-
-Risk: external UI dependency adds inconsistent styles.  
-Mitigation: wrap external primitives in local components and expose only local APIs.
-
-Risk: Vite browser mode shows Tauri invoke errors.  
-Mitigation: use browser mode for visual layout only; test Tauri-specific behavior separately.
-
-## 13. Definition Of Done For The Whole UI Pass
-
-The UI unification project is complete when:
-
-- All dashboard pages use the shared page/header/surface primitives.
-- Buttons, inputs, selects, switches, dialogs, badges, tabs, empty states, and alerts have one visual language.
-- The app uses `sonner` only for toasts.
-- Manual raw style strings are reduced to layout-specific exceptions.
-- No page has a unique color theme unless it is semantically justified.
-- Desktop `1280x720` screenshots of all pages look like one product.
-- `npm run typecheck` passes.
-
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-05-13 | v2.0 | Added implementation status, color rules, page migration tracking |
+| 2026-05-06 | v1.0 | Initial document creation |

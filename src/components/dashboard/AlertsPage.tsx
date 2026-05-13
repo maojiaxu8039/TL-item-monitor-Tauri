@@ -13,8 +13,15 @@ import {
 import { cmd, AlertRule, AlertEvent, ItemSearchResult } from "@/lib/commands";
 import { useToast } from "@/hooks/useToast";
 import { Dialog } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { PageShell } from "@/components/ui/PageShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Surface } from "@/components/ui/Surface";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
+import { Button } from "@/components/ui/button";
 
 type RuleType = "price_below" | "price_above" | "profit_ratio_above" | "price_drop_percent";
 
@@ -219,61 +226,53 @@ export default function AlertsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-            <Bell className="w-5 h-5 text-amber-500" />
-            预警规则
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">设置价格预警，实时监控市场变化</p>
-        </div>
-        <button
-          onClick={() => setShowCreateDialog(true)}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          新建规则
-        </button>
-      </div>
+    <PageShell size="xl" className="space-y-5">
+      <PageHeader
+        title="预警规则"
+        description="设置价格预警，实时监控市场变化"
+        icon={Bell}
+        iconBg="bg-amber-50"
+        iconColor="text-amber-500"
+        actions={
+          <ToolbarActions>
+            <Button variant="warning" size="sm" onClick={() => setShowCreateDialog(true)}>
+              <Plus className="w-4 h-4 mr-1.5" />
+              新建规则
+            </Button>
+          </ToolbarActions>
+        }
+      />
 
-      <div className="flex gap-2">
-        <button
-          onClick={() => setFilter("all")}
-          className={`px-3 py-1.5 text-xs rounded-lg ${
-            filter === "all" ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-          }`}
-        >
-          全部 ({rules.length})
-        </button>
-        <button
-          onClick={() => setFilter("enabled")}
-          className={`px-3 py-1.5 text-xs rounded-lg ${
-            filter === "enabled" ? "bg-green-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-          }`}
-        >
-          启用中 ({rules.filter(r => r.enabled === 1).length})
-        </button>
-        <button
-          onClick={() => setFilter("disabled")}
-          className={`px-3 py-1.5 text-xs rounded-lg ${
-            filter === "disabled" ? "bg-slate-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-          }`}
-        >
-          已停用 ({rules.filter(r => r.enabled === 0).length})
-        </button>
-      </div>
+      <Surface padding="sm">
+        <div className="flex items-center gap-2">
+          {[
+            { key: "all", label: "全部", count: rules.length, color: "slate" },
+            { key: "enabled", label: "启用中", count: rules.filter(r => r.enabled === 1).length, color: "green" },
+            { key: "disabled", label: "已停用", count: rules.filter(r => r.enabled === 0).length, color: "slate" },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setFilter(tab.key as typeof filter)}
+              className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                filter === tab.key
+                  ? tab.color === "green"
+                    ? "bg-green-500 text-white font-medium"
+                    : "bg-slate-800 text-white font-medium"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {tab.label} ({tab.count})
+            </button>
+          ))}
+        </div>
+      </Surface>
 
       {filteredRules.length === 0 ? (
-        <div className="bg-white rounded-lg border border-slate-200 py-16 text-center">
-          <Bell className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-          <div className="text-sm text-slate-500 mb-2">
-            {filter === "all" ? "暂无预警规则" : filter === "enabled" ? "暂无启用的规则" : "暂无停用的规则"}
-          </div>
-          {filter === "all" && (
-            <div className="text-xs text-slate-400">点击右上角"新建规则"开始设置</div>
-          )}
-        </div>
+        <EmptyState
+          icon={Bell}
+          title={filter === "all" ? "暂无预警规则" : filter === "enabled" ? "暂无启用的规则" : "暂无停用的规则"}
+          description={filter === "all" ? '点击右上角"新建规则"开始设置' : undefined}
+        />
       ) : (
         <div className="space-y-2">
           {filteredRules.map(rule => {
@@ -302,11 +301,9 @@ export default function AlertsPage() {
                             {getRuleTypeLabel(rule.rule_type)} {rule.threshold}
                             {rule.rule_type === "price_drop_percent" ? "%" : "火"}
                           </span>
-                          <span className={`px-2 py-0.5 text-xs rounded ${
-                            rule.enabled === 1 ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"
-                          }`}>
+                          <StatusBadge variant={rule.enabled === 1 ? "success" : "default"} size="sm">
                             {rule.enabled === 1 ? "启用" : "停用"}
-                          </span>
+                          </StatusBadge>
                         </div>
                         {rule.item_id && (
                           <div className="text-xs text-slate-500 mt-0.5">
@@ -333,22 +330,20 @@ export default function AlertsPage() {
                       创建时间: {formatTimestamp(rule.created_at)}
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
+                      <Button
+                        variant={rule.enabled === 1 ? "outline" : "success"}
+                        size="sm"
                         onClick={() => handleToggle(rule)}
-                        className={`px-3 py-1.5 text-xs rounded-lg ${
-                          rule.enabled === 1
-                            ? "bg-slate-200 text-slate-600 hover:bg-slate-300"
-                            : "bg-green-100 text-green-700 hover:bg-green-200"
-                        }`}
                       >
                         {rule.enabled === 1 ? "禁用" : "启用"}
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
                         onClick={() => handleDelete(rule.id)}
-                        className="px-3 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
                       >
                         删除
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -359,16 +354,18 @@ export default function AlertsPage() {
       )}
 
       {events.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" />
-            最近预警事件
-          </h3>
-          <div className="bg-white rounded-lg border border-slate-200 divide-y divide-slate-100">
+        <Surface padding="none">
+          <div className="px-4 py-3 border-b border-slate-100">
+            <h3 className="text-sm font-medium text-slate-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-500" />
+              最近预警事件
+            </h3>
+          </div>
+          <div className="divide-y divide-slate-100">
             {events.slice(0, 10).map(event => (
-              <div key={event.id} className="px-4 py-3 flex items-start gap-3">
-                <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5" />
-                <div className="flex-1">
+              <div key={event.id} className="px-4 py-3 flex items-start gap-3 hover:bg-slate-50 transition-colors">
+                <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
                   <div className="text-sm text-slate-700">{event.message}</div>
                   <div className="text-xs text-slate-400 mt-1">
                     {formatTimestamp(event.triggered_at)}
@@ -377,7 +374,7 @@ export default function AlertsPage() {
               </div>
             ))}
           </div>
-        </div>
+        </Surface>
       )}
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -466,21 +463,15 @@ export default function AlertsPage() {
             </div>
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
-            <button
-              onClick={() => setShowCreateDialog(false)}
-              className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg"
-            >
+            <Button variant="outline" size="sm" onClick={() => setShowCreateDialog(false)}>
               取消
-            </button>
-            <button
-              onClick={handleCreate}
-              className="px-4 py-2 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600"
-            >
+            </Button>
+            <Button variant="warning" size="sm" onClick={handleCreate}>
               创建规则
-            </button>
+            </Button>
           </div>
         </div>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

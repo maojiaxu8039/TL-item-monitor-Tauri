@@ -4,12 +4,14 @@ import { type ReactNode } from "react";
 interface StatusBadgeProps {
   children: ReactNode;
   variant?: "default" | "success" | "warning" | "danger" | "info" | "primary";
+  size?: "sm" | "md";
   className?: string;
 }
 
 export function StatusBadge({
   children,
   variant = "default",
+  size = "md",
   className,
 }: StatusBadgeProps) {
   const variantMap = {
@@ -21,8 +23,13 @@ export function StatusBadge({
     primary: "bg-slate-900 text-white",
   };
 
+  const sizeMap = {
+    sm: "text-[10px] px-1.5 py-0.5",
+    md: "text-xs px-2.5 py-0.5",
+  };
+
   return (
-    <span className={cn("status-badge", variantMap[variant], className)}>
+    <span className={cn("status-badge", variantMap[variant], sizeMap[size], className)}>
       {children}
     </span>
   );
