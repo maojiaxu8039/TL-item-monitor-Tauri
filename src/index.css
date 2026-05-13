@@ -1020,12 +1020,41 @@
 
   .torchscan-theme [class*="bg-slate-50"],
   .torchscan-theme [class*="bg-slate-100"],
-  .torchscan-theme [class*="bg-slate-200"] {
+  .torchscan-theme [class*="bg-slate-200"],
+  .torchscan-theme [class*="bg-gray-50"],
+  .torchscan-theme [class*="bg-gray-100"],
+  .torchscan-theme [class*="bg-gray-200"],
+  .torchscan-theme [class*="bg-gray-300"] {
     background-color: var(--color-panel-soft) !important;
   }
 
-  .torchscan-theme [class*="border-slate-"] {
+  .torchscan-theme [class*="hover:bg-slate-"]:hover,
+  .torchscan-theme [class*="hover:bg-gray-"]:hover {
+    background-color: var(--color-panel-soft) !important;
+  }
+
+  .torchscan-theme [class*="border-slate-"],
+  .torchscan-theme [class*="border-gray-"] {
     border-color: var(--color-border) !important;
+  }
+
+  .torchscan-theme .text-gray-500,
+  .torchscan-theme .text-gray-400,
+  .torchscan-theme .text-gray-300,
+  .torchscan-theme .text-gray-200 {
+    color: var(--color-text-subtle) !important;
+  }
+
+  .torchscan-theme .text-gray-600,
+  .torchscan-theme .text-gray-700,
+  .torchscan-theme .text-gray-800,
+  .torchscan-theme .text-gray-900 {
+    color: var(--color-text) !important;
+  }
+
+  .torchscan-theme [class*="hover:text-slate-"]:hover,
+  .torchscan-theme [class*="hover:text-gray-"]:hover {
+    color: var(--color-text) !important;
   }
 
   .torchscan-theme .text-slate-900,
@@ -1079,6 +1108,46 @@
     background-color: rgba(239, 68, 68, 0.1) !important;
   }
 
+  .torchscan-theme .hover\:bg-blue-50:hover,
+  .torchscan-theme .hover\:bg-blue-100:hover,
+  .torchscan-theme .hover\:bg-green-50:hover,
+  .torchscan-theme .hover\:bg-green-100:hover,
+  .torchscan-theme .hover\:bg-red-50:hover,
+  .torchscan-theme .hover\:bg-red-100:hover,
+  .torchscan-theme .hover\:bg-amber-50:hover,
+  .torchscan-theme .hover\:bg-yellow-50:hover {
+    background-color: var(--color-panel-soft) !important;
+  }
+
+  .torchscan-theme .hover\:bg-green-500:hover,
+  .torchscan-theme .hover\:bg-green-600:hover {
+    background-color: var(--color-success) !important;
+  }
+
+  .torchscan-theme .hover\:bg-red-500:hover,
+  .torchscan-theme .hover\:bg-red-600:hover {
+    background-color: var(--color-danger) !important;
+  }
+
+  .torchscan-theme .hover\:bg-blue-500:hover,
+  .torchscan-theme .hover\:bg-blue-600:hover {
+    background: linear-gradient(135deg, var(--color-brand), var(--color-brand-gold)) !important;
+  }
+
+  .torchscan-theme [class*="text-blue-"]:hover,
+  .torchscan-theme [class*="text-green-"]:hover,
+  .torchscan-theme [class*="text-red-"]:hover {
+    opacity: 0.8;
+  }
+
+  .torchscan-theme .text-red-500 {
+    color: var(--color-danger) !important;
+  }
+
+  .torchscan-theme .text-green-500 {
+    color: var(--color-success) !important;
+  }
+
   .torchscan-theme [class*="border-blue-"],
   .torchscan-theme [class*="border-yellow-"],
   .torchscan-theme [class*="border-amber-"],
@@ -1092,6 +1161,48 @@
 
   .torchscan-theme [class*="border-red-"] {
     border-color: rgba(239, 68, 68, 0.3) !important;
+  }
+
+  .torchscan-theme [class*="border-gray-100"],
+  .torchscan-theme [class*="border-gray-200"],
+  .torchscan-theme [class*="border-gray-300"] {
+    border-color: var(--color-border) !important;
+  }
+
+  .torchscan-theme .rounded-full[class*="border-"] {
+    border-color: inherit !important;
+  }
+
+  .torchscan-theme [class*="bg-white"] {
+    background-color: var(--color-panel) !important;
+  }
+
+  .torchscan-theme [class*="hover:bg-white"]:hover {
+    background-color: var(--color-panel-soft) !important;
+  }
+
+  .torchscan-theme .border-white {
+    border-color: var(--color-border) !important;
+  }
+
+  .torchscan-theme [class*="bg-green-500"],
+  .torchscan-theme [class*="bg-green-600"] {
+    background-color: var(--color-success) !important;
+  }
+
+  .torchscan-theme [class*="bg-red-500"],
+  .torchscan-theme [class*="bg-red-600"] {
+    background-color: var(--color-danger) !important;
+  }
+
+  .torchscan-theme [class*="border-green-500"],
+  .torchscan-theme [class*="border-green-600"] {
+    border-color: var(--color-success) !important;
+  }
+
+  .torchscan-theme [class*="border-red-500"],
+  .torchscan-theme [class*="border-red-600"] {
+    border-color: var(--color-danger) !important;
   }
 
   .torchscan-theme .text-green-600,
