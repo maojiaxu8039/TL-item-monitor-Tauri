@@ -145,11 +145,29 @@
     display: inline-flex;
     align-items: center;
     gap: 0.6rem;
-    min-width: 186px;
+    min-width: auto;
     border: 0;
     background: transparent;
     color: inherit;
     cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s ease;
+  }
+
+  .torch-brand:hover {
+    background: rgba(255, 106, 0, 0.08);
+  }
+
+  .torch-brand img {
+    max-width: 160px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 8px rgba(255, 106, 0, 0.25));
+    transition: filter 0.2s ease;
+  }
+
+  .torch-brand:hover img {
+    filter: drop-shadow(0 0 12px rgba(255, 106, 0, 0.45));
   }
 
   .torch-topbar-context {
@@ -460,12 +478,25 @@
   .torch-sidebar-footer {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.55rem;
     margin: 0 0.75rem 0.65rem;
     border: 1px solid rgba(255, 184, 0, 0.16);
     border-radius: 8px;
-    padding: 0.52rem 0.58rem;
+    padding: 0.4rem 0.5rem;
     background: rgba(255, 255, 255, 0.026);
+    overflow: hidden;
+  }
+
+  .torch-sidebar-footer img {
+    max-width: 100%;
+    object-fit: contain;
+    opacity: 0.85;
+    transition: opacity 0.2s ease;
+  }
+
+  .torch-sidebar-footer:hover img {
+    opacity: 1;
   }
 
   /* Surface - dark bordered panel */
@@ -1261,8 +1292,8 @@
   }
 
   @media (max-width: 1180px) {
-    .torch-brand {
-      min-width: 148px;
+    .torch-brand img {
+      max-width: 120px;
     }
 
     .torch-brand-tagline,
@@ -1279,6 +1310,11 @@
 
     .torch-brand {
       min-width: auto;
+      padding: 0.15rem 0.3rem;
+    }
+
+    .torch-brand img {
+      max-width: 90px;
     }
 
     .torch-brand-copy {
@@ -1333,6 +1369,11 @@
       justify-content: center;
       margin-left: 0.55rem;
       margin-right: 0.55rem;
+      padding: 0.3rem;
+    }
+
+    .torch-sidebar-footer img {
+      max-width: 52px;
     }
   }
 
