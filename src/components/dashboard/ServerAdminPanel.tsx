@@ -118,7 +118,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
       {/* Header */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center gap-2 px-5 py-4 hover:bg-slate-50 transition-colors"
+        className="w-full flex items-center gap-2 px-5 py-4 hover:bg-[var(--color-panel-soft)] transition-colors"
       >
         <Settings className="w-4 h-4 text-amber-500" />
         <span className="text-sm font-semibold text-slate-700">服务器管理（管理员）</span>
@@ -144,7 +144,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
             />
             <button
               onClick={() => setIsConfigLoaded(false)}
-              className="px-3 py-2 text-xs border border-slate-200 rounded-lg hover:bg-slate-50"
+              className="px-3 py-2 text-xs border border-slate-200 rounded-lg hover:bg-[var(--color-panel-soft)]"
             >
               重置
             </button>

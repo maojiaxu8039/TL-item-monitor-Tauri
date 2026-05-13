@@ -80,7 +80,7 @@ function SectionPicker({
                     onAdd(s.id);
                     setOpen(false);
                   }}
-                  className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-[var(--color-panel-soft)]"
                 >
                   {s.name}
                 </button>
@@ -154,7 +154,7 @@ function HoardCard({
               </h4>
               <button
                 onClick={() => onViewTrend(analysis.item_id, analysis.item_name)}
-                className="flex items-center gap-1 px-2 py-0.5 text-xs rounded border border-slate-200 hover:bg-slate-50 transition-colors"
+                className="flex items-center gap-1 px-2 py-0.5 text-xs rounded border border-slate-200 hover:bg-[var(--color-panel-soft)] transition-colors"
                 title="查看价格走势"
               >
                 <BarChart2 className="w-3 h-3 text-blue-500" />
@@ -342,7 +342,7 @@ export default function PriceAnalysisPage() {
               placeholder="搜索物品名称..."
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded text-sm bg-white outline-none focus:border-blue-400"
+              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded text-sm bg-white outline-none focus:border-[var(--color-brand)]"
             />
           </div>
 
@@ -359,7 +359,7 @@ export default function PriceAnalysisPage() {
                 className={`px-2.5 py-1 rounded text-xs transition-colors ${
                   sortBy === s.key
                     ? "bg-blue-100 text-blue-700"
-                    : "text-slate-500 hover:bg-slate-50"
+                    : "text-slate-500 hover:bg-[var(--color-panel-soft)]"
                 }`}
               >
                 {s.label}

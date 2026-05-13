@@ -362,7 +362,7 @@ export default function FirePriceComparePage() {
             <select
               value={historySeason}
               onChange={(e) => setHistorySeason(e.target.value)}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white"
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 bg-white"
             >
               <option value="ss11">SS11</option>
             </select>
@@ -400,7 +400,7 @@ export default function FirePriceComparePage() {
                 max={currentMaxDay}
                 value={customDayRange.start}
                 onChange={(e) => handleCustomRangeChange('start', e.target.value)}
-                className="w-16 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                className="w-16 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
               />
               <span className="text-xs text-slate-400">~</span>
               <input
@@ -409,7 +409,7 @@ export default function FirePriceComparePage() {
                 max={currentMaxDay}
                 value={customDayRange.end}
                 onChange={(e) => handleCustomRangeChange('end', e.target.value)}
-                className="w-16 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                className="w-16 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
               />
               <span className="text-xs text-slate-400">天</span>
               {useCustomRange && (

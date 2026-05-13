@@ -280,7 +280,7 @@ export default function AlertsPage() {
             return (
               <div key={rule.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
                 <div
-                  className="p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                  className="p-4 cursor-pointer hover:bg-[var(--color-panel-soft)] transition-colors"
                   onClick={() => toggleExpand(rule.id)}
                 >
                   <div className="flex items-center justify-between">
@@ -363,7 +363,7 @@ export default function AlertsPage() {
           </div>
           <div className="divide-y divide-slate-100">
             {events.slice(0, 10).map(event => (
-              <div key={event.id} className="px-4 py-3 flex items-start gap-3 hover:bg-slate-50 transition-colors">
+              <div key={event.id} className="px-4 py-3 flex items-start gap-3 hover:bg-[var(--color-panel-soft)] transition-colors">
                 <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-slate-700">{event.message}</div>
@@ -426,7 +426,7 @@ export default function AlertsPage() {
                     <button
                       key={item.item_id}
                       onClick={() => selectItem(item)}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center justify-between"
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                     >
                       <span>{item.name}</span>
                       <span className="text-slate-400 text-xs">{item.price?.toLocaleString() ?? "无价"} 火</span>

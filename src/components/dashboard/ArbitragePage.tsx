@@ -535,7 +535,7 @@ export default function ArbitragePage() {
             </div>
           ) : (
             filteredResults.map(result => (
-              <div key={result.recipe_id} className="px-4 py-3 hover:bg-slate-50 transition-colors">
+              <div key={result.recipe_id} className="px-4 py-3 hover:bg-[var(--color-panel-soft)] transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <button
@@ -664,7 +664,7 @@ export default function ArbitragePage() {
               <select
                 value={newRecipe.recipe_type}
                 onChange={e => setNewRecipe(prev => ({ ...prev, recipe_type: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               >
                 {RECIPE_TYPES.map(type => (
                   <option key={type.value} value={type.value}>{type.label}</option>
@@ -709,7 +709,7 @@ export default function ArbitragePage() {
                       searchIngredients(e.target.value);
                     }}
                     placeholder="搜索物品..."
-                    className="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
                   />
                 </div>
                 <input
@@ -737,7 +737,7 @@ export default function ArbitragePage() {
                         setIngredientDraft({ item_name: item.name, count: 1 });
                         setIngredientResults([]);
                       }}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center justify-between"
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                     >
                       <span>{item.name}</span>
                       <span className="text-slate-400 text-xs">{formatPrice(item.price)}</span>
@@ -775,7 +775,7 @@ export default function ArbitragePage() {
                       searchOutputs(e.target.value);
                     }}
                     placeholder="搜索产物..."
-                    className="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
                   />
                 </div>
                 <input
@@ -803,7 +803,7 @@ export default function ArbitragePage() {
                         setOutputDraft({ item_name: item.name, count: 1 });
                         setOutputResults([]);
                       }}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center justify-between"
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                     >
                       <span>{item.name}</span>
                       <span className="text-slate-400 text-xs">{formatPrice(item.price)}</span>
@@ -816,7 +816,7 @@ export default function ArbitragePage() {
           <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
             <button
               onClick={() => setShowCreateDialog(false)}
-              className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg"
+              className="px-4 py-2 text-sm text-slate-600 hover:bg-[var(--color-panel-soft)] rounded-lg"
             >
               取消
             </button>
@@ -850,7 +850,7 @@ export default function ArbitragePage() {
               <select
                 value={editRecipe.recipe_type}
                 onChange={e => setEditRecipe(prev => ({ ...prev, recipe_type: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               >
                 {RECIPE_TYPES.map(type => (
                   <option key={type.value} value={type.value}>{type.label}</option>
@@ -904,7 +904,7 @@ export default function ArbitragePage() {
                     <button
                       key={item.item_id}
                       onClick={() => addEditIngredient(item)}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center justify-between"
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                     >
                       <span>{item.name}</span>
                       <span className="text-slate-400 text-xs">{formatPrice(item.price)}</span>
@@ -942,7 +942,7 @@ export default function ArbitragePage() {
                     <button
                       key={item.item_id}
                       onClick={() => addEditOutput(item)}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center justify-between"
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                     >
                       <span>{item.name}</span>
                       <span className="text-slate-400 text-xs">{formatPrice(item.price)}</span>
@@ -955,7 +955,7 @@ export default function ArbitragePage() {
           <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100 sticky bottom-0 bg-white">
             <button
               onClick={() => setShowEditDialog(null)}
-              className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg"
+              className="px-4 py-2 text-sm text-slate-600 hover:bg-[var(--color-panel-soft)] rounded-lg"
             >
               取消
             </button>
@@ -998,7 +998,7 @@ export default function ArbitragePage() {
                 value={ingredientSearch}
                 onChange={e => searchIngredients(e.target.value)}
                 placeholder="搜索添加物品..."
-                className="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               />
             </div>
             {ingredientResults.length > 0 && (
@@ -1011,7 +1011,7 @@ export default function ArbitragePage() {
                       e.stopPropagation();
                       addEditIngredient(item);
                     }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center justify-between"
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                   >
                     <span>{item.name}</span>
                     <span className="text-slate-400 text-xs">{formatPrice(item.price)}</span>
@@ -1023,7 +1023,7 @@ export default function ArbitragePage() {
           <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
             <button
               onClick={() => setShowIngredientDialog(null)}
-              className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg"
+              className="px-4 py-2 text-sm text-slate-600 hover:bg-[var(--color-panel-soft)] rounded-lg"
             >
               取消
             </button>
@@ -1066,7 +1066,7 @@ export default function ArbitragePage() {
                 value={outputSearch}
                 onChange={e => searchOutputs(e.target.value)}
                 placeholder="搜索添加物品..."
-                className="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               />
             </div>
             {outputResults.length > 0 && (
@@ -1079,7 +1079,7 @@ export default function ArbitragePage() {
                       e.stopPropagation();
                       addEditOutput(item);
                     }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 flex items-center justify-between"
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                   >
                     <span>{item.name}</span>
                     <span className="text-slate-400 text-xs">{formatPrice(item.price)}</span>
@@ -1091,7 +1091,7 @@ export default function ArbitragePage() {
           <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
             <button
               onClick={() => setShowOutputDialog(null)}
-              className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg"
+              className="px-4 py-2 text-sm text-slate-600 hover:bg-[var(--color-panel-soft)] rounded-lg"
             >
               取消
             </button>

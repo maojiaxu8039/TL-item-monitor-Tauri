@@ -583,7 +583,7 @@ export default function DataMonitorPage() {
                 value={serverUrl}
                 onChange={(e) => setServerUrl(e.target.value)}
                 placeholder="http://192.168.1.100:8080"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
               />
             </div>
             <button
@@ -732,7 +732,7 @@ export default function DataMonitorPage() {
                 className={`px-3 py-1.5 text-xs ${
                   dataType === "fire"
                     ? "bg-green-500 text-white"
-                    : "bg-white text-slate-600 hover:bg-slate-50"
+                    : "bg-white text-slate-600 hover:bg-[var(--color-panel-soft)]"
                 } disabled:opacity-50`}
               >
                 火价
@@ -743,7 +743,7 @@ export default function DataMonitorPage() {
                 className={`px-3 py-1.5 text-xs ${
                   dataType === "items"
                     ? "bg-green-500 text-white"
-                    : "bg-white text-slate-600 hover:bg-slate-50"
+                    : "bg-white text-slate-600 hover:bg-[var(--color-panel-soft)]"
                 } disabled:opacity-50`}
               >
                 物品价格
@@ -760,7 +760,7 @@ export default function DataMonitorPage() {
                 className={`px-3 py-1.5 text-xs ${
                   syncMode === "normal"
                     ? "bg-blue-500 text-white"
-                    : "bg-white text-slate-600 hover:bg-slate-50"
+                    : "bg-white text-slate-600 hover:bg-[var(--color-panel-soft)]"
                 } disabled:opacity-50`}
               >
                 普通服
@@ -771,7 +771,7 @@ export default function DataMonitorPage() {
                 className={`px-3 py-1.5 text-xs ${
                   syncMode === "expert"
                     ? "bg-purple-500 text-white"
-                    : "bg-white text-slate-600 hover:bg-slate-50"
+                    : "bg-white text-slate-600 hover:bg-[var(--color-panel-soft)]"
                 } disabled:opacity-50`}
               >
                 专家服
@@ -785,7 +785,7 @@ export default function DataMonitorPage() {
               value={timeRange}
               onChange={(e) => setTimeRange(e.target.value as TimeRange)}
               disabled={isSyncing}
-              className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50"
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 disabled:opacity-50"
             >
               <option value="24h">24小时</option>
               <option value="3d">3天</option>
@@ -802,7 +802,7 @@ export default function DataMonitorPage() {
                 checked={isPaginatedSync}
                 onChange={(e) => setIsPaginatedSync(e.target.checked)}
                 disabled={isSyncing || timeRange !== "season"}
-                className="rounded border-slate-300 text-blue-500 focus:ring-blue-500 disabled:opacity-50"
+                className="rounded border-slate-300 text-blue-500 focus:ring-[var(--color-brand)] disabled:opacity-50"
               />
               分页同步（大数据量推荐，每页 {PAGE_SIZE} 条）
               {timeRange !== "season" && <span className="text-amber-500">（仅整赛季）</span>}
