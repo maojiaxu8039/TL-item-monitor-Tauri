@@ -29,7 +29,7 @@ function FireChangeCard({ item, isRising }: FireChangeCardProps) {
       interactive
       padding="sm"
       className={`transition-colors ${
-        isRising ? "border-red-100 hover:border-red-200" : "border-green-100 hover:border-green-200"
+        isRising ? "border-[rgba(239,68,68,0.2)] hover:border-red-200" : "border-green-100 hover:border-green-200"
       }`}
     >
       <div className="flex items-start justify-between">
@@ -37,7 +37,7 @@ function FireChangeCard({ item, isRising }: FireChangeCardProps) {
           <Package className={`w-4 h-4 ${isRising ? "text-red-500" : "text-green-500"}`} />
           <div>
             <div className="text-sm font-medium text-slate-900">{item.name}</div>
-            <div className="text-xs text-slate-400">
+            <div className="text-xs text-[var(--color-text-subtle)]">
               价格: {item.current_price.toFixed(2)} 火 |
               变动: {maxChange.toFixed(2)}% |
               评分: {item.score.toFixed(2)}
@@ -50,26 +50,26 @@ function FireChangeCard({ item, isRising }: FireChangeCardProps) {
       </div>
 
       <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
-        <div className="text-center p-1.5 bg-slate-50 rounded">
-          <div className="text-slate-400">5m</div>
+        <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded">
+          <div className="text-[var(--color-text-subtle)]">5m</div>
           <div className={`font-medium ${(item.change_rate_5m ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
             {item.change_rate_5m !== null ? `${(item.change_rate_5m ?? 0) >= 0 ? "+" : ""}${item.change_rate_5m?.toFixed(1)}%` : "-"}
           </div>
         </div>
-        <div className="text-center p-1.5 bg-slate-50 rounded">
-          <div className="text-slate-400">30m</div>
+        <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded">
+          <div className="text-[var(--color-text-subtle)]">30m</div>
           <div className={`font-medium ${(item.change_rate_30m ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
             {item.change_rate_30m !== null ? `${(item.change_rate_30m ?? 0) >= 0 ? "+" : ""}${item.change_rate_30m?.toFixed(1)}%` : "-"}
           </div>
         </div>
-        <div className="text-center p-1.5 bg-slate-50 rounded">
-          <div className="text-slate-400">1h</div>
+        <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded">
+          <div className="text-[var(--color-text-subtle)]">1h</div>
           <div className={`font-medium ${(item.change_rate_1h ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
             {item.change_rate_1h !== null ? `${(item.change_rate_1h ?? 0) >= 0 ? "+" : ""}${item.change_rate_1h?.toFixed(1)}%` : "-"}
           </div>
         </div>
-        <div className="text-center p-1.5 bg-slate-50 rounded">
-          <div className="text-slate-400">3h</div>
+        <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded">
+          <div className="text-[var(--color-text-subtle)]">3h</div>
           <div className={`font-medium ${(item.change_rate_3h ?? 0) >= 0 ? "text-red-500" : "text-green-500"}`}>
             {item.change_rate_3h !== null ? `${(item.change_rate_3h ?? 0) >= 0 ? "+" : ""}${item.change_rate_3h?.toFixed(1)}%` : "-"}
           </div>
@@ -96,13 +96,13 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-[480px] overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+      <div className="bg-[var(--color-panel)] rounded-2xl shadow-2xl w-[480px] overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
           <div className="flex items-center gap-2">
-            <Settings className="w-5 h-5 text-slate-500" />
-            <h2 className="text-lg font-semibold text-slate-800">监控设置</h2>
+            <Settings className="w-5 h-5 text-[var(--color-text-subtle)]" />
+            <h2 className="text-lg font-semibold text-[var(--color-text)]">监控设置</h2>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+          <button onClick={onClose} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
         </div>
 
         <div className="p-5 space-y-5">
@@ -110,12 +110,12 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-red-500" />
-                <span className="text-sm font-medium text-slate-700">出货阈值</span>
+                <span className="text-sm font-medium text-[var(--color-text)]">出货阈值</span>
               </div>
               <span className="text-sm font-medium text-red-600">{riseThreshold}%</span>
             </div>
             <div className="pl-6">
-              <div className="text-xs text-slate-500 mb-1.5">涨幅超过此百分比时显示为出货机会</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mb-1.5">涨幅超过此百分比时显示为出货机会</div>
               <input
                 type="range"
                 min={1}
@@ -125,7 +125,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
                 onChange={(e) => setRiseThreshold(Number(e.target.value))}
                 className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-500"
               />
-              <div className="flex justify-between text-xs text-slate-400 mt-1">
+              <div className="flex justify-between text-xs text-[var(--color-text-subtle)] mt-1">
                 <span>1%</span>
                 <span>50%</span>
               </div>
@@ -136,12 +136,12 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <TrendingDown className="w-4 h-4 text-green-500" />
-                <span className="text-sm font-medium text-slate-700">捡漏阈值</span>
+                <span className="text-sm font-medium text-[var(--color-text)]">捡漏阈值</span>
               </div>
               <span className="text-sm font-medium text-green-600">{fallThreshold}%</span>
             </div>
             <div className="pl-6">
-              <div className="text-xs text-slate-500 mb-1.5">跌幅超过此百分比时显示为捡漏机会</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mb-1.5">跌幅超过此百分比时显示为捡漏机会</div>
               <input
                 type="range"
                 min={1}
@@ -151,7 +151,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
                 onChange={(e) => setFallThreshold(Number(e.target.value))}
                 className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-green-500"
               />
-              <div className="flex justify-between text-xs text-slate-400 mt-1">
+              <div className="flex justify-between text-xs text-[var(--color-text-subtle)] mt-1">
                 <span>1%</span>
                 <span>50%</span>
               </div>
@@ -159,8 +159,8 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg transition-colors">取消</button>
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg transition-colors">取消</button>
           <button onClick={handleSave} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90 transition-opacity">保存设置</button>
         </div>
       </div>
@@ -241,7 +241,7 @@ export default function DealsPage() {
           <div className="flex items-center justify-center h-full">
             <div className="flex flex-col items-center gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-slate-300" />
-              <span className="text-slate-400">加载中...</span>
+              <span className="text-[var(--color-text-subtle)]">加载中...</span>
             </div>
           </div>
         ) : fireChanges.length === 0 ? (
@@ -255,7 +255,7 @@ export default function DealsPage() {
             <div className="flex flex-col overflow-hidden">
               <div className="flex items-center gap-2 px-1 mb-3">
                 <TrendingUp className="w-5 h-5 text-red-500" />
-                <h2 className="text-sm font-semibold text-slate-700">出货机会</h2>
+                <h2 className="text-sm font-semibold text-[var(--color-text)]">出货机会</h2>
                 <StatusBadge variant="danger">涨幅≥{settings.rise_threshold}%</StatusBadge>
               </div>
               <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
@@ -275,7 +275,7 @@ export default function DealsPage() {
             <div className="flex flex-col overflow-hidden">
               <div className="flex items-center gap-2 px-1 mb-3">
                 <TrendingDown className="w-5 h-5 text-green-500" />
-                <h2 className="text-sm font-semibold text-slate-700">捡漏机会</h2>
+                <h2 className="text-sm font-semibold text-[var(--color-text)]">捡漏机会</h2>
                 <StatusBadge variant="success">跌幅≥{settings.fall_threshold}%</StatusBadge>
               </div>
               <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin">

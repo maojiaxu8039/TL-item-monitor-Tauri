@@ -538,7 +538,7 @@ export default function DataMonitorPage() {
         title="数据监控"
         description="管理与服务器的数据同步"
         icon={Database}
-        iconBg="bg-blue-50"
+        iconBg="bg-[rgba(255,184,0,0.08)]"
         iconColor="text-[var(--color-brand)]"
         actions={
           <ToolbarActions>
@@ -553,7 +553,7 @@ export default function DataMonitorPage() {
       <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
           <Server className="w-4 h-4 text-[var(--color-brand)]" />
-          <h2 className="text-sm font-semibold text-slate-700">服务器连接</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text)]">服务器连接</h2>
           <div className="ml-auto flex items-center gap-2">
             {connectionStatus === "connected" ? (
               <>
@@ -567,8 +567,8 @@ export default function DataMonitorPage() {
               </>
             ) : (
               <>
-                <WifiOff className="w-5 h-5 text-slate-400" />
-                <span className="text-slate-400">未连接</span>
+                <WifiOff className="w-5 h-5 text-[var(--color-text-subtle)]" />
+                <span className="text-[var(--color-text-subtle)]">未连接</span>
               </>
             )}
           </div>
@@ -577,13 +577,13 @@ export default function DataMonitorPage() {
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <div className="flex-1">
-              <label className="block text-xs text-slate-500 mb-1">服务器地址</label>
+              <label className="block text-xs text-[var(--color-text-subtle)] mb-1">服务器地址</label>
               <input
                 type="text"
                 value={serverUrl}
                 onChange={(e) => setServerUrl(e.target.value)}
                 placeholder="http://192.168.1.100:8080"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
+                className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
               />
             </div>
             <button
@@ -595,26 +595,26 @@ export default function DataMonitorPage() {
           </div>
 
           {serverStatus && (
-            <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-100">
+            <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-[var(--color-border-soft)]">
               <MetricCard
                 label="版本"
                 value={serverStatus.version}
                 icon={Server}
-                iconBg="bg-blue-50"
+                iconBg="bg-[rgba(255,184,0,0.08)]"
                 iconColor="text-[var(--color-brand)]"
               />
               <MetricCard
                 label="运行时长"
                 value={formatUptime(serverStatus.uptime_seconds)}
                 icon={RefreshCw}
-                iconBg="bg-green-50"
+                iconBg="bg-[rgba(34,197,94,0.1)]"
                 iconColor="text-green-500"
               />
               <MetricCard
                 label="赛季"
                 value={serverStatus.season_id}
                 icon={Database}
-                iconBg="bg-purple-50"
+                iconBg="bg-[rgba(167,139,250,0.12)]"
                 iconColor="text-[var(--color-ai)]"
               />
               <MetricCard
@@ -644,9 +644,9 @@ export default function DataMonitorPage() {
                   ) : (
                     <XCircle className="w-4 h-4 text-red-500" />
                   )}
-                  <span className="text-sm text-slate-600">火价</span>
+                  <span className="text-sm text-[var(--color-text-muted)]">火价</span>
                 </div>
-                <span className={`font-medium ${normalStatus.fire_success ? "text-slate-700" : "text-red-500"}`}>
+                <span className={`font-medium ${normalStatus.fire_success ? "text-[var(--color-text)]" : "text-red-500"}`}>
                   {normalStatus.fire_success ? `${normalStatus.fire_price?.toFixed(2)} RMB/10K` : "失败"}
                 </span>
               </div>
@@ -657,13 +657,13 @@ export default function DataMonitorPage() {
                   ) : (
                     <XCircle className="w-4 h-4 text-red-500" />
                   )}
-                  <span className="text-sm text-slate-600">物品</span>
+                  <span className="text-sm text-[var(--color-text-muted)]">物品</span>
                 </div>
-                <span className={`font-medium ${normalStatus.items_success ? "text-slate-700" : "text-red-500"}`}>
+                <span className={`font-medium ${normalStatus.items_success ? "text-[var(--color-text)]" : "text-red-500"}`}>
                   {normalStatus.items_success ? `${normalStatus.items_count} 个` : "失败"}
                 </span>
               </div>
-              <div className="text-xs text-slate-400 text-right pt-2 border-t border-slate-100">
+              <div className="text-xs text-[var(--color-text-subtle)] text-right pt-2 border-t border-[var(--color-border-soft)]">
                 {formatTimestamp(normalStatus.timestamp)}
               </div>
             </div>
@@ -686,9 +686,9 @@ export default function DataMonitorPage() {
                   ) : (
                     <XCircle className="w-4 h-4 text-red-500" />
                   )}
-                  <span className="text-sm text-slate-600">火价</span>
+                  <span className="text-sm text-[var(--color-text-muted)]">火价</span>
                 </div>
-                <span className={`font-medium ${expertStatus.fire_success ? "text-slate-700" : "text-red-500"}`}>
+                <span className={`font-medium ${expertStatus.fire_success ? "text-[var(--color-text)]" : "text-red-500"}`}>
                   {expertStatus.fire_success ? `${expertStatus.fire_price?.toFixed(2)} RMB/10K` : "失败"}
                 </span>
               </div>
@@ -699,13 +699,13 @@ export default function DataMonitorPage() {
                   ) : (
                     <XCircle className="w-4 h-4 text-red-500" />
                   )}
-                  <span className="text-sm text-slate-600">物品</span>
+                  <span className="text-sm text-[var(--color-text-muted)]">物品</span>
                 </div>
-                <span className={`font-medium ${expertStatus.items_success ? "text-slate-700" : "text-red-500"}`}>
+                <span className={`font-medium ${expertStatus.items_success ? "text-[var(--color-text)]" : "text-red-500"}`}>
                   {expertStatus.items_success ? `${expertStatus.items_count} 个` : "失败"}
                 </span>
               </div>
-              <div className="text-xs text-slate-400 text-right pt-2 border-t border-slate-100">
+              <div className="text-xs text-[var(--color-text-subtle)] text-right pt-2 border-t border-[var(--color-border-soft)]">
                 {formatTimestamp(expertStatus.timestamp)}
               </div>
             </div>
@@ -718,14 +718,14 @@ export default function DataMonitorPage() {
       <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
           <Download className="w-4 h-4 text-green-500" />
-          <h2 className="text-sm font-semibold text-slate-700">数据同步</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text)]">数据同步</h2>
           {syncJob && getSyncStatusBadge()}
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-500">数据类型</label>
-            <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+            <label className="text-xs text-[var(--color-text-subtle)]">数据类型</label>
+            <div className="flex rounded-lg border border-[var(--color-border)] overflow-hidden">
               <button
                 onClick={() => setDataType("fire")}
                 disabled={isSyncing}
@@ -752,15 +752,15 @@ export default function DataMonitorPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-500">服务器模式</label>
-            <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+            <label className="text-xs text-[var(--color-text-subtle)]">服务器模式</label>
+            <div className="flex rounded-lg border border-[var(--color-border)] overflow-hidden">
               <button
                 onClick={() => setSyncMode("normal")}
                 disabled={isSyncing}
                 className={`px-3 py-1.5 text-xs ${
                   syncMode === "normal"
                     ? "bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white"
-                    : "bg-white text-slate-600 hover:bg-[var(--color-panel-soft)]"
+                    : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
                 } disabled:opacity-50`}
               >
                 普通服
@@ -780,12 +780,12 @@ export default function DataMonitorPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-500">时间范围</label>
+            <label className="text-xs text-[var(--color-text-subtle)]">时间范围</label>
             <select
               value={timeRange}
               onChange={(e) => setTimeRange(e.target.value as TimeRange)}
               disabled={isSyncing}
-              className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 disabled:opacity-50"
+              className="px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 disabled:opacity-50"
             >
               <option value="24h">24小时</option>
               <option value="3d">3天</option>
@@ -796,13 +796,13 @@ export default function DataMonitorPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <label className={`flex items-center gap-2 text-xs cursor-pointer ${timeRange !== "season" ? "text-slate-400" : "text-slate-500"}`}>
+            <label className={`flex items-center gap-2 text-xs cursor-pointer ${timeRange !== "season" ? "text-[var(--color-text-subtle)]" : "text-[var(--color-text-subtle)]"}`}>
               <input
                 type="checkbox"
                 checked={isPaginatedSync}
                 onChange={(e) => setIsPaginatedSync(e.target.checked)}
                 disabled={isSyncing || timeRange !== "season"}
-                className="rounded border-slate-300 text-[var(--color-brand)] focus:ring-[var(--color-brand)] disabled:opacity-50"
+                className="rounded border-[var(--color-border)] text-[var(--color-brand)] focus:ring-[var(--color-brand)] disabled:opacity-50"
               />
               分页同步（大数据量推荐，每页 {PAGE_SIZE} 条）
               {timeRange !== "season" && <span className="text-amber-500">（仅整赛季）</span>}
@@ -828,18 +828,18 @@ export default function DataMonitorPage() {
               )}
             </button>
 
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-[var(--color-text-subtle)]">
               同步 {dataType === "fire" ? "火价" : "物品价格"} / {syncMode === "normal" ? "普通服" : "专家服"} / {timeRange === "season" ? "整赛季" : timeRange}
             </span>
           </div>
 
           {syncJob && syncJob.status === "running" && (
             <div className="space-y-2">
-              <div className="flex justify-between text-xs text-slate-500">
+              <div className="flex justify-between text-xs text-[var(--color-text-subtle)]">
                 <span>进度</span>
                 <span>{getSyncProgress()}%</span>
               </div>
-              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+              <div className="w-full bg-[var(--color-panel)] rounded-full h-2 overflow-hidden">
                 <div
                   className="bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] h-2 rounded-full transition-all duration-300"
                   style={{ width: `${Math.min(getSyncProgress(), 100)}%` }}
@@ -848,16 +848,16 @@ export default function DataMonitorPage() {
               <div className="flex gap-4 text-xs">
                 <span className="text-green-600">成功: {syncJob.success.toLocaleString()}</span>
                 <span className="text-red-600">失败: {syncJob.failed.toLocaleString()}</span>
-                <span className="text-slate-500">总计: {syncJob.total.toLocaleString()}</span>
+                <span className="text-[var(--color-text-subtle)]">总计: {syncJob.total.toLocaleString()}</span>
               </div>
             </div>
           )}
 
           {syncJob && syncJob.status !== "idle" && syncJob.status !== "running" && (
             <div className={`p-4 rounded-lg border ${
-              syncJob.status === "success" ? "bg-green-50 border-green-200" :
+              syncJob.status === "success" ? "bg-[rgba(34,197,94,0.1)] border-green-200" :
               syncJob.status === "partial" ? "bg-yellow-50 border-yellow-200" :
-              "bg-red-50 border-red-200"
+              "bg-[rgba(239,68,68,0.1)] border-red-200"
             }`}>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium">
@@ -865,7 +865,7 @@ export default function DataMonitorPage() {
                    syncJob.status === "partial" ? "部分同步成功" : "同步失败"}
                 </h3>
                 {syncJob.finishedAt && syncJob.startedAt && (
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-[var(--color-text-subtle)]">
                     耗时: {formatDuration(syncJob.finishedAt - syncJob.startedAt)}
                   </span>
                 )}
@@ -873,15 +873,15 @@ export default function DataMonitorPage() {
               <div className="grid grid-cols-3 gap-4 text-sm">
                 <div className="text-center">
                   <div className="text-lg font-semibold text-green-600">{syncJob.success}</div>
-                  <div className="text-xs text-slate-500">成功</div>
+                  <div className="text-xs text-[var(--color-text-subtle)]">成功</div>
                 </div>
                 <div className="text-center">
                   <div className="text-lg font-semibold text-red-600">{syncJob.failed}</div>
-                  <div className="text-xs text-slate-500">失败</div>
+                  <div className="text-xs text-[var(--color-text-subtle)]">失败</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-lg font-semibold text-slate-600">{syncJob.total}</div>
-                  <div className="text-xs text-slate-500">总计</div>
+                  <div className="text-lg font-semibold text-[var(--color-text-muted)]">{syncJob.total}</div>
+                  <div className="text-xs text-[var(--color-text-subtle)]">总计</div>
                 </div>
               </div>
               {syncJob.firstError && (
@@ -892,7 +892,7 @@ export default function DataMonitorPage() {
               {syncJob.failures.length > 0 && (
                 <button
                   onClick={() => setShowFailures(!showFailures)}
-                  className="mt-2 flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700"
+                  className="mt-2 flex items-center gap-1 text-xs text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
                 >
                   {showFailures ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                   查看失败详情 ({syncJob.failures.length})
@@ -901,8 +901,8 @@ export default function DataMonitorPage() {
               {showFailures && syncJob.failures.length > 0 && (
                 <div className="mt-2 space-y-2 text-xs">
                   {syncJob.failures.map((failure, index) => (
-                    <div key={index} className="p-2 bg-white rounded border border-red-100">
-                      <div className="font-medium text-slate-700">
+                    <div key={index} className="p-2 bg-[var(--color-panel)] rounded border border-[rgba(239,68,68,0.2)]">
+                      <div className="font-medium text-[var(--color-text)]">
                         {failure.itemName || failure.itemId || "记录"}
                       </div>
                       <div className="text-red-500">{failure.reason}</div>
@@ -918,11 +918,11 @@ export default function DataMonitorPage() {
       {connectionStatus !== "connected" && (
         <Surface padding="lg" className="text-center">
           <WifiOff className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-slate-600 mb-2">未连接到服务器</h3>
-          <p className="text-sm text-slate-400">
+          <h3 className="text-lg font-medium text-[var(--color-text-muted)] mb-2">未连接到服务器</h3>
+          <p className="text-sm text-[var(--color-text-subtle)]">
             请确保服务器采集器正在运行，并检查服务器地址是否正确
           </p>
-          <p className="text-xs text-slate-400 mt-2">
+          <p className="text-xs text-[var(--color-text-subtle)] mt-2">
             服务器采集器运行命令：./server --port 8080
           </p>
         </Surface>

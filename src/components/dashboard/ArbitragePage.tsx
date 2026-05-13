@@ -445,7 +445,7 @@ export default function ArbitragePage() {
         title="套利比价"
         description="分解、合成、材料兑换 全场景比价分析"
         icon={Calculator}
-        iconBg="bg-green-50"
+        iconBg="bg-[rgba(34,197,94,0.1)]"
         iconColor="text-green-500"
         actions={
           <ToolbarActions>
@@ -469,16 +469,16 @@ export default function ArbitragePage() {
           label="可套利配方"
           value={totalProfitable}
           icon={TrendingUp}
-          iconBg="bg-red-50"
+          iconBg="bg-[rgba(239,68,68,0.1)]"
           iconColor="text-red-500"
           helper={<span className="text-xs text-red-500">个</span>}
-          className="border-red-100"
+          className="border-[rgba(239,68,68,0.2)]"
         />
         <MetricCard
           label="亏损配方"
           value={totalLoss}
           icon={TrendingDown}
-          iconBg="bg-green-50"
+          iconBg="bg-[rgba(34,197,94,0.1)]"
           iconColor="text-green-500"
           helper={<span className="text-xs text-green-500">个</span>}
           className="border-green-100"
@@ -487,7 +487,7 @@ export default function ArbitragePage() {
           label="配方总数"
           value={recipes.length}
           icon={Layers}
-          iconBg="bg-blue-50"
+          iconBg="bg-[rgba(255,184,0,0.08)]"
           iconColor="text-[var(--color-brand)]"
           helper={<span className="text-xs text-[var(--color-brand)]">个</span>}
           className="border-blue-100"
@@ -495,18 +495,18 @@ export default function ArbitragePage() {
       </div>
 
       <Surface padding="none">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-[var(--color-border-soft)] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-slate-700">套利结果</span>
-            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+            <span className="text-sm font-medium text-[var(--color-text)]">套利结果</span>
+            <div className="flex items-center gap-1 bg-[var(--color-panel)] rounded-lg p-1">
               {["all", "decompose", "synthesize", "exchange"].map(type => (
                 <button
                   key={type}
                   onClick={() => setTypeFilter(type)}
                   className={`px-3 py-1 text-xs rounded-md transition-colors ${
                     typeFilter === type
-                      ? "bg-white text-slate-800 shadow-sm font-medium"
-                      : "text-slate-500 hover:text-slate-700"
+                      ? "bg-[var(--color-panel)] text-[var(--color-text)] shadow-sm font-medium"
+                      : "text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
                   }`}
                 >
                   {type === "all" ? "全部" : getRecipeTypeLabel(type)}
@@ -515,7 +515,7 @@ export default function ArbitragePage() {
             </div>
           </div>
           {lastCalculatedAt && (
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-[var(--color-text-subtle)]">
               计算时间: {formatTime(lastCalculatedAt)}
             </span>
           )}
@@ -524,7 +524,7 @@ export default function ArbitragePage() {
           {filteredResults.length === 0 ? (
             <div className="px-4 py-8 text-center">
               {loading ? (
-                <div className="text-sm text-slate-400">加载中...</div>
+                <div className="text-sm text-[var(--color-text-subtle)]">加载中...</div>
               ) : (
                 <EmptyState
                   title="暂无套利数据"
@@ -543,14 +543,14 @@ export default function ArbitragePage() {
                       className="p-1 rounded-lg hover:bg-slate-200 transition-colors"
                     >
                       {expandedIds.has(result.recipe_id) ? (
-                        <ChevronDown className="h-4 w-4 text-slate-400" />
+                        <ChevronDown className="h-4 w-4 text-[var(--color-text-subtle)]" />
                       ) : (
-                        <ChevronRight className="h-4 w-4 text-slate-400" />
+                        <ChevronRight className="h-4 w-4 text-[var(--color-text-subtle)]" />
                       )}
                     </button>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-slate-800">{result.recipe_name}</span>
+                        <span className="text-sm font-medium text-[var(--color-text)]">{result.recipe_name}</span>
                         <StatusBadge variant="default">{getRecipeTypeLabel(result.recipe_type)}</StatusBadge>
                         {result.used_lowest_price && (
                           <StatusBadge variant="warning">最低价</StatusBadge>
@@ -560,12 +560,12 @@ export default function ArbitragePage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <div className="text-sm font-medium text-slate-600">
+                      <div className="text-sm font-medium text-[var(--color-text-muted)]">
                         利润: <span className={result.is_profitable ? "text-red-600" : "text-green-500"}>
                           {result.is_profitable ? "+" : ""}{formatPrice(result.profit)}
                         </span>
                       </div>
-                      <div className="text-xs text-slate-400">
+                      <div className="text-xs text-[var(--color-text-subtle)]">
                         利润率: <span className={result.is_profitable ? "text-red-500" : "text-green-400"}>
                           {formatProfitMargin(result.profit_margin)}
                         </span>
@@ -586,7 +586,7 @@ export default function ArbitragePage() {
                           const recipe = recipes.find(r => r.id === result.recipe_id);
                           if (recipe) openEditDialog(recipe);
                         }}
-                        className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors text-slate-500 hover:text-[var(--color-brand)]"
+                        className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors text-[var(--color-text-subtle)] hover:text-[var(--color-brand)]"
                         title="编辑配方"
                       >
                         <Edit3 className="h-4 w-4" />
@@ -605,32 +605,32 @@ export default function ArbitragePage() {
                 {expandedIds.has(result.recipe_id) && (
                   <div className="mt-3 pl-8 space-y-3">
                     <div className="grid grid-cols-2 gap-4">
-                      <Surface padding="sm" className="bg-slate-50">
-                        <div className="text-xs font-medium text-slate-500 mb-2">原料成本</div>
+                      <Surface padding="sm" className="bg-[var(--color-panel-soft)]">
+                        <div className="text-xs font-medium text-[var(--color-text-subtle)] mb-2">原料成本</div>
                         <div className="space-y-1">
                           {result.ingredients_detail.map(ing => (
                             <div key={ing.item_name} className="flex items-center justify-between text-sm">
-                              <span className="text-slate-600">{ing.item_name} × {ing.count}</span>
-                              <span className="text-slate-800 font-medium">{formatPrice(ing.unit_price)} × {ing.count} = {formatPrice(ing.total_cost)}</span>
+                              <span className="text-[var(--color-text-muted)]">{ing.item_name} × {ing.count}</span>
+                              <span className="text-[var(--color-text)] font-medium">{formatPrice(ing.unit_price)} × {ing.count} = {formatPrice(ing.total_cost)}</span>
                             </div>
                           ))}
-                          <div className="pt-1 border-t border-slate-200 flex items-center justify-between font-medium">
-                            <span className="text-slate-600">总成本</span>
+                          <div className="pt-1 border-t border-[var(--color-border)] flex items-center justify-between font-medium">
+                            <span className="text-[var(--color-text-muted)]">总成本</span>
                             <span className="text-red-500">{formatPrice(result.total_cost)}</span>
                           </div>
                         </div>
                       </Surface>
-                      <Surface padding="sm" className="bg-slate-50">
-                        <div className="text-xs font-medium text-slate-500 mb-2">产物收入（12.5%手续费后）</div>
+                      <Surface padding="sm" className="bg-[var(--color-panel-soft)]">
+                        <div className="text-xs font-medium text-[var(--color-text-subtle)] mb-2">产物收入（12.5%手续费后）</div>
                         <div className="space-y-1">
                           {result.outputs_detail.map(out => (
                             <div key={out.item_name} className="flex items-center justify-between text-sm">
-                              <span className="text-slate-600">{out.item_name} × {out.count}</span>
-                              <span className="text-slate-800 font-medium">{formatPrice(out.unit_price)} × {out.count} = {formatPrice(out.after_tax_value)}</span>
+                              <span className="text-[var(--color-text-muted)]">{out.item_name} × {out.count}</span>
+                              <span className="text-[var(--color-text)] font-medium">{formatPrice(out.unit_price)} × {out.count} = {formatPrice(out.after_tax_value)}</span>
                             </div>
                           ))}
-                          <div className="pt-1 border-t border-slate-200 flex items-center justify-between font-medium">
-                            <span className="text-slate-600">税后总收入</span>
+                          <div className="pt-1 border-t border-[var(--color-border)] flex items-center justify-between font-medium">
+                            <span className="text-[var(--color-text-muted)]">税后总收入</span>
                             <span className="text-green-600">{formatPrice(result.total_output_value)}</span>
                           </div>
                         </div>
@@ -645,14 +645,14 @@ export default function ArbitragePage() {
       </Surface>
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-800">新增套利配方</h3>
-            <button onClick={() => setShowCreateDialog(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-lg mx-4">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">新增套利配方</h3>
+            <button onClick={() => setShowCreateDialog(false)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
           </div>
           <div className="p-5 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">配方名称</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1">配方名称</label>
               <Input
                 value={newRecipe.name}
                 onChange={e => setNewRecipe(prev => ({ ...prev, name: e.target.value }))}
@@ -660,11 +660,11 @@ export default function ArbitragePage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">配方类型</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1">配方类型</label>
               <select
                 value={newRecipe.recipe_type}
                 onChange={e => setNewRecipe(prev => ({ ...prev, recipe_type: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               >
                 {RECIPE_TYPES.map(type => (
                   <option key={type.value} value={type.value}>{type.label}</option>
@@ -674,10 +674,10 @@ export default function ArbitragePage() {
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-slate-700">原料列表</label>
+                <label className="text-sm font-medium text-[var(--color-text)]">原料列表</label>
                 <button
                   onClick={() => setNewRecipe(prev => ({ ...prev, enabled: !prev.enabled }))}
-                  className="flex items-center gap-1 text-sm text-slate-500"
+                  className="flex items-center gap-1 text-sm text-[var(--color-text-subtle)]"
                 >
                   {newRecipe.enabled ? <ToggleRight className="h-5 w-5 text-green-500" /> : <ToggleLeft className="h-5 w-5" />}
                   启用
@@ -686,7 +686,7 @@ export default function ArbitragePage() {
               {newRecipe.ingredients.length > 0 && (
                 <div className="mb-2 space-y-1">
                   {newRecipe.ingredients.map(ing => (
-                    <div key={ing.item_name} className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg text-sm">
+                    <div key={ing.item_name} className="flex items-center justify-between px-3 py-2 bg-[var(--color-panel-soft)] rounded-lg text-sm">
                       <span>{ing.item_name}</span>
                       <div className="flex items-center gap-2">
                         <span>× {ing.count}</span>
@@ -700,7 +700,7 @@ export default function ArbitragePage() {
               )}
               <div className="flex items-center gap-2 mb-2">
                 <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-text-subtle)]" />
                   <input
                     type="text"
                     value={ingredientDraft.item_name}
@@ -709,25 +709,25 @@ export default function ArbitragePage() {
                       searchIngredients(e.target.value);
                     }}
                     placeholder="搜索物品..."
-                    className="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+                    className="w-full pl-10 pr-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
                   />
                 </div>
                 <input
                   type="number"
                   value={ingredientDraft.count}
                   onChange={e => setIngredientDraft(prev => ({ ...prev, count: parseInt(e.target.value) || 1 }))}
-                  className="w-20 px-2 py-2 rounded-lg border border-slate-200 text-sm text-center"
+                  className="w-20 px-2 py-2 rounded-lg border border-[var(--color-border)] text-sm text-center"
                   min="1"
                 />
                 <button
                   onClick={addIngredientFromDraft}
-                  className="px-3 py-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  className="px-3 py-2 rounded-lg bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-slate-200"
                 >
                   添加
                 </button>
               </div>
               {ingredientResults.length > 0 && (
-                <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-lg">
+                <div className="max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-lg">
                   {ingredientResults.map(item => (
                     <button
                       type="button"
@@ -740,7 +740,7 @@ export default function ArbitragePage() {
                       className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                     >
                       <span>{item.name}</span>
-                      <span className="text-slate-400 text-xs">{formatPrice(item.price)}</span>
+                      <span className="text-[var(--color-text-subtle)] text-xs">{formatPrice(item.price)}</span>
                     </button>
                   ))}
                 </div>
@@ -748,11 +748,11 @@ export default function ArbitragePage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">产物列表</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1">产物列表</label>
               {newRecipe.outputs.length > 0 && (
                 <div className="mb-2 space-y-1">
                   {newRecipe.outputs.map(out => (
-                    <div key={out.item_name} className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg text-sm">
+                    <div key={out.item_name} className="flex items-center justify-between px-3 py-2 bg-[var(--color-panel-soft)] rounded-lg text-sm">
                       <span>{out.item_name}</span>
                       <div className="flex items-center gap-2">
                         <span>× {out.count}</span>
@@ -766,7 +766,7 @@ export default function ArbitragePage() {
               )}
               <div className="flex items-center gap-2 mb-2">
                 <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-text-subtle)]" />
                   <input
                     type="text"
                     value={outputDraft.item_name}
@@ -775,25 +775,25 @@ export default function ArbitragePage() {
                       searchOutputs(e.target.value);
                     }}
                     placeholder="搜索产物..."
-                    className="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+                    className="w-full pl-10 pr-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
                   />
                 </div>
                 <input
                   type="number"
                   value={outputDraft.count}
                   onChange={e => setOutputDraft(prev => ({ ...prev, count: parseInt(e.target.value) || 1 }))}
-                  className="w-20 px-2 py-2 rounded-lg border border-slate-200 text-sm text-center"
+                  className="w-20 px-2 py-2 rounded-lg border border-[var(--color-border)] text-sm text-center"
                   min="1"
                 />
                 <button
                   onClick={addOutputFromDraft}
-                  className="px-3 py-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  className="px-3 py-2 rounded-lg bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-slate-200"
                 >
                   添加
                 </button>
               </div>
               {outputResults.length > 0 && (
-                <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-lg">
+                <div className="max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-lg">
                   {outputResults.map(item => (
                     <button
                       type="button"
@@ -806,17 +806,17 @@ export default function ArbitragePage() {
                       className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                     >
                       <span>{item.name}</span>
-                      <span className="text-slate-400 text-xs">{formatPrice(item.price)}</span>
+                      <span className="text-[var(--color-text-subtle)] text-xs">{formatPrice(item.price)}</span>
                     </button>
                   ))}
                 </div>
               )}
             </div>
           </div>
-          <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
+          <div className="flex justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
             <button
               onClick={() => setShowCreateDialog(false)}
-              className="px-4 py-2 text-sm text-slate-600 hover:bg-[var(--color-panel-soft)] rounded-lg"
+              className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg"
             >
               取消
             </button>
@@ -832,25 +832,25 @@ export default function ArbitragePage() {
       </Dialog>
 
       <Dialog open={!!showEditDialog} onOpenChange={() => setShowEditDialog(null)}>
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white">
-            <h3 className="text-sm font-semibold text-slate-800">编辑配方</h3>
-            <button onClick={() => setShowEditDialog(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)] sticky top-0 bg-[var(--color-panel)]">
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">编辑配方</h3>
+            <button onClick={() => setShowEditDialog(null)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
           </div>
           <div className="p-5 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">配方名称</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1">配方名称</label>
               <Input
                 value={editRecipe.name}
                 onChange={e => setEditRecipe(prev => ({ ...prev, name: e.target.value }))}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">配方类型</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1">配方类型</label>
               <select
                 value={editRecipe.recipe_type}
                 onChange={e => setEditRecipe(prev => ({ ...prev, recipe_type: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               >
                 {RECIPE_TYPES.map(type => (
                   <option key={type.value} value={type.value}>{type.label}</option>
@@ -859,18 +859,18 @@ export default function ArbitragePage() {
             </div>
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-slate-700">原料列表</label>
+                <label className="text-sm font-medium text-[var(--color-text)]">原料列表</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     value={ingredientSearch}
                     onChange={e => searchIngredients(e.target.value)}
                     placeholder="搜索物品..."
-                    className="w-32 px-2 py-1 rounded-lg border border-slate-200 text-sm"
+                    className="w-32 px-2 py-1 rounded-lg border border-[var(--color-border)] text-sm"
                   />
                   <button
                     onClick={() => setEditRecipe(prev => ({ ...prev, enabled: !prev.enabled }))}
-                    className="text-xs text-slate-500 flex items-center gap-1"
+                    className="text-xs text-[var(--color-text-subtle)] flex items-center gap-1"
                   >
                     {editRecipe.enabled ? <ToggleRight className="h-4 w-4 text-green-500" /> : <ToggleLeft className="h-4 w-4" />}
                     启用
@@ -880,13 +880,13 @@ export default function ArbitragePage() {
               {editIngredients.length > 0 ? (
                 <div className="space-y-1 mb-2">
                   {editIngredients.map(ing => (
-                    <div key={ing.item_name} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg">
+                    <div key={ing.item_name} className="flex items-center gap-2 px-3 py-2 bg-[var(--color-panel-soft)] rounded-lg">
                       <span className="flex-1 text-sm">{ing.item_name}</span>
                       <input
                         type="number"
                         value={ing.count}
                         onChange={e => updateEditIngredientCount(ing.item_name, parseInt(e.target.value) || 1)}
-                        className="w-16 px-2 py-1 rounded-lg border border-slate-200 text-sm text-center"
+                        className="w-16 px-2 py-1 rounded-lg border border-[var(--color-border)] text-sm text-center"
                         min="1"
                       />
                       <button onClick={() => removeEditIngredient(ing.item_name)} className="text-red-400 hover:text-red-600">
@@ -896,10 +896,10 @@ export default function ArbitragePage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-slate-400 mb-2">暂无原料</div>
+                <div className="text-sm text-[var(--color-text-subtle)] mb-2">暂无原料</div>
               )}
               {ingredientResults.length > 0 && (
-                <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg mb-2">
+                <div className="max-h-32 overflow-y-auto border border-[var(--color-border)] rounded-lg mb-2">
                   {ingredientResults.map(item => (
                     <button
                       key={item.item_id}
@@ -907,24 +907,24 @@ export default function ArbitragePage() {
                       className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                     >
                       <span>{item.name}</span>
-                      <span className="text-slate-400 text-xs">{formatPrice(item.price)}</span>
+                      <span className="text-[var(--color-text-subtle)] text-xs">{formatPrice(item.price)}</span>
                     </button>
                   ))}
                 </div>
               )}
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-2">产物列表</label>
+              <label className="text-sm font-medium text-[var(--color-text)] mb-2">产物列表</label>
               {editOutputs.length > 0 ? (
                 <div className="space-y-1 mb-2">
                   {editOutputs.map(out => (
-                    <div key={out.item_name} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg">
+                    <div key={out.item_name} className="flex items-center gap-2 px-3 py-2 bg-[var(--color-panel-soft)] rounded-lg">
                       <span className="flex-1 text-sm">{out.item_name}</span>
                       <input
                         type="number"
                         value={out.count}
                         onChange={e => updateEditOutputCount(out.item_name, parseInt(e.target.value) || 1)}
-                        className="w-16 px-2 py-1 rounded-lg border border-slate-200 text-sm text-center"
+                        className="w-16 px-2 py-1 rounded-lg border border-[var(--color-border)] text-sm text-center"
                         min="1"
                       />
                       <button onClick={() => removeEditOutput(out.item_name)} className="text-red-400 hover:text-red-600">
@@ -934,10 +934,10 @@ export default function ArbitragePage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-slate-400 mb-2">暂无产物</div>
+                <div className="text-sm text-[var(--color-text-subtle)] mb-2">暂无产物</div>
               )}
               {outputResults.length > 0 && (
-                <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg">
+                <div className="max-h-32 overflow-y-auto border border-[var(--color-border)] rounded-lg">
                   {outputResults.map(item => (
                     <button
                       key={item.item_id}
@@ -945,17 +945,17 @@ export default function ArbitragePage() {
                       className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                     >
                       <span>{item.name}</span>
-                      <span className="text-slate-400 text-xs">{formatPrice(item.price)}</span>
+                      <span className="text-[var(--color-text-subtle)] text-xs">{formatPrice(item.price)}</span>
                     </button>
                   ))}
                 </div>
               )}
             </div>
           </div>
-          <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100 sticky bottom-0 bg-white">
+          <div className="flex justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)] sticky bottom-0 bg-[var(--color-panel)]">
             <button
               onClick={() => setShowEditDialog(null)}
-              className="px-4 py-2 text-sm text-slate-600 hover:bg-[var(--color-panel-soft)] rounded-lg"
+              className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg"
             >
               取消
             </button>
@@ -970,10 +970,10 @@ export default function ArbitragePage() {
       </Dialog>
 
       <Dialog open={!!showIngredientDialog} onOpenChange={() => setShowIngredientDialog(null)}>
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-800">编辑原料</h3>
-            <button onClick={() => setShowIngredientDialog(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">编辑原料</h3>
+            <button onClick={() => setShowIngredientDialog(null)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
           </div>
           <div className="p-5 space-y-3">
             {editIngredients.map(ing => (
@@ -983,7 +983,7 @@ export default function ArbitragePage() {
                   type="number"
                   value={ing.count}
                   onChange={e => updateEditIngredientCount(ing.item_name, parseInt(e.target.value) || 1)}
-                  className="w-20 px-2 py-1 rounded-lg border border-slate-200 text-sm text-center"
+                  className="w-20 px-2 py-1 rounded-lg border border-[var(--color-border)] text-sm text-center"
                   min="1"
                 />
                 <button onClick={() => removeEditIngredient(ing.item_name)} className="text-red-400 hover:text-red-600">
@@ -992,17 +992,17 @@ export default function ArbitragePage() {
               </div>
             ))}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-text-subtle)]" />
               <input
                 type="text"
                 value={ingredientSearch}
                 onChange={e => searchIngredients(e.target.value)}
                 placeholder="搜索添加物品..."
-                className="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+                className="w-full pl-10 pr-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               />
             </div>
             {ingredientResults.length > 0 && (
-              <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-lg">
+              <div className="max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-lg">
                 {ingredientResults.map(item => (
                   <button
                     type="button"
@@ -1014,16 +1014,16 @@ export default function ArbitragePage() {
                     className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                   >
                     <span>{item.name}</span>
-                    <span className="text-slate-400 text-xs">{formatPrice(item.price)}</span>
+                    <span className="text-[var(--color-text-subtle)] text-xs">{formatPrice(item.price)}</span>
                   </button>
                 ))}
               </div>
             )}
           </div>
-          <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
+          <div className="flex justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
             <button
               onClick={() => setShowIngredientDialog(null)}
-              className="px-4 py-2 text-sm text-slate-600 hover:bg-[var(--color-panel-soft)] rounded-lg"
+              className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg"
             >
               取消
             </button>
@@ -1038,10 +1038,10 @@ export default function ArbitragePage() {
       </Dialog>
 
       <Dialog open={!!showOutputDialog} onOpenChange={() => setShowOutputDialog(null)}>
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-800">编辑产物</h3>
-            <button onClick={() => setShowOutputDialog(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">编辑产物</h3>
+            <button onClick={() => setShowOutputDialog(null)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
           </div>
           <div className="p-5 space-y-3">
             {editOutputs.map(out => (
@@ -1051,7 +1051,7 @@ export default function ArbitragePage() {
                   type="number"
                   value={out.count}
                   onChange={e => updateEditOutputCount(out.item_name, parseInt(e.target.value) || 1)}
-                  className="w-20 px-2 py-1 rounded-lg border border-slate-200 text-sm text-center"
+                  className="w-20 px-2 py-1 rounded-lg border border-[var(--color-border)] text-sm text-center"
                   min="1"
                 />
                 <button onClick={() => removeEditOutput(out.item_name)} className="text-red-400 hover:text-red-600">
@@ -1060,17 +1060,17 @@ export default function ArbitragePage() {
               </div>
             ))}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-text-subtle)]" />
               <input
                 type="text"
                 value={outputSearch}
                 onChange={e => searchOutputs(e.target.value)}
                 placeholder="搜索添加物品..."
-                className="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+                className="w-full pl-10 pr-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               />
             </div>
             {outputResults.length > 0 && (
-              <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-lg">
+              <div className="max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-lg">
                 {outputResults.map(item => (
                   <button
                     type="button"
@@ -1082,16 +1082,16 @@ export default function ArbitragePage() {
                     className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                   >
                     <span>{item.name}</span>
-                    <span className="text-slate-400 text-xs">{formatPrice(item.price)}</span>
+                    <span className="text-[var(--color-text-subtle)] text-xs">{formatPrice(item.price)}</span>
                   </button>
                 ))}
               </div>
             )}
           </div>
-          <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
+          <div className="flex justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
             <button
               onClick={() => setShowOutputDialog(null)}
-              className="px-4 py-2 text-sm text-slate-600 hover:bg-[var(--color-panel-soft)] rounded-lg"
+              className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg"
             >
               取消
             </button>

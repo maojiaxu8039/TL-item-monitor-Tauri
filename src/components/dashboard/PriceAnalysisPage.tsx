@@ -69,9 +69,9 @@ function SectionPicker({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-20 min-w-[140px] py-1">
+          <div className="absolute right-0 top-full mt-1 bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg shadow-lg z-20 min-w-[140px] py-1">
             {sections.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-slate-400">暂无分组</div>
+              <div className="px-3 py-2 text-xs text-[var(--color-text-subtle)]">暂无分组</div>
             ) : (
               sections.map((s) => (
                 <button
@@ -80,7 +80,7 @@ function SectionPicker({
                     onAdd(s.id);
                     setOpen(false);
                   }}
-                  className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-[var(--color-panel-soft)]"
+                  className="w-full text-left px-3 py-2 text-sm text-[var(--color-text)] hover:bg-[var(--color-panel-soft)]"
                 >
                   {s.name}
                 </button>
@@ -111,7 +111,7 @@ function HoardCard({
     if (isBuy)
       return {
         border: "border-green-200",
-        bg: "bg-green-50",
+        bg: "bg-[rgba(34,197,94,0.1)]",
         badge: "success",
         icon: ShoppingCart,
         label: "建议入手",
@@ -119,7 +119,7 @@ function HoardCard({
     if (isSell)
       return {
         border: "border-red-200",
-        bg: "bg-red-50",
+        bg: "bg-[rgba(239,68,68,0.1)]",
         badge: "danger",
         icon: DollarSign,
         label: "建议出手",
@@ -146,7 +146,7 @@ function HoardCard({
           <div>
             <div className="flex items-center gap-2">
               <h4
-                className="font-semibold text-slate-800 cursor-pointer hover:text-[var(--color-brand)] transition-colors"
+                className="font-semibold text-[var(--color-text)] cursor-pointer hover:text-[var(--color-brand)] transition-colors"
                 onClick={() => onViewTrend(analysis.item_id, analysis.item_name)}
                 title="点击查看价格走势"
               >
@@ -154,14 +154,14 @@ function HoardCard({
               </h4>
               <button
                 onClick={() => onViewTrend(analysis.item_id, analysis.item_name)}
-                className="flex items-center gap-1 px-2 py-0.5 text-xs rounded border border-slate-200 hover:bg-[var(--color-panel-soft)] transition-colors"
+                className="flex items-center gap-1 px-2 py-0.5 text-xs rounded border border-[var(--color-border)] hover:bg-[var(--color-panel-soft)] transition-colors"
                 title="查看价格走势"
               >
                 <BarChart2 className="w-3 h-3 text-[var(--color-brand)]" />
                 走势
               </button>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">{analysis.reason}</p>
+            <p className="text-xs text-[var(--color-text-subtle)] mt-0.5">{analysis.reason}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -176,21 +176,21 @@ function HoardCard({
       </div>
 
       <div className="grid grid-cols-4 gap-3 mt-4">
-        <Surface padding="sm" className="bg-slate-50">
-          <div className="text-xs text-slate-400 mb-1">当前价格</div>
-          <div className="text-sm font-bold text-slate-700">{analysis.current_price.toFixed(1)}</div>
+        <Surface padding="sm" className="bg-[var(--color-panel-soft)]">
+          <div className="text-xs text-[var(--color-text-subtle)] mb-1">当前价格</div>
+          <div className="text-sm font-bold text-[var(--color-text)]">{analysis.current_price.toFixed(1)}</div>
         </Surface>
-        <Surface padding="sm" className="bg-slate-50">
-          <div className="text-xs text-slate-400 mb-1">均价</div>
-          <div className="text-sm font-bold text-slate-700">{analysis.avg_price.toFixed(1)}</div>
+        <Surface padding="sm" className="bg-[var(--color-panel-soft)]">
+          <div className="text-xs text-[var(--color-text-subtle)] mb-1">均价</div>
+          <div className="text-sm font-bold text-[var(--color-text)]">{analysis.avg_price.toFixed(1)}</div>
         </Surface>
-        <Surface padding="sm" className="bg-slate-50">
-          <div className="text-xs text-slate-400 mb-1">价格区间</div>
-          <div className="text-sm font-bold text-slate-700">{analysis.min_price.toFixed(1)} - {analysis.max_price.toFixed(1)}</div>
+        <Surface padding="sm" className="bg-[var(--color-panel-soft)]">
+          <div className="text-xs text-[var(--color-text-subtle)] mb-1">价格区间</div>
+          <div className="text-sm font-bold text-[var(--color-text)]">{analysis.min_price.toFixed(1)} - {analysis.max_price.toFixed(1)}</div>
         </Surface>
-        <Surface padding="sm" className="bg-slate-50">
-          <div className="text-xs text-slate-400 mb-1">趋势</div>
-          <div className={`text-sm font-bold ${analysis.trend_percent > 0 ? "text-red-600" : analysis.trend_percent < 0 ? "text-green-600" : "text-slate-700"}`}>
+        <Surface padding="sm" className="bg-[var(--color-panel-soft)]">
+          <div className="text-xs text-[var(--color-text-subtle)] mb-1">趋势</div>
+          <div className={`text-sm font-bold ${analysis.trend_percent > 0 ? "text-red-600" : analysis.trend_percent < 0 ? "text-green-600" : "text-[var(--color-text)]"}`}>
             {analysis.trend_percent > 0 ? "+" : ""}{analysis.trend_percent.toFixed(1)}%
           </div>
         </Surface>
@@ -198,10 +198,10 @@ function HoardCard({
 
       <div className="mt-3">
         <div className="flex items-center justify-between text-xs mb-1">
-          <span className="text-slate-400">分析置信度</span>
-          <span className="text-slate-600 font-medium">{analysis.confidence}%</span>
+          <span className="text-[var(--color-text-subtle)]">分析置信度</span>
+          <span className="text-[var(--color-text-muted)] font-medium">{analysis.confidence}%</span>
         </div>
-        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-[var(--color-panel)] rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all ${
               analysis.confidence >= 70
@@ -300,15 +300,15 @@ export default function PriceAnalysisPage() {
           label="分析物品"
           value={stats.total}
           icon={BarChart3}
-          iconBg="bg-purple-50"
+          iconBg="bg-[rgba(167,139,250,0.12)]"
           iconColor="text-[var(--color-ai)]"
-          helper={<span className="text-xs text-slate-400">件物品</span>}
+          helper={<span className="text-xs text-[var(--color-text-subtle)]">件物品</span>}
         />
         <MetricCard
           label="建议入手"
           value={stats.buy}
           icon={ShoppingCart}
-          iconBg="bg-green-50"
+          iconBg="bg-[rgba(34,197,94,0.1)]"
           iconColor="text-green-500"
           helper={<span className="text-xs text-green-500">件物品</span>}
           className="border-green-100"
@@ -317,10 +317,10 @@ export default function PriceAnalysisPage() {
           label="建议出手"
           value={stats.sell}
           icon={DollarSign}
-          iconBg="bg-red-50"
+          iconBg="bg-[rgba(239,68,68,0.1)]"
           iconColor="text-red-500"
           helper={<span className="text-xs text-red-500">件物品</span>}
-          className="border-red-100"
+          className="border-[rgba(239,68,68,0.2)]"
         />
         <MetricCard
           label="建议观望"
@@ -336,18 +336,18 @@ export default function PriceAnalysisPage() {
       <Surface padding="sm">
         <Toolbar className="flex items-center gap-3 flex-wrap">
           <div className="flex-1 relative min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
             <input
               type="text"
               placeholder="搜索物品名称..."
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded text-sm bg-white outline-none focus:border-[var(--color-brand)]"
+              className="w-full pl-9 pr-4 py-2 border border-[var(--color-border)] rounded text-sm bg-[var(--color-panel)] outline-none focus:border-[var(--color-brand)]"
             />
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">排序:</span>
+            <span className="text-xs text-[var(--color-text-subtle)]">排序:</span>
             {[
               { key: "trend" as const, label: "趋势" },
               { key: "price_asc" as const, label: "价格低" },
@@ -359,7 +359,7 @@ export default function PriceAnalysisPage() {
                 className={`px-2.5 py-1 rounded text-xs transition-colors ${
                   sortBy === s.key
                     ? "bg-[var(--color-brand)]/20 text-[var(--color-brand)]"
-                    : "text-slate-500 hover:bg-[var(--color-panel-soft)]"
+                    : "text-[var(--color-text-subtle)] hover:bg-[var(--color-panel-soft)]"
                 }`}
               >
                 {s.label}
@@ -373,7 +373,7 @@ export default function PriceAnalysisPage() {
         <Surface padding="md">
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-8 h-8 text-slate-300 animate-spin" />
-            <span className="ml-2 text-sm text-slate-400">分析中...</span>
+            <span className="ml-2 text-sm text-[var(--color-text-subtle)]">分析中...</span>
           </div>
         </Surface>
       ) : filteredAnalysis.length === 0 ? (

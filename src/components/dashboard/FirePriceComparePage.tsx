@@ -193,8 +193,8 @@ export default function FirePriceComparePage() {
       return (
         <Surface padding="md">
           <div className="flex items-center gap-2 mb-4">
-            <CalendarDays className="w-4 h-4 text-slate-500" />
-            <h3 className="text-sm font-semibold text-slate-700">最佳交易时段分析</h3>
+            <CalendarDays className="w-4 h-4 text-[var(--color-text-subtle)]" />
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">最佳交易时段分析</h3>
           </div>
           <EmptyState description="数据不足，无法分析" />
         </Surface>
@@ -279,15 +279,15 @@ export default function FirePriceComparePage() {
     return (
       <Surface padding="md">
         <div className="flex items-center gap-2 mb-4">
-          <CalendarDays className="w-4 h-4 text-slate-500" />
-          <h3 className="text-sm font-semibold text-slate-700">最佳交易时段分析</h3>
-          <span className="text-xs text-slate-400">
+          <CalendarDays className="w-4 h-4 text-[var(--color-text-subtle)]" />
+          <h3 className="text-sm font-semibold text-[var(--color-text)]">最佳交易时段分析</h3>
+          <span className="text-xs text-[var(--color-text-subtle)]">
             基于 {currentSeason.toUpperCase()} {useCustomRange ? `第${customDayRange.start}-${customDayRange.end}天` : timeRange === "all" ? "整个赛季" : timeRange === "3d" ? "第1-3天" : timeRange === "7d" ? "第1-7天" : timeRange === "14d" ? "第1-14天" : "第1-30天"}数据统计
           </span>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <Surface padding="md" className="bg-green-50 border-green-200">
+          <Surface padding="md" className="bg-[rgba(34,197,94,0.1)] border-green-200">
             <div className="flex items-center gap-2 mb-2">
               <ArrowDownCircle className="w-5 h-5 text-green-600" />
               <span className="text-sm font-medium text-green-700">最佳购买火时机</span>
@@ -306,7 +306,7 @@ export default function FirePriceComparePage() {
             </div>
           </Surface>
 
-          <Surface padding="md" className="bg-red-50 border-red-200">
+          <Surface padding="md" className="bg-[rgba(239,68,68,0.1)] border-red-200">
             <div className="flex items-center gap-2 mb-2">
               <ArrowUpCircle className="w-5 h-5 text-red-600" />
               <span className="text-sm font-medium text-red-700">最佳出售火时机</span>
@@ -326,19 +326,19 @@ export default function FirePriceComparePage() {
           </Surface>
         </div>
 
-        <div className="mt-4 p-3 bg-slate-50 rounded-lg">
-          <div className="text-xs text-slate-500 mb-2">赛季统计</div>
+        <div className="mt-4 p-3 bg-[var(--color-panel-soft)] rounded-lg">
+          <div className="text-xs text-[var(--color-text-subtle)] mb-2">赛季统计</div>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
-              <div className="text-xs text-slate-400">均价</div>
-              <div className="text-sm font-medium text-slate-700">¥{avgPrice.toFixed(2)}</div>
+              <div className="text-xs text-[var(--color-text-subtle)]">均价</div>
+              <div className="text-sm font-medium text-[var(--color-text)]">¥{avgPrice.toFixed(2)}</div>
             </div>
             <div>
-              <div className="text-xs text-slate-400">最低价</div>
+              <div className="text-xs text-[var(--color-text-subtle)]">最低价</div>
               <div className="text-sm font-medium text-green-600">¥{minPrice.toFixed(2)}</div>
             </div>
             <div>
-              <div className="text-xs text-slate-400">最高价</div>
+              <div className="text-xs text-[var(--color-text-subtle)]">最高价</div>
               <div className="text-sm font-medium text-red-600">¥{maxPrice.toFixed(2)}</div>
             </div>
           </div>
@@ -358,21 +358,21 @@ export default function FirePriceComparePage() {
       <Surface padding="sm">
         <Toolbar className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-500">对比赛季</span>
+            <span className="text-sm text-[var(--color-text-subtle)]">对比赛季</span>
             <select
               value={historySeason}
               onChange={(e) => setHistorySeason(e.target.value)}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 bg-white"
+              className="px-3 py-1.5 border border-[var(--color-border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 bg-[var(--color-panel)]"
             >
               <option value="ss11">SS11</option>
             </select>
             <span className="text-sm text-slate-300">|</span>
-            <span className="text-sm font-medium text-slate-700">{currentSeason.toUpperCase()}</span>
+            <span className="text-sm font-medium text-[var(--color-text)]">{currentSeason.toUpperCase()}</span>
             <StatusBadge variant="primary">当前</StatusBadge>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+            <div className="flex items-center gap-1 bg-[var(--color-panel)] rounded-lg p-1">
               {timeRanges.map(({ label, value }) => (
                 <button
                   key={value}
@@ -382,8 +382,8 @@ export default function FirePriceComparePage() {
                   }}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                     timeRange === value && !useCustomRange
-                      ? "bg-white text-slate-700 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
+                      ? "bg-[var(--color-panel)] text-[var(--color-text)] shadow-sm"
+                      : "text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
                   }`}
                 >
                   {label}
@@ -392,26 +392,26 @@ export default function FirePriceComparePage() {
             </div>
 
             <div className="flex items-center gap-2 ml-2">
-              <CalendarDays className="w-4 h-4 text-slate-400" />
-              <span className="text-xs text-slate-500">自定义</span>
+              <CalendarDays className="w-4 h-4 text-[var(--color-text-subtle)]" />
+              <span className="text-xs text-[var(--color-text-subtle)]">自定义</span>
               <input
                 type="number"
                 min={1}
                 max={currentMaxDay}
                 value={customDayRange.start}
                 onChange={(e) => handleCustomRangeChange('start', e.target.value)}
-                className="w-16 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
+                className="w-16 px-2 py-1 border border-[var(--color-border)] rounded text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
               />
-              <span className="text-xs text-slate-400">~</span>
+              <span className="text-xs text-[var(--color-text-subtle)]">~</span>
               <input
                 type="number"
                 min={1}
                 max={currentMaxDay}
                 value={customDayRange.end}
                 onChange={(e) => handleCustomRangeChange('end', e.target.value)}
-                className="w-16 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
+                className="w-16 px-2 py-1 border border-[var(--color-border)] rounded text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
               />
-              <span className="text-xs text-slate-400">天</span>
+              <span className="text-xs text-[var(--color-text-subtle)]">天</span>
               {useCustomRange && (
                 <span className="text-xs text-[var(--color-brand)] ml-1">
                   (第{customDayRange.start}-{customDayRange.end}天)
@@ -427,15 +427,15 @@ export default function FirePriceComparePage() {
           label={`${currentSeason.toUpperCase()} 均价`}
           value={currentAvg > 0 ? (
             <span>
-              <span className="text-xl font-bold text-slate-800">{currentAvg.toFixed(2)}</span>
-              <span className="text-xs text-slate-400 ml-1">元/万火</span>
+              <span className="text-xl font-bold text-[var(--color-text)]">{currentAvg.toFixed(2)}</span>
+              <span className="text-xs text-[var(--color-text-subtle)] ml-1">元/万火</span>
             </span>
           ) : "--"}
         />
         <MetricCard
           label={`${currentSeason.toUpperCase()} 最高/最低`}
           value={currentHigh > 0 ? (
-            <span className="text-xl font-bold text-slate-800">
+            <span className="text-xl font-bold text-[var(--color-text)]">
               {currentHigh.toFixed(2)}
               <span className="text-slate-300 mx-1">/</span>
               {currentLow.toFixed(2)}
@@ -446,15 +446,15 @@ export default function FirePriceComparePage() {
           label={`${historySeason.toUpperCase()} 均价`}
           value={historyAvg > 0 ? (
             <span>
-              <span className="text-xl font-bold text-slate-600">{historyAvg.toFixed(2)}</span>
-              <span className="text-xs text-slate-400 ml-1">元/万火</span>
+              <span className="text-xl font-bold text-[var(--color-text-muted)]">{historyAvg.toFixed(2)}</span>
+              <span className="text-xs text-[var(--color-text-subtle)] ml-1">元/万火</span>
             </span>
           ) : "--"}
         />
         <MetricCard
           label={`${historySeason.toUpperCase()} 最高/最低`}
           value={historyHigh > 0 ? (
-            <span className="text-xl font-bold text-slate-600">
+            <span className="text-xl font-bold text-[var(--color-text-muted)]">
               {historyHigh.toFixed(2)}
               <span className="text-slate-300 mx-1">/</span>
               {historyLow.toFixed(2)}
@@ -465,21 +465,21 @@ export default function FirePriceComparePage() {
 
       <Surface padding="md">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-slate-700">火价走势对比</h3>
+          <h3 className="text-sm font-semibold text-[var(--color-text)]">火价走势对比</h3>
           <div className="flex items-center gap-4 text-xs">
             <span className="flex items-center gap-1.5">
               <span className="w-3 h-0.5 bg-slate-400 rounded" />
-              <span className="text-slate-500">{historySeason.toUpperCase()}</span>
+              <span className="text-[var(--color-text-subtle)]">{historySeason.toUpperCase()}</span>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-3 h-0.5 bg-orange-500 rounded" />
-              <span className="text-slate-500">{currentSeason.toUpperCase()}</span>
+              <span className="text-[var(--color-text-subtle)]">{currentSeason.toUpperCase()}</span>
             </span>
           </div>
         </div>
 
         {currentQuery.isLoading || historyQuery.isLoading ? (
-          <div className="h-64 flex items-center justify-center text-slate-400">
+          <div className="h-64 flex items-center justify-center text-[var(--color-text-subtle)]">
             加载中...
           </div>
         ) : chartData.length === 0 ? (

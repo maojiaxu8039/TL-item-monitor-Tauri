@@ -449,14 +449,14 @@ export default function StrategiesPage() {
       case "U8": return "bg-purple-100 text-[var(--color-ai)]";
       case "深空": return "bg-blue-100 text-[var(--color-brand)]";
       case "九红深空": return "bg-yellow-100 text-yellow-700";
-      default: return "bg-gray-100 text-gray-600";
+      default: return "bg-[var(--color-panel)] text-[var(--color-text-muted)]";
     }
   };
 
   const getProfitColor = (ratio: number) => {
     if (ratio > 0) return "text-red-600";
     if (ratio < 0) return "text-green-600";
-    return "text-gray-600";
+    return "text-[var(--color-text-muted)]";
   };
 
   const getRecommendationLevelColor = (level: StrategyRecommendation["level"]) => {
@@ -479,9 +479,9 @@ export default function StrategiesPage() {
 
   const getRiskColor = (risk: StrategyRecommendation["risk_level"]) => {
     switch (risk) {
-      case "low": return "text-green-600 bg-green-50";
+      case "low": return "text-green-600 bg-[rgba(34,197,94,0.1)]";
       case "medium": return "text-yellow-600 bg-yellow-50";
-      case "high": return "text-red-600 bg-red-50";
+      case "high": return "text-red-600 bg-[rgba(239,68,68,0.1)]";
     }
   };
 
@@ -575,7 +575,7 @@ export default function StrategiesPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-slate-400">加载中...</div>
+        <div className="text-[var(--color-text-subtle)]">加载中...</div>
       </div>
     );
   }
@@ -586,7 +586,7 @@ export default function StrategiesPage() {
         title="策略管理"
         description="管理游戏策略、成本和产出数据"
         icon={Shield}
-        iconBg="bg-blue-50"
+        iconBg="bg-[rgba(255,184,0,0.08)]"
         iconColor="text-[var(--color-brand)]"
         actions={
           activeTab === "strategies" && (
@@ -606,7 +606,7 @@ export default function StrategiesPage() {
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
             activeTab === "strategies"
               ? "border-[var(--color-brand)] text-[var(--color-brand)]"
-              : "border-transparent text-slate-500 hover:text-slate-700"
+              : "border-transparent text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
           }`}
         >
           我的策略
@@ -616,7 +616,7 @@ export default function StrategiesPage() {
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
             activeTab === "templates"
               ? "border-[var(--color-brand)] text-[var(--color-brand)]"
-              : "border-transparent text-slate-500 hover:text-slate-700"
+              : "border-transparent text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
           }`}
         >
           模板库
@@ -626,7 +626,7 @@ export default function StrategiesPage() {
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
             activeTab === "recommendations"
               ? "border-[var(--color-brand)] text-[var(--color-brand)]"
-              : "border-transparent text-slate-500 hover:text-slate-700"
+              : "border-transparent text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
           }`}
         >
           推荐榜
@@ -635,38 +635,38 @@ export default function StrategiesPage() {
 
       {activeTab === "templates" && (
         <div className="space-y-4">
-          <p className="text-xs text-slate-500">选择模板快速创建策略，降低录入成本</p>
+          <p className="text-xs text-[var(--color-text-subtle)]">选择模板快速创建策略，降低录入成本</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {strategyTemplates.map((template) => (
               <div
                 key={template.id}
-                className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition-shadow"
+                className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] p-4 hover:shadow-md transition-shadow"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="font-medium text-slate-900">{template.name}</h3>
-                    <p className="text-xs text-slate-500 mt-1">{template.description}</p>
+                    <p className="text-xs text-[var(--color-text-subtle)] mt-1">{template.description}</p>
                   </div>
                   <span className={`px-2 py-0.5 text-xs rounded ${getLabelColor(template.label)}`}>
                     {template.label}
                   </span>
                 </div>
-                <div className="flex items-center gap-4 text-xs text-slate-500 mb-3">
+                <div className="flex items-center gap-4 text-xs text-[var(--color-text-subtle)] mb-3">
                   <span>难度: {template.difficulty}</span>
                   <span>输出: {template.output_value}</span>
                   <span>防御: {template.defense_value}</span>
                 </div>
-                <div className="text-xs text-slate-400 mb-3">
+                <div className="text-xs text-[var(--color-text-subtle)] mb-3">
                   {template.remark}
                 </div>
                 <div className="flex flex-wrap gap-1 mb-3">
                   {template.costs.slice(0, 3).map((cost, i) => (
-                    <span key={i} className="px-1.5 py-0.5 bg-red-50 text-red-600 text-xs rounded">
+                    <span key={i} className="px-1.5 py-0.5 bg-[rgba(239,68,68,0.1)] text-red-600 text-xs rounded">
                       {cost.cost_type}
                     </span>
                   ))}
                   {template.costs.length > 3 && (
-                    <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-xs rounded">
+                    <span className="px-1.5 py-0.5 bg-[var(--color-panel)] text-[var(--color-text-subtle)] text-xs rounded">
                       +{template.costs.length - 3}
                     </span>
                   )}
@@ -725,16 +725,16 @@ export default function StrategiesPage() {
       {activeTab === "recommendations" && (
         <div className="space-y-4">
           {strategies.length === 0 ? (
-            <div className="bg-white rounded-lg border border-slate-200 py-12 text-center">
+            <div className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] py-12 text-center">
               <Award className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-              <div className="text-sm text-slate-500">暂无策略</div>
-              <div className="text-xs text-slate-400 mt-1">请先创建策略后查看推荐</div>
+              <div className="text-sm text-[var(--color-text-subtle)]">暂无策略</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-1">请先创建策略后查看推荐</div>
             </div>
           ) : calculateRecommendations.length === 0 ? (
-            <div className="bg-white rounded-lg border border-slate-200 py-12 text-center">
+            <div className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] py-12 text-center">
               <Info className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-              <div className="text-sm text-slate-500">策略数据不足</div>
-              <div className="text-xs text-slate-400 mt-1">请添加成本和产出后查看推荐</div>
+              <div className="text-sm text-[var(--color-text-subtle)]">策略数据不足</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-1">请添加成本和产出后查看推荐</div>
             </div>
           ) : (
             <div className="space-y-3">
@@ -743,14 +743,14 @@ export default function StrategiesPage() {
                 return (
                   <div
                     key={rec.strategy_id}
-                    className="bg-white rounded-lg border border-slate-200 p-4"
+                    className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] p-4"
                   >
                     <div className="flex items-center gap-4">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
                         index === 0 ? "bg-yellow-100 text-yellow-600" :
-                        index === 1 ? "bg-slate-100 text-slate-500" :
+                        index === 1 ? "bg-[var(--color-panel)] text-[var(--color-text-subtle)]" :
                         index === 2 ? "bg-orange-100 text-[var(--color-brand-gold)]" :
-                        "bg-slate-50 text-slate-400"
+                        "bg-[var(--color-panel-soft)] text-[var(--color-text-subtle)]"
                       }`}>
                         {index + 1}
                       </div>
@@ -764,7 +764,7 @@ export default function StrategiesPage() {
                             {rec.risk_level === "low" ? "低风险" : rec.risk_level === "medium" ? "中风险" : "高风险"}
                           </span>
                         </div>
-                        <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
+                        <div className="flex items-center gap-4 mt-1 text-xs text-[var(--color-text-subtle)]">
                           <span>评分: <span className="font-medium">{rec.score}</span></span>
                           <span>收益率: <span className={`font-medium ${rec.profit_ratio >= 0 ? "text-red-600" : "text-green-600"}`}>
                             {rec.profit_ratio >= 0 ? "+" : ""}{rec.profit_ratio.toFixed(1)}%
@@ -778,7 +778,7 @@ export default function StrategiesPage() {
                         <img
                           src={strategy.image_url}
                           alt="加点图"
-                          className="w-16 h-16 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-80"
+                          className="w-16 h-16 object-cover rounded-lg border border-[var(--color-border)] cursor-pointer hover:opacity-80"
                           onClick={() => setPreviewImage(strategy.image_url)}
                         />
                       )}
@@ -791,13 +791,13 @@ export default function StrategiesPage() {
                         }`}>
                           {rec.score}
                         </div>
-                        <div className="text-xs text-slate-400">分</div>
+                        <div className="text-xs text-[var(--color-text-subtle)]">分</div>
                       </div>
                     </div>
                     {rec.reasons.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-1">
                         {rec.reasons.map((reason, i) => (
-                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded">
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(34,197,94,0.1)] text-green-700 text-xs rounded">
                             <ThumbsUp className="w-3 h-3" />
                             {reason}
                           </span>
@@ -815,21 +815,21 @@ export default function StrategiesPage() {
                       </div>
                     )}
                     {strategy && (
-                      <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
-                        <div className="flex items-center gap-4 text-xs text-slate-500">
+                      <div className="mt-3 pt-3 border-t border-[var(--color-border-soft)] space-y-3">
+                        <div className="flex items-center gap-4 text-xs text-[var(--color-text-subtle)]">
                           <span>成本: <span className="text-red-500">{strategy.total_cost_fire.toFixed(0)}火</span></span>
                           <span>产出: <span className="text-green-500">{strategy.total_output_value.toFixed(0)}火</span></span>
                           <span>难度: {strategy.difficulty}</span>
                         </div>
                         {strategy.costs.length > 0 && (
                           <div>
-                            <div className="text-xs font-medium text-slate-700 mb-1.5 flex items-center gap-1">
+                            <div className="text-xs font-medium text-[var(--color-text)] mb-1.5 flex items-center gap-1">
                               <Zap className="w-3 h-3 text-red-500" />
                               消耗材料
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {strategy.costs.map((cost) => (
-                                <span key={cost.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-600 text-xs rounded">
+                                <span key={cost.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(239,68,68,0.1)] text-red-600 text-xs rounded">
                                   <span className="font-medium">{cost.item_name || cost.item_id}</span>
                                   <span className="text-red-400">×{cost.count}</span>
                                   <span className="text-red-700">{cost.total_fire.toFixed(0)}火</span>
@@ -841,13 +841,13 @@ export default function StrategiesPage() {
                         )}
                         {strategy.outputs.length > 0 && (
                           <div>
-                            <div className="text-xs font-medium text-slate-700 mb-1.5 flex items-center gap-1">
+                            <div className="text-xs font-medium text-[var(--color-text)] mb-1.5 flex items-center gap-1">
                               <TrendingUp className="w-3 h-3 text-green-500" />
                               产出收益
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {strategy.outputs.map((output) => (
-                                <span key={output.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-600 text-xs rounded">
+                                <span key={output.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(34,197,94,0.1)] text-green-600 text-xs rounded">
                                   <span className="font-medium">{output.item_name}</span>
                                   <span className="text-green-400">×{output.count}</span>
                                   <span className="text-green-700">{(output.realtime_value * output.count).toFixed(0)}火</span>
@@ -869,39 +869,39 @@ export default function StrategiesPage() {
       {activeTab === "strategies" && (
         <>
           {strategies.length === 0 ? (
-            <div className="bg-white rounded-lg border border-slate-200 py-16 text-center">
+            <div className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] py-16 text-center">
               <Target className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-              <div className="text-sm text-slate-500 mb-2">暂无策略</div>
-              <div className="text-xs text-slate-400">点击右上角"新建策略"开始分析</div>
+              <div className="text-sm text-[var(--color-text-subtle)] mb-2">暂无策略</div>
+              <div className="text-xs text-[var(--color-text-subtle)]">点击右上角"新建策略"开始分析</div>
             </div>
           ) : (
         <div className="space-y-2">
           {strategies.map((strategy) => {
             const isExpanded = expandedIds.has(strategy.id);
             return (
-              <div key={strategy.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+              <div key={strategy.id} className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] overflow-hidden">
                 <div
-                  className="p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                  className="p-4 cursor-pointer hover:bg-[var(--color-panel-soft)] transition-colors"
                   onClick={() => toggleExpand(strategy.id)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       {isExpanded ? (
-                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                        <ChevronDown className="w-4 h-4 text-[var(--color-text-subtle)]" />
                       ) : (
-                        <ChevronRight className="w-4 h-4 text-slate-400" />
+                        <ChevronRight className="w-4 h-4 text-[var(--color-text-subtle)]" />
                       )}
                       <div className="text-lg font-semibold text-slate-900">{strategy.name}</div>
                       <span className={`px-2 py-0.5 text-xs rounded-full ${getLabelColor(strategy.label)}`}>
                         {strategy.label}
                       </span>
-                      <span className="px-2 py-0.5 text-xs bg-slate-100 text-slate-600 rounded-full">
+                      <span className="px-2 py-0.5 text-xs bg-[var(--color-panel)] text-[var(--color-text-muted)] rounded-full">
                         {strategy.difficulty}
                       </span>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-1.5">
-                        <DollarSign className="w-4 h-4 text-slate-400" />
+                        <DollarSign className="w-4 h-4 text-[var(--color-text-subtle)]" />
                         <span className={`font-medium ${getProfitColor(strategy.profit_ratio)}`}>
                           {strategy.profit_ratio >= 0 ? "+" : ""}{strategy.profit_ratio.toFixed(1)}%
                         </span>
@@ -920,20 +920,20 @@ export default function StrategiesPage() {
                     </div>
                   </div>
                   {strategy.remark && (
-                    <div className="mt-2 text-sm text-slate-500 ml-7">{strategy.remark}</div>
+                    <div className="mt-2 text-sm text-[var(--color-text-subtle)] ml-7">{strategy.remark}</div>
                   )}
-                  <div className="mt-2 flex items-center gap-6 ml-7 text-xs text-slate-400">
+                  <div className="mt-2 flex items-center gap-6 ml-7 text-xs text-[var(--color-text-subtle)]">
                     <span>成本: <span className="text-red-500">{strategy.total_cost_fire.toFixed(0)} 火</span></span>
                     <span>产出: <span className="text-green-500">{strategy.total_output_value.toFixed(0)} 火</span></span>
                   </div>
                 </div>
 
                 {isExpanded && (
-                  <div className="border-t border-slate-100">
+                  <div className="border-t border-[var(--color-border-soft)]">
                     <div className="p-4 grid grid-cols-2 gap-6">
                       <div>
                         <div className="flex items-center justify-between mb-3">
-                          <div className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                          <div className="text-sm font-medium text-[var(--color-text)] flex items-center gap-1.5">
                             <Zap className="w-4 h-4 text-red-500" />
                             成本消耗
                           </div>
@@ -945,19 +945,19 @@ export default function StrategiesPage() {
                           </button>
                         </div>
                         {strategy.costs.length === 0 ? (
-                          <div className="text-sm text-slate-400 py-4 text-center border border-dashed border-slate-200 rounded-lg">
+                          <div className="text-sm text-[var(--color-text-subtle)] py-4 text-center border border-dashed border-[var(--color-border)] rounded-lg">
                             暂无成本
                           </div>
                         ) : (
                           <div className="space-y-2">
                             {strategy.costs.map((cost) => (
-                              <div key={cost.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-sm">
+                              <div key={cost.id} className="flex items-center justify-between p-2 bg-[var(--color-panel-soft)] rounded-lg text-sm">
                                 <div className="flex items-center gap-2">
                                   <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded">
                                     {cost.cost_type}
                                   </span>
-                                  <span className="text-slate-700">{cost.item_name || cost.item_id}</span>
-                                  <span className="text-slate-400">×{cost.count}</span>
+                                  <span className="text-[var(--color-text)]">{cost.item_name || cost.item_id}</span>
+                                  <span className="text-[var(--color-text-subtle)]">×{cost.count}</span>
                                   {cost.is_realtime && (
                                     <span className="px-1 py-0.5 bg-[var(--color-success)]/20 text-[var(--color-success)] text-xs rounded">
                                       实时
@@ -965,12 +965,12 @@ export default function StrategiesPage() {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-3">
-                                  <span className="text-slate-600">
+                                  <span className="text-[var(--color-text-muted)]">
                                     {cost.total_fire.toFixed(1)} 火
                                   </span>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleDeleteCost(cost.id); }}
-                                    className="p-1 text-slate-400 hover:text-red-500"
+                                    className="p-1 text-[var(--color-text-subtle)] hover:text-red-500"
                                   >
                                     <X className="w-3 h-3" />
                                   </button>
@@ -983,7 +983,7 @@ export default function StrategiesPage() {
 
                       <div>
                         <div className="flex items-center justify-between mb-3">
-                          <div className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                          <div className="text-sm font-medium text-[var(--color-text)] flex items-center gap-1.5">
                             <TrendingUp className="w-4 h-4 text-green-500" />
                             产出收益
                           </div>
@@ -995,27 +995,27 @@ export default function StrategiesPage() {
                           </button>
                         </div>
                         {strategy.outputs.length === 0 ? (
-                          <div className="text-sm text-slate-400 py-4 text-center border border-dashed border-slate-200 rounded-lg">
+                          <div className="text-sm text-[var(--color-text-subtle)] py-4 text-center border border-dashed border-[var(--color-border)] rounded-lg">
                             暂无产出
                           </div>
                         ) : (
                           <div className="space-y-2">
                             {strategy.outputs.map((output) => (
-                              <div key={output.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-sm">
+                              <div key={output.id} className="flex items-center justify-between p-2 bg-[var(--color-panel-soft)] rounded-lg text-sm">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-slate-700">{output.item_name}</span>
-                                  <span className="px-1 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
+                                  <span className="text-[var(--color-text)]">{output.item_name}</span>
+                                  <span className="px-1 py-0.5 bg-[var(--color-panel)] text-[var(--color-text-muted)] text-xs rounded">
                                     {output.item_type}
                                   </span>
-                                  <span className="text-slate-400">×{output.count}</span>
+                                  <span className="text-[var(--color-text-subtle)]">×{output.count}</span>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                  <span className="text-slate-600">
+                                  <span className="text-[var(--color-text-muted)]">
                                     {(output.realtime_value * output.count).toFixed(0)} 火
                                   </span>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleDeleteOutput(output.id); }}
-                                    className="p-1 text-slate-400 hover:text-red-500"
+                                    className="p-1 text-[var(--color-text-subtle)] hover:text-red-500"
                                   >
                                     <X className="w-3 h-3" />
                                   </button>
@@ -1028,15 +1028,15 @@ export default function StrategiesPage() {
                     </div>
 
                     {strategy.image_url && (
-                      <div className="px-4 py-3 border-t border-slate-100">
-                        <div className="text-xs text-slate-500 mb-2 flex items-center gap-1">
+                      <div className="px-4 py-3 border-t border-[var(--color-border-soft)]">
+                        <div className="text-xs text-[var(--color-text-subtle)] mb-2 flex items-center gap-1">
                           <Image className="w-3 h-3" />
                           加点图片
                         </div>
                         <img
                           src={strategy.image_url}
                           alt="加点图"
-                          className="max-h-32 rounded-lg border border-slate-200 cursor-pointer hover:opacity-80 transition-opacity"
+                          className="max-h-32 rounded-lg border border-[var(--color-border)] cursor-pointer hover:opacity-80 transition-opacity"
                           onClick={(e) => {
                             e.stopPropagation();
                             setPreviewImage(strategy.image_url);
@@ -1045,38 +1045,38 @@ export default function StrategiesPage() {
                       </div>
                     )}
 
-                    <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                    <div className="px-4 py-3 bg-[var(--color-panel-soft)] border-t border-[var(--color-border-soft)] flex items-center justify-between">
                       <div className="flex items-center gap-6">
                         <div className="flex items-center gap-1.5 text-sm">
-                          <Layers className="w-4 h-4 text-slate-400" />
-                          <span className="text-slate-500">输出值:</span>
-                          <span className="font-medium text-slate-700">{strategy.output_value.toFixed(0)}</span>
+                          <Layers className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                          <span className="text-[var(--color-text-subtle)]">输出值:</span>
+                          <span className="font-medium text-[var(--color-text)]">{strategy.output_value.toFixed(0)}</span>
                         </div>
                         <div className="flex items-center gap-1.5 text-sm">
-                          <Shield className="w-4 h-4 text-slate-400" />
-                          <span className="text-slate-500">防御值:</span>
-                          <span className="font-medium text-slate-700">{strategy.defense_value.toFixed(0)}</span>
+                          <Shield className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                          <span className="text-[var(--color-text-subtle)]">防御值:</span>
+                          <span className="font-medium text-[var(--color-text)]">{strategy.defense_value.toFixed(0)}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={(e) => { e.stopPropagation(); handleRefreshPrices(strategy.id); }}
                           disabled={refreshing === strategy.id}
-                          className="p-1.5 text-slate-400 hover:text-[var(--color-brand)] hover:bg-[var(--color-brand)]/10 rounded-lg transition-colors disabled:opacity-50"
+                          className="p-1.5 text-[var(--color-text-subtle)] hover:text-[var(--color-brand)] hover:bg-[var(--color-brand)]/10 rounded-lg transition-colors disabled:opacity-50"
                           title="刷新火价"
                         >
                           <RefreshCw className={`w-4 h-4 ${refreshing === strategy.id ? "animate-spin" : ""}`} />
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleEdit(strategy); }}
-                          className="p-1.5 text-slate-400 hover:text-[var(--color-brand)] hover:bg-[var(--color-brand)]/10 rounded-lg transition-colors"
+                          className="p-1.5 text-[var(--color-text-subtle)] hover:text-[var(--color-brand)] hover:bg-[var(--color-brand)]/10 rounded-lg transition-colors"
                           title="编辑策略"
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDelete(strategy.id); }}
-                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-1.5 text-[var(--color-text-subtle)] hover:text-red-500 hover:bg-[rgba(239,68,68,0.1)] rounded-lg transition-colors"
                           title="删除策略"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1092,14 +1092,14 @@ export default function StrategiesPage() {
       )}
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-800">新建策略</h3>
-            <button onClick={() => setShowCreateDialog(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">新建策略</h3>
+            <button onClick={() => setShowCreateDialog(false)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
           </div>
           <div className="p-5 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">策略名称</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">策略名称</label>
               <Input
                 value={editForm.name}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
@@ -1108,7 +1108,7 @@ export default function StrategiesPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">标签</label>
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">标签</label>
                 <Select
                   value={editForm.label}
                   onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
@@ -1117,7 +1117,7 @@ export default function StrategiesPage() {
                 </Select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">难度</label>
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">难度</label>
                 <Select
                   value={editForm.difficulty}
                   onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}
@@ -1128,7 +1128,7 @@ export default function StrategiesPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">输出值</label>
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">输出值</label>
                 <Input
                   type="number"
                   value={editForm.output_value}
@@ -1136,7 +1136,7 @@ export default function StrategiesPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">防御值</label>
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">防御值</label>
                 <Input
                   type="number"
                   value={editForm.defense_value}
@@ -1145,7 +1145,7 @@ export default function StrategiesPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">备注</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">备注</label>
               <Input
                 value={editForm.remark}
                 onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })}
@@ -1153,8 +1153,8 @@ export default function StrategiesPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">加点图片</label>
-              <label className="flex items-center gap-2 px-4 py-3 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 cursor-pointer w-full">
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">加点图片</label>
+              <label className="flex items-center gap-2 px-4 py-3 bg-[var(--color-panel)] text-[var(--color-text-muted)] rounded-lg hover:bg-slate-200 cursor-pointer w-full">
                 <Upload className="w-4 h-4" />
                 <span className="text-sm">上传加点截图</span>
                 <input
@@ -1174,7 +1174,7 @@ export default function StrategiesPage() {
                 />
               </label>
               {editForm.image_url && (
-                <div className="mt-2 p-2 border border-slate-200 rounded-lg bg-slate-50 flex items-center gap-3">
+                <div className="mt-2 p-2 border border-[var(--color-border)] rounded-lg bg-[var(--color-panel-soft)] flex items-center gap-3">
                   <img src={editForm.image_url} alt="加点图预览" className="max-h-24 rounded" />
                   <button
                     onClick={() => setEditForm(prev => ({ ...prev, image_url: "" }))}
@@ -1186,22 +1186,22 @@ export default function StrategiesPage() {
               )}
             </div>
           </div>
-          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
-            <button onClick={() => setShowCreateDialog(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg">取消</button>
+          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
+            <button onClick={() => setShowCreateDialog(false)} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg">取消</button>
             <button onClick={handleCreate} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90">创建</button>
           </div>
         </div>
       </Dialog>
 
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-800">编辑策略</h3>
-            <button onClick={() => setShowEditDialog(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">编辑策略</h3>
+            <button onClick={() => setShowEditDialog(false)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
           </div>
           <div className="p-5 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">策略名称</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">策略名称</label>
               <Input
                 value={editForm.name}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
@@ -1210,7 +1210,7 @@ export default function StrategiesPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">标签</label>
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">标签</label>
                 <Select
                   value={editForm.label}
                   onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
@@ -1219,7 +1219,7 @@ export default function StrategiesPage() {
                 </Select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">难度</label>
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">难度</label>
                 <Select
                   value={editForm.difficulty}
                   onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}
@@ -1230,7 +1230,7 @@ export default function StrategiesPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">输出值</label>
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">输出值</label>
                 <Input
                   type="number"
                   value={editForm.output_value}
@@ -1238,7 +1238,7 @@ export default function StrategiesPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">防御值</label>
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">防御值</label>
                 <Input
                   type="number"
                   value={editForm.defense_value}
@@ -1247,7 +1247,7 @@ export default function StrategiesPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">备注</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">备注</label>
               <Input
                 value={editForm.remark}
                 onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })}
@@ -1255,8 +1255,8 @@ export default function StrategiesPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">加点图片</label>
-              <label className="flex items-center gap-2 px-4 py-3 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 cursor-pointer w-full">
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">加点图片</label>
+              <label className="flex items-center gap-2 px-4 py-3 bg-[var(--color-panel)] text-[var(--color-text-muted)] rounded-lg hover:bg-slate-200 cursor-pointer w-full">
                 <Upload className="w-4 h-4" />
                 <span className="text-sm">上传加点截图</span>
                 <input
@@ -1276,7 +1276,7 @@ export default function StrategiesPage() {
                 />
               </label>
               {editForm.image_url && (
-                <div className="mt-2 p-2 border border-slate-200 rounded-lg bg-slate-50 flex items-center gap-3">
+                <div className="mt-2 p-2 border border-[var(--color-border)] rounded-lg bg-[var(--color-panel-soft)] flex items-center gap-3">
                   <img src={editForm.image_url} alt="加点图预览" className="max-h-24 rounded" />
                   <button
                     onClick={() => setEditForm(prev => ({ ...prev, image_url: "" }))}
@@ -1288,22 +1288,22 @@ export default function StrategiesPage() {
               )}
             </div>
           </div>
-          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
-            <button onClick={() => setShowEditDialog(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg">取消</button>
+          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
+            <button onClick={() => setShowEditDialog(false)} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg">取消</button>
             <button onClick={handleUpdate} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90">保存</button>
           </div>
         </div>
       </Dialog>
 
       <Dialog open={!!showCostDialog} onOpenChange={() => { setShowCostDialog(null); setItemSearchResults([]); }}>
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-800">添加成本</h3>
-            <button onClick={() => setShowCostDialog(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">添加成本</h3>
+            <button onClick={() => setShowCostDialog(null)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
           </div>
           <div className="p-5 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">搜索物品</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">搜索物品</label>
               <div className="relative">
                 <Input
                   value={costForm.item_name}
@@ -1313,25 +1313,25 @@ export default function StrategiesPage() {
                   }}
                   placeholder="输入物品名称搜索"
                 />
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
               </div>
               {itemSearchResults.length > 0 && (
-                <div className="mt-2 max-h-40 overflow-y-auto border border-slate-200 rounded-lg">
+                <div className="mt-2 max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-lg">
                   {itemSearchResults.map((item) => (
                     <div
                       key={item.item_id}
                       onClick={() => handleItemSelect(item)}
-                      className="px-3 py-2 text-sm hover:bg-[var(--color-brand)]/10 cursor-pointer border-b border-slate-100 last:border-b-0"
+                      className="px-3 py-2 text-sm hover:bg-[var(--color-brand)]/10 cursor-pointer border-b border-[var(--color-border-soft)] last:border-b-0"
                     >
-                      <div className="text-slate-700">{item.name}</div>
-                      <div className="text-xs text-slate-400">{item.item_type} - {item.price.toFixed(0)} 火</div>
+                      <div className="text-[var(--color-text)]">{item.name}</div>
+                      <div className="text-xs text-[var(--color-text-subtle)]">{item.item_type} - {item.price.toFixed(0)} 火</div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">数量</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">数量</label>
               <Input
                 type="number"
                 value={costForm.count}
@@ -1348,22 +1348,22 @@ export default function StrategiesPage() {
               <span>关联实时火价</span>
             </label>
           </div>
-          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
-            <button onClick={() => setShowCostDialog(null)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg">取消</button>
+          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
+            <button onClick={() => setShowCostDialog(null)} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg">取消</button>
             <button onClick={handleAddCost} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90">添加</button>
           </div>
         </div>
       </Dialog>
 
       <Dialog open={!!showOutputDialog} onOpenChange={() => { setShowOutputDialog(null); setItemSearchResults([]); }}>
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-800">添加产出</h3>
-            <button onClick={() => setShowOutputDialog(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">添加产出</h3>
+            <button onClick={() => setShowOutputDialog(null)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
           </div>
           <div className="p-5 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">搜索物品</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">搜索物品</label>
               <div className="relative">
                 <Input
                   value={outputForm.item_name}
@@ -1373,25 +1373,25 @@ export default function StrategiesPage() {
                   }}
                   placeholder="输入物品名称搜索"
                 />
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
               </div>
               {itemSearchResults.length > 0 && (
-                <div className="mt-2 max-h-40 overflow-y-auto border border-slate-200 rounded-lg">
+                <div className="mt-2 max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-lg">
                   {itemSearchResults.map((item) => (
                     <div
                       key={item.item_id}
                       onClick={() => handleItemSelect(item)}
-                      className="px-3 py-2 text-sm hover:bg-[var(--color-brand)]/10 cursor-pointer border-b border-slate-100 last:border-b-0"
+                      className="px-3 py-2 text-sm hover:bg-[var(--color-brand)]/10 cursor-pointer border-b border-[var(--color-border-soft)] last:border-b-0"
                     >
-                      <div className="text-slate-700">{item.name}</div>
-                      <div className="text-xs text-slate-400">{item.item_type} - {item.price.toFixed(0)} 火</div>
+                      <div className="text-[var(--color-text)]">{item.name}</div>
+                      <div className="text-xs text-[var(--color-text-subtle)]">{item.item_type} - {item.price.toFixed(0)} 火</div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">物品类型</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">物品类型</label>
               <Input
                 value={outputForm.item_type}
                 onChange={(e) => setOutputForm({ ...outputForm, item_type: e.target.value })}
@@ -1400,7 +1400,7 @@ export default function StrategiesPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">数量</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">数量</label>
               <Input
                 type="number"
                 value={outputForm.count}
@@ -1408,8 +1408,8 @@ export default function StrategiesPage() {
               />
             </div>
           </div>
-          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
-            <button onClick={() => setShowOutputDialog(null)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg">取消</button>
+          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
+            <button onClick={() => setShowOutputDialog(null)} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg">取消</button>
             <button onClick={handleAddOutput} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90">添加</button>
           </div>
         </div>
@@ -1419,10 +1419,10 @@ export default function StrategiesPage() {
       )}
 
       <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 p-4">
+        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-3xl mx-4 p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-slate-800">加点图片预览</h3>
-            <button onClick={() => setPreviewImage(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">加点图片预览</h3>
+            <button onClick={() => setPreviewImage(null)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
           </div>
           {previewImage && (
             <img

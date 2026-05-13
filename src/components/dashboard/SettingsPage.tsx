@@ -331,7 +331,7 @@ export default function SettingsPage() {
   if (!loaded) {
     return (
       <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-5 h-5 text-slate-400 animate-spin" />
+        <RefreshCw className="w-5 h-5 text-[var(--color-text-subtle)] animate-spin" />
       </div>
     );
   }
@@ -342,8 +342,8 @@ export default function SettingsPage() {
         title="系统设置"
         description="配置应用参数、赛季信息和数据管理"
         icon={Settings}
-        iconBg="bg-slate-100"
-        iconColor="text-slate-600"
+        iconBg="bg-[var(--color-panel)]"
+        iconColor="text-[var(--color-text-muted)]"
         actions={
           <ToolbarActions>
             <Button variant="default" size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
@@ -357,14 +357,14 @@ export default function SettingsPage() {
       <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
           <Globe className="w-4 h-4 text-[var(--color-ai)]" />
-          <h2 className="text-sm font-semibold text-slate-700">赛季设置</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text)]">赛季设置</h2>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-slate-700">当前赛季 ID</div>
-              <div className="text-xs text-slate-400 mt-0.5">归档当前赛季后可初始化新赛季</div>
+              <div className="text-sm font-medium text-[var(--color-text)]">当前赛季 ID</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">归档当前赛季后可初始化新赛季</div>
             </div>
             <StatusBadge variant="primary" className="px-4 py-1.5 text-sm font-semibold">
               {seasonId.toUpperCase()}
@@ -377,17 +377,17 @@ export default function SettingsPage() {
             if (!currentSeason) return null;
             return (
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-                  <div className="text-xs text-slate-400 mb-1">赛季开始日期</div>
-                  <div className="text-sm font-medium text-slate-700">
+                <div className="bg-[var(--color-panel-soft)] rounded-lg p-3 border border-[var(--color-border-soft)]">
+                  <div className="text-xs text-[var(--color-text-subtle)] mb-1">赛季开始日期</div>
+                  <div className="text-sm font-medium text-[var(--color-text)]">
                     {currentSeason.started_at 
                       ? new Date(currentSeason.started_at * 1000).toLocaleDateString('zh-CN')
                       : '未设置'
                     }
                   </div>
                 </div>
-                <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-                  <div className="text-xs text-slate-400 mb-1">赛季状态</div>
+                <div className="bg-[var(--color-panel-soft)] rounded-lg p-3 border border-[var(--color-border-soft)]">
+                  <div className="text-xs text-[var(--color-text-subtle)] mb-1">赛季状态</div>
                   <div className="text-sm font-medium text-green-600">
                     {currentSeason.ended_at 
                       ? `已结束 (${new Date(currentSeason.ended_at * 1000).toLocaleDateString('zh-CN')})`
@@ -400,11 +400,11 @@ export default function SettingsPage() {
           })()}
 
           {/* Archive current season */}
-          <div className="border-t border-slate-100 pt-4">
+          <div className="border-t border-[var(--color-border-soft)] pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium text-slate-700">归档当前赛季</div>
-                <div className="text-xs text-slate-400 mt-0.5">将 {seasonId} 数据打包为历史赛季</div>
+                <div className="text-sm font-medium text-[var(--color-text)]">归档当前赛季</div>
+                <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">将 {seasonId} 数据打包为历史赛季</div>
               </div>
               <Button
                 variant="outline"
@@ -420,11 +420,11 @@ export default function SettingsPage() {
           </div>
 
           {/* Initialize new season */}
-          <div className="border-t border-slate-100 pt-4">
+          <div className="border-t border-[var(--color-border-soft)] pt-4">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <div className="text-sm font-medium text-slate-700">初始化新赛季</div>
-                <div className="text-xs text-slate-400 mt-0.5">
+                <div className="text-sm font-medium text-[var(--color-text)]">初始化新赛季</div>
+                <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">
                   {seasonsQuery.data?.some(s => s.is_current)
                     ? "请先归档当前赛季后再创建新赛季"
                     : "当前无进行中的赛季，可以创建新赛季"
@@ -444,38 +444,38 @@ export default function SettingsPage() {
             </div>
 
             {showNewSeasonForm && (
-              <div className="space-y-4 bg-slate-50 rounded-lg p-4">
+              <div className="space-y-4 bg-[var(--color-panel-soft)] rounded-lg p-4">
                 {/* Basic info */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs text-slate-500 block mb-1">赛季 ID *</label>
+                    <label className="text-xs text-[var(--color-text-subtle)] block mb-1">赛季 ID *</label>
                     <input
                       type="text"
                       value={newSeasonId}
                       onChange={(e) => setNewSeasonId(e.target.value)}
                       placeholder="如 ss13"
-                      className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                      className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 block mb-1">赛季名称</label>
+                    <label className="text-xs text-[var(--color-text-subtle)] block mb-1">赛季名称</label>
                     <input
                       type="text"
                       value={newSeasonName}
                       onChange={(e) => setNewSeasonName(e.target.value)}
                       placeholder="如 SS13 赛季"
-                      className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                      className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 block mb-1">开服时间 *</label>
+                    <label className="text-xs text-[var(--color-text-subtle)] block mb-1">开服时间 *</label>
                     <input
                       type="datetime-local"
                       value={newSeasonStartedAt}
                       onChange={(e) => setNewSeasonStartedAt(e.target.value)}
-                      className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                      className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
                     />
-                    <p className="text-xs text-slate-400 mt-0.5">必填，请输入正确的开服时间</p>
+                    <p className="text-xs text-[var(--color-text-subtle)] mt-0.5">必填，请输入正确的开服时间</p>
                   </div>
                 </div>
 
@@ -507,10 +507,10 @@ export default function SettingsPage() {
           </div>
 
           {/* API Config for Current Season */}
-          <div className="border-t border-slate-100 pt-4">
+          <div className="border-t border-[var(--color-border-soft)] pt-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                <Key className="w-4 h-4 text-slate-500" />
+              <div className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
+                <Key className="w-4 h-4 text-[var(--color-text-subtle)]" />
                 当前赛季 API 参数配置
               </div>
               <Button
@@ -529,48 +529,48 @@ export default function SettingsPage() {
               <div className="space-y-4 bg-amber-50 rounded-lg p-4 border border-amber-100">
                 {/* Qiandao API */}
                 <div>
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">
+                  <div className="text-xs font-medium text-[var(--color-text-subtle)] uppercase tracking-wider mb-2">
                     千岛火价 API 参数
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-slate-500 block mb-1">普通服 tagId</label>
+                      <label className="text-xs text-[var(--color-text-subtle)] block mb-1">普通服 tagId</label>
                       <input
                         type="text"
                         value={apiConfigForm.qiandao_tag_id_normal}
                         onChange={(e) => setApiConfigForm({ ...apiConfigForm, qiandao_tag_id_normal: e.target.value })}
                         placeholder="如 1560053"
-                        className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-500 block mb-1">普通服 specId</label>
+                      <label className="text-xs text-[var(--color-text-subtle)] block mb-1">普通服 specId</label>
                       <input
                         type="text"
                         value={apiConfigForm.qiandao_spec_id_normal}
                         onChange={(e) => setApiConfigForm({ ...apiConfigForm, qiandao_spec_id_normal: e.target.value })}
                         placeholder="如 267416"
-                        className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-500 block mb-1">专家服 tagId</label>
+                      <label className="text-xs text-[var(--color-text-subtle)] block mb-1">专家服 tagId</label>
                       <input
                         type="text"
                         value={apiConfigForm.qiandao_tag_id_expert}
                         onChange={(e) => setApiConfigForm({ ...apiConfigForm, qiandao_tag_id_expert: e.target.value })}
                         placeholder="如 1560055"
-                        className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-500 block mb-1">专家服 specId</label>
+                      <label className="text-xs text-[var(--color-text-subtle)] block mb-1">专家服 specId</label>
                       <input
                         type="text"
                         value={apiConfigForm.qiandao_spec_id_expert}
                         onChange={(e) => setApiConfigForm({ ...apiConfigForm, qiandao_spec_id_expert: e.target.value })}
                         placeholder="如 267417"
-                        className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
                       />
                     </div>
                   </div>
@@ -578,28 +578,28 @@ export default function SettingsPage() {
 
                 {/* 物品火价 API */}
                 <div>
-                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">
+                  <div className="text-xs font-medium text-[var(--color-text-subtle)] uppercase tracking-wider mb-2">
                     物品火价 API 参数
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-slate-500 block mb-1">普通服 season_id</label>
+                      <label className="text-xs text-[var(--color-text-subtle)] block mb-1">普通服 season_id</label>
                       <input
                         type="number"
                         value={apiConfigForm.luosi_season_id_normal}
                         onChange={(e) => setApiConfigForm({ ...apiConfigForm, luosi_season_id_normal: e.target.value })}
                         placeholder="如 1401"
-                        className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-500 block mb-1">专家服 season_id</label>
+                      <label className="text-xs text-[var(--color-text-subtle)] block mb-1">专家服 season_id</label>
                       <input
                         type="number"
                         value={apiConfigForm.luosi_season_id_expert}
                         onChange={(e) => setApiConfigForm({ ...apiConfigForm, luosi_season_id_expert: e.target.value })}
                         placeholder="如 1431"
-                        className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
                       />
                     </div>
                   </div>
@@ -632,20 +632,20 @@ export default function SettingsPage() {
       <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
           <AlertTriangle className="w-4 h-4 text-amber-500" />
-          <h2 className="text-sm font-semibold text-slate-700">价格预警设置</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text)]">价格预警设置</h2>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div>
-                <div className="text-sm font-medium text-slate-700">开启系统通知</div>
-                <div className="text-xs text-slate-400 mt-0.5">开启后将在发现值得购买的物品时发送桌面通知</div>
+                <div className="text-sm font-medium text-[var(--color-text)]">开启系统通知</div>
+                <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">开启后将在发现值得购买的物品时发送桌面通知</div>
               </div>
               {notificationPermission && (
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${notificationPermission.granted ? 'bg-[var(--color-success)]' : notificationPermission.denied ? 'bg-[var(--color-danger)]' : 'bg-[var(--color-brand-gold)]'}`}></div>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-[var(--color-text-subtle)]">
                     {notificationPermission.granted ? '已授权' : notificationPermission.denied ? '已拒绝' : '未授权'}
                   </span>
                 </div>
@@ -676,8 +676,8 @@ export default function SettingsPage() {
 
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-slate-700">开启语音提醒</div>
-              <div className="text-xs text-slate-400 mt-0.5">预警触发时播放语音提示</div>
+              <div className="text-sm font-medium text-[var(--color-text)]">开启语音提醒</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">预警触发时播放语音提示</div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -693,23 +693,23 @@ export default function SettingsPage() {
           {voiceAlertEnabled && (
             <div className="flex items-center justify-between pl-4 border-l-2 border-[var(--color-brand)]/30">
               <div>
-                <div className="text-sm font-medium text-slate-600">语音文件路径</div>
-                <div className="text-xs text-slate-400 mt-0.5">支持 .mp3 或 .wav 文件（留空或路径失效时使用内置萝莉音）</div>
+                <div className="text-sm font-medium text-[var(--color-text-muted)]">语音文件路径</div>
+                <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">支持 .mp3 或 .wav 文件（留空或路径失效时使用内置萝莉音）</div>
               </div>
               <input
                 type="text"
                 value={voiceAlertPath}
                 onChange={(e) => setVoiceAlertPath(e.target.value)}
                 placeholder="留空使用内置萝莉音"
-                className="w-64 text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                className="w-64 text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
               />
             </div>
           )}
 
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-slate-700">开启价格预警弹窗</div>
-              <div className="text-xs text-slate-400 mt-0.5">当监控物品变得"值的"时弹出通知提醒</div>
+              <div className="text-sm font-medium text-[var(--color-text)]">开启价格预警弹窗</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">当监控物品变得"值的"时弹出通知提醒</div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -725,13 +725,13 @@ export default function SettingsPage() {
           {priceAlertEnabled && (
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium text-slate-700">预警间隔时间</div>
-                <div className="text-xs text-slate-400 mt-0.5">预警触发后的等待时间</div>
+                <div className="text-sm font-medium text-[var(--color-text)]">预警间隔时间</div>
+                <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">预警触发后的等待时间</div>
               </div>
               <select
                 value={priceAlertCooldown}
                 onChange={(e) => setPriceAlertCooldown(Number(e.target.value))}
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
               >
                 {COOLDOWN_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -750,14 +750,14 @@ export default function SettingsPage() {
       <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
           <Bell className="w-4 h-4 text-red-500" />
-          <h2 className="text-sm font-semibold text-slate-700">火价监控</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text)]">火价监控</h2>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-slate-700">自动采集火价</div>
-              <div className="text-xs text-slate-400 mt-0.5">定时从千岛获取当前赛季火价数据</div>
+              <div className="text-sm font-medium text-[var(--color-text)]">自动采集火价</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">定时从千岛获取当前赛季火价数据</div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -772,14 +772,14 @@ export default function SettingsPage() {
 
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-slate-700">采集间隔</div>
-              <div className="text-xs text-slate-400 mt-0.5">两次火价采集之间的时间间隔</div>
+              <div className="text-sm font-medium text-[var(--color-text)]">采集间隔</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">两次火价采集之间的时间间隔</div>
             </div>
             <select
               value={fireInterval}
               onChange={(e) => setFireInterval(Number(e.target.value))}
               disabled={!fireEnabled}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {INTERVAL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -795,14 +795,14 @@ export default function SettingsPage() {
       <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
           <Database className="w-4 h-4 text-[var(--color-brand)]" />
-          <h2 className="text-sm font-semibold text-slate-700">物品数据</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text)]">物品数据</h2>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-slate-700">自动同步物品价格</div>
-              <div className="text-xs text-slate-400 mt-0.5">定时从小助手获取当前赛季物品价格数据</div>
+              <div className="text-sm font-medium text-[var(--color-text)]">自动同步物品价格</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">定时从小助手获取当前赛季物品价格数据</div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -817,14 +817,14 @@ export default function SettingsPage() {
 
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-slate-700">同步间隔</div>
-              <div className="text-xs text-slate-400 mt-0.5">两次物品价格同步之间的时间间隔</div>
+              <div className="text-sm font-medium text-[var(--color-text)]">同步间隔</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">两次物品价格同步之间的时间间隔</div>
             </div>
             <select
               value={itemsInterval}
               onChange={(e) => setItemsInterval(Number(e.target.value))}
               disabled={!itemsEnabled}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {INTERVAL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -836,13 +836,13 @@ export default function SettingsPage() {
 
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-slate-700">数据来源</div>
-              <div className="text-xs text-slate-400 mt-0.5">选择物品价格的获取方式</div>
+              <div className="text-sm font-medium text-[var(--color-text)]">数据来源</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">选择物品价格的获取方式</div>
             </div>
             <select
               value={itemsSource}
               onChange={(e) => handleItemsSourceChange(e.target.value)}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
             >
               {SOURCE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -854,8 +854,8 @@ export default function SettingsPage() {
 
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-slate-700">同步专家服数据</div>
-              <div className="text-xs text-slate-400 mt-0.5">同时抓取赛季专家的物品价格数据</div>
+              <div className="text-sm font-medium text-[var(--color-text)]">同步专家服数据</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">同时抓取赛季专家的物品价格数据</div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -869,7 +869,7 @@ export default function SettingsPage() {
           </div>
 
           <div className={`flex items-center justify-between ${itemsSource === 'local' ? 'opacity-100' : 'opacity-50'}`}>
-            <div className="text-sm font-medium text-slate-700">本地JSON路径</div>
+            <div className="text-sm font-medium text-[var(--color-text)]">本地JSON路径</div>
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -878,8 +878,8 @@ export default function SettingsPage() {
                 readOnly={itemsSource !== 'local'}
                 className={`text-xs border rounded-lg px-3 py-1.5 w-72 overflow-hidden text-ellipsis ${
                   itemsSource === 'local' 
-                    ? 'border-slate-300 text-slate-700 bg-white focus:ring-2 focus:ring-blue-500/30' 
-                    : 'border-slate-200 text-slate-400 bg-slate-50'
+                    ? 'border-[var(--color-border)] text-[var(--color-text)] bg-[var(--color-panel)] focus:ring-2 focus:ring-[var(--color-brand)]/30' 
+                    : 'border-[var(--color-border)] text-[var(--color-text-subtle)] bg-[var(--color-panel-soft)]'
                 }`}
               />
               {itemsSource === 'local' && jsonPathValidation && (
@@ -900,8 +900,8 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex items-center justify-between pt-1">
-            <div className="text-sm text-slate-500">
-              已加载 <span className="font-semibold text-slate-700">{itemCount}</span> 个物品
+            <div className="text-sm text-[var(--color-text-subtle)]">
+              已加载 <span className="font-semibold text-[var(--color-text)]">{itemCount}</span> 个物品
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -909,7 +909,7 @@ export default function SettingsPage() {
                 size="sm"
                 onClick={() => setConfirmClearOpen(true)}
                 disabled={clearMutation.isPending}
-                className="border-red-200 text-red-500 hover:bg-red-50"
+                className="border-red-200 text-red-500 hover:bg-[rgba(239,68,68,0.1)]"
                 title="清空物品数据库，重新抓取"
               >
                 <Trash2 className={`w-3.5 h-3.5 ${clearMutation.isPending ? "animate-spin" : ""} mr-1.5`} />
@@ -933,8 +933,8 @@ export default function SettingsPage() {
       <Surface padding="lg">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm font-medium text-slate-700">当前版本</div>
-            <div className="text-xs text-slate-400 mt-0.5">v2.0.0 · Tauri 2.0</div>
+            <div className="text-sm font-medium text-[var(--color-text)]">当前版本</div>
+            <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">v2.0.0 · Tauri 2.0</div>
           </div>
           <Button
             variant="outline"

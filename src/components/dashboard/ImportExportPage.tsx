@@ -134,7 +134,7 @@ export default function ImportExportPage() {
         title="导入导出"
         description="管理数据的导入和导出"
         icon={Download}
-        iconBg="bg-blue-50"
+        iconBg="bg-[rgba(255,184,0,0.08)]"
         iconColor="text-[var(--color-brand)]"
       />
 
@@ -144,7 +144,7 @@ export default function ImportExportPage() {
             label="数据库大小"
             value={formatBytes(backupInfo.db_size_kb)}
             icon={HardDrive}
-            iconBg="bg-blue-50"
+            iconBg="bg-[rgba(255,184,0,0.08)]"
             iconColor="text-[var(--color-brand)]"
           />
           <MetricCard
@@ -158,10 +158,10 @@ export default function ImportExportPage() {
       )}
 
       <Surface padding="none">
-        <div className="px-5 py-4 border-b border-slate-100 bg-slate-50">
+        <div className="px-5 py-4 border-b border-[var(--color-border-soft)] bg-[var(--color-panel-soft)]">
           <div className="flex items-center gap-2">
             <Upload className="w-4 h-4 text-[var(--color-brand-gold)]" />
-            <h2 className="text-sm font-semibold text-slate-700">导入数据</h2>
+            <h2 className="text-sm font-semibold text-[var(--color-text)]">导入数据</h2>
           </div>
         </div>
         
@@ -169,10 +169,10 @@ export default function ImportExportPage() {
           <div className="space-y-3">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <FileText className="w-4 h-4 text-slate-400" />
-                <span className="text-sm font-medium text-slate-700">导入关注列表 CSV</span>
+                <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                <span className="text-sm font-medium text-[var(--color-text)]">导入关注列表 CSV</span>
               </div>
-              <p className="text-xs text-slate-400 ml-6">
+              <p className="text-xs text-[var(--color-text-subtle)] ml-6">
                 CSV 格式：section_id, item_id, purchase_fire_price, count, more_value
               </p>
             </div>
@@ -189,7 +189,7 @@ export default function ImportExportPage() {
           </div>
 
           {importResult && (
-            <Surface padding="md" className={importResult.errors.length > 0 ? "bg-amber-50 border-amber-200" : "bg-green-50 border-green-200"}>
+            <Surface padding="md" className={importResult.errors.length > 0 ? "bg-amber-50 border-amber-200" : "bg-[rgba(34,197,94,0.1)] border-green-200"}>
               <div className="flex items-center gap-2 mb-2">
                 <span className={`text-sm font-medium ${importResult.errors.length > 0 ? "text-amber-700" : "text-green-700"}`}>
                   导入完成：成功 {importResult.imported} 条
@@ -227,14 +227,14 @@ export default function ImportExportPage() {
             </Surface>
           )}
 
-          <div className="border-t border-slate-100 pt-5">
+          <div className="border-t border-[var(--color-border-soft)] pt-5">
             <div className="space-y-3">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <Database className="w-4 h-4 text-slate-400" />
-                  <span className="text-sm font-medium text-slate-700">导入数据库备份</span>
+                  <Database className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">导入数据库备份</span>
                 </div>
-                <p className="text-xs text-slate-400 ml-6">
+                <p className="text-xs text-[var(--color-text-subtle)] ml-6">
                   恢复之前导出的 .db 备份文件。操作会覆盖当前数据，建议先备份。
                 </p>
               </div>
@@ -254,10 +254,10 @@ export default function ImportExportPage() {
       </Surface>
 
       <Surface padding="none">
-        <div className="px-5 py-4 border-b border-slate-100 bg-slate-50">
+        <div className="px-5 py-4 border-b border-[var(--color-border-soft)] bg-[var(--color-panel-soft)]">
           <div className="flex items-center gap-2">
             <Download className="w-4 h-4 text-green-500" />
-            <h2 className="text-sm font-semibold text-slate-700">导出数据</h2>
+            <h2 className="text-sm font-semibold text-[var(--color-text)]">导出数据</h2>
           </div>
         </div>
         
@@ -265,10 +265,10 @@ export default function ImportExportPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-slate-400" />
-                <span className="text-sm font-medium text-slate-700">导出关注列表</span>
+                <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                <span className="text-sm font-medium text-[var(--color-text)]">导出关注列表</span>
               </div>
-              <p className="text-xs text-slate-400 ml-6 mt-1">
+              <p className="text-xs text-[var(--color-text-subtle)] ml-6 mt-1">
                 导出所有分组的物品关注列表为 CSV 格式
               </p>
             </div>
@@ -282,13 +282,13 @@ export default function ImportExportPage() {
             </Button>
           </div>
 
-          <div className="flex items-center justify-between border-t border-slate-100 pt-5">
+          <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-5">
             <div>
               <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-slate-400" />
-                <span className="text-sm font-medium text-slate-700">导出火价历史</span>
+                <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                <span className="text-sm font-medium text-[var(--color-text)]">导出火价历史</span>
               </div>
-              <p className="text-xs text-slate-400 ml-6 mt-1">
+              <p className="text-xs text-[var(--color-text-subtle)] ml-6 mt-1">
                 导出最近 7 天的火价记录
               </p>
             </div>
@@ -302,13 +302,13 @@ export default function ImportExportPage() {
             </Button>
           </div>
 
-          <div className="flex items-center justify-between border-t border-slate-100 pt-5">
+          <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-5">
             <div>
               <div className="flex items-center gap-2">
-                <Database className="w-4 h-4 text-slate-400" />
-                <span className="text-sm font-medium text-slate-700">备份数据库</span>
+                <Database className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                <span className="text-sm font-medium text-[var(--color-text)]">备份数据库</span>
               </div>
-              <p className="text-xs text-slate-400 ml-6 mt-1">
+              <p className="text-xs text-[var(--color-text-subtle)] ml-6 mt-1">
                 完整备份当前 SQLite 数据库
               </p>
             </div>

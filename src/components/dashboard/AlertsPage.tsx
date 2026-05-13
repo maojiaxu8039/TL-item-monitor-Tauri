@@ -220,7 +220,7 @@ export default function AlertsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-slate-400">加载中...</div>
+        <div className="text-[var(--color-text-subtle)]">加载中...</div>
       </div>
     );
   }
@@ -278,7 +278,7 @@ export default function AlertsPage() {
           {filteredRules.map(rule => {
             const isExpanded = expandedRules.has(rule.id);
             return (
-              <div key={rule.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+              <div key={rule.id} className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] overflow-hidden">
                 <div
                   className="p-4 cursor-pointer hover:bg-[var(--color-panel-soft)] transition-colors"
                   onClick={() => toggleExpand(rule.id)}
@@ -286,9 +286,9 @@ export default function AlertsPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       {isExpanded ? (
-                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                        <ChevronDown className="w-4 h-4 text-[var(--color-text-subtle)]" />
                       ) : (
-                        <ChevronRight className="w-4 h-4 text-slate-400" />
+                        <ChevronRight className="w-4 h-4 text-[var(--color-text-subtle)]" />
                       )}
                       {rule.enabled === 1 ? (
                         <CheckCircle className="w-5 h-5 text-green-500" />
@@ -306,13 +306,13 @@ export default function AlertsPage() {
                           </StatusBadge>
                         </div>
                         {rule.item_id && (
-                          <div className="text-xs text-slate-500 mt-0.5">
+                          <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">
                             物品: {rule.item_id}
                           </div>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-slate-400">
+                    <div className="flex items-center gap-4 text-xs text-[var(--color-text-subtle)]">
                       <div className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
                         冷却: {formatCooldown(rule.cooldown_seconds)}
@@ -325,8 +325,8 @@ export default function AlertsPage() {
                 </div>
 
                 {isExpanded && (
-                  <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                    <div className="text-xs text-slate-500">
+                  <div className="px-4 py-3 bg-[var(--color-panel-soft)] border-t border-[var(--color-border-soft)] flex items-center justify-between">
+                    <div className="text-xs text-[var(--color-text-subtle)]">
                       创建时间: {formatTimestamp(rule.created_at)}
                     </div>
                     <div className="flex items-center gap-2">
@@ -355,8 +355,8 @@ export default function AlertsPage() {
 
       {events.length > 0 && (
         <Surface padding="none">
-          <div className="px-4 py-3 border-b border-slate-100">
-            <h3 className="text-sm font-medium text-slate-700 flex items-center gap-2">
+          <div className="px-4 py-3 border-b border-[var(--color-border-soft)]">
+            <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-500" />
               最近预警事件
             </h3>
@@ -366,8 +366,8 @@ export default function AlertsPage() {
               <div key={event.id} className="px-4 py-3 flex items-start gap-3 hover:bg-[var(--color-panel-soft)] transition-colors">
                 <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm text-slate-700">{event.message}</div>
-                  <div className="text-xs text-slate-400 mt-1">
+                  <div className="text-sm text-[var(--color-text)]">{event.message}</div>
+                  <div className="text-xs text-[var(--color-text-subtle)] mt-1">
                     {formatTimestamp(event.triggered_at)}
                   </div>
                 </div>
@@ -378,14 +378,14 @@ export default function AlertsPage() {
       )}
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-800">新建预警规则</h3>
-            <button onClick={() => setShowCreateDialog(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">新建预警规则</h3>
+            <button onClick={() => setShowCreateDialog(false)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
           </div>
           <div className="p-5 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">规则类型</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">规则类型</label>
               <Select
                 value={createForm.rule_type}
                 onChange={(e) => setCreateForm({ ...createForm, rule_type: e.target.value as RuleType })}
@@ -398,9 +398,9 @@ export default function AlertsPage() {
               </Select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">物品名称</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">物品名称</label>
               {selectedItemName ? (
-                <div className="flex items-center gap-2 px-3 py-2 bg-green-50 rounded-lg border border-green-200">
+                <div className="flex items-center gap-2 px-3 py-2 bg-[rgba(34,197,94,0.1)] rounded-lg border border-green-200">
                   <span className="flex-1 text-sm text-green-700 font-medium">{selectedItemName}</span>
                   <button
                     onClick={clearSelectedItem}
@@ -411,7 +411,7 @@ export default function AlertsPage() {
                 </div>
               ) : (
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
                   <Input
                     value={itemSearch}
                     onChange={(e) => searchItems(e.target.value)}
@@ -421,7 +421,7 @@ export default function AlertsPage() {
                 </div>
               )}
               {itemResults.length > 0 && (
-                <div className="mt-1 max-h-40 overflow-y-auto border border-slate-200 rounded-lg">
+                <div className="mt-1 max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-lg">
                   {itemResults.map(item => (
                     <button
                       key={item.item_id}
@@ -429,15 +429,15 @@ export default function AlertsPage() {
                       className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-panel-soft)] flex items-center justify-between"
                     >
                       <span>{item.name}</span>
-                      <span className="text-slate-400 text-xs">{item.price?.toLocaleString() ?? "无价"} 火</span>
+                      <span className="text-[var(--color-text-subtle)] text-xs">{item.price?.toLocaleString() ?? "无价"} 火</span>
                     </button>
                   ))}
                 </div>
               )}
-              {!selectedItemName && <p className="text-xs text-slate-400 mt-1">留空则监控所有物品</p>}
+              {!selectedItemName && <p className="text-xs text-[var(--color-text-subtle)] mt-1">留空则监控所有物品</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
                 阈值 {createForm.rule_type === "price_drop_percent" ? "(%)" : "(火)"}
               </label>
               <Input
@@ -447,7 +447,7 @@ export default function AlertsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">冷却时间</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">冷却时间</label>
               <Select
                 value={createForm.cooldown_seconds}
                 onChange={(e) => setCreateForm({ ...createForm, cooldown_seconds: parseInt(e.target.value) })}
@@ -459,10 +459,10 @@ export default function AlertsPage() {
                 <option value={3600}>1小时</option>
                 <option value={86400}>24小时</option>
               </Select>
-              <p className="text-xs text-slate-400 mt-1">触发后等待一段时间才再次通知</p>
+              <p className="text-xs text-[var(--color-text-subtle)] mt-1">触发后等待一段时间才再次通知</p>
             </div>
           </div>
-          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
+          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
             <Button variant="outline" size="sm" onClick={() => setShowCreateDialog(false)}>
               取消
             </Button>
