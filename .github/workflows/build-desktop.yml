@@ -91,6 +91,13 @@ jobs:
         env:
           CI: true
 
+      - name: Remove quarantine attribute
+        run: |
+          find src-tauri/target/release/bundle -name "*.app" -type d | while read app; do
+            xattr -cr "$app"
+            echo "Removed quarantine from: $app"
+          done
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         if: always()
