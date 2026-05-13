@@ -1,3 +1,4 @@
+use crate::core::paths;
 use crate::core::state::{AppState, SeasonApiConfig};
 use crate::db::table_resolver::TableResolver;
 use sqlx::{Row, SqlitePool};
@@ -55,10 +56,7 @@ pub async fn archive_season(
     archive_name: Option<String>,
 ) -> Result<ArchiveResult, String> {
     let archive_file_name = archive_name.unwrap_or_else(|| format!("{}_archive.db", season_id));
-    let archive_dir = dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("com.tlmonitor.app")
-        .join("archives");
+    let archive_dir = paths::archives_dir();
 
     std::fs::create_dir_all(&archive_dir)
         .map_err(|e| format!("Failed to create archive dir: {}", e))?;

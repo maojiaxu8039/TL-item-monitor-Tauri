@@ -13,6 +13,8 @@ import { Surface } from "@/components/ui/Surface";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
+import { MetricCard } from "@/components/ui/MetricCard";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 interface ServerStatus {
   server: string;
@@ -594,103 +596,121 @@ export default function DataMonitorPage() {
 
           {serverStatus && (
             <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-100">
-              <div className="text-center">
-                <div className="text-xs text-slate-400">版本</div>
-                <div className="text-sm font-medium text-slate-700">{serverStatus.version}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs text-slate-400">运行时长</div>
-                <div className="text-sm font-medium text-slate-700">{formatUptime(serverStatus.uptime_seconds)}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs text-slate-400">赛季</div>
-                <div className="text-sm font-medium text-slate-700">{serverStatus.season_id}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs text-slate-400">下次采集</div>
-                <div className="text-sm font-medium text-slate-700">
-                  {serverStatus.next_collection ? formatTimestamp(serverStatus.next_collection) : "-"}
-                </div>
-              </div>
+              <MetricCard
+                label="版本"
+                value={serverStatus.version}
+                icon={Server}
+                iconBg="bg-blue-50"
+                iconColor="text-blue-500"
+              />
+              <MetricCard
+                label="运行时长"
+                value={formatUptime(serverStatus.uptime_seconds)}
+                icon={RefreshCw}
+                iconBg="bg-green-50"
+                iconColor="text-green-500"
+              />
+              <MetricCard
+                label="赛季"
+                value={serverStatus.season_id}
+                icon={Database}
+                iconBg="bg-purple-50"
+                iconColor="text-purple-500"
+              />
+              <MetricCard
+                label="下次采集"
+                value={serverStatus.next_collection ? formatTimestamp(serverStatus.next_collection) : "-"}
+                icon={Loader2}
+                iconBg="bg-amber-50"
+                iconColor="text-amber-500"
+              />
             </div>
           )}
         </div>
       </Surface>
 
       <div className="grid grid-cols-2 gap-4">
-        <Surface padding="lg">
+        <Surface padding="md">
           <div className="flex items-center gap-2 mb-4">
             <StatusBadge variant="info">普通服</StatusBadge>
           </div>
 
           {normalStatus ? (
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                {normalStatus.fire_success ? (
-                  <CheckCircle className="w-4 h-4 text-green-500" />
-                ) : (
-                  <XCircle className="w-4 h-4 text-red-500" />
-                )}
-                <span className="text-sm">火价</span>
-                <span className="ml-auto font-medium">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {normalStatus.fire_success ? (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-red-500" />
+                  )}
+                  <span className="text-sm text-slate-600">火价</span>
+                </div>
+                <span className={`font-medium ${normalStatus.fire_success ? "text-slate-700" : "text-red-500"}`}>
                   {normalStatus.fire_success ? `${normalStatus.fire_price?.toFixed(2)} RMB/10K` : "失败"}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                {normalStatus.items_success ? (
-                  <CheckCircle className="w-4 h-4 text-green-500" />
-                ) : (
-                  <XCircle className="w-4 h-4 text-red-500" />
-                )}
-                <span className="text-sm">物品</span>
-                <span className="ml-auto font-medium">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {normalStatus.items_success ? (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-red-500" />
+                  )}
+                  <span className="text-sm text-slate-600">物品</span>
+                </div>
+                <span className={`font-medium ${normalStatus.items_success ? "text-slate-700" : "text-red-500"}`}>
                   {normalStatus.items_success ? `${normalStatus.items_count} 个` : "失败"}
                 </span>
               </div>
-              <div className="text-xs text-slate-400 text-right">
+              <div className="text-xs text-slate-400 text-right pt-2 border-t border-slate-100">
                 {formatTimestamp(normalStatus.timestamp)}
               </div>
             </div>
           ) : (
-            <div className="text-sm text-slate-400 text-center py-4">暂无数据</div>
+            <EmptyState description="暂无数据" />
           )}
         </Surface>
 
-        <Surface padding="lg">
+        <Surface padding="md">
           <div className="flex items-center gap-2 mb-4">
             <StatusBadge variant="default">专家服</StatusBadge>
           </div>
 
           {expertStatus ? (
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                {expertStatus.fire_success ? (
-                  <CheckCircle className="w-4 h-4 text-green-500" />
-                ) : (
-                  <XCircle className="w-4 h-4 text-red-500" />
-                )}
-                <span className="text-sm">火价</span>
-                <span className="ml-auto font-medium">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {expertStatus.fire_success ? (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-red-500" />
+                  )}
+                  <span className="text-sm text-slate-600">火价</span>
+                </div>
+                <span className={`font-medium ${expertStatus.fire_success ? "text-slate-700" : "text-red-500"}`}>
                   {expertStatus.fire_success ? `${expertStatus.fire_price?.toFixed(2)} RMB/10K` : "失败"}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                {expertStatus.items_success ? (
-                  <CheckCircle className="w-4 h-4 text-green-500" />
-                ) : (
-                  <XCircle className="w-4 h-4 text-red-500" />
-                )}
-                <span className="text-sm">物品</span>
-                <span className="ml-auto font-medium">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {expertStatus.items_success ? (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-red-500" />
+                  )}
+                  <span className="text-sm text-slate-600">物品</span>
+                </div>
+                <span className={`font-medium ${expertStatus.items_success ? "text-slate-700" : "text-red-500"}`}>
                   {expertStatus.items_success ? `${expertStatus.items_count} 个` : "失败"}
                 </span>
               </div>
-              <div className="text-xs text-slate-400 text-right">
+              <div className="text-xs text-slate-400 text-right pt-2 border-t border-slate-100">
                 {formatTimestamp(expertStatus.timestamp)}
               </div>
             </div>
           ) : (
-            <div className="text-sm text-slate-400 text-center py-4">暂无数据</div>
+            <EmptyState description="暂无数据" />
           )}
         </Surface>
       </div>

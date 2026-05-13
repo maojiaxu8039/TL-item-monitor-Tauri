@@ -15,12 +15,12 @@ export function StatusBadge({
   className,
 }: StatusBadgeProps) {
   const variantMap = {
-    default: "bg-slate-100 text-slate-700",
-    success: "bg-green-50 text-green-700",
-    warning: "bg-amber-50 text-amber-700",
-    danger: "bg-red-50 text-red-700",
-    info: "bg-blue-50 text-blue-700",
-    primary: "bg-slate-900 text-white",
+    default: "border border-[var(--color-border)] bg-[var(--color-panel-soft)] text-[var(--color-text-muted)]",
+    success: "border border-[rgba(34,197,94,0.3)] bg-[rgba(34,197,94,0.1)] text-[var(--color-success)]",
+    warning: "border border-[rgba(255,184,0,0.32)] bg-[rgba(255,184,0,0.1)] text-[var(--color-brand-gold)]",
+    danger: "border border-[rgba(239,68,68,0.32)] bg-[rgba(239,68,68,0.1)] text-[var(--color-danger)]",
+    info: "border border-[rgba(56,189,248,0.28)] bg-[rgba(56,189,248,0.1)] text-sky-300",
+    primary: "border border-[rgba(255,184,0,0.36)] bg-[rgba(255,184,0,0.14)] text-[var(--color-brand-gold)]",
   };
 
   const sizeMap = {

@@ -5,8 +5,8 @@ import { queryClient } from "@/lib/query"
 import { SectionRefreshProvider } from "@/contexts/SectionRefreshContext"
 import { SyncProvider } from "@/contexts/SyncContext"
 import { useTauriEvents } from "@/hooks/useTauriEvents"
-import { Sidebar } from "@/components/layout/Sidebar"
 import { TopBar } from "@/components/layout/TopBar"
+import { Sidebar } from "@/components/layout/Sidebar"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 import type { PageId } from "@/lib/commands"
 
@@ -26,8 +26,14 @@ const ArbitragePage = lazy(() => import("@/components/dashboard/ArbitragePage"))
 
 function PageLoading() {
   return (
-    <div className="flex items-center justify-center h-64">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+    <div className="flex h-64 items-center justify-center">
+      <div className="flex min-w-64 flex-col items-center gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] px-8 py-7 shadow-[var(--shadow-glow)]">
+        <img src="/torchscan/logo-mark.svg" alt="TorchScan" className="h-16 w-16" />
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-panel-soft)]">
+          <div className="h-full w-2/3 animate-pulse rounded-full bg-[linear-gradient(90deg,var(--color-brand),var(--color-brand-gold))]" />
+        </div>
+        <span className="text-xs font-medium text-[var(--color-text-subtle)]">正在点燃市场数据...</span>
+      </div>
     </div>
   )
 }
@@ -50,83 +56,80 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <SectionRefreshProvider>
         <SyncProvider>
-          <div className="flex h-screen bg-[#f7f8fb]">
-          <Sidebar page={page} onPageChange={setPage} />
-          <div className="flex flex-1 flex-col overflow-hidden">
-            <TopBar />
-            <main className="flex-1 overflow-auto px-6 py-5">
-              {page === "dashboard" && (
-                <LazyPage>
-                  <DashboardContent />
-                </LazyPage>
-              )}
-              {/* season 路由已移除，改用 firecompare 火价分析页面 */}
-              {page === "strategies" && (
-                <LazyPage>
-                  <StrategiesPage />
-                </LazyPage>
-              )}
-              {page === "settings" && (
-                <LazyPage>
-                  <SettingsPage />
-                </LazyPage>
-              )}
-              {page === "import_export" && (
-                <LazyPage>
-                  <ImportExportPage />
-                </LazyPage>
-              )}
-              {page === "items" && (
-                <LazyPage>
-                  <ItemsPage />
-                </LazyPage>
-              )}
-              {page === "deals" && (
-                <LazyPage>
-                  <DealsPage />
-                </LazyPage>
-              )}
-              {page === "priceanalysis" && (
-                <LazyPage>
-                  <PriceAnalysisPage />
-                </LazyPage>
-              )}
-              {page === "aianalysis" && (
-                <LazyPage>
-                  <AIAnalysisPage />
-                </LazyPage>
-              )}
-              {page === "records" && (
-                <LazyPage>
-                  <DataMonitorPage />
-                </LazyPage>
-              )}
-              {page === "firecompare" && (
-                <LazyPage>
-                  <FirePriceComparePage />
-                </LazyPage>
-              )}
-              {page === "help" && (
-                <LazyPage>
-                  <HelpPage />
-                </LazyPage>
-              )}
-              {page === "alerts" && (
-                <LazyPage>
-                  <AlertsPage />
-                </LazyPage>
-              )}
-              {page === "arbitrage" && (
-                <LazyPage>
-                  <ArbitragePage />
-                </LazyPage>
-              )}
-            </main>
-            <footer className="border-t border-slate-200/80 bg-white/80 backdrop-blur-sm px-6 py-2.5 text-center text-[11px] text-slate-400">
-              Tauri 2.0 · 火炬之光：天限物品监控系统 · 数据仅供参考
-            </footer>
+          <div className="torchscan-theme flex h-screen flex-col overflow-hidden">
+            <TopBar page={page} onPageChange={setPage} />
+            <div className="relative z-[1] flex min-h-0 flex-1">
+              <Sidebar page={page} onPageChange={setPage} />
+              <main className="torchscan-main scrollbar-thin flex-1 overflow-auto px-5 py-5">
+                {page === "dashboard" && (
+                  <LazyPage>
+                    <DashboardContent />
+                  </LazyPage>
+                )}
+                {/* season 路由已移除，改用 firecompare 火价分析页面 */}
+                {page === "strategies" && (
+                  <LazyPage>
+                    <StrategiesPage />
+                  </LazyPage>
+                )}
+                {page === "settings" && (
+                  <LazyPage>
+                    <SettingsPage />
+                  </LazyPage>
+                )}
+                {page === "import_export" && (
+                  <LazyPage>
+                    <ImportExportPage />
+                  </LazyPage>
+                )}
+                {page === "items" && (
+                  <LazyPage>
+                    <ItemsPage />
+                  </LazyPage>
+                )}
+                {page === "deals" && (
+                  <LazyPage>
+                    <DealsPage />
+                  </LazyPage>
+                )}
+                {page === "priceanalysis" && (
+                  <LazyPage>
+                    <PriceAnalysisPage />
+                  </LazyPage>
+                )}
+                {page === "aianalysis" && (
+                  <LazyPage>
+                    <AIAnalysisPage />
+                  </LazyPage>
+                )}
+                {page === "records" && (
+                  <LazyPage>
+                    <DataMonitorPage />
+                  </LazyPage>
+                )}
+                {page === "firecompare" && (
+                  <LazyPage>
+                    <FirePriceComparePage />
+                  </LazyPage>
+                )}
+                {page === "help" && (
+                  <LazyPage>
+                    <HelpPage />
+                  </LazyPage>
+                )}
+                {page === "alerts" && (
+                  <LazyPage>
+                    <AlertsPage />
+                  </LazyPage>
+                )}
+                {page === "arbitrage" && (
+                  <LazyPage>
+                    <ArbitragePage />
+                  </LazyPage>
+                )}
+              </main>
+            </div>
           </div>
-        </div>
         </SyncProvider>
       </SectionRefreshProvider>
       <Toaster position="bottom-right" />

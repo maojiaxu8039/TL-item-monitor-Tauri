@@ -1,6 +1,6 @@
-//! TL Monitor - 库模块
+//! TorchScan - 库模块
 //!
-//! 这个库被桌面应用使用
+//! 这个库被 TorchScan 桌面应用使用
 
 pub mod app;
 pub mod commands;

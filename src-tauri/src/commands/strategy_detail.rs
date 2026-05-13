@@ -162,7 +162,13 @@ pub async fn refresh_strategy_fire_prices(
 
     for cost in costs {
         if cost.is_realtime {
-            let fire_price = match repo_fire::get_latest_fire(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await {
+            let fire_price = match repo_fire::get_latest_fire(
+                &state.db,
+                &ctx.season_id,
+                ctx.market_mode.as_str(),
+            )
+            .await
+            {
                 Ok(Some(record)) => record.fire_per_rmb,
                 _ => cost.fire_price,
             };

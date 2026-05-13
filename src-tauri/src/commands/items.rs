@@ -1,4 +1,5 @@
 use crate::commands::types::{DbStats, ItemsStats, OkResponse, SearchResult};
+use crate::core::paths::resolve_voice_alert_path;
 use crate::core::state::AppState;
 use crate::db::repo_history;
 use crate::db::repo_items;
@@ -338,24 +339,34 @@ pub async fn trigger_price_alert(
         send_notification(&app, &title, &message).map_err(|e| e.to_string())?;
     }
 
-    if config.notification.voice_alert_enabled && !config.notification.voice_alert_path.is_empty() {
-        let voice_path = config.notification.voice_alert_path.clone();
-        if std::path::Path::new(&voice_path).exists() {
+    if config.notification.voice_alert_enabled {
+        if let Some(voice_path) =
+            resolve_voice_alert_path(&app, &config.notification.voice_alert_path)
+        {
             tokio::spawn(async move {
                 #[cfg(target_os = "macos")]
                 {
-                    let _ = tokio::process::Command::new("afplay").arg(&voice_path).spawn();
+                    let _ = tokio::process::Command::new("afplay")
+                        .arg(&voice_path)
+                        .spawn();
                 }
                 #[cfg(target_os = "windows")]
                 {
+                    let voice_path = voice_path.to_string_lossy().replace('\'', "''");
+                    let script = format!(
+                        "Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; $player.Open([Uri]'{}'); $player.Play(); Start-Sleep -Milliseconds 2500; $player.Close()",
+                        voice_path
+                    );
                     let _ = tokio::process::Command::new("powershell")
-                        .args(["-c", "[System.Media.SystemSounds]::Hand.Play()"])
+                        .args(["-NoProfile", "-Command", &script])
                         .spawn();
                 }
             });
             tracing::info!("Voice alert played for {} items", count);
         } else {
-            tracing::warn!("Voice file not found: {}", voice_path);
+            tracing::warn!(
+                "Voice alert enabled, but no configured or bundled voice alert file was found"
+            );
         }
     }
 
@@ -570,6 +581,6 @@ pub async fn get_realtime_fire_changes(
                 item.name, item.current_price, item.change_rate_5m, item.trend);
         }
     }
-    
+
     Ok(result)
 }

@@ -25,6 +25,9 @@ import { Surface } from "@/components/ui/Surface";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Select } from "@/components/ui/select";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const RECIPE_TYPES = [
   { value: "decompose", label: "分解" },
@@ -462,45 +465,36 @@ export default function ArbitragePage() {
       />
 
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-1.5 rounded-lg bg-red-50">
-              <TrendingUp className="h-4 w-4 text-red-500" />
-            </div>
-            <span className="text-xs text-slate-500 font-medium">可套利配方</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-red-600">{totalProfitable}</span>
-            <span className="text-xs text-slate-400">个</span>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-1.5 rounded-lg bg-green-50">
-              <TrendingDown className="h-4 w-4 text-green-500" />
-            </div>
-            <span className="text-xs text-slate-500 font-medium">亏损配方</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-green-600">{totalLoss}</span>
-            <span className="text-xs text-slate-400">个</span>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-1.5 rounded-lg bg-blue-50">
-              <Layers className="h-4 w-4 text-blue-500" />
-            </div>
-            <span className="text-xs text-slate-500 font-medium">配方总数</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-blue-600">{recipes.length}</span>
-            <span className="text-xs text-slate-400">个</span>
-          </div>
-        </div>
+        <MetricCard
+          label="可套利配方"
+          value={totalProfitable}
+          icon={TrendingUp}
+          iconBg="bg-red-50"
+          iconColor="text-red-500"
+          helper={<span className="text-xs text-red-500">个</span>}
+          className="border-red-100"
+        />
+        <MetricCard
+          label="亏损配方"
+          value={totalLoss}
+          icon={TrendingDown}
+          iconBg="bg-green-50"
+          iconColor="text-green-500"
+          helper={<span className="text-xs text-green-500">个</span>}
+          className="border-green-100"
+        />
+        <MetricCard
+          label="配方总数"
+          value={recipes.length}
+          icon={Layers}
+          iconBg="bg-blue-50"
+          iconColor="text-blue-500"
+          helper={<span className="text-xs text-blue-500">个</span>}
+          className="border-blue-100"
+        />
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+      <Surface padding="none">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-slate-700">套利结果</span>
@@ -528,8 +522,16 @@ export default function ArbitragePage() {
         </div>
         <div className="divide-y divide-slate-100">
           {filteredResults.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-slate-400">
-              {loading ? "加载中..." : "暂无套利数据，点击刷新价格获取最新结果"}
+            <div className="px-4 py-8 text-center">
+              {loading ? (
+                <div className="text-sm text-slate-400">加载中...</div>
+              ) : (
+                <EmptyState
+                  title="暂无套利数据"
+                  description="点击刷新价格获取最新结果"
+                  icon={Calculator}
+                />
+              )}
             </div>
           ) : (
             filteredResults.map(result => (
@@ -549,13 +551,9 @@ export default function ArbitragePage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-slate-800">{result.recipe_name}</span>
-                        <span className="px-1.5 py-0.5 text-xs rounded-md bg-slate-100 text-slate-500">
-                          {getRecipeTypeLabel(result.recipe_type)}
-                        </span>
+                        <StatusBadge variant="default">{getRecipeTypeLabel(result.recipe_type)}</StatusBadge>
                         {result.used_lowest_price && (
-                          <span className="px-1.5 py-0.5 text-xs rounded-md bg-orange-100 text-orange-600" title="原料使用最低价计算">
-                            最低价
-                          </span>
+                          <StatusBadge variant="warning">最低价</StatusBadge>
                         )}
                       </div>
                     </div>
@@ -607,7 +605,7 @@ export default function ArbitragePage() {
                 {expandedIds.has(result.recipe_id) && (
                   <div className="mt-3 pl-8 space-y-3">
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-slate-50 rounded-lg p-3">
+                      <Surface padding="sm" className="bg-slate-50">
                         <div className="text-xs font-medium text-slate-500 mb-2">原料成本</div>
                         <div className="space-y-1">
                           {result.ingredients_detail.map(ing => (
@@ -621,8 +619,8 @@ export default function ArbitragePage() {
                             <span className="text-red-500">{formatPrice(result.total_cost)}</span>
                           </div>
                         </div>
-                      </div>
-                      <div className="bg-slate-50 rounded-lg p-3">
+                      </Surface>
+                      <Surface padding="sm" className="bg-slate-50">
                         <div className="text-xs font-medium text-slate-500 mb-2">产物收入（12.5%手续费后）</div>
                         <div className="space-y-1">
                           {result.outputs_detail.map(out => (
@@ -636,7 +634,7 @@ export default function ArbitragePage() {
                             <span className="text-green-600">{formatPrice(result.total_output_value)}</span>
                           </div>
                         </div>
-                      </div>
+                      </Surface>
                     </div>
                   </div>
                 )}
@@ -644,7 +642,7 @@ export default function ArbitragePage() {
             ))
           )}
         </div>
-      </div>
+      </Surface>
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">

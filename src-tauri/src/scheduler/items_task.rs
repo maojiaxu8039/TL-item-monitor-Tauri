@@ -42,7 +42,10 @@ pub async fn run_items_reload_task(
                 error!("Failed to load config: {}", e);
                 consecutive_errors += 1;
                 if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
-                    error!("[ITEMS-TASK] Too many consecutive errors ({}), stopping task", consecutive_errors);
+                    error!(
+                        "[ITEMS-TASK] Too many consecutive errors ({}), stopping task",
+                        consecutive_errors
+                    );
                     break;
                 }
                 if wait_or_abort(&mut abort, Duration::from_secs(10), "config reload retry").await {
@@ -196,12 +199,8 @@ pub async fn run_items_reload_task(
         // Update cache with current mode items
         if normal_count > 0 || expert_count > 0 {
             let current_mode = ctx.market_mode.as_str();
-            match repo_items::get_items_from_realtime_table(
-                &state.db,
-                &season_id,
-                current_mode,
-            )
-            .await
+            match repo_items::get_items_from_realtime_table(&state.db, &season_id, current_mode)
+                .await
             {
                 Ok(items) => {
                     let mut cache = state.items_cache.write();

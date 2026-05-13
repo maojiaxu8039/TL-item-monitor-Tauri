@@ -31,7 +31,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTML
   <div 
     ref={ref} 
     className={cn(
-      "rounded-xl border border-slate-200 bg-white shadow-xl animate-slide-up",
+      "rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] shadow-[var(--shadow-lg)] animate-slide-up",
       className
     )} 
     onClick={e => e.stopPropagation()}

@@ -1,7 +1,7 @@
 {
-  "name": "tl-item-monitor-tauri",
+  "name": "torchscan",
   "version": "1.0.0",
-  "description": "TL Item Fire Price Monitor - Tauri Desktop App",
+  "description": "TorchScan - Tauri Desktop App for Torchlight market and fire price monitoring",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",

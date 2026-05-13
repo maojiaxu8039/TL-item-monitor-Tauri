@@ -1,4 +1,4 @@
-//! TL 物品火价监控 — Tauri 2.0 Desktop App
+//! TorchScan — Tauri 2.0 Desktop App
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -6,9 +6,9 @@ use std::sync::Arc;
 use tauri::{Manager, WindowEvent};
 use tracing::{error, info};
 
-use tl_monitor::app::{init_app, start_background_tasks};
-use tl_monitor::commands::*;
-use tl_monitor::tray::setup_tray;
+use torchscan::app::{init_app, start_background_tasks};
+use torchscan::commands::*;
+use torchscan::tray::setup_tray;
 
 fn main() {
     let exe_path = std::env::current_exe()
@@ -57,8 +57,8 @@ fn main() {
 
 fn run_app() -> Result<(), Box<dyn std::error::Error>> {
     info!(
-        "TL Monitor v{} starting...",
-        tl_monitor::core::constants::APP_VERSION
+        "TorchScan v{} starting...",
+        torchscan::core::constants::APP_VERSION
     );
 
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -183,7 +183,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
         .setup(move |app| {
             let handle = app.handle().clone();
 
-            let state: Arc<tl_monitor::core::state::AppState> = rt_handle.block_on(async {
+            let state: Arc<torchscan::core::state::AppState> = rt_handle.block_on(async {
                 match init_app(&handle).await {
                     Ok(state) => Ok(Arc::new(state)),
                     Err(e) => {

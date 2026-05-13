@@ -607,6 +607,7 @@ async fn finalize_schema(pool: &SqlitePool) -> Result<(), String> {
     ensure_strategy_detail_schema(pool).await?;
     ensure_item_realtime_prices_schema(pool).await?;
     ensure_arbitrage_schema(pool).await?;
+    ensure_legacy_schema(pool).await?;
     ensure_split_tables(pool).await?;
     apply_season_day_migration(pool).await?;
     apply_snapshot_metadata_migration(pool).await?;
@@ -699,6 +700,16 @@ async fn apply_strategy_outputs_realtime_value_migration(pool: &SqlitePool) -> R
         .map_err(|e| format!("Failed to create strategy_outputs table: {}", e))?;
     }
 
+    add_column_if_missing(
+        pool,
+        "strategy_outputs",
+        "realtime_value",
+        "REAL NOT NULL DEFAULT 0",
+    )
+    .await
+}
+
+async fn ensure_legacy_schema(pool: &SqlitePool) -> Result<(), String> {
     add_column_if_missing(
         pool,
         "strategy_outputs",
@@ -805,6 +816,10 @@ async fn validate_database(pool: &SqlitePool) -> Result<(), String> {
         (
             "seasons",
             &["id", "name", "code", "created_at", "updated_at"][..],
+        ),
+        (
+            "strategy_outputs",
+            &["id", "strategy_id", "realtime_value"][..],
         ),
     ];
 
@@ -1932,6 +1947,26 @@ mod migration_tests {
         .unwrap();
 
         sqlx::query(
+            "CREATE TABLE strategy_outputs (
+                id TEXT PRIMARY KEY,
+                strategy_id TEXT NOT NULL,
+                season_id TEXT NOT NULL DEFAULT 'ss12',
+                market_mode TEXT NOT NULL DEFAULT 'season_normal',
+                item_id TEXT NOT NULL,
+                item_name TEXT NOT NULL DEFAULT '',
+                item_type TEXT NOT NULL DEFAULT '',
+                buy_price REAL NOT NULL DEFAULT 0,
+                sell_price REAL NOT NULL DEFAULT 0,
+                profit_rate REAL NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
             "CREATE TABLE item_realtime_prices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 item_id TEXT NOT NULL,
@@ -1973,6 +2008,7 @@ mod migration_tests {
         )
         .await;
         assert_columns(&pool, "item_realtime_prices", &["name", "fire_price"]).await;
+        assert_columns(&pool, "strategy_outputs", &["realtime_value"]).await;
 
         let backup_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM sqlite_master

@@ -1,15 +1,13 @@
-use std::sync::Arc;
-use tauri::State;
 use crate::commands::types::OkResponse;
 use crate::core::state::AppState;
 use crate::db::models_arbitrage::{
-    ArbitrageRecipe, ArbitrageRecipeWithDetails,
-    ArbitrageResponse, CreateRecipeRequest,
-    UpdateIngredientsRequest, UpdateOutputsRequest,
-    UpdateRecipeRequest,
+    ArbitrageRecipe, ArbitrageRecipeWithDetails, ArbitrageResponse, CreateRecipeRequest,
+    UpdateIngredientsRequest, UpdateOutputsRequest, UpdateRecipeRequest,
 };
 use crate::db::repo_arbitrage;
 use crate::db::repo_items::{self, ItemSearchResult};
+use std::sync::Arc;
+use tauri::State;
 
 #[tauri::command]
 pub async fn get_arbitrage_recipes(
@@ -113,11 +111,16 @@ pub async fn calculate_arbitrage(
 ) -> Result<ArbitrageResponse, String> {
     let ctx = state.active_context.read().clone();
     let effective_season_id = season_id.clone().unwrap_or(ctx.season_id.clone());
-    let effective_market_mode = market_mode.clone().unwrap_or_else(|| ctx.market_mode.as_str().to_string());
-    
+    let effective_market_mode = market_mode
+        .clone()
+        .unwrap_or_else(|| ctx.market_mode.as_str().to_string());
+
     tracing::info!(
-        "[calculate_arbitrage] season_id={:?}, market_mode={:?}, effective={}/{}", 
-        season_id, market_mode, effective_season_id, effective_market_mode
+        "[calculate_arbitrage] season_id={:?}, market_mode={:?}, effective={}/{}",
+        season_id,
+        market_mode,
+        effective_season_id,
+        effective_market_mode
     );
 
     let mut results = repo_arbitrage::calculate_arbitrage_for_all_recipes(
@@ -150,9 +153,14 @@ pub async fn search_items_for_arbitrage(
     keyword: String,
 ) -> Result<Vec<ItemSearchResult>, String> {
     let ctx = state.active_context.read().clone();
-    repo_items::search_items_simple(&state.db, &ctx.season_id, ctx.market_mode.as_str(), &keyword)
-        .await
-        .map_err(|e| e.to_string())
+    repo_items::search_items_simple(
+        &state.db,
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
+        &keyword,
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -161,8 +169,11 @@ pub async fn get_arbitrage_item_price(
     item_id: String,
 ) -> Result<Option<f64>, String> {
     let ctx = state.active_context.read().clone();
-    let items_table = crate::db::table_resolver::TableResolver::items_table(&ctx.season_id, ctx.market_mode.as_str());
-    
+    let items_table = crate::db::table_resolver::TableResolver::items_table(
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
+    );
+
     let result: Option<(f64,)> = sqlx::query_as(&format!(
         "SELECT price FROM {} WHERE item_id = ? LIMIT 1",
         items_table

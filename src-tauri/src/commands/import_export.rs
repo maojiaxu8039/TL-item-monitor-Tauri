@@ -147,16 +147,14 @@ pub async fn restore_database(
         return Err("恢复失败: 源文件不存在".to_string());
     }
 
-    let metadata = std::fs::metadata(&src_path)
-        .map_err(|e| format!("无法读取源文件: {}", e))?;
+    let metadata = std::fs::metadata(&src_path).map_err(|e| format!("无法读取源文件: {}", e))?;
     if metadata.len() < 512 {
         return Err("恢复失败: 源文件太小，可能不是有效的数据库".to_string());
     }
 
     // Check SQLite magic header
     let mut header = [0u8; 16];
-    let mut file = std::fs::File::open(&src_path)
-        .map_err(|e| format!("无法打开源文件: {}", e))?;
+    let mut file = std::fs::File::open(&src_path).map_err(|e| format!("无法打开源文件: {}", e))?;
     std::io::Read::read_exact(&mut file, &mut header)
         .map_err(|e| format!("无法读取文件头: {}", e))?;
     if &header[0..6] != b"SQLite" {

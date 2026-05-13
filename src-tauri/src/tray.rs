@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use tauri::{
+    image::Image,
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager,
@@ -85,10 +86,10 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // Initial fire price text for tooltip
     let initial_price = get_fire_price_display(&app_handle);
-    let initial_tooltip = format!("火价: {}元/万火", initial_price);
+    let initial_tooltip = format!("TorchScan · 火价: {}元/万火", initial_price);
 
     // Build menu items
-    let show_item = MenuItemBuilder::with_id("show", "显示主窗口").build(app)?;
+    let show_item = MenuItemBuilder::with_id("show", "打开 TorchScan").build(app)?;
     let refresh_item = MenuItemBuilder::with_id("refresh", "刷新火价").build(app)?;
     let quit_item = MenuItemBuilder::with_id("quit", "退出").build(app)?;
 
@@ -113,7 +114,11 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     };
     app.manage(tray_state);
 
+    let tray_icon = Image::from_bytes(include_bytes!("../icons/tray.png"))
+        .expect("Failed to load TorchScan tray icon");
+
     let _tray = TrayIconBuilder::new()
+        .icon(tray_icon)
         .menu(&menu)
         .tooltip(&initial_tooltip)
         .on_menu_event(move |app, event| match event.id().as_ref() {

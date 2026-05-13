@@ -21,6 +21,7 @@ export default defineConfig({
     include: [
       "@tauri-apps/api",
       "@tauri-apps/api/core",
+      "@tauri-apps/api/window",
     ],
   },
   build: {

@@ -52,7 +52,7 @@ pub async fn evaluate_worth_cmd(
 
 #[tauri::command]
 pub async fn test_notification(app: tauri::AppHandle) -> Result<OkResponse, String> {
-    send_notification(&app, "🔔 通知测试", "TL监控通知功能正常！")
+    send_notification(&app, "🔔 通知测试", "TorchScan 通知功能正常！")
         .map_err(|e| format!("Notification failed: {}", e))?;
     Ok(OkResponse::success("Notification sent"))
 }
@@ -89,11 +89,8 @@ pub async fn select_local_items_file(app: tauri::AppHandle) -> Result<Option<Str
 }
 
 #[tauri::command]
-pub fn get_app_data_dir(app: tauri::AppHandle) -> Result<String, String> {
-    app.path()
-        .app_data_dir()
-        .map(|p: std::path::PathBuf| p.to_string_lossy().to_string())
-        .map_err(|e| format!("Failed to get app data dir: {}", e))
+pub fn get_app_data_dir() -> Result<String, String> {
+    Ok(crate::core::paths::app_dir().to_string_lossy().to_string())
 }
 
 #[tauri::command]

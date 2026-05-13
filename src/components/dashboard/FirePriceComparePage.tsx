@@ -1,9 +1,16 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart2, ArrowUpCircle, ArrowDownCircle, CalendarDays } from "lucide-react";
+import { BarChart2, ArrowDownCircle, ArrowUpCircle, CalendarDays } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { cmd } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
+import { PageShell } from "@/components/ui/PageShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Surface } from "@/components/ui/Surface";
+import { MetricCard } from "@/components/ui/MetricCard";
+import { Toolbar } from "@/components/ui/Toolbar";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 type TimeRange = "all" | "3d" | "7d" | "14d" | "30d";
 type DayRange = { start: number; end: number };
@@ -21,7 +28,7 @@ interface ChartPoint {
   history: number | null;
 }
 
-const SS12_START = 1776355200; // 2026-04-17 00:00:00 UTC+8
+const SS12_START = 1776355200;
 
 export default function FirePriceComparePage() {
   const [historySeason, setHistorySeason] = useState("ss11");
@@ -177,22 +184,179 @@ export default function FirePriceComparePage() {
     setTimeRange("all");
   };
 
-  return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
-          <BarChart2 className="w-5 h-5 text-orange-600" />
-        </div>
-        <div>
-          <h1 className="text-lg font-semibold text-slate-800">火价分析</h1>
-          <p className="text-xs text-slate-400">对比历史赛季火价走势，辅助交易决策</p>
-        </div>
-      </div>
+  const renderBestTimeAnalysis = () => {
+    if (filteredCurrentData.length === 0) return null;
 
-      {/* Controls Bar */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
+    const sortedData = [...filteredCurrentData].sort((a, b) => a.scraped_at - b.scraped_at);
+
+    if (sortedData.length < 2) {
+      return (
+        <Surface padding="md">
+          <div className="flex items-center gap-2 mb-4">
+            <CalendarDays className="w-4 h-4 text-slate-500" />
+            <h3 className="text-sm font-semibold text-slate-700">最佳交易时段分析</h3>
+          </div>
+          <EmptyState description="数据不足，无法分析" />
+        </Surface>
+      );
+    }
+
+    const allPrices = sortedData.map(r => r.rmb_per_10k_fire);
+    const avgPrice = allPrices.reduce((a, b) => a + b, 0) / allPrices.length;
+    const minPrice = Math.min(...allPrices);
+    const maxPrice = Math.max(...allPrices);
+
+    const globalMinIdx = sortedData.findIndex(r => r.rmb_per_10k_fire === minPrice);
+    const globalMaxIdx = sortedData.findIndex(r => r.rmb_per_10k_fire === maxPrice);
+
+    const minPoint = {
+      day: sortedData[globalMinIdx].season_day,
+      hour: new Date(sortedData[globalMinIdx].scraped_at * 1000).getHours(),
+      price: minPrice,
+      timestamp: sortedData[globalMinIdx].scraped_at,
+    };
+
+    const maxPoint = {
+      day: sortedData[globalMaxIdx].season_day,
+      hour: new Date(sortedData[globalMaxIdx].scraped_at * 1000).getHours(),
+      price: maxPrice,
+      timestamp: sortedData[globalMaxIdx].scraped_at,
+    };
+
+    const groupByDay = new Map<number, { hour: number; price: number; timestamp: number }[]>();
+    sortedData.forEach(r => {
+      const day = r.season_day;
+      const hour = new Date(r.scraped_at * 1000).getHours();
+      if (!groupByDay.has(day)) {
+        groupByDay.set(day, []);
+      }
+      groupByDay.get(day)!.push({ hour, price: r.rmb_per_10k_fire, timestamp: r.scraped_at });
+    });
+
+    const dailyStats = Array.from(groupByDay.entries()).map(([day, points]) => {
+      const prices = points.map(p => p.price);
+      const min = Math.min(...prices);
+      const max = Math.max(...prices);
+      const minPoint = points.find(p => p.price === min)!;
+      const maxPoint = points.find(p => p.price === max)!;
+      const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+      return { day, min, max, avg, minHour: minPoint.hour, maxHour: maxPoint.hour, minTimestamp: minPoint.timestamp, maxTimestamp: maxPoint.timestamp };
+    });
+
+    const avgDailyAvg = dailyStats.reduce((a, d) => a + d.avg, 0) / dailyStats.length;
+
+    const lowDays = dailyStats.filter(d => d.avg < avgDailyAvg * 0.9).sort((a, b) => a.min - b.min);
+    const highDays = dailyStats.filter(d => d.avg > avgDailyAvg * 1.1).sort((a, b) => b.max - a.max);
+
+    const bestBuyTime = lowDays.length > 0 
+      ? {
+          day: lowDays[0].day,
+          hour: lowDays[0].minHour,
+          price: lowDays[0].min,
+          reason: `第${lowDays[0].day}天 ${String(lowDays[0].minHour).padStart(2, '0')}:00 均价最低 (${lowDays[0].avg.toFixed(0)}元)，最低达 ${lowDays[0].min.toFixed(0)}元`
+        }
+      : {
+          day: minPoint.day,
+          hour: minPoint.hour,
+          price: minPoint.price,
+          reason: `第${minPoint.day}天 ${String(minPoint.hour).padStart(2, '0')}:00 出现全赛季最低价 ${minPoint.price.toFixed(0)}元`
+        };
+
+    const bestSellTime = highDays.length > 0
+      ? {
+          day: highDays[0].day,
+          hour: highDays[0].maxHour,
+          price: highDays[0].max,
+          reason: `第${highDays[0].day}天 ${String(highDays[0].maxHour).padStart(2, '0')}:00 均价最高 (${highDays[0].avg.toFixed(0)}元)，最高达 ${highDays[0].max.toFixed(0)}元`
+        }
+      : {
+          day: maxPoint.day,
+          hour: maxPoint.hour,
+          price: maxPoint.price,
+          reason: `第${maxPoint.day}天 ${String(maxPoint.hour).padStart(2, '0')}:00 出现全赛季最高价 ${maxPoint.price.toFixed(0)}元`
+        };
+
+    return (
+      <Surface padding="md">
+        <div className="flex items-center gap-2 mb-4">
+          <CalendarDays className="w-4 h-4 text-slate-500" />
+          <h3 className="text-sm font-semibold text-slate-700">最佳交易时段分析</h3>
+          <span className="text-xs text-slate-400">
+            基于 {currentSeason.toUpperCase()} {useCustomRange ? `第${customDayRange.start}-${customDayRange.end}天` : timeRange === "all" ? "整个赛季" : timeRange === "3d" ? "第1-3天" : timeRange === "7d" ? "第1-7天" : timeRange === "14d" ? "第1-14天" : "第1-30天"}数据统计
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <Surface padding="md" className="bg-green-50 border-green-200">
+            <div className="flex items-center gap-2 mb-2">
+              <ArrowDownCircle className="w-5 h-5 text-green-600" />
+              <span className="text-sm font-medium text-green-700">最佳购买火时机</span>
+            </div>
+            <div className="text-xl font-bold text-green-800">
+              第{bestBuyTime.day}天 {String(bestBuyTime.hour).padStart(2, '0')}:00
+            </div>
+            <div className="text-sm text-green-600 font-medium mt-1">
+              ¥{bestBuyTime.price.toFixed(2)}/万火
+            </div>
+            <div className="text-xs text-green-600 mt-1">
+              {bestBuyTime.reason}
+            </div>
+            <div className="text-xs text-green-500 mt-2 pt-2 border-t border-green-200">
+              建议：火价低于均价时购入初火
+            </div>
+          </Surface>
+
+          <Surface padding="md" className="bg-red-50 border-red-200">
+            <div className="flex items-center gap-2 mb-2">
+              <ArrowUpCircle className="w-5 h-5 text-red-600" />
+              <span className="text-sm font-medium text-red-700">最佳出售火时机</span>
+            </div>
+            <div className="text-xl font-bold text-red-800">
+              第{bestSellTime.day}天 {String(bestSellTime.hour).padStart(2, '0')}:00
+            </div>
+            <div className="text-sm text-red-600 font-medium mt-1">
+              ¥{bestSellTime.price.toFixed(2)}/万火
+            </div>
+            <div className="text-xs text-red-600 mt-1">
+              {bestSellTime.reason}
+            </div>
+            <div className="text-xs text-red-500 mt-2 pt-2 border-t border-red-200">
+              建议：火价高于均价时出售物品换RMB
+            </div>
+          </Surface>
+        </div>
+
+        <div className="mt-4 p-3 bg-slate-50 rounded-lg">
+          <div className="text-xs text-slate-500 mb-2">赛季统计</div>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div className="text-xs text-slate-400">均价</div>
+              <div className="text-sm font-medium text-slate-700">¥{avgPrice.toFixed(2)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-400">最低价</div>
+              <div className="text-sm font-medium text-green-600">¥{minPrice.toFixed(2)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-400">最高价</div>
+              <div className="text-sm font-medium text-red-600">¥{maxPrice.toFixed(2)}</div>
+            </div>
+          </div>
+        </div>
+      </Surface>
+    );
+  };
+
+  return (
+    <PageShell size="xl" className="space-y-5">
+      <PageHeader
+        title="火价分析"
+        description="对比历史赛季火价走势，辅助交易决策"
+        iconAsset="fire-price"
+      />
+
+      <Surface padding="sm">
+        <Toolbar className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
             <span className="text-sm text-slate-500">对比赛季</span>
             <select
@@ -204,7 +368,7 @@ export default function FirePriceComparePage() {
             </select>
             <span className="text-sm text-slate-300">|</span>
             <span className="text-sm font-medium text-slate-700">{currentSeason.toUpperCase()}</span>
-            <span className="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">当前</span>
+            <StatusBadge variant="primary">当前</StatusBadge>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -226,7 +390,7 @@ export default function FirePriceComparePage() {
                 </button>
               ))}
             </div>
-            
+
             <div className="flex items-center gap-2 ml-2">
               <CalendarDays className="w-4 h-4 text-slate-400" />
               <span className="text-xs text-slate-500">自定义</span>
@@ -255,45 +419,51 @@ export default function FirePriceComparePage() {
               )}
             </div>
           </div>
-        </div>
-      </div>
+        </Toolbar>
+      </Surface>
 
-      {/* Stats Overview */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="text-xs text-slate-400 mb-1">{currentSeason.toUpperCase()} 均价</div>
-          <div className="text-xl font-bold text-slate-800">
-            {currentAvg > 0 ? currentAvg.toFixed(2) : "--"}
-            <span className="text-xs font-normal text-slate-400 ml-1">元/万火</span>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="text-xs text-slate-400 mb-1">{currentSeason.toUpperCase()} 最高 / 最低</div>
-          <div className="text-xl font-bold text-slate-800">
-            {currentHigh > 0 ? currentHigh.toFixed(2) : "--"}
-            <span className="text-slate-300 mx-1">/</span>
-            {currentLow > 0 ? currentLow.toFixed(2) : "--"}
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="text-xs text-slate-400 mb-1">{historySeason.toUpperCase()} 均价</div>
-          <div className="text-xl font-bold text-slate-600">
-            {historyAvg > 0 ? historyAvg.toFixed(2) : "--"}
-            <span className="text-xs font-normal text-slate-400 ml-1">元/万火</span>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="text-xs text-slate-400 mb-1">{historySeason.toUpperCase()} 最高 / 最低</div>
-          <div className="text-xl font-bold text-slate-600">
-            {historyHigh > 0 ? historyHigh.toFixed(2) : "--"}
-            <span className="text-slate-300 mx-1">/</span>
-            {historyLow > 0 ? historyLow.toFixed(2) : "--"}
-          </div>
-        </div>
+        <MetricCard
+          label={`${currentSeason.toUpperCase()} 均价`}
+          value={currentAvg > 0 ? (
+            <span>
+              <span className="text-xl font-bold text-slate-800">{currentAvg.toFixed(2)}</span>
+              <span className="text-xs text-slate-400 ml-1">元/万火</span>
+            </span>
+          ) : "--"}
+        />
+        <MetricCard
+          label={`${currentSeason.toUpperCase()} 最高/最低`}
+          value={currentHigh > 0 ? (
+            <span className="text-xl font-bold text-slate-800">
+              {currentHigh.toFixed(2)}
+              <span className="text-slate-300 mx-1">/</span>
+              {currentLow.toFixed(2)}
+            </span>
+          ) : "--"}
+        />
+        <MetricCard
+          label={`${historySeason.toUpperCase()} 均价`}
+          value={historyAvg > 0 ? (
+            <span>
+              <span className="text-xl font-bold text-slate-600">{historyAvg.toFixed(2)}</span>
+              <span className="text-xs text-slate-400 ml-1">元/万火</span>
+            </span>
+          ) : "--"}
+        />
+        <MetricCard
+          label={`${historySeason.toUpperCase()} 最高/最低`}
+          value={historyHigh > 0 ? (
+            <span className="text-xl font-bold text-slate-600">
+              {historyHigh.toFixed(2)}
+              <span className="text-slate-300 mx-1">/</span>
+              {historyLow.toFixed(2)}
+            </span>
+          ) : "--"}
+        />
       </div>
 
-      {/* Chart */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+      <Surface padding="md">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-slate-700">火价走势对比</h3>
           <div className="flex items-center gap-4 text-xs">
@@ -313,9 +483,11 @@ export default function FirePriceComparePage() {
             加载中...
           </div>
         ) : chartData.length === 0 ? (
-          <div className="h-64 flex items-center justify-center text-slate-400">
-            暂无数据
-          </div>
+          <EmptyState
+            title="暂无数据"
+            description="请先在数据监控页面同步火价数据"
+            icon={BarChart2}
+          />
         ) : (
           <ResponsiveContainer width="100%" height={320}>
             <LineChart data={chartData}>
@@ -359,177 +531,9 @@ export default function FirePriceComparePage() {
             </LineChart>
           </ResponsiveContainer>
         )}
-      </div>
+      </Surface>
 
-      {/* Best Time Analysis */}
-      {filteredCurrentData.length > 0 && (() => {
-        const sortedData = [...filteredCurrentData].sort((a, b) => a.scraped_at - b.scraped_at);
-        
-        if (sortedData.length < 2) {
-          return (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <CalendarDays className="w-4 h-4 text-slate-500" />
-                <h3 className="text-sm font-semibold text-slate-700">最佳交易时段分析</h3>
-              </div>
-              <div className="text-slate-400">数据不足，无法分析</div>
-            </div>
-          );
-        }
-
-        const allPrices = sortedData.map(r => r.rmb_per_10k_fire);
-        const avgPrice = allPrices.reduce((a, b) => a + b, 0) / allPrices.length;
-        const minPrice = Math.min(...allPrices);
-        const maxPrice = Math.max(...allPrices);
-
-        const globalMinIdx = sortedData.findIndex(r => r.rmb_per_10k_fire === minPrice);
-        const globalMaxIdx = sortedData.findIndex(r => r.rmb_per_10k_fire === maxPrice);
-
-        const minPoint = {
-          day: sortedData[globalMinIdx].season_day,
-          hour: new Date(sortedData[globalMinIdx].scraped_at * 1000).getHours(),
-          price: minPrice,
-          timestamp: sortedData[globalMinIdx].scraped_at,
-        };
-
-        const maxPoint = {
-          day: sortedData[globalMaxIdx].season_day,
-          hour: new Date(sortedData[globalMaxIdx].scraped_at * 1000).getHours(),
-          price: maxPrice,
-          timestamp: sortedData[globalMaxIdx].scraped_at,
-        };
-
-        const groupByDay = new Map<number, { hour: number; price: number; timestamp: number }[]>();
-        sortedData.forEach(r => {
-          const day = r.season_day;
-          const hour = new Date(r.scraped_at * 1000).getHours();
-          if (!groupByDay.has(day)) {
-            groupByDay.set(day, []);
-          }
-          groupByDay.get(day)!.push({ hour, price: r.rmb_per_10k_fire, timestamp: r.scraped_at });
-        });
-
-        const dailyStats = Array.from(groupByDay.entries()).map(([day, points]) => {
-          const prices = points.map(p => p.price);
-          const min = Math.min(...prices);
-          const max = Math.max(...prices);
-          const minPoint = points.find(p => p.price === min)!;
-          const maxPoint = points.find(p => p.price === max)!;
-          const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-          return { day, min, max, avg, minHour: minPoint.hour, maxHour: maxPoint.hour, minTimestamp: minPoint.timestamp, maxTimestamp: maxPoint.timestamp };
-        });
-
-        const avgDailyAvg = dailyStats.reduce((a, d) => a + d.avg, 0) / dailyStats.length;
-
-        const lowDays = dailyStats.filter(d => d.avg < avgDailyAvg * 0.9).sort((a, b) => a.min - b.min);
-        const highDays = dailyStats.filter(d => d.avg > avgDailyAvg * 1.1).sort((a, b) => b.max - a.max);
-
-        const bestBuyTime = lowDays.length > 0 
-          ? {
-              day: lowDays[0].day,
-              hour: lowDays[0].minHour,
-              price: lowDays[0].min,
-              reason: `第${lowDays[0].day}天 ${String(lowDays[0].minHour).padStart(2, '0')}:00 均价最低 (${lowDays[0].avg.toFixed(0)}元)，最低达 ${lowDays[0].min.toFixed(0)}元`
-            }
-          : {
-              day: minPoint.day,
-              hour: minPoint.hour,
-              price: minPoint.price,
-              reason: `第${minPoint.day}天 ${String(minPoint.hour).padStart(2, '0')}:00 出现全赛季最低价 ${minPoint.price.toFixed(0)}元`
-            };
-
-        const bestSellTime = highDays.length > 0
-          ? {
-              day: highDays[0].day,
-              hour: highDays[0].maxHour,
-              price: highDays[0].max,
-              reason: `第${highDays[0].day}天 ${String(highDays[0].maxHour).padStart(2, '0')}:00 均价最高 (${highDays[0].avg.toFixed(0)}元)，最高达 ${highDays[0].max.toFixed(0)}元`
-            }
-          : {
-              day: maxPoint.day,
-              hour: maxPoint.hour,
-              price: maxPoint.price,
-              reason: `第${maxPoint.day}天 ${String(maxPoint.hour).padStart(2, '0')}:00 出现全赛季最高价 ${maxPoint.price.toFixed(0)}元`
-            };
-
-        const rangeLabel = useCustomRange
-          ? `第${customDayRange.start}-${customDayRange.end}天`
-          : timeRange === "all" ? "整个赛季"
-          : timeRange === "3d" ? "第1-3天"
-          : timeRange === "7d" ? "第1-7天"
-          : timeRange === "14d" ? "第1-14天"
-          : "第1-30天";
-
-        const analysisTitle = `基于 ${currentSeason.toUpperCase()} ${rangeLabel}数据统计`;
-
-        return (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <CalendarDays className="w-4 h-4 text-slate-500" />
-              <h3 className="text-sm font-semibold text-slate-700">最佳交易时段分析</h3>
-              <span className="text-xs text-slate-400">{analysisTitle}</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <ArrowDownCircle className="w-5 h-5 text-green-600" />
-                  <span className="text-sm font-medium text-green-700">最佳购买火时机</span>
-                </div>
-                <div className="text-xl font-bold text-green-800">
-                  第{bestBuyTime.day}天 {String(bestBuyTime.hour).padStart(2, '0')}:00
-                </div>
-                <div className="text-sm text-green-600 font-medium mt-1">
-                  ¥{bestBuyTime.price.toFixed(2)}/万火
-                </div>
-                <div className="text-xs text-green-600 mt-1">
-                  {bestBuyTime.reason}
-                </div>
-                <div className="text-xs text-green-500 mt-2 pt-2 border-t border-green-200">
-                  建议：火价低于均价时购入初火
-                </div>
-              </div>
-
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <ArrowUpCircle className="w-5 h-5 text-orange-600" />
-                  <span className="text-sm font-medium text-orange-700">最佳出售火时机</span>
-                </div>
-                <div className="text-xl font-bold text-orange-800">
-                  第{bestSellTime.day}天 {String(bestSellTime.hour).padStart(2, '0')}:00
-                </div>
-                <div className="text-sm text-orange-600 font-medium mt-1">
-                  ¥{bestSellTime.price.toFixed(2)}/万火
-                </div>
-                <div className="text-xs text-orange-600 mt-1">
-                  {bestSellTime.reason}
-                </div>
-                <div className="text-xs text-orange-500 mt-2 pt-2 border-t border-orange-200">
-                  建议：火价高于均价时出售物品换RMB
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 p-3 bg-slate-50 rounded-lg">
-              <div className="text-xs text-slate-500 mb-2">赛季统计</div>
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <div className="text-xs text-slate-400">均价</div>
-                  <div className="text-sm font-medium text-slate-700">¥{avgPrice.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-slate-400">最低价</div>
-                  <div className="text-sm font-medium text-green-600">¥{minPrice.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-slate-400">最高价</div>
-                  <div className="text-sm font-medium text-orange-600">¥{maxPrice.toFixed(2)}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-    </div>
+      {renderBestTimeAnalysis()}
+    </PageShell>
   );
 }

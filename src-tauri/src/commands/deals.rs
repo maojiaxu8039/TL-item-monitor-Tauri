@@ -117,7 +117,9 @@ async fn calculate_real_alerts(
         }
 
         // Try 1h comparison first, fallback to 24h
-        let baseline_price = recent_map.get(&item_id).copied()
+        let baseline_price = recent_map
+            .get(&item_id)
+            .copied()
             .or_else(|| prev_map.get(&item_id).copied())
             .unwrap_or(0.0);
 

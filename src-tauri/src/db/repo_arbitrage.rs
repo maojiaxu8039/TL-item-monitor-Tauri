@@ -1,17 +1,14 @@
 use crate::core::errors::AppError;
 use crate::db::models_arbitrage::{
-    ArbitrageCalculationResult, ArbitrageIngredient,
-    ArbitrageOutput, ArbitrageRecipe, ArbitrageRecipeWithDetails,
-    CreateIngredientRequest, CreateOutputRequest, IngredientCostDetail,
+    ArbitrageCalculationResult, ArbitrageIngredient, ArbitrageOutput, ArbitrageRecipe,
+    ArbitrageRecipeWithDetails, CreateIngredientRequest, CreateOutputRequest, IngredientCostDetail,
     OutputRevenueDetail,
 };
 use crate::db::table_resolver::TableResolver;
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 
-pub async fn get_all_recipes(
-    pool: &SqlitePool,
-) -> Result<Vec<ArbitrageRecipe>, AppError> {
+pub async fn get_all_recipes(pool: &SqlitePool) -> Result<Vec<ArbitrageRecipe>, AppError> {
     let recipes: Vec<ArbitrageRecipe> = sqlx::query_as(
         "SELECT id, name, recipe_type, enabled, created_at, updated_at 
          FROM arbitrage_recipes 
@@ -90,17 +87,20 @@ pub async fn get_all_recipes_with_details(
     .fetch_all(pool)
     .await?;
 
-    let mut result: HashMap<String, (Vec<ArbitrageIngredient>, Vec<ArbitrageOutput>)> = HashMap::new();
+    let mut result: HashMap<String, (Vec<ArbitrageIngredient>, Vec<ArbitrageOutput>)> =
+        HashMap::new();
 
     for ing in ingredients {
-        result.entry(ing.recipe_id.clone())
+        result
+            .entry(ing.recipe_id.clone())
             .or_insert_with(|| (Vec::new(), Vec::new()))
             .0
             .push(ing);
     }
 
     for out in outputs {
-        result.entry(out.recipe_id.clone())
+        result
+            .entry(out.recipe_id.clone())
             .or_insert_with(|| (Vec::new(), Vec::new()))
             .1
             .push(out);
@@ -198,7 +198,7 @@ pub async fn update_recipe(
     );
 
     let mut query = sqlx::query(&sql).bind(now);
-    
+
     if let Some(n) = name {
         query = query.bind(n);
     }
@@ -208,7 +208,7 @@ pub async fn update_recipe(
     if let Some(e) = enabled {
         query = query.bind(if e { 1 } else { 0 });
     }
-    
+
     query = query.bind(recipe_id);
     query.execute(pool).await?;
 
@@ -389,7 +389,10 @@ pub async fn calculate_arbitrage_for_all_recipes(
 
     // Batch fetch all recipe details in 2 queries instead of N+1
     let all_details = get_all_recipes_with_details(pool).await?;
-    tracing::info!("[Arbitrage] Batch loaded details for {} recipes", all_details.len());
+    tracing::info!(
+        "[Arbitrage] Batch loaded details for {} recipes",
+        all_details.len()
+    );
 
     let (all_ingredient_names, all_output_names): (Vec<String>, Vec<String>) = {
         let mut ingredients = Vec::new();
@@ -409,11 +412,17 @@ pub async fn calculate_arbitrage_for_all_recipes(
 
     let unique_ingredient_names: Vec<String> = {
         let mut set = HashSet::new();
-        all_ingredient_names.into_iter().filter(|s| set.insert(s.clone())).collect()
+        all_ingredient_names
+            .into_iter()
+            .filter(|s| set.insert(s.clone()))
+            .collect()
     };
     let unique_output_names: Vec<String> = {
         let mut set = HashSet::new();
-        all_output_names.into_iter().filter(|s| set.insert(s.clone())).collect()
+        all_output_names
+            .into_iter()
+            .filter(|s| set.insert(s.clone()))
+            .collect()
     };
 
     tracing::info!(
@@ -421,16 +430,19 @@ pub async fn calculate_arbitrage_for_all_recipes(
         unique_ingredient_names.len(),
         unique_output_names.len()
     );
-    
-    let ingredient_prices = get_item_lowest_prices_by_name(pool, season_id, market_mode, &unique_ingredient_names).await?;
-    let output_prices = get_item_prices_by_name(pool, season_id, market_mode, &unique_output_names).await?;
-    
+
+    let ingredient_prices =
+        get_item_lowest_prices_by_name(pool, season_id, market_mode, &unique_ingredient_names)
+            .await?;
+    let output_prices =
+        get_item_prices_by_name(pool, season_id, market_mode, &unique_output_names).await?;
+
     tracing::info!(
         "[Arbitrage] Found prices for {} ingredients, {} outputs",
         ingredient_prices.len(),
         output_prices.len()
     );
-    
+
     for recipe in recipes {
         let (ingredients, outputs) = match all_details.get(&recipe.id) {
             Some(details) => details,
@@ -443,7 +455,10 @@ pub async fn calculate_arbitrage_for_all_recipes(
         let ingredients_detail: Vec<IngredientCostDetail> = ingredients
             .iter()
             .map(|ing| {
-                let unit_price = ingredient_prices.get(&ing.item_name).copied().unwrap_or(0.0);
+                let unit_price = ingredient_prices
+                    .get(&ing.item_name)
+                    .copied()
+                    .unwrap_or(0.0);
                 let total_cost = unit_price * ing.count;
                 IngredientCostDetail {
                     item_name: ing.item_name.clone(),
@@ -486,7 +501,9 @@ pub async fn calculate_arbitrage_for_all_recipes(
 
         tracing::debug!(
             "[Arbitrage] Recipe '{}' profit: {} (margin: {:.1}%)",
-            recipe.name, profit, profit_margin
+            recipe.name,
+            profit,
+            profit_margin
         );
 
         results.push(ArbitrageCalculationResult {
@@ -504,7 +521,11 @@ pub async fn calculate_arbitrage_for_all_recipes(
         });
     }
 
-    results.sort_by(|a, b| b.profit.partial_cmp(&a.profit).unwrap_or(std::cmp::Ordering::Equal));
+    results.sort_by(|a, b| {
+        b.profit
+            .partial_cmp(&a.profit)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     Ok(results)
 }

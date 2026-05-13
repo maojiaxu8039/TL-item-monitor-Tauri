@@ -28,12 +28,20 @@ impl TableResolver {
 
     /// Get item snapshots table name for given season and mode (historical, with season suffix)
     pub fn item_snapshots_table(season_id: &str, market_mode: &str) -> String {
-        format!("item_snapshots_{}_{}", season_id, Self::mode_suffix(market_mode))
+        format!(
+            "item_snapshots_{}_{}",
+            season_id,
+            Self::mode_suffix(market_mode)
+        )
     }
 
     /// Get fire price snapshots table name for given season and mode (historical, with season suffix)
     pub fn fire_price_snapshots_table(season_id: &str, market_mode: &str) -> String {
-        format!("fire_price_snapshots_{}_{}", season_id, Self::mode_suffix(market_mode))
+        format!(
+            "fire_price_snapshots_{}_{}",
+            season_id,
+            Self::mode_suffix(market_mode)
+        )
     }
 
     /// List all supported season/mode combinations for snapshot tables.
@@ -66,7 +74,10 @@ impl TableResolver {
 
     /// Validate season_id and market_mode, returning an error if invalid.
     /// This should be called before using any table name in SQL queries.
-    pub fn validate(season_id: &str, market_mode: &str) -> Result<(), crate::core::errors::AppError> {
+    pub fn validate(
+        season_id: &str,
+        market_mode: &str,
+    ) -> Result<(), crate::core::errors::AppError> {
         if !Self::is_supported(season_id, market_mode) {
             return Err(crate::core::errors::AppError::Validation(format!(
                 "Invalid season_id '{}' or market_mode '{}'",

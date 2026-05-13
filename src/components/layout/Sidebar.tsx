@@ -1,81 +1,78 @@
-import { cn } from "@/lib/utils"
-import { Flame, LayoutDashboard, Shield, Settings, Download, Box, Bell, Database, CircleHelp, TrendingUp, Brain, Tag, AlertCircle, Calculator } from "lucide-react"
 import { motion } from "framer-motion"
+import { AssetIcon, type IconAssetName } from "@/components/brand/AssetIcon"
+import { cn } from "@/lib/utils"
 import type { PageId } from "@/lib/commands"
 
-const NAV_ITEMS: { id: PageId; label: string; icon: typeof Flame }[] = [
-  { id: "dashboard", label: "监控首页", icon: LayoutDashboard },
-  { id: "firecompare", label: "火价分析", icon: TrendingUp },
-  { id: "items", label: "物价数据", icon: Box },
-  { id: "deals", label: "捡漏出货", icon: Tag },
-  { id: "strategies", label: "策略管理", icon: Shield },
-  { id: "alerts", label: "预警规则", icon: AlertCircle },
-  { id: "arbitrage", label: "套利比价", icon: Calculator },
-  { id: "priceanalysis", label: "物价分析", icon: Bell },
-  { id: "aianalysis", label: "AI分析", icon: Brain },
-  { id: "records", label: "数据监控", icon: Database },
-  { id: "import_export", label: "导入导出", icon: Download },
-  { id: "settings", label: "设置", icon: Settings },
-  { id: "help", label: "帮助", icon: CircleHelp },
+type NavItem = {
+  id: PageId
+  label: string
+  icon: IconAssetName
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { id: "dashboard", label: "市场监控", icon: "market-monitor" },
+  { id: "items", label: "物品追踪", icon: "item-tracking" },
+  { id: "priceanalysis", label: "价格分析", icon: "price-analysis" },
+  { id: "deals", label: "捡漏出货", icon: "deals" },
+  { id: "alerts", label: "提醒设置", icon: "alerts" },
+  { id: "firecompare", label: "火价分析", icon: "fire-price" },
+  { id: "arbitrage", label: "套利比价", icon: "arbitrage" },
+  { id: "strategies", label: "策略管理", icon: "strategies" },
+  { id: "aianalysis", label: "AI分析", icon: "ai-analysis" },
+  { id: "records", label: "数据监控", icon: "data-monitor" },
+  { id: "import_export", label: "导入导出", icon: "import-export" },
+  { id: "settings", label: "设置", icon: "settings" },
+  { id: "help", label: "帮助", icon: "help" },
 ]
 
 export function Sidebar({ page, onPageChange }: { page: PageId; onPageChange: (p: PageId) => void }) {
   return (
     <motion.aside
-      initial={{ opacity: 0, x: -20 }}
+      initial={{ opacity: 0, x: -18 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.35 }}
-      className="flex h-full w-[200px] flex-col bg-white border-r border-slate-200/80 shadow-[1px_0_3px_rgba(0,0,0,0.02)]"
+      className="torch-sidebar"
     >
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-slate-100">
-        <img 
-          src="/tl-icon.png" 
-          alt="TL" 
-          className="h-9 w-9 object-contain"
-        />
-        <span className="text-[15px] font-bold text-slate-800 tracking-tight">火炬之光</span>
+      <div className="torch-sidebar-header">
+        <span className="text-[11px] font-semibold uppercase text-[var(--color-text-subtle)]">功能列表</span>
+        <span className="h-px flex-1 bg-[linear-gradient(90deg,rgba(255,184,0,0.35),transparent)]" />
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        {NAV_ITEMS.map(({ id, label, icon: Icon }, index) => {
+      <nav className="torch-sidebar-nav" aria-label="功能列表">
+        {NAV_ITEMS.map(({ id, label, icon }, index) => {
           const isActive = page === id
           return (
             <motion.button
               key={id}
-              initial={{ opacity: 0, x: -10 }}
+              initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.25, delay: 0.05 * index }}
+              transition={{ duration: 0.2, delay: 0.025 * index }}
               onClick={() => onPageChange(id)}
-              className={cn(
-                "relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-all duration-200",
-                isActive
-                  ? "bg-blue-50 text-blue-600 font-semibold shadow-[0_1px_3px_rgba(59,130,246,0.1)]"
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
-              )}
+              className={cn("torch-sidebar-item", isActive && "torch-sidebar-item-active")}
+              title={label}
             >
               {isActive && (
-                <motion.div
-                  layoutId="sidebar-indicator"
-                  className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full bg-blue-500"
-                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                <motion.span
+                  layoutId="sidebar-active-glow"
+                  className="torch-sidebar-active-glow"
+                  transition={{ type: "spring", stiffness: 380, damping: 32 }}
                 />
               )}
-              <Icon className={cn("h-[18px] w-[18px] flex-shrink-0 transition-colors", isActive ? "text-blue-500" : "text-slate-400")} />
-              {label}
+              <span className="torch-sidebar-icon-frame">
+                <AssetIcon name={icon} className="h-[18px] w-[18px]" />
+              </span>
+              <span className="truncate">{label}</span>
             </motion.button>
           )
         })}
       </nav>
 
-      <div className="border-t border-slate-100 px-3 py-3 space-y-0.5">
-        <button className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-all">
-          <svg className="h-[18px] w-[18px] text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-            <line x1="8" y1="21" x2="16" y2="21" />
-            <line x1="12" y1="17" x2="12" y2="21" />
-          </svg>
-          小窗模式
-        </button>
+      <div className="torch-sidebar-footer">
+        <img src="/torchscan/logo-mark.svg" alt="" className="h-8 w-8" draggable={false} />
+        <div className="min-w-0">
+          <div className="truncate text-[12px] font-semibold text-[var(--color-brand-gold)]">TorchScan</div>
+          <div className="truncate text-[10px] text-[var(--color-text-subtle)]">实时物价监控</div>
+        </div>
       </div>
     </motion.aside>
   )

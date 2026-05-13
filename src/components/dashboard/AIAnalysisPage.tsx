@@ -232,7 +232,7 @@ export default function AIAnalysisPage() {
         ? `当前赛季: ${marketContext.seasonId}, 当前火价: ${fireData[fireData.length - 1]?.rmb_per_10k_fire.toFixed(2)} 元/万火`
         : "当前无火价数据";
 
-      const systemPrompt = `你是TL（火炬之光）游戏的经济分析专家。请基于提供的火价和物品数据，给出专业的交易建议。回答要求简洁专业，使用中文。`;
+      const systemPrompt = `你是TorchScan（火炬之光）游戏的经济分析专家。请基于提供的火价和物品数据，给出专业的交易建议。回答要求简洁专业，使用中文。`;
 
       const result = await cmd.openclawChat(
         settings.gatewayUrl,

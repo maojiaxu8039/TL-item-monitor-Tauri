@@ -1,4 +1,7 @@
-use crate::core::constants::{get_previous_season_id, get_previous_season_start, get_season_start as get_const_season_start, SECONDS_PER_DAY, SECONDS_PER_HOUR};
+use crate::core::constants::{
+    get_previous_season_id, get_previous_season_start, get_season_start as get_const_season_start,
+    SECONDS_PER_DAY, SECONDS_PER_HOUR,
+};
 use crate::db::models::{FirePriceRecord, FirePriceSnapshotRecord};
 use crate::db::table_resolver::TableResolver;
 use chrono::Utc;
@@ -208,7 +211,8 @@ pub async fn get_previous_season_fire_nearest(
     };
 
     let prev_season_day = current_season_day;
-    let target_time = prev_season_start + (prev_season_day as i64 - 1) * SECONDS_PER_DAY + SECONDS_PER_HOUR;
+    let target_time =
+        prev_season_start + (prev_season_day as i64 - 1) * SECONDS_PER_DAY + SECONDS_PER_HOUR;
 
     let prev_table = TableResolver::fire_price_snapshots_table(prev_season_id, market_mode);
 

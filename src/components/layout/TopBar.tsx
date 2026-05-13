@@ -1,15 +1,59 @@
-import { useEffect } from "react"
+import { useEffect, useState, type ChangeEvent } from "react"
 import { RefreshCw } from "lucide-react"
+import { getCurrentWindow } from "@tauri-apps/api/window"
+import { motion } from "framer-motion"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
+import { AssetIcon } from "@/components/brand/AssetIcon"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
-import { motion } from "framer-motion"
-import { useState } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
-import { cmd } from "@/lib/commands"
+import { cmd, type PageId } from "@/lib/commands"
+import { cn } from "@/lib/utils"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 
-export function TopBar() {
+const PAGE_TITLES: Record<PageId, string> = {
+  dashboard: "市场监控",
+  firecompare: "火价分析",
+  items: "物品追踪",
+  deals: "捡漏出货",
+  records: "数据监控",
+  strategies: "策略管理",
+  priceanalysis: "价格分析",
+  aianalysis: "AI分析",
+  import_export: "导入导出",
+  settings: "设置",
+  help: "帮助",
+  alerts: "提醒设置",
+  arbitrage: "套利比价",
+}
+
+interface TopBarProps {
+  page: PageId
+  onPageChange: (page: PageId) => void
+}
+
+async function withWindow(action: "minimize" | "toggleMaximize" | "close") {
+  try {
+    const appWindow = getCurrentWindow()
+    if (action === "minimize") {
+      await appWindow.minimize()
+      return
+    }
+    if (action === "toggleMaximize") {
+      if (await appWindow.isMaximized()) {
+        await appWindow.unmaximize()
+      } else {
+        await appWindow.maximize()
+      }
+      return
+    }
+    await appWindow.close()
+  } catch {
+    // Window APIs are only available in the Tauri shell.
+  }
+}
+
+export function TopBar({ page, onPageChange }: TopBarProps) {
   const { refreshData, marketContext, setMarketContext } = useSectionRefresh()
   const queryClient = useQueryClient()
   const [marketMode, setMarketMode] = useState(marketContext.marketMode)
@@ -17,13 +61,13 @@ export function TopBar() {
   const [notificationEnabled, setNotificationEnabled] = useState(true)
 
   useEffect(() => {
-    let mounted = true;
+    let mounted = true
     cmd.getConfig().then((cfg) => {
-      if (!mounted) return;
+      if (!mounted) return
       setDataSource(cfg.scrape.items_source === "local" ? "local" : "api")
       setNotificationEnabled(cfg.notification.system_notifications)
     }).catch(() => {})
-    return () => { mounted = false; };
+    return () => { mounted = false }
   }, [])
 
   const { data: summary } = useQuery({
@@ -38,25 +82,19 @@ export function TopBar() {
       return newMode
     },
     onSuccess: (newMode) => {
-      const season_id = summary?.season_name || "ss12"
-      setMarketContext({ seasonId: season_id, marketMode: newMode })
+      const seasonId = summary?.season_name || "ss12"
+      setMarketContext({ seasonId, marketMode: newMode })
       toast.success("已切换到" + (newMode === "season_normal" ? "赛季普通" : "赛季专家"))
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary", season_id, newMode] })
-      queryClient.invalidateQueries({ queryKey: ["sections", season_id, newMode] })
-      queryClient.invalidateQueries({ queryKey: ["section-items", season_id, newMode] })
-      queryClient.invalidateQueries({ queryKey: ["items-search", season_id, newMode] })
-      queryClient.invalidateQueries({ queryKey: ["fire-history", season_id, newMode] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary", seasonId, newMode] })
+      queryClient.invalidateQueries({ queryKey: ["sections", seasonId, newMode] })
+      queryClient.invalidateQueries({ queryKey: ["section-items", seasonId, newMode] })
+      queryClient.invalidateQueries({ queryKey: ["items-search", seasonId, newMode] })
+      queryClient.invalidateQueries({ queryKey: ["fire-history", seasonId, newMode] })
     },
     onError: (error) => {
       toast.error(`切换失败: ${error}`)
     },
   })
-
-  const handleModeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newMode = e.target.value
-    setMarketMode(newMode)
-    switchModeMutation.mutate(newMode)
-  }
 
   const refreshMutation = useMutation({
     mutationFn: async () => {
@@ -72,8 +110,10 @@ export function TopBar() {
     },
   })
 
-  const handleRefresh = () => {
-    refreshMutation.mutate()
+  const handleModeChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    const newMode = e.target.value
+    setMarketMode(newMode)
+    switchModeMutation.mutate(newMode)
   }
 
   return (
@@ -81,62 +121,77 @@ export function TopBar() {
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="flex h-[56px] items-center gap-5 border-b border-slate-200/80 bg-white/80 backdrop-blur-sm px-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
+      className="torch-topbar"
     >
-      <div className="flex items-center gap-2 text-[13px]">
-        <span className="text-slate-500 font-medium">赛季模式</span>
+      <div className="torch-topbar-drag-region" data-tauri-drag-region />
+      <button className="torch-brand" onClick={() => onPageChange("dashboard")} title="TorchScan">
+        <img src="/torchscan/logo-mark.svg" alt="" className="h-11 w-11" draggable={false} />
+        <span className="torch-brand-copy">
+          <span className="torch-brand-name">TorchScan</span>
+          <span className="torch-brand-tagline">火炬之光 · 无限 物价监控系统</span>
+        </span>
+      </button>
+
+      <div className="torch-topbar-context">
+        <span>{PAGE_TITLES[page]}</span>
+      </div>
+
+      <div className="flex-1" />
+
+      <div className="torch-market-strip">
         <Select
-          className="h-8 w-[110px] text-[13px] bg-slate-50 border-slate-200 rounded-lg"
+          className="torch-select h-8 w-[108px] text-[12px]"
           value={marketMode}
           onChange={handleModeChange}
+          title="赛季模式"
         >
           <option value="season_normal">赛季普通</option>
           <option value="season_expert">赛季专家</option>
         </Select>
-      </div>
 
-      <div className="flex items-center gap-2 text-[13px]">
-        <span className="text-slate-500 font-medium">当前火价</span>
-        <span className="font-bold text-red-500 text-base">
-          {summary?.fire?.rmb_per_10k_fire?.toFixed(2) || "—"}
-        </span>
-        <span className="text-slate-400">元/万火</span>
-        {summary?.fire?.increase_ratio !== null && summary?.fire?.increase_ratio !== undefined && (
-          <span className={`text-xs font-medium ${summary.fire.increase_ratio >= 0 ? "text-red-500" : "text-green-500"}`}>
-            {summary.fire.increase_ratio >= 0 ? "↑" : "↓"}{Math.abs(summary.fire.increase_ratio).toFixed(2)}%
+        <div className="torch-price-chip" title="当前火价">
+          <AssetIcon name="fire-price" className="h-4 w-4" />
+          <span className="font-bold text-[var(--color-brand-gold)]">
+            {summary?.fire?.rmb_per_10k_fire?.toFixed(2) || "—"}
           </span>
-        )}
-      </div>
-
-      {summary?.history_fire && (
-        <div className="flex items-center gap-2 text-[13px]">
-          <span className="text-slate-500 font-medium">上赛季火价</span>
-          <span className="font-bold text-slate-500 text-base">
-            {summary.history_fire.rmb_per_10k_fire?.toFixed(2) || "—"}
-          </span>
-          <span className="text-slate-400">元/万火</span>
+          <span className="text-[var(--color-text-subtle)]">元/万火</span>
         </div>
-      )}
 
-      <div className="flex-1" />
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => refreshMutation.mutate()}
+          disabled={refreshMutation.isPending}
+          className="torch-icon-button h-8 w-8"
+          title="获取最新数据"
+        >
+          <RefreshCw className={cn("h-4 w-4", refreshMutation.isPending && "animate-spin")} />
+        </Button>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleRefresh}
-        disabled={refreshMutation.isPending}
-        className="gap-1.5 text-[13px] h-8 px-4 border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all rounded-lg"
-      >
-        <RefreshCw className={`h-3.5 w-3.5 text-slate-500 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
-        获取最新数据
-      </Button>
-      <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 rounded text-xs">
-        <span className={`w-2 h-2 rounded-full ${dataSource === "api" ? "bg-blue-500" : "bg-green-500"}`}></span>
-        <span className="text-slate-600">{dataSource === "api" ? "网络" : "本地"}</span>
+        <div className="torch-status-chip" title={dataSource === "api" ? "网络数据源" : "本地数据源"}>
+          <span className={cn("torch-status-dot", dataSource === "api" ? "bg-sky-400" : "bg-[var(--color-success)]")} />
+          {dataSource === "api" ? "网络" : "本地"}
+        </div>
+
+        <div className="torch-status-chip" title={notificationEnabled ? "通知已开启" : "通知已关闭"}>
+          <span className={cn("torch-status-dot", notificationEnabled ? "bg-[var(--color-success)]" : "bg-[var(--color-danger)]")} />
+          通知
+        </div>
       </div>
-      <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 rounded text-xs">
-        <span className={`w-2 h-2 rounded-full ${notificationEnabled ? "bg-green-500" : "bg-red-500"}`}></span>
-        <span className="text-slate-600">通知</span>
+
+      <div className="torch-window-controls">
+        <button className={cn("torch-window-button", page === "settings" && "torch-window-button-active")} onClick={() => onPageChange("settings")} title="设置">
+          <AssetIcon name="settings" className="h-[18px] w-[18px]" />
+        </button>
+        <button className="torch-window-button" onClick={() => withWindow("minimize")} title="最小化">
+          <AssetIcon name="window-minimize" className="h-[18px] w-[18px]" />
+        </button>
+        <button className="torch-window-button" onClick={() => withWindow("toggleMaximize")} title="最大化">
+          <AssetIcon name="window-maximize" className="h-[18px] w-[18px]" />
+        </button>
+        <button className="torch-window-button torch-window-close" onClick={() => withWindow("close")} title="关闭">
+          <AssetIcon name="window-close" className="h-[18px] w-[18px]" />
+        </button>
       </div>
     </motion.header>
   )

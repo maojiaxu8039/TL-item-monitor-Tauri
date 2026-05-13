@@ -1,4 +1,8 @@
 import { CircleHelp, ExternalLink, MessageSquare, Info } from "lucide-react";
+import { PageShell } from "@/components/ui/PageShell";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Surface } from "@/components/ui/Surface";
+import { Button } from "@/components/ui/button";
 
 export default function HelpPage() {
   const faqs = [
@@ -37,74 +41,74 @@ export default function HelpPage() {
   ];
 
   return (
-    <div className="p-6 max-w-4xl">
-      <div className="flex items-center gap-3 mb-6">
-        <CircleHelp className="h-6 w-6 text-blue-600" />
-        <h1 className="text-2xl font-bold text-slate-900">帮助文档</h1>
-      </div>
+    <PageShell size="lg" className="space-y-5">
+      <PageHeader
+        title="帮助文档"
+        description="使用说明和常见问题解答"
+        icon={CircleHelp}
+        iconBg="bg-blue-50"
+        iconColor="text-blue-500"
+      />
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+      <Surface padding="md" className="bg-blue-50 border-blue-200">
         <div className="flex items-start gap-3">
           <Info className="h-5 w-5 text-blue-600 mt-0.5" />
           <div>
             <h3 className="font-semibold text-blue-900">版本信息</h3>
             <p className="text-blue-700 text-sm mt-1">
-              TL 物品火价监控 v2.0.0 · 基于 Tauri 2 + React 构建
+              TorchScan v2.0.0 · 基于 Tauri 2 + React 构建
             </p>
           </div>
         </div>
-      </div>
+      </Surface>
 
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold text-slate-900 mb-4">常见问题</h2>
-        <div className="space-y-4">
+      <Surface padding="md">
+        <h2 className="text-sm font-semibold text-slate-700 mb-4">常见问题</h2>
+        <div className="space-y-3">
           {faqs.map((faq, index) => (
-            <div key={index} className="bg-white border border-slate-200 rounded-lg p-4">
-              <h3 className="font-medium text-slate-900 mb-2">Q: {faq.q}</h3>
-              <p className="text-slate-600 text-sm">{faq.a}</p>
+            <div key={index} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+              <h3 className="font-medium text-slate-700 mb-1">Q: {faq.q}</h3>
+              <p className="text-sm text-slate-500">{faq.a}</p>
             </div>
           ))}
         </div>
-      </div>
+      </Surface>
 
-      <div className="bg-white border border-slate-200 rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-slate-900 mb-4">快捷键</h2>
+      <Surface padding="md">
+        <h2 className="text-sm font-semibold text-slate-700 mb-4">快捷键</h2>
         <div className="space-y-2">
-          <div className="flex justify-between py-2 border-b">
-            <span className="text-slate-600">刷新火价</span>
-            <kbd className="px-2 py-1 bg-slate-100 rounded text-sm">Ctrl + R</kbd>
+          <div className="flex justify-between py-2 border-b border-slate-100">
+            <span className="text-sm text-slate-600">刷新火价</span>
+            <kbd className="px-2 py-1 bg-slate-100 rounded text-xs">Ctrl + R</kbd>
           </div>
-          <div className="flex justify-between py-2 border-b">
-            <span className="text-slate-600">打开搜索</span>
-            <kbd className="px-2 py-1 bg-slate-100 rounded text-sm">Ctrl + K</kbd>
+          <div className="flex justify-between py-2 border-b border-slate-100">
+            <span className="text-sm text-slate-600">打开搜索</span>
+            <kbd className="px-2 py-1 bg-slate-100 rounded text-xs">Ctrl + K</kbd>
           </div>
           <div className="flex justify-between py-2">
-            <span className="text-slate-600">最小化到托盘</span>
-            <kbd className="px-2 py-1 bg-slate-100 rounded text-sm">Ctrl + W</kbd>
+            <span className="text-sm text-slate-600">最小化到托盘</span>
+            <kbd className="px-2 py-1 bg-slate-100 rounded text-xs">Ctrl + W</kbd>
           </div>
         </div>
-      </div>
+      </Surface>
 
-      <div className="mt-8 flex gap-4">
-        <a
-          href="https://github.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+      <div className="flex gap-4">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => window.open("https://github.com", "_blank")}
         >
-          <ExternalLink className="h-4 w-4" />
+          <ExternalLink className="h-4 w-4 mr-1.5" />
           GitHub
-        </a>
-        <a
-          href="https://discord.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => window.open("https://discord.com", "_blank")}
         >
-          <MessageSquare className="h-4 w-4" />
+          <MessageSquare className="h-4 w-4 mr-1.5" />
           加入讨论
-        </a>
+        </Button>
       </div>
-    </div>
+    </PageShell>
   );
 }

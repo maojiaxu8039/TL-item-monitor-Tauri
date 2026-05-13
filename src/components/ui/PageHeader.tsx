@@ -1,9 +1,11 @@
 import { cn } from "@/lib/utils";
+import { AssetIcon, type IconAssetName } from "@/components/brand/AssetIcon";
 import { type ReactNode, type ElementType } from "react";
 
 interface PageHeaderProps {
   title: string;
   description?: string;
+  iconAsset?: IconAssetName;
   icon?: ElementType;
   iconBg?: string;
   iconColor?: string;
@@ -14,6 +16,7 @@ interface PageHeaderProps {
 export function PageHeader({
   title,
   description,
+  iconAsset,
   icon: Icon,
   iconBg = "bg-slate-100",
   iconColor = "text-slate-600",
@@ -22,7 +25,11 @@ export function PageHeader({
 }: PageHeaderProps) {
   return (
     <div className={cn("page-header", className)}>
-      {Icon && (
+      {iconAsset ? (
+        <div className="page-header-icon page-header-icon-brand">
+          <AssetIcon name={iconAsset} className="h-7 w-7" />
+        </div>
+      ) : Icon && (
         <div className={cn("page-header-icon", iconBg, iconColor)}>
           <Icon className="w-5 h-5" />
         </div>

@@ -144,7 +144,8 @@ pub async fn get_strategy_costs_batch(
     let costs = query.fetch_all(pool).await?;
     let mut result: HashMap<String, Vec<StrategyCost>> = HashMap::new();
     for cost in costs {
-        result.entry(cost.strategy_id.clone())
+        result
+            .entry(cost.strategy_id.clone())
             .or_default()
             .push(cost);
     }
@@ -197,11 +198,12 @@ pub async fn update_strategy_cost(
 ) -> Result<(), crate::core::errors::AppError> {
     let now = Utc::now().timestamp();
 
-    let cost = sqlx::query_as::<_, StrategyCost>("SELECT * FROM strategy_detail_costs WHERE id = ?")
-        .bind(&req.id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| crate::core::errors::AppError::Db("Cost not found".to_string()))?;
+    let cost =
+        sqlx::query_as::<_, StrategyCost>("SELECT * FROM strategy_detail_costs WHERE id = ?")
+            .bind(&req.id)
+            .fetch_optional(pool)
+            .await?
+            .ok_or_else(|| crate::core::errors::AppError::Db("Cost not found".to_string()))?;
 
     let fire_price = if req.is_realtime {
         match repo_fire::get_latest_fire(pool, "ss12", "season_normal").await {
@@ -280,7 +282,8 @@ pub async fn get_strategy_outputs_batch(
     let outputs = query.fetch_all(pool).await?;
     let mut result: HashMap<String, Vec<StrategyOutput>> = HashMap::new();
     for output in outputs {
-        result.entry(output.strategy_id.clone())
+        result
+            .entry(output.strategy_id.clone())
             .or_default()
             .push(output);
     }
@@ -346,13 +349,17 @@ pub async fn delete_strategy_output(
 }
 
 /// Optimized: batch fetch all item prices in a single query per table
-async fn get_all_item_prices(pool: &SqlitePool) -> Result<(HashMap<String, f64>, HashMap<String, f64>), crate::core::errors::AppError> {
-    let normal_prices: Vec<(String, f64)> = sqlx::query_as("SELECT item_id, price FROM items_normal")
-        .fetch_all(pool)
-        .await?;
-    let expert_prices: Vec<(String, f64)> = sqlx::query_as("SELECT item_id, price FROM items_expert")
-        .fetch_all(pool)
-        .await?;
+async fn get_all_item_prices(
+    pool: &SqlitePool,
+) -> Result<(HashMap<String, f64>, HashMap<String, f64>), crate::core::errors::AppError> {
+    let normal_prices: Vec<(String, f64)> =
+        sqlx::query_as("SELECT item_id, price FROM items_normal")
+            .fetch_all(pool)
+            .await?;
+    let expert_prices: Vec<(String, f64)> =
+        sqlx::query_as("SELECT item_id, price FROM items_expert")
+            .fetch_all(pool)
+            .await?;
 
     let mut normal_map = HashMap::new();
     for (id, price) in normal_prices {
@@ -367,7 +374,9 @@ async fn get_all_item_prices(pool: &SqlitePool) -> Result<(HashMap<String, f64>,
     Ok((normal_map, expert_map))
 }
 
-async fn get_all_item_prices_by_name(pool: &SqlitePool) -> Result<(HashMap<String, f64>, HashMap<String, f64>), crate::core::errors::AppError> {
+async fn get_all_item_prices_by_name(
+    pool: &SqlitePool,
+) -> Result<(HashMap<String, f64>, HashMap<String, f64>), crate::core::errors::AppError> {
     let normal_prices: Vec<(String, f64)> = sqlx::query_as("SELECT name, price FROM items_normal")
         .fetch_all(pool)
         .await?;
@@ -407,7 +416,8 @@ pub async fn get_strategy_with_costs(
 
     let mut total_cost_fire = 0.0;
     for cost in &mut costs {
-        let current_price = normal_prices.get(&cost.item_id)
+        let current_price = normal_prices
+            .get(&cost.item_id)
             .or_else(|| expert_prices.get(&cost.item_id))
             .copied()
             .unwrap_or(0.0);
@@ -420,7 +430,8 @@ pub async fn get_strategy_with_costs(
 
     let mut total_output_value = 0.0;
     for output in &mut outputs {
-        let current_price = normal_name_prices.get(&output.item_name)
+        let current_price = normal_name_prices
+            .get(&output.item_name)
             .or_else(|| expert_name_prices.get(&output.item_name))
             .copied()
             .unwrap_or(0.0);
@@ -472,7 +483,8 @@ pub async fn get_all_strategies_with_costs(
 
         let mut total_cost_fire = 0.0;
         for cost in &mut costs {
-            let current_price = normal_prices.get(&cost.item_id)
+            let current_price = normal_prices
+                .get(&cost.item_id)
                 .or_else(|| expert_prices.get(&cost.item_id))
                 .copied()
                 .unwrap_or(0.0);
@@ -485,7 +497,8 @@ pub async fn get_all_strategies_with_costs(
 
         let mut total_output_value = 0.0;
         for output in &mut outputs {
-            let current_price = normal_name_prices.get(&output.item_name)
+            let current_price = normal_name_prices
+                .get(&output.item_name)
                 .or_else(|| expert_name_prices.get(&output.item_name))
                 .copied()
                 .unwrap_or(0.0);

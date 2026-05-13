@@ -112,7 +112,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       const date = new Date().toISOString().slice(0, 10)
       const filePath = await save({
         filters: [{ name: 'CSV', extensions: ['csv'] }],
-        defaultPath: `TL_groups_${date}.csv`,
+        defaultPath: `TorchScan_groups_${date}.csv`,
       })
       
       if (filePath) {

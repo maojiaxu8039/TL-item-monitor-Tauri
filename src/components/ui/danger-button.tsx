@@ -18,9 +18,9 @@ export const DangerButton = React.forwardRef<HTMLButtonElement, DangerButtonProp
         ref={ref}
         className={cn(
           "rounded-lg transition-all duration-200",
-          "text-slate-400 hover:text-red-500",
-          "hover:bg-red-50/80",
-          "active:bg-red-100",
+          "text-[var(--color-text-subtle)] hover:text-[var(--color-danger)]",
+          "hover:bg-[rgba(239,68,68,0.12)]",
+          "active:bg-[rgba(239,68,68,0.18)]",
           "focus:outline-none focus:ring-2 focus:ring-red-500/20",
           "disabled:opacity-40 disabled:cursor-not-allowed",
           "inline-flex items-center justify-center gap-1.5",

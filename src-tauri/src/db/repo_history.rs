@@ -150,7 +150,7 @@ pub async fn insert_fire_snapshots_batch(
     let season_start = get_season_start_from_db(pool, season_id).await?;
     let realtime_table = TableResolver::fire_price_table(season_id, market_mode);
     let snapshots_table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
-    
+
     let mut tx = pool.begin().await?;
     let mut inserted = 0usize;
 
@@ -370,9 +370,8 @@ pub async fn get_items_price_compare(
         let cs_day_start = current_season_start + (((day - 1) as i64) * 86400);
         let cs_day_end = cs_day_start + 86400;
 
-        sqlx::query_as::<_, CurrentItemRow>(
-            &format!(
-                "SELECT s.item_id, s.name, s.fire_price as price \
+        sqlx::query_as::<_, CurrentItemRow>(&format!(
+            "SELECT s.item_id, s.name, s.fire_price as price \
                  FROM {} s \
                  INNER JOIN ( \
                      SELECT item_id, MAX(scraped_at) as max_scraped_at \
@@ -380,27 +379,24 @@ pub async fn get_items_price_compare(
                      WHERE season_day = ? AND scraped_at >= ? AND scraped_at < ? \
                      GROUP BY item_id \
                  ) latest ON s.item_id = latest.item_id AND s.scraped_at = latest.max_scraped_at",
-                current_snapshots_table, current_snapshots_table
-            )
-        )
+            current_snapshots_table, current_snapshots_table
+        ))
         .bind(day)
         .bind(cs_day_start)
         .bind(cs_day_end)
         .fetch_all(pool)
         .await?
     } else {
-        sqlx::query_as::<_, CurrentItemRow>(
-            &format!(
-                "SELECT s.item_id, s.name, s.fire_price as price \
+        sqlx::query_as::<_, CurrentItemRow>(&format!(
+            "SELECT s.item_id, s.name, s.fire_price as price \
                  FROM {} s \
                  INNER JOIN ( \
                      SELECT item_id, MAX(scraped_at) as max_scraped_at \
                      FROM {} \
                      GROUP BY item_id \
                  ) latest ON s.item_id = latest.item_id AND s.scraped_at = latest.max_scraped_at",
-                current_snapshots_table, current_snapshots_table
-            )
-        )
+            current_snapshots_table, current_snapshots_table
+        ))
         .fetch_all(pool)
         .await?
     };
@@ -422,18 +418,16 @@ pub async fn get_items_price_compare(
         .fetch_all(pool)
         .await?
     } else {
-        sqlx::query_as::<_, HistoryPriceRow>(
-            &format!(
-                "SELECT h.item_id, h.name, h.fire_price as avg_price \
+        sqlx::query_as::<_, HistoryPriceRow>(&format!(
+            "SELECT h.item_id, h.name, h.fire_price as avg_price \
                  FROM {} h \
                  INNER JOIN ( \
                      SELECT item_id, MAX(scraped_at) as max_scraped_at \
                      FROM {} \
                      GROUP BY item_id \
                  ) latest ON h.item_id = latest.item_id AND h.scraped_at = latest.max_scraped_at",
-                history_snapshots_table, history_snapshots_table
-            )
-        )
+            history_snapshots_table, history_snapshots_table
+        ))
         .fetch_all(pool)
         .await?
     };

@@ -692,7 +692,10 @@ pub async fn openclaw_chat(
                     if let Ok(event) = serde_json::from_str::<ChallengeEvent>(&text) {
                         tracing::debug!("[OpenClaw] Challenge event: {:?}", event);
                         if event.event == "connect.challenge" {
-                            tracing::debug!("[OpenClaw] Got challenge, nonce: {}", event.payload.nonce);
+                            tracing::debug!(
+                                "[OpenClaw] Got challenge, nonce: {}",
+                                event.payload.nonce
+                            );
 
                             let connect_id = Uuid::new_v4().to_string();
                             let mut connect_params = json!({
@@ -700,15 +703,15 @@ pub async fn openclaw_chat(
                                 "maxProtocol": 3,
                                 "client": {
                                     "id": "gateway-client",
-                                    "displayName": "TL Item Monitor",
-                                    "version": "tl-monitor-tauri",
+                                    "displayName": "TorchScan",
+                                    "version": "torchscan",
                                     "platform": gateway_platform(),
                                     "mode": "backend"
                                 },
                                 "role": "operator",
                                 "scopes": OPERATOR_SCOPES,
                                 "caps": ["tool-events"],
-                                "userAgent": "tl-monitor-tauri",
+                                "userAgent": "torchscan",
                                 "locale": "zh-CN"
                             });
 
@@ -744,7 +747,10 @@ pub async fn openclaw_chat(
                                         }
                                     }
                                     Err(e) => {
-                                        tracing::debug!("[OpenClaw] Device auth signing failed: {}", e);
+                                        tracing::debug!(
+                                            "[OpenClaw] Device auth signing failed: {}",
+                                            e
+                                        );
                                     }
                                 }
                             }
@@ -877,7 +883,7 @@ pub async fn openclaw_chat(
     }
 
     let system_prompt = context.unwrap_or_else(|| {
-        "你是TL（火炬之光）游戏的经济分析专家。请基于提供的火价和物品数据，给出专业的交易建议。回答要求简洁专业，使用中文。".to_string()
+        "你是TorchScan（火炬之光）游戏的经济分析专家。请基于提供的火价和物品数据，给出专业的交易建议。回答要求简洁专业，使用中文。".to_string()
     });
 
     let full_content = format!("{}\n\n{}", system_prompt, text);
@@ -1129,7 +1135,7 @@ pub async fn openclaw_chat(
         payload: ChatPayload {
             text: full_content,
             context: Some(json!({
-                "source": "tl-monitor",
+                "source": "torchscan",
                 "context": system_prompt,
             })),
             options: json!({

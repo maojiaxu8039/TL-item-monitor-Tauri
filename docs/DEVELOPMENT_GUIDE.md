@@ -934,9 +934,13 @@ cd src-tauri && cargo fmt
 
 ### 7.4 添加新数据库迁移
 
-1. 在 `src-tauri/src/db/migrations/` 创建 SQL 文件
-2. 在 `run_migrations` 函数中添加迁移逻辑
-3. 更新 `_migrations` 表版本
+数据库迁移必须遵循 [数据库迁移开发指南](DATABASE_MIGRATION_GUIDE.md)。核心流程：
+
+1. 提升 `LATEST_SCHEMA_VERSION`
+2. 更新 `001_initial.sql`，让新安装用户直接得到最新 schema
+3. 在 `run_legacy_migrations` 添加幂等升级逻辑
+4. 必要时更新 `validate_database` 和迁移测试
+5. 运行 `cargo test migration_tests --lib` 和 `cargo check`
 
 ***
 

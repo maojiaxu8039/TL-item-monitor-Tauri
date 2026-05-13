@@ -1,15 +1,15 @@
 [package]
-name = "tl-monitor"
+name = "torchscan"
 version = "1.0.0"
 edition = "2021"
-default-run = "tl-monitor"
+default-run = "torchscan"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # Tauri core
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-log = "2"

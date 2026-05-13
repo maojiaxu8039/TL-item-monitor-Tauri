@@ -283,7 +283,7 @@ pub async fn search_items_simple(
 ) -> Result<Vec<ItemSearchResult>, crate::core::errors::AppError> {
     let items_table = TableResolver::items_table(season_id, market_mode);
     let pattern = format!("%{}%", keyword);
-    
+
     let items: Vec<ItemSearchResult> = sqlx::query_as(&format!(
         r#"
             SELECT item_id, name, item_type, price
@@ -297,6 +297,6 @@ pub async fn search_items_simple(
     .bind(&pattern)
     .fetch_all(pool)
     .await?;
-    
+
     Ok(items)
 }

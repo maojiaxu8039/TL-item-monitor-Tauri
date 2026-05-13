@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" fill="none" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="card" x1="31" x2="226" y1="24" y2="234" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1a1511"/>
+      <stop offset=".48" stop-color="#090a0c"/>
+      <stop offset="1" stop-color="#14100d"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="66" x2="192" y1="38" y2="213" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff1a8"/>
+      <stop offset=".24" stop-color="#ffb800"/>
+      <stop offset=".58" stop-color="#ff6a00"/>
+      <stop offset="1" stop-color="#ffd36a"/>
+    </linearGradient>
+    <filter id="glow" width="150%" height="150%" x="-25%" y="-25%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" flood-color="#ff6a00" flood-opacity=".55" stdDeviation="5"/>
+      <feDropShadow dx="0" dy="7" flood-color="#000" flood-opacity=".8" stdDeviation="4"/>
+    </filter>
+  </defs>
+  <rect width="228" height="228" x="14" y="14" fill="url(#card)" rx="38"/>
+  <rect width="226" height="226" x="15" y="15" stroke="#6d5336" stroke-opacity=".75" stroke-width="2" rx="37"/>
+  <path stroke="#ff6a00" stroke-opacity=".24" d="M33 70c42-22 93 19 142-7 23-13 37-4 50 5M33 176c55 14 92-28 153-3 19 8 31 6 42-3"/>
+  <g filter="url(#glow)" stroke="url(#gold)" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width="11" d="M128 36 212 192H44L128 36Z"/>
+    <path stroke-width="9" d="M115 183c-31-19-36-49-13-78 12-15 30-27 33-52 28 31 21 57 9 77 18-10 29-29 29-45 31 45 22 79-16 98"/>
+    <path stroke-width="7" d="M76 174 102 149l21 16 38-46"/>
+    <path stroke-width="7" d="M154 121h20v19"/>
+    <path stroke-width="6" d="M103 184v-27m24 27v-20m24 20v-42"/>
+  </g>
+  <text x="128" y="222" fill="url(#gold)" font-family="Georgia, 'Times New Roman', serif" font-size="35" font-weight="700" text-anchor="middle">TorchScan</text>
+</svg>

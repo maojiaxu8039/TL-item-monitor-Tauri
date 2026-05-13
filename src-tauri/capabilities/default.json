@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "description": "Default capabilities for TL Monitor",
+  "description": "Default capabilities for TorchScan",
   "windows": ["main"],
   "permissions": [
     "core:default",

@@ -96,8 +96,6 @@ pub fn status_to_color(status: WorthStatus) -> &'static str {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;

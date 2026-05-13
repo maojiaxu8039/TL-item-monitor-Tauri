@@ -20,7 +20,10 @@ async fn record_hourly_snapshot(state: &Arc<AppState>, snapshot_at: i64) {
     {
         let mut running = state.snapshot_running.write();
         if *running {
-            warn!("Hourly snapshot already running, skipping overlap at {}", snapshot_at);
+            warn!(
+                "Hourly snapshot already running, skipping overlap at {}",
+                snapshot_at
+            );
             return;
         }
         *running = true;
@@ -68,7 +71,8 @@ async fn record_hourly_snapshot(state: &Arc<AppState>, snapshot_at: i64) {
                 }
             }
         }
-    }.await;
+    }
+    .await;
 
     {
         let mut running = state.snapshot_running.write();
