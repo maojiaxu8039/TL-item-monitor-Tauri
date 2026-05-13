@@ -481,18 +481,40 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
     }
     if current_version < 10 {
         // v10: Add realtime_value to strategy_outputs (idempotent)
-        // Check if column already exists before applying
-        if !column_exists(pool, "strategy_outputs", "realtime_value").await? {
-            apply_sql_migration(
-                pool,
-                10,
-                include_str!("db/migrations/010_add_realtime_value_to_outputs.sql"),
+        // First ensure the table exists (in case v1 failed to create it)
+        if !table_exists(pool, "strategy_outputs").await? {
+            tracing::info!("Creating strategy_outputs table for migration v10");
+            sqlx::query(
+                r#"CREATE TABLE IF NOT EXISTS strategy_outputs (
+                    id TEXT PRIMARY KEY,
+                    strategy_id TEXT NOT NULL,
+                    season_id TEXT NOT NULL DEFAULT 'ss12',
+                    market_mode TEXT NOT NULL DEFAULT 'season_normal',
+                    item_id TEXT NOT NULL,
+                    item_name TEXT NOT NULL DEFAULT '',
+                    item_type TEXT NOT NULL DEFAULT '',
+                    buy_price REAL NOT NULL DEFAULT 0,
+                    sell_price REAL NOT NULL DEFAULT 0,
+                    profit_rate REAL NOT NULL DEFAULT 0,
+                    realtime_value REAL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    FOREIGN KEY (strategy_id) REFERENCES strategies(id) ON DELETE CASCADE
+                )"#
             )
-            .await?;
-        } else {
-            tracing::info!("Migration v10 skipped: column 'realtime_value' already exists");
-            record_migration(pool, 10).await?;
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Failed to create strategy_outputs table: {}", e))?;
         }
+        
+        // Now add the realtime_value column if it doesn't exist
+        if !column_exists(pool, "strategy_outputs", "realtime_value").await? {
+            sqlx::query("ALTER TABLE strategy_outputs ADD COLUMN realtime_value REAL NOT NULL DEFAULT 0")
+                .execute(pool)
+                .await
+                .map_err(|e| format!("Migration v10 failed: {}", e))?;
+        }
+        record_migration(pool, 10).await?;
     }
     if current_version < 11 {
         apply_sql_migration(
