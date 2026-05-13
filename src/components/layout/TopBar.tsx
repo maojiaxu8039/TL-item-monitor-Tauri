@@ -125,7 +125,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
     >
       <div className="torch-topbar-drag-region" data-tauri-drag-region />
       <button className="torch-brand" onClick={() => onPageChange("dashboard")} title="TorchScan">
-        <img src="/torchscan/logo-mark.png" alt="TorchScan" className="h-[78px] w-auto" draggable={false} />
+        <img src="/torchscan/logo-mark.png" alt="TorchScan" className="torch-brand-logo" draggable={false} />
       </button>
 
       <div className="torch-topbar-context">
@@ -146,7 +146,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
         </Select>
 
         <div className="torch-price-chip" title="当前火价">
-          <AssetIcon name="fire-price" className="h-4 w-4" />
+          <AssetIcon name="fire-price" className="h-5 w-5" />
           <span className="font-bold text-[var(--color-brand-gold)]">
             {summary?.fire?.rmb_per_10k_fire?.toFixed(2) || "—"}
           </span>
@@ -177,7 +177,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
 
       <div className="torch-window-controls">
         <button className={cn("torch-window-button", page === "settings" && "torch-window-button-active")} onClick={() => onPageChange("settings")} title="设置">
-          <AssetIcon name="settings" className="h-[18px] w-[18px]" />
+          <AssetIcon name="settings" className="h-5 w-5" />
         </button>
         <button className="torch-window-button" onClick={() => withWindow("minimize")} title="最小化">
           <AssetIcon name="window-minimize" className="h-[18px] w-[18px]" />

@@ -133,9 +133,7 @@ export default function ImportExportPage() {
       <PageHeader
         title="导入导出"
         description="管理数据的导入和导出"
-        icon={Download}
-        iconBg="bg-[rgba(255,184,0,0.08)]"
-        iconColor="text-[var(--color-brand)]"
+        iconAsset="import-export"
       />
 
       {backupInfo && (

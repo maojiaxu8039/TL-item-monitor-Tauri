@@ -11,13 +11,13 @@ export const iconAssetMap = {
   "window-minimize": "/torchscan/icons/original/window-minimize.png",
   "window-maximize": "/torchscan/icons/original/window-maximize.png",
   "window-close": "/torchscan/icons/original/window-close.png",
-  deals: "/torchscan/icons/deals.svg",
-  arbitrage: "/torchscan/icons/arbitrage.svg",
-  "ai-analysis": "/torchscan/icons/ai-analysis.svg",
-  "data-monitor": "/torchscan/icons/data-monitor.svg",
-  "import-export": "/torchscan/icons/import-export.svg",
-  help: "/torchscan/icons/help.svg",
-  strategies: "/torchscan/icons/strategies.svg",
+  deals: "/torchscan/icons/original/deals.png",
+  arbitrage: "/torchscan/icons/original/arbitrage.png",
+  "ai-analysis": "/torchscan/icons/original/ai-analysis.png",
+  "data-monitor": "/torchscan/icons/original/data-monitor.png",
+  "import-export": "/torchscan/icons/original/import-export.png",
+  help: "/torchscan/icons/original/help.png",
+  strategies: "/torchscan/icons/original/strategies.png",
   "fire-price": "/torchscan/icons/original/fire-price.png",
 } as const
 
@@ -35,7 +35,7 @@ export function AssetIcon({ name, className, label }: AssetIconProps) {
       src={iconAssetMap[name]}
       alt={label ?? ""}
       aria-hidden={label ? undefined : true}
-      className={cn("h-5 w-5 select-none object-contain", className)}
+      className={cn("torch-asset-icon h-5 w-5 select-none object-contain", className)}
       draggable={false}
     />
   )

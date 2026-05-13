@@ -2,7 +2,7 @@
 
 These files are the split-out icon assets from the TorchScan visual redesign.
 
-`original/*.png` are cropped directly from the provided UI design draft and are used by the app shell first. The sibling SVG files are fallback/vector-friendly recreations for icons that were not present in the draft.
+`original/*.png` are cropped directly from the provided UI design draft and are the primary app-shell assets. The sibling SVG files are retained as legacy vector fallbacks, but navigation and page headers use the PNG set for the unified ember-gold glow style.
 
 - `market-monitor.svg` - 市场监控
 - `item-tracking.svg` - 物品追踪

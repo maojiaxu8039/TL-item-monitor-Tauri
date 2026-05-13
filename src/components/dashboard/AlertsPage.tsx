@@ -230,9 +230,7 @@ export default function AlertsPage() {
       <PageHeader
         title="预警规则"
         description="设置价格预警，实时监控市场变化"
-        icon={Bell}
-        iconBg="bg-amber-50"
-        iconColor="text-amber-500"
+        iconAsset="alerts"
         actions={
           <ToolbarActions>
             <Button variant="warning" size="sm" onClick={() => setShowCreateDialog(true)}>

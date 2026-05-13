@@ -30,7 +30,6 @@ import {
   ArrowDown,
   ArrowUp,
   Tag,
-  Database,
 } from "lucide-react";
 import { ItemPriceTrendModal } from "./ItemPriceTrendModal";
 import { ToastContainer } from "@/components/ui/Toast";
@@ -424,9 +423,7 @@ export default function ItemsPage() {
       <PageHeader
         title="物价数据"
         description="查看和管理游戏物品价格信息"
-        icon={Database}
-        iconBg="bg-[rgba(255,184,0,0.08)]"
-        iconColor="text-[var(--color-brand)]"
+        iconAsset="item-tracking"
         actions={
           <ToolbarActions>
             <Button variant="outline" size="sm" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending}>

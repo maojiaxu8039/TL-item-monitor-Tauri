@@ -1,4 +1,4 @@
-import { CircleHelp, ExternalLink, MessageSquare, Info } from "lucide-react";
+import { ExternalLink, MessageSquare, Info } from "lucide-react";
 import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
@@ -45,9 +45,7 @@ export default function HelpPage() {
       <PageHeader
         title="帮助文档"
         description="使用说明和常见问题解答"
-        icon={CircleHelp}
-        iconBg="bg-[rgba(255,184,0,0.08)]"
-        iconColor="text-[var(--color-brand)]"
+        iconAsset="help"
       />
 
       <Surface padding="md" className="bg-[rgba(255,184,0,0.08)] border-[var(--color-brand)]/30">

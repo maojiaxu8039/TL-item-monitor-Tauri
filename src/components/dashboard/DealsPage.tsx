@@ -219,9 +219,7 @@ export default function DealsPage() {
       <PageHeader
         title="捡漏出货"
         description={`实时监控物品价格变化，自动检测涨跌机会 | 出货≥${settings.rise_threshold}% 捡漏≥${settings.fall_threshold}%`}
-        icon={TrendingUp}
-        iconBg="bg-orange-50"
-        iconColor="text-[var(--color-brand-gold)]"
+        iconAsset="deals"
         actions={
           <ToolbarActions>
             <Button variant="outline" size="sm" onClick={() => refetch()}>

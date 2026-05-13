@@ -444,9 +444,7 @@ export default function ArbitragePage() {
       <PageHeader
         title="套利比价"
         description="分解、合成、材料兑换 全场景比价分析"
-        icon={Calculator}
-        iconBg="bg-[rgba(34,197,94,0.1)]"
-        iconColor="text-green-500"
+        iconAsset="arbitrage"
         actions={
           <ToolbarActions>
             <Button variant="outline" size="sm" onClick={refreshPrices} disabled={refreshingPrice || calculating}>

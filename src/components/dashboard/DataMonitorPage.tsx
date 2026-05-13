@@ -537,9 +537,7 @@ export default function DataMonitorPage() {
       <PageHeader
         title="数据监控"
         description="管理与服务器的数据同步"
-        icon={Database}
-        iconBg="bg-[rgba(255,184,0,0.08)]"
-        iconColor="text-[var(--color-brand)]"
+        iconAsset="data-monitor"
         actions={
           <ToolbarActions>
             <Button variant="outline" size="sm" onClick={() => refetchStatus()}>

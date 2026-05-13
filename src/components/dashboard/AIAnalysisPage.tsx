@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { cmd } from "@/lib/commands";
 import {
-  Brain,
   Send,
   Loader2,
   User,
@@ -19,6 +18,7 @@ import {
 } from "lucide-react";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useToast } from "@/hooks/useToast";
+import { AssetIcon } from "@/components/brand/AssetIcon";
 
 interface AISettings {
   gatewayUrl: string;
@@ -296,7 +296,9 @@ export default function AIAnalysisPage() {
 
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Brain className="w-5 h-5 text-[var(--color-ai)]" />
+          <span className="page-header-icon page-header-icon-brand h-9 w-9">
+            <AssetIcon name="ai-analysis" className="h-7 w-7" />
+          </span>
           <h1 className="text-lg font-semibold text-[var(--color-text)]">AI分析</h1>
           <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-[var(--color-success)]/20 text-[var(--color-success)] rounded-full">
             <Server className="w-3 h-3" />

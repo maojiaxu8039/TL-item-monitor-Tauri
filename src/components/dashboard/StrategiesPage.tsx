@@ -585,9 +585,7 @@ export default function StrategiesPage() {
       <PageHeader
         title="策略管理"
         description="管理游戏策略、成本和产出数据"
-        icon={Shield}
-        iconBg="bg-[rgba(255,184,0,0.08)]"
-        iconColor="text-[var(--color-brand)]"
+        iconAsset="strategies"
         actions={
           activeTab === "strategies" && (
             <ToolbarActions>

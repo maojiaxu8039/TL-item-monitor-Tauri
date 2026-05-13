@@ -27,7 +27,7 @@ export function PageHeader({
     <div className={cn("page-header", className)}>
       {iconAsset ? (
         <div className="page-header-icon page-header-icon-brand">
-          <AssetIcon name={iconAsset} className="h-7 w-7" />
+          <AssetIcon name={iconAsset} className="h-8 w-8" />
         </div>
       ) : Icon && (
         <div className={cn("page-header-icon", iconBg, iconColor)}>

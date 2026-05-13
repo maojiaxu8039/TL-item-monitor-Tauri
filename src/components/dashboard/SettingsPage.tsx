@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus, type JsonFileValidationResult, type SeasonInfo } from "@/lib/commands";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { RefreshCw, Save, Settings, Bell, Database, Globe, AlertTriangle, Trash2, Archive, Plus, Edit3, Key } from "lucide-react";
+import { RefreshCw, Save, Bell, Database, Globe, AlertTriangle, Trash2, Archive, Plus, Edit3, Key } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageShell } from "@/components/ui/PageShell";
@@ -341,9 +341,7 @@ export default function SettingsPage() {
       <PageHeader
         title="系统设置"
         description="配置应用参数、赛季信息和数据管理"
-        icon={Settings}
-        iconBg="bg-[var(--color-panel)]"
-        iconColor="text-[var(--color-text-muted)]"
+        iconAsset="settings"
         actions={
           <ToolbarActions>
             <Button variant="default" size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
