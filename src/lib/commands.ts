@@ -466,12 +466,12 @@ export const cmd = {
     cooldownSeconds: number
   ) =>
     invoke<AlertRule>("create_alert_rule", {
-      strategy_id: strategyId,
-      section_id: sectionId,
-      item_id: itemId,
-      ruleType: ruleType,
+      strategyId,
+      sectionId,
+      itemId,
+      ruleType,
       threshold,
-      cooldown_seconds: cooldownSeconds,
+      cooldownSeconds,
     }),
   updateAlertRule: (
     id: string,
