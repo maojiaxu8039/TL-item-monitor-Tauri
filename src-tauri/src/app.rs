@@ -526,19 +526,21 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         )
         .await?;
     }
-    if current_version < 15 {
-        apply_sql_migration(
-            pool,
-            15,
-            include_str!("db/migrations/015_add_performance_indexes.sql"),
-        )
-        .await?;
-    }
+    // Fix strategy_detail tables BEFORE v15 (which depends on them)
+    // Use version 16 but place BEFORE version 15 to ensure tables exist
     if current_version < 16 {
         apply_sql_migration(
             pool,
             16,
             include_str!("db/migrations/016_fix_strategy_detail_tables.sql"),
+        )
+        .await?;
+    }
+    if current_version < 15 {
+        apply_sql_migration(
+            pool,
+            15,
+            include_str!("db/migrations/015_add_performance_indexes.sql"),
         )
         .await?;
     }
