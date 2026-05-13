@@ -15,7 +15,7 @@ export function MetricCard({
   label,
   value,
   icon: Icon,
-  iconBg = "bg-[rgba(255,184,0,0.08)]",
+  iconBg = "bg-[var(--color-brand-gold)]/10",
   iconColor = "text-[var(--color-brand-gold)]",
   helper,
   className,

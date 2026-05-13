@@ -15,7 +15,7 @@ const buttonVariants = cva(
         secondary: "bg-[var(--color-panel-soft)] text-[var(--color-text)] hover:bg-[rgba(255,184,0,0.12)]",
         success: "bg-[var(--color-success)] text-black shadow-sm hover:brightness-110",
         warning: "bg-[var(--color-warning)] text-black shadow-sm hover:brightness-110",
-        info: "bg-sky-500 text-black shadow-sm hover:brightness-110",
+        info: "bg-[var(--color-ai)] text-black shadow-sm hover:brightness-110",
       },
       size: {
         default: "h-10 px-4 py-2",

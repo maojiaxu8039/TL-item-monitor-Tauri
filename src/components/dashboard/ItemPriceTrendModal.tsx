@@ -278,33 +278,33 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
               <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 50 }}>
                 <XAxis
                   dataKey={viewMode === "day" ? "hour" : "day"}
-                  tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                  tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
                   tickLine={false}
-                  axisLine={{ stroke: "#2A2F36" }}
+                  axisLine={{ stroke: "var(--color-border)" }}
                   label={{ 
                     value: viewMode === "day" ? "小时" : "开服天数", 
                     position: "insideBottom", 
                     offset: -30, 
                     fontSize: 12, 
-                    fill: "#9CA3AF" 
+                    fill: "var(--color-text-muted)" 
                   }}
                   tickFormatter={(v) => viewMode === "day" ? `${v}h` : `第${v}天`}
                 />
                 <YAxis
                   tickFormatter={(v: number) => `${v.toFixed(0)}`}
-                  tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                  tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
                   tickLine={false}
                   axisLine={false}
-                  label={{ value: "价格(火)", angle: -90, position: "insideLeft", fontSize: 12, fill: "#9CA3AF" }}
+                  label={{ value: "价格(火)", angle: -90, position: "insideLeft", fontSize: 12, fill: "var(--color-text-muted)" }}
                 />
                 <Tooltip
                   contentStyle={{
-                    background: "#111418",
+                    background: "var(--color-panel)",
                     border: "1px solid rgba(255,184,0,0.24)",
                     borderRadius: 8,
-                    color: "#e6e6e6",
+                    color: "var(--color-text)",
                   }}
-                  labelStyle={{ color: "#ffb800" }}
+                  labelStyle={{ color: "var(--color-brand-gold)" }}
                   formatter={(value: any, name: string) => {
                     if (value === null) return ["—", name];
                     return [`${Number(value).toFixed(2)} 火`, name];
@@ -321,22 +321,22 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
                   type="monotone"
                   dataKey="current"
                   name={`${currentSeason.toUpperCase()} 当前赛季`}
-                  stroke="#FFB800"
+                  stroke="var(--color-brand-gold)"
                   strokeWidth={2}
                   dot={false}
                   connectNulls
-                  activeDot={{ r: 4, fill: "#FFB800" }}
+                  activeDot={{ r: 4, fill: "var(--color-brand-gold)" }}
                 />
                 <Line
                   type="monotone"
                   dataKey="history"
                   name={`${historySeason.toUpperCase()} 历史赛季`}
-                  stroke="#9CA3AF"
+                  stroke="var(--color-text-muted)"
                   strokeWidth={2}
                   strokeDasharray="5 5"
                   dot={false}
                   connectNulls
-                  activeDot={{ r: 4, fill: "#9CA3AF" }}
+                  activeDot={{ r: 4, fill: "var(--color-text-muted)" }}
                 />
               </LineChart>
             </ResponsiveContainer>

@@ -493,40 +493,40 @@ export default function FirePriceComparePage() {
             <LineChart data={chartData}>
               <XAxis
                 dataKey="label"
-                tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
                 tickLine={false}
-                axisLine={{ stroke: "#E5E7EB" }}
+                axisLine={{ stroke: "var(--color-border)" }}
                 interval="preserveStartEnd"
               />
               <YAxis
                 domain={yDomain}
                 tickFormatter={(v: number) => `¥${v.toFixed(1)}`}
-                tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
                 tickLine={false}
                 axisLine={false}
               />
               <Tooltip
                 formatter={(value: any) => [`¥${Number(value).toFixed(2)}/万火`]}
-                contentStyle={{ borderRadius: "8px", border: "1px solid #E5E7EB", fontSize: "12px" }}
+                contentStyle={{ borderRadius: "8px", border: "1px solid var(--color-border)", fontSize: "12px" }}
               />
               <Line
                 type="monotone"
                 dataKey="history"
-                stroke="#94A3B8"
+                stroke="var(--color-text-muted)"
                 strokeWidth={1.5}
                 strokeDasharray="4 4"
                 dot={false}
                 connectNulls
-                activeDot={{ r: 3, fill: "#94A3B8" }}
+                activeDot={{ r: 3, fill: "var(--color-text-muted)" }}
               />
               <Line
                 type="monotone"
                 dataKey="current"
-                stroke="#F97316"
+                stroke="var(--color-brand)"
                 strokeWidth={2}
                 dot={false}
                 connectNulls
-                activeDot={{ r: 4, fill: "#F97316" }}
+                activeDot={{ r: 4, fill: "var(--color-brand)" }}
               />
             </LineChart>
           </ResponsiveContainer>

@@ -19,7 +19,7 @@ export function StatusBadge({
     success: "border border-[rgba(34,197,94,0.3)] bg-[rgba(34,197,94,0.1)] text-[var(--color-success)]",
     warning: "border border-[rgba(255,184,0,0.32)] bg-[rgba(255,184,0,0.1)] text-[var(--color-brand-gold)]",
     danger: "border border-[rgba(239,68,68,0.32)] bg-[rgba(239,68,68,0.1)] text-[var(--color-danger)]",
-    info: "border border-[rgba(56,189,248,0.28)] bg-[rgba(56,189,248,0.1)] text-sky-300",
+    info: "border border-[var(--color-ai)]/30 bg-[var(--color-ai)]/10 text-[var(--color-ai)]",
     primary: "border border-[rgba(255,184,0,0.36)] bg-[rgba(255,184,0,0.14)] text-[var(--color-brand-gold)]",
   };
 
