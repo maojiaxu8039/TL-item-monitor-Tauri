@@ -146,7 +146,7 @@ function HoardCard({
           <div>
             <div className="flex items-center gap-2">
               <h4
-                className="font-semibold text-slate-800 cursor-pointer hover:text-blue-600 transition-colors"
+                className="font-semibold text-slate-800 cursor-pointer hover:text-[var(--color-brand)] transition-colors"
                 onClick={() => onViewTrend(analysis.item_id, analysis.item_name)}
                 title="点击查看价格走势"
               >
@@ -157,7 +157,7 @@ function HoardCard({
                 className="flex items-center gap-1 px-2 py-0.5 text-xs rounded border border-slate-200 hover:bg-[var(--color-panel-soft)] transition-colors"
                 title="查看价格走势"
               >
-                <BarChart2 className="w-3 h-3 text-blue-500" />
+                <BarChart2 className="w-3 h-3 text-[var(--color-brand)]" />
                 走势
               </button>
             </div>
@@ -301,7 +301,7 @@ export default function PriceAnalysisPage() {
           value={stats.total}
           icon={BarChart3}
           iconBg="bg-purple-50"
-          iconColor="text-purple-500"
+          iconColor="text-[var(--color-ai)]"
           helper={<span className="text-xs text-slate-400">件物品</span>}
         />
         <MetricCard
@@ -358,7 +358,7 @@ export default function PriceAnalysisPage() {
                 onClick={() => setSortBy(s.key)}
                 className={`px-2.5 py-1 rounded text-xs transition-colors ${
                   sortBy === s.key
-                    ? "bg-blue-100 text-blue-700"
+                    ? "bg-[var(--color-brand)]/20 text-[var(--color-brand)]"
                     : "text-slate-500 hover:bg-[var(--color-panel-soft)]"
                 }`}
               >

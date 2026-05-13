@@ -356,7 +356,7 @@ export default function SettingsPage() {
 
       <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
-          <Globe className="w-4 h-4 text-purple-500" />
+          <Globe className="w-4 h-4 text-[var(--color-ai)]" />
           <h2 className="text-sm font-semibold text-slate-700">赛季设置</h2>
         </div>
 
@@ -691,7 +691,7 @@ export default function SettingsPage() {
           </div>
 
           {voiceAlertEnabled && (
-            <div className="flex items-center justify-between pl-4 border-l-2 border-blue-200">
+            <div className="flex items-center justify-between pl-4 border-l-2 border-[var(--color-brand)]/30">
               <div>
                 <div className="text-sm font-medium text-slate-600">语音文件路径</div>
                 <div className="text-xs text-slate-400 mt-0.5">支持 .mp3 或 .wav 文件（留空或路径失效时使用内置萝莉音）</div>
@@ -794,7 +794,7 @@ export default function SettingsPage() {
       {/* Items data settings */}
       <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
-          <Database className="w-4 h-4 text-blue-500" />
+          <Database className="w-4 h-4 text-[var(--color-brand)]" />
           <h2 className="text-sm font-semibold text-slate-700">物品数据</h2>
         </div>
 

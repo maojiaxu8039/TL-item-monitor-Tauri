@@ -135,7 +135,7 @@ export default function ImportExportPage() {
         description="管理数据的导入和导出"
         icon={Download}
         iconBg="bg-blue-50"
-        iconColor="text-blue-500"
+        iconColor="text-[var(--color-brand)]"
       />
 
       {backupInfo && (
@@ -145,7 +145,7 @@ export default function ImportExportPage() {
             value={formatBytes(backupInfo.db_size_kb)}
             icon={HardDrive}
             iconBg="bg-blue-50"
-            iconColor="text-blue-500"
+            iconColor="text-[var(--color-brand)]"
           />
           <MetricCard
             label="上次备份"
@@ -160,7 +160,7 @@ export default function ImportExportPage() {
       <Surface padding="none">
         <div className="px-5 py-4 border-b border-slate-100 bg-slate-50">
           <div className="flex items-center gap-2">
-            <Upload className="w-4 h-4 text-orange-500" />
+            <Upload className="w-4 h-4 text-[var(--color-brand-gold)]" />
             <h2 className="text-sm font-semibold text-slate-700">导入数据</h2>
           </div>
         </div>
@@ -180,7 +180,7 @@ export default function ImportExportPage() {
               <Button
                 onClick={() => importCsvMutation.mutate()}
                 disabled={importCsvMutation.isPending}
-                className="bg-orange-500 hover:bg-orange-600 text-white"
+                className="bg-[var(--color-brand-gold)] hover:opacity-90 text-white"
               >
                 <Upload className="w-4 h-4 mr-1.5" />
                 {importCsvMutation.isPending ? "导入中..." : "选择 CSV 文件"}
@@ -275,7 +275,7 @@ export default function ImportExportPage() {
             <Button
               onClick={() => handleExport(exportCsvMutation)}
               disabled={exportCsvMutation.isPending}
-              className="bg-green-500 hover:bg-green-600 text-white"
+              className="bg-[var(--color-success)] hover:opacity-90 text-white"
             >
               <Download className="w-4 h-4 mr-1.5" />
               {exportCsvMutation.isPending ? "导出中..." : "导出 CSV"}
@@ -295,7 +295,7 @@ export default function ImportExportPage() {
             <Button
               onClick={() => handleExport(exportFireMutation)}
               disabled={exportFireMutation.isPending}
-              className="bg-green-500 hover:bg-green-600 text-white"
+              className="bg-[var(--color-success)] hover:opacity-90 text-white"
             >
               <Download className="w-4 h-4 mr-1.5" />
               {exportFireMutation.isPending ? "导出中..." : "导出 CSV"}
@@ -315,7 +315,7 @@ export default function ImportExportPage() {
             <Button
               onClick={() => handleExport(backupMutation)}
               disabled={backupMutation.isPending}
-              className="bg-blue-500 hover:bg-blue-600 text-white"
+              className="bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] hover:opacity-90 text-white"
             >
               <Database className="w-4 h-4 mr-1.5" />
               {backupMutation.isPending ? "备份中..." : "备份数据库"}

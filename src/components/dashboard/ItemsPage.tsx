@@ -70,7 +70,7 @@ function SectionPicker({
           e.stopPropagation();
           setOpen(v => !v);
         }}
-        className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 transition-colors whitespace-nowrap shadow-sm"
+        className="inline-flex items-center gap-1 px-3 py-1.5 bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white text-xs rounded-lg hover:opacity-90 transition-opacity whitespace-nowrap shadow-sm"
       >
         <Plus className="w-3 h-3 flex-shrink-0" />
         <span>添加</span>
@@ -87,7 +87,7 @@ function SectionPicker({
                 <button
                   key={s.id}
                   onClick={() => { onAdd(s.id); setOpen(false); }}
-                  className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                  className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-[var(--color-brand)]/10 hover:text-[var(--color-brand)] transition-colors"
                 >
                   {s.name}
                 </button>
@@ -426,7 +426,7 @@ export default function ItemsPage() {
         description="查看和管理游戏物品价格信息"
         icon={Database}
         iconBg="bg-blue-50"
-        iconColor="text-blue-500"
+        iconColor="text-[var(--color-brand)]"
         actions={
           <ToolbarActions>
             <Button variant="outline" size="sm" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending}>
@@ -444,7 +444,7 @@ export default function ItemsPage() {
             value={stats.avgPrice.toFixed(2)}
             icon={ArrowUpDown}
             iconBg="bg-blue-50"
-            iconColor="text-blue-500"
+            iconColor="text-[var(--color-brand)]"
             helper={<span className="text-xs text-slate-400">火</span>}
           />
           <MetricCard
@@ -468,7 +468,7 @@ export default function ItemsPage() {
             value={total.toString()}
             icon={Tag}
             iconBg="bg-purple-50"
-            iconColor="text-purple-500"
+            iconColor="text-[var(--color-ai)]"
             helper={
               <span className="text-xs text-slate-400">
                 本页 {startItem}-{endItem}

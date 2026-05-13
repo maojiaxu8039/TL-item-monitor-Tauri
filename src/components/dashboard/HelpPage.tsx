@@ -47,12 +47,12 @@ export default function HelpPage() {
         description="使用说明和常见问题解答"
         icon={CircleHelp}
         iconBg="bg-blue-50"
-        iconColor="text-blue-500"
+        iconColor="text-[var(--color-brand)]"
       />
 
-      <Surface padding="md" className="bg-blue-50 border-blue-200">
+      <Surface padding="md" className="bg-blue-50 border-[var(--color-brand)]/30">
         <div className="flex items-start gap-3">
-          <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+          <Info className="h-5 w-5 text-[var(--color-brand)] mt-0.5" />
           <div>
             <h3 className="font-semibold text-blue-900">版本信息</h3>
             <p className="text-blue-700 text-sm mt-1">

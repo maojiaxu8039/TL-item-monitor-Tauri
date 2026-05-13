@@ -413,7 +413,7 @@ export default function FirePriceComparePage() {
               />
               <span className="text-xs text-slate-400">天</span>
               {useCustomRange && (
-                <span className="text-xs text-blue-500 ml-1">
+                <span className="text-xs text-[var(--color-brand)] ml-1">
                   (第{customDayRange.start}-{customDayRange.end}天)
                 </span>
               )}

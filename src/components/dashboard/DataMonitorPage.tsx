@@ -539,7 +539,7 @@ export default function DataMonitorPage() {
         description="管理与服务器的数据同步"
         icon={Database}
         iconBg="bg-blue-50"
-        iconColor="text-blue-500"
+        iconColor="text-[var(--color-brand)]"
         actions={
           <ToolbarActions>
             <Button variant="outline" size="sm" onClick={() => refetchStatus()}>
@@ -552,7 +552,7 @@ export default function DataMonitorPage() {
 
       <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
-          <Server className="w-4 h-4 text-blue-500" />
+          <Server className="w-4 h-4 text-[var(--color-brand)]" />
           <h2 className="text-sm font-semibold text-slate-700">服务器连接</h2>
           <div className="ml-auto flex items-center gap-2">
             {connectionStatus === "connected" ? (
@@ -588,7 +588,7 @@ export default function DataMonitorPage() {
             </div>
             <button
               onClick={handleSaveUrl}
-              className="mt-5 px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
+              className="mt-5 px-4 py-2 bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white text-sm rounded-lg hover:opacity-90 transition-opacity"
             >
               保存
             </button>
@@ -601,7 +601,7 @@ export default function DataMonitorPage() {
                 value={serverStatus.version}
                 icon={Server}
                 iconBg="bg-blue-50"
-                iconColor="text-blue-500"
+                iconColor="text-[var(--color-brand)]"
               />
               <MetricCard
                 label="运行时长"
@@ -615,7 +615,7 @@ export default function DataMonitorPage() {
                 value={serverStatus.season_id}
                 icon={Database}
                 iconBg="bg-purple-50"
-                iconColor="text-purple-500"
+                iconColor="text-[var(--color-ai)]"
               />
               <MetricCard
                 label="下次采集"
@@ -759,7 +759,7 @@ export default function DataMonitorPage() {
                 disabled={isSyncing}
                 className={`px-3 py-1.5 text-xs ${
                   syncMode === "normal"
-                    ? "bg-blue-500 text-white"
+                    ? "bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white"
                     : "bg-white text-slate-600 hover:bg-[var(--color-panel-soft)]"
                 } disabled:opacity-50`}
               >
@@ -802,7 +802,7 @@ export default function DataMonitorPage() {
                 checked={isPaginatedSync}
                 onChange={(e) => setIsPaginatedSync(e.target.checked)}
                 disabled={isSyncing || timeRange !== "season"}
-                className="rounded border-slate-300 text-blue-500 focus:ring-[var(--color-brand)] disabled:opacity-50"
+                className="rounded border-slate-300 text-[var(--color-brand)] focus:ring-[var(--color-brand)] disabled:opacity-50"
               />
               分页同步（大数据量推荐，每页 {PAGE_SIZE} 条）
               {timeRange !== "season" && <span className="text-amber-500">（仅整赛季）</span>}
@@ -841,7 +841,7 @@ export default function DataMonitorPage() {
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  className="bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] h-2 rounded-full transition-all duration-300"
                   style={{ width: `${Math.min(getSyncProgress(), 100)}%` }}
                 />
               </div>

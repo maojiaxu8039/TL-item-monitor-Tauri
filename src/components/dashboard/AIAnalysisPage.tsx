@@ -421,8 +421,8 @@ export default function AIAnalysisPage() {
                 <div
                   className={`max-w-[80%] rounded-xl px-4 py-2.5 text-sm ${
                     msg.role === "user"
-                      ? "bg-blue-500 text-white"
-                      : "bg-slate-100 text-slate-700"
+                      ? "bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white"
+                      : "bg-[var(--color-panel-soft)] text-[var(--color-text)]"
                   }`}
                 >
                   <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -439,7 +439,7 @@ export default function AIAnalysisPage() {
           )}
           {isLoading && (
             <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 rounded-full bg-purple-100 text-[var(--color-ai)] flex items-center justify-center flex-shrink-0">
                 <Bot className="w-4 h-4" />
               </div>
               <div className="bg-slate-100 rounded-xl px-4 py-2.5">

@@ -387,7 +387,7 @@ export function DashboardStats() {
                     <div className="text-right">
                       <div className={`text-xl font-bold ${
                         rec.score >= 80 ? "text-red-600" :
-                        rec.score >= 60 ? "text-orange-600" :
+                        rec.score >= 60 ? "text-[var(--color-brand-gold)]" :
                         rec.score >= 40 ? "text-yellow-600" :
                         "text-green-600"
                       }`}>

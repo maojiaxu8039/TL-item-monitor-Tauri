@@ -443,11 +443,11 @@ export default function StrategiesPage() {
 
   const getLabelColor = (label: string) => {
     switch (label) {
-      case "K7": return "bg-green-100 text-green-600";
-      case "K8-1": return "bg-orange-100 text-orange-600";
+      case "K7": return "bg-[var(--color-success)]/20 text-[var(--color-success)]";
+      case "K8-1": return "bg-orange-100 text-[var(--color-brand-gold)]";
       case "K8-2": return "bg-red-100 text-red-600";
-      case "U8": return "bg-purple-100 text-purple-600";
-      case "深空": return "bg-blue-100 text-blue-600";
+      case "U8": return "bg-purple-100 text-[var(--color-ai)]";
+      case "深空": return "bg-blue-100 text-[var(--color-brand)]";
       case "九红深空": return "bg-yellow-100 text-yellow-700";
       default: return "bg-gray-100 text-gray-600";
     }
@@ -462,7 +462,7 @@ export default function StrategiesPage() {
   const getRecommendationLevelColor = (level: StrategyRecommendation["level"]) => {
     switch (level) {
       case "strong": return "bg-green-100 text-green-700 border-green-200";
-      case "good": return "bg-blue-100 text-blue-700 border-blue-200";
+      case "good": return "bg-[var(--color-brand)]/20 text-[var(--color-brand)] border-[var(--color-brand)]/30";
       case "watch": return "bg-yellow-100 text-yellow-700 border-yellow-200";
       case "avoid": return "bg-red-100 text-red-700 border-red-200";
     }
@@ -587,7 +587,7 @@ export default function StrategiesPage() {
         description="管理游戏策略、成本和产出数据"
         icon={Shield}
         iconBg="bg-blue-50"
-        iconColor="text-blue-500"
+        iconColor="text-[var(--color-brand)]"
         actions={
           activeTab === "strategies" && (
             <ToolbarActions>
@@ -605,7 +605,7 @@ export default function StrategiesPage() {
           onClick={() => setActiveTab("strategies")}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
             activeTab === "strategies"
-              ? "border-blue-500 text-blue-600"
+              ? "border-[var(--color-brand)] text-[var(--color-brand)]"
               : "border-transparent text-slate-500 hover:text-slate-700"
           }`}
         >
@@ -615,7 +615,7 @@ export default function StrategiesPage() {
           onClick={() => setActiveTab("templates")}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
             activeTab === "templates"
-              ? "border-blue-500 text-blue-600"
+              ? "border-[var(--color-brand)] text-[var(--color-brand)]"
               : "border-transparent text-slate-500 hover:text-slate-700"
           }`}
         >
@@ -625,7 +625,7 @@ export default function StrategiesPage() {
           onClick={() => setActiveTab("recommendations")}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
             activeTab === "recommendations"
-              ? "border-blue-500 text-blue-600"
+              ? "border-[var(--color-brand)] text-[var(--color-brand)]"
               : "border-transparent text-slate-500 hover:text-slate-700"
           }`}
         >
@@ -712,7 +712,7 @@ export default function StrategiesPage() {
                       addToast("error", `从模板创建失败: ${e}`);
                     }
                   }}
-                  className="w-full px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  className="w-full px-3 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90 transition-opacity"
                 >
                   一键创建
                 </button>
@@ -749,7 +749,7 @@ export default function StrategiesPage() {
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
                         index === 0 ? "bg-yellow-100 text-yellow-600" :
                         index === 1 ? "bg-slate-100 text-slate-500" :
-                        index === 2 ? "bg-orange-100 text-orange-500" :
+                        index === 2 ? "bg-orange-100 text-[var(--color-brand-gold)]" :
                         "bg-slate-50 text-slate-400"
                       }`}>
                         {index + 1}
@@ -785,7 +785,7 @@ export default function StrategiesPage() {
                       <div className="text-right">
                         <div className={`text-2xl font-bold ${
                           rec.score >= 80 ? "text-red-600" :
-                          rec.score >= 60 ? "text-orange-600" :
+                          rec.score >= 60 ? "text-[var(--color-brand-gold)]" :
                           rec.score >= 40 ? "text-yellow-600" :
                           "text-green-600"
                         }`}>
@@ -833,7 +833,7 @@ export default function StrategiesPage() {
                                   <span className="font-medium">{cost.item_name || cost.item_id}</span>
                                   <span className="text-red-400">×{cost.count}</span>
                                   <span className="text-red-700">{cost.total_fire.toFixed(0)}火</span>
-                                  {cost.is_realtime && <span className="text-[10px] bg-green-100 text-green-600 px-1 rounded">实时</span>}
+                                  {cost.is_realtime && <span className="text-[10px] bg-[var(--color-success)]/20 text-[var(--color-success)] px-1 rounded">实时</span>}
                                 </span>
                               ))}
                             </div>
@@ -939,7 +939,7 @@ export default function StrategiesPage() {
                           </div>
                           <button
                             onClick={(e) => { e.stopPropagation(); openCostDialog(strategy.id); }}
-                            className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-0.5"
+                            className="text-xs text-[var(--color-brand)] hover:text-[var(--color-brand)] flex items-center gap-0.5"
                           >
                             <Plus className="w-3 h-3" /> 添加
                           </button>
@@ -959,7 +959,7 @@ export default function StrategiesPage() {
                                   <span className="text-slate-700">{cost.item_name || cost.item_id}</span>
                                   <span className="text-slate-400">×{cost.count}</span>
                                   {cost.is_realtime && (
-                                    <span className="px-1 py-0.5 bg-green-100 text-green-600 text-xs rounded">
+                                    <span className="px-1 py-0.5 bg-[var(--color-success)]/20 text-[var(--color-success)] text-xs rounded">
                                       实时
                                     </span>
                                   )}
@@ -989,7 +989,7 @@ export default function StrategiesPage() {
                           </div>
                           <button
                             onClick={(e) => { e.stopPropagation(); openOutputDialog(strategy.id); }}
-                            className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-0.5"
+                            className="text-xs text-[var(--color-brand)] hover:text-[var(--color-brand)] flex items-center gap-0.5"
                           >
                             <Plus className="w-3 h-3" /> 添加
                           </button>
@@ -1062,14 +1062,14 @@ export default function StrategiesPage() {
                         <button
                           onClick={(e) => { e.stopPropagation(); handleRefreshPrices(strategy.id); }}
                           disabled={refreshing === strategy.id}
-                          className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                          className="p-1.5 text-slate-400 hover:text-[var(--color-brand)] hover:bg-[var(--color-brand)]/10 rounded-lg transition-colors disabled:opacity-50"
                           title="刷新火价"
                         >
                           <RefreshCw className={`w-4 h-4 ${refreshing === strategy.id ? "animate-spin" : ""}`} />
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleEdit(strategy); }}
-                          className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-[var(--color-brand)] hover:bg-[var(--color-brand)]/10 rounded-lg transition-colors"
                           title="编辑策略"
                         >
                           <Edit3 className="w-4 h-4" />
@@ -1188,7 +1188,7 @@ export default function StrategiesPage() {
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
             <button onClick={() => setShowCreateDialog(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg">取消</button>
-            <button onClick={handleCreate} className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600">创建</button>
+            <button onClick={handleCreate} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90">创建</button>
           </div>
         </div>
       </Dialog>
@@ -1290,7 +1290,7 @@ export default function StrategiesPage() {
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
             <button onClick={() => setShowEditDialog(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg">取消</button>
-            <button onClick={handleUpdate} className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600">保存</button>
+            <button onClick={handleUpdate} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90">保存</button>
           </div>
         </div>
       </Dialog>
@@ -1321,7 +1321,7 @@ export default function StrategiesPage() {
                     <div
                       key={item.item_id}
                       onClick={() => handleItemSelect(item)}
-                      className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-b-0"
+                      className="px-3 py-2 text-sm hover:bg-[var(--color-brand)]/10 cursor-pointer border-b border-slate-100 last:border-b-0"
                     >
                       <div className="text-slate-700">{item.name}</div>
                       <div className="text-xs text-slate-400">{item.item_type} - {item.price.toFixed(0)} 火</div>
@@ -1350,7 +1350,7 @@ export default function StrategiesPage() {
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
             <button onClick={() => setShowCostDialog(null)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg">取消</button>
-            <button onClick={handleAddCost} className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600">添加</button>
+            <button onClick={handleAddCost} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90">添加</button>
           </div>
         </div>
       </Dialog>
@@ -1381,7 +1381,7 @@ export default function StrategiesPage() {
                     <div
                       key={item.item_id}
                       onClick={() => handleItemSelect(item)}
-                      className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-b-0"
+                      className="px-3 py-2 text-sm hover:bg-[var(--color-brand)]/10 cursor-pointer border-b border-slate-100 last:border-b-0"
                     >
                       <div className="text-slate-700">{item.name}</div>
                       <div className="text-xs text-slate-400">{item.item_type} - {item.price.toFixed(0)} 火</div>
@@ -1410,7 +1410,7 @@ export default function StrategiesPage() {
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
             <button onClick={() => setShowOutputDialog(null)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg">取消</button>
-            <button onClick={handleAddOutput} className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600">添加</button>
+            <button onClick={handleAddOutput} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90">添加</button>
           </div>
         </div>
       </Dialog>

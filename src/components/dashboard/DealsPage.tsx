@@ -161,7 +161,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
 
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
           <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg transition-colors">取消</button>
-          <button onClick={handleSave} className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">保存设置</button>
+          <button onClick={handleSave} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90 transition-opacity">保存设置</button>
         </div>
       </div>
     </div>
@@ -221,7 +221,7 @@ export default function DealsPage() {
         description={`实时监控物品价格变化，自动检测涨跌机会 | 出货≥${settings.rise_threshold}% 捡漏≥${settings.fall_threshold}%`}
         icon={TrendingUp}
         iconBg="bg-orange-50"
-        iconColor="text-orange-500"
+        iconColor="text-[var(--color-brand-gold)]"
         actions={
           <ToolbarActions>
             <Button variant="outline" size="sm" onClick={() => refetch()}>

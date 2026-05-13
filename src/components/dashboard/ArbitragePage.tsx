@@ -488,8 +488,8 @@ export default function ArbitragePage() {
           value={recipes.length}
           icon={Layers}
           iconBg="bg-blue-50"
-          iconColor="text-blue-500"
-          helper={<span className="text-xs text-blue-500">个</span>}
+          iconColor="text-[var(--color-brand)]"
+          helper={<span className="text-xs text-[var(--color-brand)]">个</span>}
           className="border-blue-100"
         />
       </div>
@@ -586,7 +586,7 @@ export default function ArbitragePage() {
                           const recipe = recipes.find(r => r.id === result.recipe_id);
                           if (recipe) openEditDialog(recipe);
                         }}
-                        className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors text-slate-500 hover:text-blue-600"
+                        className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors text-slate-500 hover:text-[var(--color-brand)]"
                         title="编辑配方"
                       >
                         <Edit3 className="h-4 w-4" />
@@ -823,7 +823,7 @@ export default function ArbitragePage() {
             <button
               type="button"
               onClick={createRecipe}
-              className="px-4 py-2 text-sm bg-blue-500 text-white hover:bg-blue-600 rounded-lg"
+              className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white hover:opacity-90 rounded-lg"
             >
               创建配方
             </button>
@@ -961,7 +961,7 @@ export default function ArbitragePage() {
             </button>
             <button
               onClick={updateRecipeInfo}
-              className="px-4 py-2 text-sm bg-blue-500 text-white hover:bg-blue-600 rounded-lg"
+              className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white hover:opacity-90 rounded-lg"
             >
               保存
             </button>
@@ -1029,7 +1029,7 @@ export default function ArbitragePage() {
             </button>
             <button
               onClick={saveIngredients}
-              className="px-4 py-2 text-sm bg-blue-500 text-white hover:bg-blue-600 rounded-lg"
+              className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white hover:opacity-90 rounded-lg"
             >
               保存
             </button>
@@ -1097,7 +1097,7 @@ export default function ArbitragePage() {
             </button>
             <button
               onClick={saveOutputs}
-              className="px-4 py-2 text-sm bg-blue-500 text-white hover:bg-blue-600 rounded-lg"
+              className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white hover:opacity-90 rounded-lg"
             >
               保存
             </button>
