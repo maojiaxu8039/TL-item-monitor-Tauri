@@ -469,7 +469,7 @@ export const cmd = {
       strategy_id: strategyId,
       section_id: sectionId,
       item_id: itemId,
-      rule_type: ruleType,
+      ruleType: ruleType,
       threshold,
       cooldown_seconds: cooldownSeconds,
     }),
