@@ -68,7 +68,7 @@ export function Sidebar({ page, onPageChange }: { page: PageId; onPageChange: (p
       </nav>
 
       <div className="torch-sidebar-footer">
-        <img src="/torchscan/logo-mark.png" alt="TorchScan" className="h-7 w-auto" draggable={false} />
+        <img src="/torchscan/logo-mark.png" alt="TorchScan" className="h-9 w-auto" draggable={false} />
       </div>
     </motion.aside>
   )
