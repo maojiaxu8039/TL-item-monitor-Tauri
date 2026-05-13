@@ -28,9 +28,11 @@ export function Sidebar({ page, onPageChange }: { page: PageId; onPageChange: (p
       className="flex h-full w-[200px] flex-col bg-white border-r border-slate-200/80 shadow-[1px_0_3px_rgba(0,0,0,0.02)]"
     >
       <div className="flex items-center gap-3 px-5 py-5 border-b border-slate-100">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-red-500 shadow-sm">
-          <Flame className="h-5 w-5 text-white" />
-        </div>
+        <img 
+          src="/tl-icon.png" 
+          alt="TL" 
+          className="h-9 w-9 object-contain"
+        />
         <span className="text-[15px] font-bold text-slate-800 tracking-tight">火炬之光</span>
       </div>
 

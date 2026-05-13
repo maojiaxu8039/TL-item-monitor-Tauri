@@ -13,7 +13,10 @@ static LUOSI_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
         .pool_max_idle_per_host(4)
         .build()
         .unwrap_or_else(|e| {
-            tracing::error!("Failed to create Luosi HTTP client: {}, using default client", e);
+            tracing::error!(
+                "Failed to create Luosi HTTP client: {}, using default client",
+                e
+            );
             reqwest::Client::new()
         })
 });

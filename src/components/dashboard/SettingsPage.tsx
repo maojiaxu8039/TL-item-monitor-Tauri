@@ -688,13 +688,13 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between pl-4 border-l-2 border-blue-200">
               <div>
                 <div className="text-sm font-medium text-slate-600">语音文件路径</div>
-                <div className="text-xs text-slate-400 mt-0.5">支持 .mp3 或 .wav 文件（留空使用系统提示音）</div>
+                <div className="text-xs text-slate-400 mt-0.5">支持 .mp3 或 .wav 文件（留空或路径失效时使用内置萝莉音）</div>
               </div>
               <input
                 type="text"
                 value={voiceAlertPath}
                 onChange={(e) => setVoiceAlertPath(e.target.value)}
-                placeholder="/path/to/alert.mp3"
+                placeholder="留空使用内置萝莉音"
                 className="w-64 text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               />
             </div>

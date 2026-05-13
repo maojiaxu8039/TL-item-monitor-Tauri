@@ -15,15 +15,14 @@ use crate::scraper;
 use parking_lot::RwLock;
 use serde::Deserialize;
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
+const LATEST_SCHEMA_VERSION: i64 = 15;
+
 pub fn full_table_json_path() -> std::path::PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("com.tlmonitor.app")
-        .join("data")
-        .join("full_table.json")
+    paths::data_dir().join("full_table.json")
 }
 
 #[derive(Debug, Deserialize)]
@@ -116,6 +115,7 @@ pub fn load_items_from_json(
 
 pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String> {
     let db_path = paths::db_path();
+    let db_existed = db_path.exists();
     let db_url = format!("sqlite:{}?mode=rwc", db_path.display());
 
     if let Some(parent) = db_path.parent() {
@@ -156,7 +156,7 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
         .await
         .map_err(|e| e.to_string())?;
 
-    run_migrations(&pool).await?;
+    run_migrations(&pool, &db_path, db_existed).await?;
 
     let config = crate::core::config::load_config().unwrap_or_else(|e| {
         tracing::warn!("Failed to load config.yaml: {}", e);
@@ -417,8 +417,53 @@ async fn insert_realtime_prices(pool: &SqlitePool, items: &[Item]) {
     }
 }
 
-async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
-    // Create migration tracking table
+async fn run_migrations(pool: &SqlitePool, db_path: &Path, db_existed: bool) -> Result<(), String> {
+    ensure_migrations_table(pool).await?;
+
+    let has_user_schema = has_user_schema(pool).await?;
+    let current_version = read_schema_version(pool).await?;
+    let is_fresh_database = !db_existed || !has_user_schema;
+
+    tracing::info!(
+        "Current database schema version: {}, latest: {}, fresh: {}",
+        current_version,
+        LATEST_SCHEMA_VERSION,
+        is_fresh_database
+    );
+
+    if is_fresh_database {
+        tracing::info!("Initializing fresh database with latest schema baseline");
+        create_latest_schema_baseline(pool).await?;
+        finalize_schema(pool).await?;
+        record_all_migrations(pool).await?;
+        validate_database(pool).await?;
+        tracing::info!(
+            "Fresh database initialized at schema v{}",
+            LATEST_SCHEMA_VERSION
+        );
+        return Ok(());
+    }
+
+    if current_version > LATEST_SCHEMA_VERSION {
+        tracing::warn!(
+            "Database schema v{} is newer than this app supports (v{}); running compatibility checks only",
+            current_version,
+            LATEST_SCHEMA_VERSION
+        );
+    } else if current_version < LATEST_SCHEMA_VERSION {
+        let backup_path = create_migration_backup(pool, db_path, current_version).await?;
+        tracing::info!("Created pre-migration database backup at {:?}", backup_path);
+        run_legacy_migrations(pool, current_version).await?;
+    }
+
+    finalize_schema(pool).await?;
+    validate_database(pool).await?;
+
+    tracing::info!("Database migrations complete");
+    Ok(())
+}
+
+async fn ensure_migrations_table(pool: &SqlitePool) -> Result<(), String> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS _migrations (
             version INTEGER PRIMARY KEY,
@@ -428,80 +473,75 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
     .execute(pool)
     .await
     .map_err(|e| format!("Failed to create _migrations: {}", e))?;
+    Ok(())
+}
 
-    // Get current schema version
-    let current_version: i64 =
-        sqlx::query_scalar("SELECT COALESCE(MAX(version), 0) FROM _migrations")
-            .fetch_one(pool)
-            .await
-            .unwrap_or(0);
+async fn read_schema_version(pool: &SqlitePool) -> Result<i64, String> {
+    sqlx::query_scalar("SELECT COALESCE(MAX(version), 0) FROM _migrations")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to read migration version: {}", e))
+}
 
-    tracing::info!("Current database schema version: {}", current_version);
+async fn has_user_schema(pool: &SqlitePool) -> Result<bool, String> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)
+         FROM sqlite_master
+         WHERE type = 'table'
+           AND name NOT LIKE 'sqlite_%'
+           AND name != '_migrations'",
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|e| format!("Failed to inspect existing schema: {}", e))?;
+    Ok(count > 0)
+}
 
-    // Apply v1: initial schema
+async fn create_latest_schema_baseline(pool: &SqlitePool) -> Result<(), String> {
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("Failed to start baseline transaction: {}", e))?;
+
+    sqlx::query(include_str!("db/migrations/001_initial.sql"))
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("Failed to create baseline schema: {}", e))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| format!("Failed to commit baseline schema: {}", e))?;
+    Ok(())
+}
+
+async fn run_legacy_migrations(pool: &SqlitePool, current_version: i64) -> Result<(), String> {
     if current_version < 1 {
-        tracing::info!("Applying migration v1: initial schema");
-        let sql = include_str!("db/migrations/001_initial.sql");
-        sqlx::query(sql)
-            .execute(pool)
-            .await
-            .map_err(|e| format!("Migration v1 failed: {}", e))?;
-
-        sqlx::query("INSERT INTO _migrations (version, applied_at) VALUES (1, ?)")
-            .bind(chrono::Utc::now().timestamp())
-            .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+        apply_sql_migration(pool, 1, include_str!("db/migrations/001_initial.sql")).await?;
     }
-
-    // Apply v2: add constraints and indexes
     if current_version < 2 {
-        tracing::info!("Applying migration v2: add constraints and indexes");
-        let sql = include_str!("db/migrations/002_add_constraints.sql");
-        sqlx::query(sql)
-            .execute(pool)
-            .await
-            .map_err(|e| format!("Migration v2 failed: {}", e))?;
-
-        sqlx::query("INSERT INTO _migrations (version, applied_at) VALUES (2, ?)")
-            .bind(chrono::Utc::now().timestamp())
-            .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+        apply_sql_migration(
+            pool,
+            2,
+            include_str!("db/migrations/002_add_constraints.sql"),
+        )
+        .await?;
     }
-
-    // Apply v3: split season tables
     if current_version < 3 {
-        tracing::info!("Applying migration v3: split season tables");
-        let sql = include_str!("db/migrations/003_split_season_tables.sql");
-        sqlx::query(sql)
-            .execute(pool)
-            .await
-            .map_err(|e| format!("Migration v3 failed: {}", e))?;
-
-        sqlx::query("INSERT INTO _migrations (version, applied_at) VALUES (3, ?)")
-            .bind(chrono::Utc::now().timestamp())
-            .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+        apply_sql_migration(
+            pool,
+            3,
+            include_str!("db/migrations/003_split_season_tables.sql"),
+        )
+        .await?;
     }
-
-    // Apply v4: remove section_items foreign key constraint
     if current_version < 4 {
-        tracing::info!("Applying migration v4: remove section_items FK constraint");
-        let sql = include_str!("db/migrations/004_remove_section_items_fk.sql");
-        sqlx::query(sql)
-            .execute(pool)
-            .await
-            .map_err(|e| format!("Migration v4 failed: {}", e))?;
-
-        sqlx::query("INSERT INTO _migrations (version, applied_at) VALUES (4, ?)")
-            .bind(chrono::Utc::now().timestamp())
-            .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+        apply_sql_migration(
+            pool,
+            4,
+            include_str!("db/migrations/004_remove_section_items_fk.sql"),
+        )
+        .await?;
     }
-
     if current_version < 5 {
         apply_sql_migration(
             pool,
@@ -526,42 +566,7 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         record_migration(pool, 9).await?;
     }
     if current_version < 10 {
-        // v10: Add realtime_value to strategy_outputs (idempotent)
-        // First ensure the table exists (in case v1 failed to create it)
-        if !table_exists(pool, "strategy_outputs").await? {
-            tracing::info!("Creating strategy_outputs table for migration v10");
-            sqlx::query(
-                r#"CREATE TABLE IF NOT EXISTS strategy_outputs (
-                    id TEXT PRIMARY KEY,
-                    strategy_id TEXT NOT NULL,
-                    season_id TEXT NOT NULL DEFAULT 'ss12',
-                    market_mode TEXT NOT NULL DEFAULT 'season_normal',
-                    item_id TEXT NOT NULL,
-                    item_name TEXT NOT NULL DEFAULT '',
-                    item_type TEXT NOT NULL DEFAULT '',
-                    buy_price REAL NOT NULL DEFAULT 0,
-                    sell_price REAL NOT NULL DEFAULT 0,
-                    profit_rate REAL NOT NULL DEFAULT 0,
-                    realtime_value REAL DEFAULT 0,
-                    created_at INTEGER NOT NULL,
-                    updated_at INTEGER NOT NULL,
-                    FOREIGN KEY (strategy_id) REFERENCES strategies(id) ON DELETE CASCADE
-                )"#,
-            )
-            .execute(pool)
-            .await
-            .map_err(|e| format!("Failed to create strategy_outputs table: {}", e))?;
-        }
-
-        // Now add the realtime_value column if it doesn't exist
-        if !column_exists(pool, "strategy_outputs", "realtime_value").await? {
-            sqlx::query(
-                "ALTER TABLE strategy_outputs ADD COLUMN realtime_value REAL NOT NULL DEFAULT 0",
-            )
-            .execute(pool)
-            .await
-            .map_err(|e| format!("Migration v10 failed: {}", e))?;
-        }
+        apply_strategy_outputs_realtime_value_migration(pool).await?;
         record_migration(pool, 10).await?;
     }
     if current_version < 11 {
@@ -587,8 +592,6 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         ensure_strategy_detail_schema(pool).await?;
         record_migration(pool, 14).await?;
     }
-    // v15 now includes table creation to ensure indexes can be created
-    // even if v9 failed to create the strategy_detail_costs and strategy_detail_outputs tables
     if current_version < 15 {
         tracing::info!("Applying migration v15: add performance indexes");
         drop_known_performance_indexes(pool).await?;
@@ -596,21 +599,19 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         record_migration(pool, 15).await?;
     }
 
-    // Always run critical schema repair helpers. This protects users who have a
-    // partially applied migration marker from a previous crashing build.
+    Ok(())
+}
+
+async fn finalize_schema(pool: &SqlitePool) -> Result<(), String> {
+    ensure_core_schema(pool).await?;
     ensure_strategy_detail_schema(pool).await?;
     ensure_item_realtime_prices_schema(pool).await?;
     ensure_arbitrage_schema(pool).await?;
-    apply_performance_indexes_migration(pool).await?;
-
-    // Ensure split tables exist (idempotent, handles cases where v3 migration
-    // was marked as applied but tables weren't actually created)
     ensure_split_tables(pool).await?;
-
-    // Seed seasons data
+    apply_season_day_migration(pool).await?;
+    apply_snapshot_metadata_migration(pool).await?;
+    apply_performance_indexes_migration(pool).await?;
     seed_seasons(pool).await?;
-
-    tracing::info!("Database migrations complete");
     Ok(())
 }
 
@@ -624,13 +625,212 @@ async fn record_migration(pool: &SqlitePool, version: i64) -> Result<(), String>
     Ok(())
 }
 
+async fn record_all_migrations(pool: &SqlitePool) -> Result<(), String> {
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("Failed to start migration marker transaction: {}", e))?;
+    let now = chrono::Utc::now().timestamp();
+
+    for version in 1..=LATEST_SCHEMA_VERSION {
+        sqlx::query("INSERT OR REPLACE INTO _migrations (version, applied_at) VALUES (?, ?)")
+            .bind(version)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("Failed to record migration v{}: {}", version, e))?;
+    }
+
+    tx.commit()
+        .await
+        .map_err(|e| format!("Failed to commit migration markers: {}", e))?;
+    Ok(())
+}
+
 async fn apply_sql_migration(pool: &SqlitePool, version: i64, sql: &str) -> Result<(), String> {
     tracing::info!("Applying migration v{}", version);
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("Migration v{} failed to start transaction: {}", version, e))?;
+
     sqlx::query(sql)
-        .execute(pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| format!("Migration v{} failed: {}", version, e))?;
-    record_migration(pool, version).await
+
+    sqlx::query("INSERT OR REPLACE INTO _migrations (version, applied_at) VALUES (?, ?)")
+        .bind(version)
+        .bind(chrono::Utc::now().timestamp())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("Migration v{} failed to record version: {}", version, e))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| format!("Migration v{} failed to commit: {}", version, e))?;
+    Ok(())
+}
+
+async fn apply_strategy_outputs_realtime_value_migration(pool: &SqlitePool) -> Result<(), String> {
+    tracing::info!("Applying migration v10: add realtime_value to strategy_outputs");
+
+    if !table_exists(pool, "strategy_outputs").await? {
+        sqlx::query(
+            r#"CREATE TABLE IF NOT EXISTS strategy_outputs (
+                id TEXT PRIMARY KEY,
+                strategy_id TEXT NOT NULL,
+                season_id TEXT NOT NULL DEFAULT 'ss12',
+                market_mode TEXT NOT NULL DEFAULT 'season_normal',
+                item_id TEXT NOT NULL,
+                item_name TEXT NOT NULL DEFAULT '',
+                item_type TEXT NOT NULL DEFAULT '',
+                buy_price REAL NOT NULL DEFAULT 0,
+                sell_price REAL NOT NULL DEFAULT 0,
+                profit_rate REAL NOT NULL DEFAULT 0,
+                realtime_value REAL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                FOREIGN KEY (strategy_id) REFERENCES strategies(id) ON DELETE CASCADE
+            )"#,
+        )
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to create strategy_outputs table: {}", e))?;
+    }
+
+    add_column_if_missing(
+        pool,
+        "strategy_outputs",
+        "realtime_value",
+        "REAL NOT NULL DEFAULT 0",
+    )
+    .await
+}
+
+async fn ensure_core_schema(pool: &SqlitePool) -> Result<(), String> {
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS app_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Failed to ensure app_meta table: {}", e))?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS seasons (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL DEFAULT '',
+            code TEXT NOT NULL DEFAULT '',
+            is_current INTEGER NOT NULL DEFAULT 0,
+            started_at INTEGER,
+            ended_at INTEGER,
+            created_at INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL DEFAULT 0
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Failed to ensure seasons table: {}", e))?;
+
+    add_column_if_missing(pool, "seasons", "name", "TEXT NOT NULL DEFAULT ''").await?;
+    add_column_if_missing(pool, "seasons", "code", "TEXT NOT NULL DEFAULT ''").await?;
+    add_column_if_missing(pool, "seasons", "is_current", "INTEGER NOT NULL DEFAULT 0").await?;
+    add_column_if_missing(pool, "seasons", "started_at", "INTEGER").await?;
+    add_column_if_missing(pool, "seasons", "ended_at", "INTEGER").await?;
+    add_column_if_missing(pool, "seasons", "created_at", "INTEGER NOT NULL DEFAULT 0").await?;
+    add_column_if_missing(pool, "seasons", "updated_at", "INTEGER NOT NULL DEFAULT 0").await?;
+
+    Ok(())
+}
+
+async fn create_migration_backup(
+    pool: &SqlitePool,
+    db_path: &Path,
+    from_version: i64,
+) -> Result<std::path::PathBuf, String> {
+    let backup_dir = db_path
+        .parent()
+        .map(|parent| parent.join("backups"))
+        .unwrap_or_else(paths::backups_dir);
+    std::fs::create_dir_all(&backup_dir)
+        .map_err(|e| format!("Failed to create migration backup directory: {}", e))?;
+
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S%.3f");
+    let backup_name = format!(
+        "tl_monitor_migration_v{}_to_v{}_{}.db",
+        from_version, LATEST_SCHEMA_VERSION, timestamp
+    );
+    let backup_path = backup_dir.join(backup_name);
+
+    sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to checkpoint database before backup: {}", e))?;
+
+    let backup_sql = format!(
+        "VACUUM INTO '{}'",
+        backup_path.to_string_lossy().replace('\'', "''")
+    );
+    sqlx::query(&backup_sql)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to create migration backup: {}", e))?;
+
+    Ok(backup_path)
+}
+
+async fn validate_database(pool: &SqlitePool) -> Result<(), String> {
+    let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to run integrity_check: {}", e))?;
+    if integrity != "ok" {
+        return Err(format!("Database integrity_check failed: {}", integrity));
+    }
+
+    let critical_columns = [
+        (
+            "strategy_details",
+            &["id", "name", "label", "difficulty", "image_url"][..],
+        ),
+        (
+            "strategy_detail_outputs",
+            &["item_name", "estimated_value", "realtime_value"][..],
+        ),
+        ("item_realtime_prices", &["name", "fire_price"][..]),
+        (
+            "seasons",
+            &["id", "name", "code", "created_at", "updated_at"][..],
+        ),
+    ];
+
+    for (table, columns) in critical_columns {
+        let existing = table_columns(pool, table).await?;
+        if !has_columns(&existing, columns) {
+            return Err(format!(
+                "Database schema validation failed for {}. Missing columns from {:?}; existing columns: {:?}",
+                table, columns, existing
+            ));
+        }
+    }
+
+    let foreign_key_issues: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM pragma_foreign_key_check")
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
+    if foreign_key_issues > 0 {
+        tracing::warn!(
+            "Database foreign_key_check reported {} issue(s); preserving existing data and continuing",
+            foreign_key_issues
+        );
+    }
+
+    Ok(())
 }
 
 async fn table_exists(pool: &SqlitePool, table: &str) -> Result<bool, String> {
@@ -1612,12 +1812,22 @@ mod migration_tests {
     use super::*;
     use sqlx::sqlite::SqlitePoolOptions;
 
-    async fn memory_pool() -> SqlitePool {
+    async fn file_pool(db_path: &std::path::Path) -> SqlitePool {
+        let db_url = format!("sqlite:{}?mode=rwc", db_path.display());
         SqlitePoolOptions::new()
             .max_connections(1)
-            .connect("sqlite::memory:")
+            .connect(&db_url)
             .await
-            .expect("in-memory sqlite pool should connect")
+            .expect("test sqlite pool should connect")
+    }
+
+    fn temp_db_path() -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "tl-monitor-migration-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp migration test dir should be created");
+        dir.join("tl_monitor.db")
     }
 
     async fn assert_columns(pool: &SqlitePool, table: &str, columns: &[&str]) {
@@ -1637,9 +1847,10 @@ mod migration_tests {
 
     #[tokio::test]
     async fn fresh_migrations_create_current_schema() {
-        let pool = memory_pool().await;
+        let db_path = temp_db_path();
+        let pool = file_pool(&db_path).await;
 
-        run_migrations(&pool)
+        run_migrations(&pool, &db_path, false)
             .await
             .expect("fresh migrations should complete");
 
@@ -1666,7 +1877,8 @@ mod migration_tests {
 
     #[tokio::test]
     async fn migrations_repair_legacy_strategy_and_realtime_tables() {
-        let pool = memory_pool().await;
+        let db_path = temp_db_path();
+        let pool = file_pool(&db_path).await;
 
         sqlx::query(
             "CREATE TABLE _migrations (
@@ -1740,9 +1952,19 @@ mod migration_tests {
         .await
         .unwrap();
 
-        run_migrations(&pool)
+        assert!(has_user_schema(&pool).await.unwrap());
+        assert_eq!(read_schema_version(&pool).await.unwrap(), 10);
+
+        run_migrations(&pool, &db_path, true)
             .await
             .expect("legacy migrations should be repaired");
+
+        let backup_dir = db_path.parent().unwrap().join("backups");
+        let backup_count = std::fs::read_dir(&backup_dir)
+            .expect("migration backup dir should exist")
+            .filter_map(Result::ok)
+            .count();
+        assert_eq!(backup_count, 1);
 
         assert_columns(
             &pool,

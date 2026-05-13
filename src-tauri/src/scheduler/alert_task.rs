@@ -2,6 +2,7 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
+use crate::core::paths::resolve_voice_alert_path;
 use crate::core::state::{AppState, NotificationSettings};
 use crate::db::models::SectionItem;
 use crate::db::repo_alerts;
@@ -101,8 +102,8 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
         }
     }
 
-    if notification_config.voice_alert_enabled && !notification_config.voice_alert_path.is_empty() {
-        play_voice_alert(&notification_config.voice_alert_path, 1);
+    if notification_config.voice_alert_enabled {
+        play_configured_voice_alert(app, &notification_config, 1);
     }
 }
 
@@ -132,6 +133,8 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
 
     let now = chrono::Utc::now().timestamp();
 
+    let mut any_rule_triggered = false;
+
     for rule in &enabled_rules {
         if let Some(last_triggered) = rule.last_triggered_at {
             if now - last_triggered < rule.cooldown_seconds as i64 {
@@ -142,6 +145,7 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
         let triggered = evaluate_rule(&state.db, &season_id, market_mode_str, rule).await;
 
         if triggered {
+            any_rule_triggered = true;
             let message = format_rule_notification(rule);
             if notification_config.system_notifications {
                 if let Err(e) = send_notification(app, "⚠️ 预警规则触发", &message) {
@@ -171,13 +175,8 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
         }
     }
 
-    if notification_config.voice_alert_enabled && !notification_config.voice_alert_path.is_empty() {
-        let has_triggered = enabled_rules.iter().any(|rule| {
-            rule.last_triggered_at.map(|t| now - t < rule.cooldown_seconds as i64).unwrap_or(false)
-        });
-        if has_triggered {
-            play_voice_alert(&notification_config.voice_alert_path, 1);
-        }
+    if notification_config.voice_alert_enabled && any_rule_triggered {
+        play_configured_voice_alert(app, &notification_config, 1);
     }
 }
 
@@ -318,8 +317,21 @@ fn emit_alert_triggered(
     Ok(())
 }
 
-fn play_voice_alert(voice_path: &str, count: usize) {
-    let voice_path = voice_path.to_string();
+fn play_configured_voice_alert(
+    app: &tauri::AppHandle,
+    notification_config: &NotificationSettings,
+    count: usize,
+) {
+    match resolve_voice_alert_path(app, &notification_config.voice_alert_path) {
+        Some(path) => play_voice_alert(path, count),
+        None => {
+            warn!("Voice alert enabled, but no configured or bundled voice alert file was found")
+        }
+    }
+}
+
+fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) {
+    let voice_path = voice_path.to_string_lossy().to_string();
     tokio::spawn(async move {
         for _ in 0..count {
             #[cfg(target_os = "macos")]
@@ -331,17 +343,15 @@ fn play_voice_alert(voice_path: &str, count: usize) {
             }
             #[cfg(target_os = "windows")]
             {
-                if voice_path.to_lowercase().ends_with(".mp3") || voice_path.to_lowercase().ends_with(".wav") {
-                    let _ = tokio::process::Command::new("powershell")
-                        .args(["-c", &format!("(New-Object System.Media.SoundPlayer '{}').PlaySync()", voice_path)])
-                        .spawn()
-                        .map_err(|e| warn!("Failed to play voice on Windows: {}", e));
-                } else {
-                    let _ = tokio::process::Command::new("powershell")
-                        .args(["-c", "[System.Media.SystemSounds]::Hand.Play()"])
-                        .spawn()
-                        .map_err(|e| warn!("Failed to play system sound on Windows: {}", e));
-                }
+                let voice_path = voice_path.replace('\'', "''");
+                let script = format!(
+                    "Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; $player.Open([Uri]'{}'); $player.Play(); Start-Sleep -Milliseconds 2500; $player.Close()",
+                    voice_path
+                );
+                let _ = tokio::process::Command::new("powershell")
+                    .args(["-NoProfile", "-Command", &script])
+                    .spawn()
+                    .map_err(|e| warn!("Failed to play voice on Windows: {}", e));
             }
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }
