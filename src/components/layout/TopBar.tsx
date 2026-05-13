@@ -125,11 +125,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
     >
       <div className="torch-topbar-drag-region" data-tauri-drag-region />
       <button className="torch-brand" onClick={() => onPageChange("dashboard")} title="TorchScan">
-        <img src="/torchscan/logo-mark.svg" alt="" className="h-11 w-11" draggable={false} />
-        <span className="torch-brand-copy">
-          <span className="torch-brand-name">TorchScan</span>
-          <span className="torch-brand-tagline">火炬之光 · 无限 物价监控系统</span>
-        </span>
+        <img src="/torchscan/logo-mark.png" alt="TorchScan" className="h-12" draggable={false} />
       </button>
 
       <div className="torch-topbar-context">

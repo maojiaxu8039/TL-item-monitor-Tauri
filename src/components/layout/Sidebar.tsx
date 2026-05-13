@@ -68,7 +68,7 @@ export function Sidebar({ page, onPageChange }: { page: PageId; onPageChange: (p
       </nav>
 
       <div className="torch-sidebar-footer">
-        <img src="/torchscan/logo-mark.svg" alt="" className="h-8 w-8" draggable={false} />
+        <img src="/torchscan/logo-mark.png" alt="" className="h-8 w-8" draggable={false} />
         <div className="min-w-0">
           <div className="truncate text-[12px] font-semibold text-[var(--color-brand-gold)]">TorchScan</div>
           <div className="truncate text-[10px] text-[var(--color-text-subtle)]">实时物价监控</div>

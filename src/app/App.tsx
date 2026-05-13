@@ -28,7 +28,7 @@ function PageLoading() {
   return (
     <div className="flex h-64 items-center justify-center">
       <div className="flex min-w-64 flex-col items-center gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] px-8 py-7 shadow-[var(--shadow-glow)]">
-        <img src="/torchscan/logo-mark.svg" alt="TorchScan" className="h-16 w-16" />
+        <img src="/torchscan/logo-mark.png" alt="TorchScan" className="h-16 w-16" />
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-panel-soft)]">
           <div className="h-full w-2/3 animate-pulse rounded-full bg-[linear-gradient(90deg,var(--color-brand),var(--color-brand-gold))]" />
         </div>
