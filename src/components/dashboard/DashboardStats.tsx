@@ -266,12 +266,12 @@ export function DashboardStats() {
           value={stats.currentFire.toFixed(2)}
           icon={Flame}
           iconBg="bg-[rgba(239,68,68,0.1)]"
-          iconColor="text-red-500"
+          iconColor="text-[var(--color-danger)]"
           helper={
             <div className="flex items-center gap-1">
               <span className="text-xs text-[var(--color-text-subtle)]">元/万火</span>
               {summary?.fire?.increase_ratio !== null && summary?.fire?.increase_ratio !== undefined && (
-                <span className={`text-xs font-medium ${summary.fire.increase_ratio >= 0 ? "text-red-500" : "text-green-500"}`}>
+                <span className={`text-xs font-medium ${summary.fire.increase_ratio >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
                   {summary.fire.increase_ratio >= 0 ? "↑" : "↓"}{Math.abs(summary.fire.increase_ratio).toFixed(2)}%
                 </span>
               )}
@@ -292,7 +292,7 @@ export function DashboardStats() {
                   {fireStats.min.toFixed(2)}
                 </span>
                 <span className="flex items-center gap-0.5 text-xs text-[var(--color-text-subtle)]">
-                  <ArrowUp className="w-3 h-3 text-red-500" />
+                  <ArrowUp className="w-3 h-3 text-[var(--color-danger)]" />
                   {fireStats.max.toFixed(2)}
                 </span>
               </div>
@@ -304,10 +304,10 @@ export function DashboardStats() {
           value={`${profitStatus === "profit" ? "+" : profitStatus === "loss" ? "-" : ""}${Math.abs(stats.profit).toFixed(2)}`}
           icon={profitStatus === "profit" ? TrendingUp : profitStatus === "loss" ? TrendingDown : Minus}
           iconBg={profitStatus === "profit" ? "bg-[rgba(239,68,68,0.1)]" : profitStatus === "loss" ? "bg-[rgba(34,197,94,0.1)]" : "bg-[rgba(255,255,255,0.04)]"}
-          iconColor={profitStatus === "profit" ? "text-red-500" : profitStatus === "loss" ? "text-green-500" : "text-[var(--color-text-subtle)]"}
+          iconColor={profitStatus === "profit" ? "text-[var(--color-danger)]" : profitStatus === "loss" ? "text-[var(--color-success)]" : "text-[var(--color-text-subtle)]"}
           helper={
             allSectionItems.length > 0 ? (
-              <span className={`text-xs font-medium ${stats.profitPercent >= 0 ? "text-red-500" : "text-green-500"}`}>
+              <span className={`text-xs font-medium ${stats.profitPercent >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
                 {stats.profitPercent >= 0 ? "↑" : "↓"}{Math.abs(stats.profitPercent).toFixed(2)}%
               </span>
             ) : <span className="text-xs text-[var(--color-text-subtle)]">元</span>

@@ -120,7 +120,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center gap-2 px-5 py-4 hover:bg-[var(--color-panel-soft)] transition-colors"
       >
-        <Settings className="w-4 h-4 text-amber-500" />
+        <Settings className="w-4 h-4 text-[var(--color-brand-gold)]" />
         <span className="text-sm font-semibold text-[var(--color-text)]">服务器管理（管理员）</span>
         {isOpen ? (
           <ChevronUp className="w-4 h-4 text-[var(--color-text-subtle)] ml-auto" />
@@ -156,7 +156,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
               onClick={() => setActiveTab("api-config")}
               className={`px-4 py-2 text-sm border-b-2 transition-colors ${
                 activeTab === "api-config"
-                  ? "border-amber-500 text-amber-600"
+                  ? "border-[var(--color-brand-gold)] text-[var(--color-brand-gold)]"
                   : "border-transparent text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
               }`}
             >
@@ -166,7 +166,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
               onClick={() => setActiveTab("init-season")}
               className={`px-4 py-2 text-sm border-b-2 transition-colors ${
                 activeTab === "init-season"
-                  ? "border-amber-500 text-amber-600"
+                  ? "border-[var(--color-brand-gold)] text-[var(--color-brand-gold)]"
                   : "border-transparent text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
               }`}
             >
@@ -182,7 +182,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
                 <button
                   onClick={loadApiConfig}
                   disabled={isLoading || !password}
-                  className="flex items-center gap-2 px-4 py-2 bg-[var(--color-warning)] text-white text-sm rounded-lg hover:opacity-90 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 bg-[var(--color-warning)] text-black text-sm rounded-lg hover:opacity-90 disabled:opacity-50"
                 >
                   {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Settings className="w-4 h-4" />}
                   加载当前配置
@@ -253,7 +253,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
                     <button
                       onClick={handleSaveApiConfig}
                       disabled={isLoading}
-                      className="flex items-center gap-2 px-4 py-2 bg-[var(--color-success)] text-white text-sm rounded-lg hover:opacity-90 disabled:opacity-50"
+                      className="flex items-center gap-2 px-4 py-2 bg-[var(--color-success)] text-black text-sm rounded-lg hover:opacity-90 disabled:opacity-50"
                     >
                       {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                       保存配置
@@ -297,7 +297,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
                 <p className="text-xs text-[var(--color-text-subtle)] mt-1">必填，用于计算赛季天数</p>
               </div>
 
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="p-3 bg-[rgba(255,184,0,0.08)] border border-[rgba(255,184,0,0.25)] rounded-lg">
                 <p className="text-xs text-[var(--color-brand-gold)]">
                   初始化新赛季会创建新的数据库表，请确保先归档当前赛季数据。
                   此操作需要服务器重启后才能生效。
@@ -307,7 +307,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
               <button
                 onClick={handleInitSeason}
                 disabled={isLoading || !password || !newSeasonId || !newSeasonStartedAt}
-                className="flex items-center gap-2 px-4 py-2 bg-[var(--color-warning)] text-white text-sm rounded-lg hover:opacity-90 disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 bg-[var(--color-warning)] text-black text-sm rounded-lg hover:opacity-90 disabled:opacity-50"
               >
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 初始化新赛季

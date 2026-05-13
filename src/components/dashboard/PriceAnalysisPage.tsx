@@ -125,8 +125,8 @@ function HoardCard({
         label: "建议出手",
       };
     return {
-      border: "border-amber-200",
-      bg: "bg-amber-50",
+      border: "border-[rgba(255,184,0,0.25)]",
+      bg: "bg-[rgba(255,184,0,0.08)]",
       badge: "warning",
       icon: Clock,
       label: "建议观望",
@@ -141,7 +141,7 @@ function HoardCard({
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className={cn("p-2 rounded-lg", config.bg)}>
-            <Icon className={`w-5 h-5 ${isBuy ? "text-[var(--color-success)]" : isSell ? "text-[var(--color-danger)]" : "text-amber-600"}`} />
+            <Icon className={`w-5 h-5 ${isBuy ? "text-[var(--color-success)]" : isSell ? "text-[var(--color-danger)]" : "text-[var(--color-brand-gold)]"}`} />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -309,8 +309,8 @@ export default function PriceAnalysisPage() {
           value={stats.buy}
           icon={ShoppingCart}
           iconBg="bg-[rgba(34,197,94,0.1)]"
-          iconColor="text-green-500"
-          helper={<span className="text-xs text-green-500">件物品</span>}
+          iconColor="text-[var(--color-success)]"
+          helper={<span className="text-xs text-[var(--color-success)]">件物品</span>}
           className="border-[rgba(34,197,94,0.2)]"
         />
         <MetricCard
@@ -318,18 +318,18 @@ export default function PriceAnalysisPage() {
           value={stats.sell}
           icon={DollarSign}
           iconBg="bg-[rgba(239,68,68,0.1)]"
-          iconColor="text-red-500"
-          helper={<span className="text-xs text-red-500">件物品</span>}
+          iconColor="text-[var(--color-danger)]"
+          helper={<span className="text-xs text-[var(--color-danger)]">件物品</span>}
           className="border-[rgba(239,68,68,0.2)]"
         />
         <MetricCard
           label="建议观望"
           value={stats.wait}
           icon={Clock}
-          iconBg="bg-amber-50"
-          iconColor="text-amber-500"
-          helper={<span className="text-xs text-amber-500">件物品</span>}
-          className="border-amber-100"
+          iconBg="bg-[rgba(255,184,0,0.08)]"
+          iconColor="text-[var(--color-brand-gold)]"
+          helper={<span className="text-xs text-[var(--color-brand-gold)]">件物品</span>}
+          className="border-[rgba(255,184,0,0.2)]"
         />
       </div>
 

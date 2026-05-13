@@ -292,7 +292,7 @@ export default function FirePriceComparePage() {
               <ArrowDownCircle className="w-5 h-5 text-[var(--color-success)]" />
               <span className="text-sm font-medium text-[var(--color-success)]">最佳购买火时机</span>
             </div>
-            <div className="text-xl font-bold text-green-800">
+            <div className="text-xl font-bold text-[var(--color-success)]">
               第{bestBuyTime.day}天 {String(bestBuyTime.hour).padStart(2, '0')}:00
             </div>
             <div className="text-sm text-[var(--color-success)] font-medium mt-1">
@@ -301,7 +301,7 @@ export default function FirePriceComparePage() {
             <div className="text-xs text-[var(--color-success)] mt-1">
               {bestBuyTime.reason}
             </div>
-            <div className="text-xs text-green-500 mt-2 pt-2 border-t border-[rgba(34,197,94,0.25)]">
+            <div className="text-xs text-[var(--color-success)] mt-2 pt-2 border-t border-[rgba(34,197,94,0.25)]">
               建议：火价低于均价时购入初火
             </div>
           </Surface>
@@ -311,7 +311,7 @@ export default function FirePriceComparePage() {
               <ArrowUpCircle className="w-5 h-5 text-[var(--color-danger)]" />
               <span className="text-sm font-medium text-[var(--color-danger)]">最佳出售火时机</span>
             </div>
-            <div className="text-xl font-bold text-red-800">
+            <div className="text-xl font-bold text-[var(--color-danger)]">
               第{bestSellTime.day}天 {String(bestSellTime.hour).padStart(2, '0')}:00
             </div>
             <div className="text-sm text-[var(--color-danger)] font-medium mt-1">
@@ -320,7 +320,7 @@ export default function FirePriceComparePage() {
             <div className="text-xs text-[var(--color-danger)] mt-1">
               {bestSellTime.reason}
             </div>
-            <div className="text-xs text-red-500 mt-2 pt-2 border-t border-[rgba(239,68,68,0.25)]">
+            <div className="text-xs text-[var(--color-danger)] mt-2 pt-2 border-t border-[rgba(239,68,68,0.25)]">
               建议：火价高于均价时出售物品换RMB
             </div>
           </Surface>
@@ -472,7 +472,7 @@ export default function FirePriceComparePage() {
               <span className="text-[var(--color-text-subtle)]">{historySeason.toUpperCase()}</span>
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-3 h-0.5 bg-orange-500 rounded" />
+              <span className="w-3 h-0.5 bg-[var(--color-brand)] rounded" />
               <span className="text-[var(--color-text-subtle)]">{currentSeason.toUpperCase()}</span>
             </span>
           </div>

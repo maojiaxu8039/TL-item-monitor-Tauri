@@ -248,7 +248,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
                 </div>
                 <div className="rounded-lg border border-[rgba(255,184,0,0.14)] bg-[var(--color-panel-soft)] p-3">
                   <div className="mb-1 text-xs text-[var(--color-text-subtle)]">溢价率</div>
-                  <div className={`text-lg font-bold ${(stats.premiumRate ?? 0) > 0 ? "text-green-500" : "text-red-500"}`}>
+                  <div className={`text-lg font-bold ${(stats.premiumRate ?? 0) > 0 ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}>
                     {(stats.premiumRate ?? 0) > 0 ? "↑" : "↓"} {Math.abs(stats.premiumRate ?? 0).toFixed(1)}%
                   </div>
                   <div className="text-xs text-[var(--color-text-subtle)]">vs 历史</div>
@@ -265,7 +265,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
               加载中...
             </div>
           ) : isError ? (
-            <div className="flex h-full items-center justify-center text-red-500">
+            <div className="flex h-full items-center justify-center text-[var(--color-danger)]">
               加载失败: {String(errorMsg)}
             </div>
           ) : chartData.length === 0 ? (

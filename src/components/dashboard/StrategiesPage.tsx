@@ -828,8 +828,8 @@ export default function StrategiesPage() {
                               {strategy.costs.map((cost) => (
                                 <span key={cost.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(239,68,68,0.1)] text-[var(--color-danger)] text-xs rounded">
                                   <span className="font-medium">{cost.item_name || cost.item_id}</span>
-                                  <span className="text-red-400">×{cost.count}</span>
-                                  <span className="text-red-700">{cost.total_fire.toFixed(0)}火</span>
+                                  <span className="text-[var(--color-danger)]">×{cost.count}</span>
+                                  <span className="text-[var(--color-danger)]">{cost.total_fire.toFixed(0)}火</span>
                                   {cost.is_realtime && <span className="text-[10px] bg-[var(--color-success)]/20 text-[var(--color-success)] px-1 rounded">实时</span>}
                                 </span>
                               ))}
@@ -846,8 +846,8 @@ export default function StrategiesPage() {
                               {strategy.outputs.map((output) => (
                                 <span key={output.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(34,197,94,0.1)] text-[var(--color-success)] text-xs rounded">
                                   <span className="font-medium">{output.item_name}</span>
-                                  <span className="text-green-400">×{output.count}</span>
-                                  <span className="text-green-700">{(output.realtime_value * output.count).toFixed(0)}火</span>
+                                  <span className="text-[var(--color-success)]">×{output.count}</span>
+                                  <span className="text-[var(--color-success)]">{(output.realtime_value * output.count).toFixed(0)}火</span>
                                 </span>
                               ))}
                             </div>
@@ -967,7 +967,7 @@ export default function StrategiesPage() {
                                   </span>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleDeleteCost(cost.id); }}
-                                    className="p-1 text-[var(--color-text-subtle)] hover:text-red-500"
+                                    className="p-1 text-[var(--color-text-subtle)] hover:text-[var(--color-danger)]"
                                   >
                                     <X className="w-3 h-3" />
                                   </button>
@@ -1012,7 +1012,7 @@ export default function StrategiesPage() {
                                   </span>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleDeleteOutput(output.id); }}
-                                    className="p-1 text-[var(--color-text-subtle)] hover:text-red-500"
+                                    className="p-1 text-[var(--color-text-subtle)] hover:text-[var(--color-danger)]"
                                   >
                                     <X className="w-3 h-3" />
                                   </button>
@@ -1073,7 +1073,7 @@ export default function StrategiesPage() {
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDelete(strategy.id); }}
-                          className="p-1.5 text-[var(--color-text-subtle)] hover:text-red-500 hover:bg-[rgba(239,68,68,0.1)] rounded-lg transition-colors"
+                          className="p-1.5 text-[var(--color-text-subtle)] hover:text-[var(--color-danger)] hover:bg-[rgba(239,68,68,0.1)] rounded-lg transition-colors"
                           title="删除策略"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1175,7 +1175,7 @@ export default function StrategiesPage() {
                   <img src={editForm.image_url} alt="加点图预览" className="max-h-24 rounded" />
                   <button
                     onClick={() => setEditForm(prev => ({ ...prev, image_url: "" }))}
-                    className="text-[var(--color-danger)] hover:text-red-700 text-xs"
+                    className="text-[var(--color-danger)] hover:text-[var(--color-danger)] text-xs"
                   >
                     删除图片
                   </button>
@@ -1277,7 +1277,7 @@ export default function StrategiesPage() {
                   <img src={editForm.image_url} alt="加点图预览" className="max-h-24 rounded" />
                   <button
                     onClick={() => setEditForm(prev => ({ ...prev, image_url: "" }))}
-                    className="text-[var(--color-danger)] hover:text-red-700 text-xs"
+                    className="text-[var(--color-danger)] hover:text-[var(--color-danger)] text-xs"
                   >
                     删除图片
                   </button>

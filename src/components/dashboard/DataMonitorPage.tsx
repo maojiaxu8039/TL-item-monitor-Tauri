@@ -555,12 +555,12 @@ export default function DataMonitorPage() {
           <div className="ml-auto flex items-center gap-2">
             {connectionStatus === "connected" ? (
               <>
-                <Wifi className="w-5 h-5 text-green-500" />
+                <Wifi className="w-5 h-5 text-[var(--color-success)]" />
                 <span className="text-[var(--color-success)]">已连接</span>
               </>
             ) : connectionStatus === "error" ? (
               <>
-                <AlertCircle className="w-5 h-5 text-yellow-500" />
+                <AlertCircle className="w-5 h-5 text-[var(--color-brand-gold)]" />
                 <span className="text-[var(--color-brand-gold)]">连接错误</span>
               </>
             ) : (
@@ -586,7 +586,7 @@ export default function DataMonitorPage() {
             </div>
             <button
               onClick={handleSaveUrl}
-              className="mt-5 px-4 py-2 bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white text-sm rounded-lg hover:opacity-90 transition-opacity"
+              className="mt-5 px-4 py-2 bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black text-sm rounded-lg hover:opacity-90 transition-opacity"
             >
               保存
             </button>
@@ -606,7 +606,7 @@ export default function DataMonitorPage() {
                 value={formatUptime(serverStatus.uptime_seconds)}
                 icon={RefreshCw}
                 iconBg="bg-[rgba(34,197,94,0.1)]"
-                iconColor="text-green-500"
+                iconColor="text-[var(--color-success)]"
               />
               <MetricCard
                 label="赛季"
@@ -619,8 +619,8 @@ export default function DataMonitorPage() {
                 label="下次采集"
                 value={serverStatus.next_collection ? formatTimestamp(serverStatus.next_collection) : "-"}
                 icon={Loader2}
-                iconBg="bg-amber-50"
-                iconColor="text-amber-500"
+                iconBg="bg-[rgba(255,184,0,0.08)]"
+                iconColor="text-[var(--color-brand-gold)]"
               />
             </div>
           )}
@@ -638,26 +638,26 @@ export default function DataMonitorPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {normalStatus.fire_success ? (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <CheckCircle className="w-4 h-4 text-[var(--color-success)]" />
                   ) : (
-                    <XCircle className="w-4 h-4 text-red-500" />
+                    <XCircle className="w-4 h-4 text-[var(--color-danger)]" />
                   )}
                   <span className="text-sm text-[var(--color-text-muted)]">火价</span>
                 </div>
-                <span className={`font-medium ${normalStatus.fire_success ? "text-[var(--color-text)]" : "text-red-500"}`}>
+                <span className={`font-medium ${normalStatus.fire_success ? "text-[var(--color-text)]" : "text-[var(--color-danger)]"}`}>
                   {normalStatus.fire_success ? `${normalStatus.fire_price?.toFixed(2)} RMB/10K` : "失败"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {normalStatus.items_success ? (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <CheckCircle className="w-4 h-4 text-[var(--color-success)]" />
                   ) : (
-                    <XCircle className="w-4 h-4 text-red-500" />
+                    <XCircle className="w-4 h-4 text-[var(--color-danger)]" />
                   )}
                   <span className="text-sm text-[var(--color-text-muted)]">物品</span>
                 </div>
-                <span className={`font-medium ${normalStatus.items_success ? "text-[var(--color-text)]" : "text-red-500"}`}>
+                <span className={`font-medium ${normalStatus.items_success ? "text-[var(--color-text)]" : "text-[var(--color-danger)]"}`}>
                   {normalStatus.items_success ? `${normalStatus.items_count} 个` : "失败"}
                 </span>
               </div>
@@ -680,26 +680,26 @@ export default function DataMonitorPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {expertStatus.fire_success ? (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <CheckCircle className="w-4 h-4 text-[var(--color-success)]" />
                   ) : (
-                    <XCircle className="w-4 h-4 text-red-500" />
+                    <XCircle className="w-4 h-4 text-[var(--color-danger)]" />
                   )}
                   <span className="text-sm text-[var(--color-text-muted)]">火价</span>
                 </div>
-                <span className={`font-medium ${expertStatus.fire_success ? "text-[var(--color-text)]" : "text-red-500"}`}>
+                <span className={`font-medium ${expertStatus.fire_success ? "text-[var(--color-text)]" : "text-[var(--color-danger)]"}`}>
                   {expertStatus.fire_success ? `${expertStatus.fire_price?.toFixed(2)} RMB/10K` : "失败"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {expertStatus.items_success ? (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <CheckCircle className="w-4 h-4 text-[var(--color-success)]" />
                   ) : (
-                    <XCircle className="w-4 h-4 text-red-500" />
+                    <XCircle className="w-4 h-4 text-[var(--color-danger)]" />
                   )}
                   <span className="text-sm text-[var(--color-text-muted)]">物品</span>
                 </div>
-                <span className={`font-medium ${expertStatus.items_success ? "text-[var(--color-text)]" : "text-red-500"}`}>
+                <span className={`font-medium ${expertStatus.items_success ? "text-[var(--color-text)]" : "text-[var(--color-danger)]"}`}>
                   {expertStatus.items_success ? `${expertStatus.items_count} 个` : "失败"}
                 </span>
               </div>
@@ -715,7 +715,7 @@ export default function DataMonitorPage() {
 
       <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
-          <Download className="w-4 h-4 text-green-500" />
+          <Download className="w-4 h-4 text-[var(--color-success)]" />
           <h2 className="text-sm font-semibold text-[var(--color-text)]">数据同步</h2>
           {syncJob && getSyncStatusBadge()}
         </div>
@@ -729,7 +729,7 @@ export default function DataMonitorPage() {
                 disabled={isSyncing}
                 className={`px-3 py-1.5 text-xs ${
                   dataType === "fire"
-                    ? "bg-[var(--color-success)] text-white"
+                    ? "bg-[var(--color-success)] text-black"
                     : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
                 } disabled:opacity-50`}
               >
@@ -740,7 +740,7 @@ export default function DataMonitorPage() {
                 disabled={isSyncing}
                 className={`px-3 py-1.5 text-xs ${
                   dataType === "items"
-                    ? "bg-[var(--color-success)] text-white"
+                    ? "bg-[var(--color-success)] text-black"
                     : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
                 } disabled:opacity-50`}
               >
@@ -757,7 +757,7 @@ export default function DataMonitorPage() {
                 disabled={isSyncing}
                 className={`px-3 py-1.5 text-xs ${
                   syncMode === "normal"
-                    ? "bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white"
+                    ? "bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black"
                     : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
                 } disabled:opacity-50`}
               >
@@ -768,7 +768,7 @@ export default function DataMonitorPage() {
                 disabled={isSyncing}
                 className={`px-3 py-1.5 text-xs ${
                   syncMode === "expert"
-                    ? "bg-[var(--color-ai)] text-white"
+                    ? "bg-[var(--color-ai)] text-black"
                     : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
                 } disabled:opacity-50`}
               >
@@ -803,7 +803,7 @@ export default function DataMonitorPage() {
                 className="rounded border-[var(--color-border)] text-[var(--color-brand)] focus:ring-[var(--color-brand)] disabled:opacity-50"
               />
               分页同步（大数据量推荐，每页 {PAGE_SIZE} 条）
-              {timeRange !== "season" && <span className="text-amber-500">（仅整赛季）</span>}
+              {timeRange !== "season" && <span className="text-[var(--color-brand-gold)]">（仅整赛季）</span>}
             </label>
           </div>
 
@@ -811,7 +811,7 @@ export default function DataMonitorPage() {
             <button
               onClick={handleSync}
               disabled={isSyncing || connectionStatus !== "connected"}
-              className="flex items-center gap-2 px-4 py-2 bg-[var(--color-success)] text-white text-sm rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+              className="flex items-center gap-2 px-4 py-2 bg-[var(--color-success)] text-black text-sm rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
             >
               {isSyncing ? (
                 <>
@@ -854,7 +854,7 @@ export default function DataMonitorPage() {
           {syncJob && syncJob.status !== "idle" && syncJob.status !== "running" && (
             <div className={`p-4 rounded-lg border ${
               syncJob.status === "success" ? "bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.25)]" :
-              syncJob.status === "partial" ? "bg-yellow-50 border-[rgba(255,184,0,0.25)]" :
+              syncJob.status === "partial" ? "bg-[rgba(255,184,0,0.08)] border-[rgba(255,184,0,0.25)]" :
               "bg-[rgba(239,68,68,0.1)] border-[rgba(239,68,68,0.25)]"
             }`}>
               <div className="flex items-center justify-between mb-3">
@@ -903,7 +903,7 @@ export default function DataMonitorPage() {
                       <div className="font-medium text-[var(--color-text)]">
                         {failure.itemName || failure.itemId || "记录"}
                       </div>
-                      <div className="text-red-500">{failure.reason}</div>
+                      <div className="text-[var(--color-danger)]">{failure.reason}</div>
                     </div>
                   ))}
                 </div>

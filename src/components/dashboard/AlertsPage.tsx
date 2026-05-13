@@ -254,8 +254,8 @@ export default function AlertsPage() {
               className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
                 filter === tab.key
                   ? tab.color === "green"
-                    ? "bg-[var(--color-success)] text-white font-medium"
-                    : "bg-[var(--color-panel)] text-white font-medium"
+                    ? "bg-[var(--color-success)] text-black font-medium"
+                    : "bg-[var(--color-panel)] text-[var(--color-text)] font-medium"
                   : "bg-[var(--color-panel-soft)] text-[var(--color-text-muted)] hover:bg-[var(--color-border)]"
               }`}
             >
@@ -289,7 +289,7 @@ export default function AlertsPage() {
                         <ChevronRight className="w-4 h-4 text-[var(--color-text-subtle)]" />
                       )}
                       {rule.enabled === 1 ? (
-                        <CheckCircle className="w-5 h-5 text-green-500" />
+                        <CheckCircle className="w-5 h-5 text-[var(--color-success)]" />
                       ) : (
                         <X className="w-5 h-5 text-[var(--color-text-subtle)]" />
                       )}
@@ -355,14 +355,14 @@ export default function AlertsPage() {
         <Surface padding="none">
           <div className="px-4 py-3 border-b border-[var(--color-border-soft)]">
             <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-500" />
+              <AlertCircle className="w-4 h-4 text-[var(--color-brand-gold)]" />
               最近预警事件
             </h3>
           </div>
           <div className="divide-y divide-slate-100">
             {events.slice(0, 10).map(event => (
               <div key={event.id} className="px-4 py-3 flex items-start gap-3 hover:bg-[var(--color-panel-soft)] transition-colors">
-                <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                <AlertCircle className="w-4 h-4 text-[var(--color-brand-gold)] mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-[var(--color-text)]">{event.message}</div>
                   <div className="text-xs text-[var(--color-text-subtle)] mt-1">
@@ -402,7 +402,7 @@ export default function AlertsPage() {
                   <span className="flex-1 text-sm text-[var(--color-success)] font-medium">{selectedItemName}</span>
                   <button
                     onClick={clearSelectedItem}
-                    className="text-green-500 hover:text-[var(--color-success)]"
+                    className="text-[var(--color-success)] hover:text-[var(--color-success)]"
                   >
                     <X className="w-4 h-4" />
                   </button>

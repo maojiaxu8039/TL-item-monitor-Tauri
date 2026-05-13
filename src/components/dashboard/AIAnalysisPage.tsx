@@ -120,7 +120,7 @@ function SettingsModal({
               onSave(localSettings);
               onClose();
             }}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white rounded-lg hover:opacity-90 transition-opacity"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90 transition-opacity"
           >
             <Save className="w-4 h-4" />
             保存
@@ -423,14 +423,14 @@ export default function AIAnalysisPage() {
                 <div
                   className={`max-w-[80%] rounded-xl px-4 py-2.5 text-sm ${
                     msg.role === "user"
-                      ? "bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white"
+                      ? "bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black"
                       : "bg-[var(--color-panel-soft)] text-[var(--color-text)]"
                   }`}
                 >
                   <div className="whitespace-pre-wrap">{msg.content}</div>
                   <div
                     className={`text-xs mt-1 ${
-                      msg.role === "user" ? "text-blue-200" : "text-[var(--color-text-subtle)]"
+                      msg.role === "user" ? "text-[var(--color-brand-gold)]" : "text-[var(--color-text-subtle)]"
                     }`}
                   >
                     {new Date(msg.timestamp).toLocaleTimeString()}
@@ -460,12 +460,12 @@ export default function AIAnalysisPage() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="输入问题..."
-              className="flex-1 text-sm border border-[var(--color-border)] rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-400"
+              className="flex-1 text-sm border border-[var(--color-border)] rounded-lg px-4 py-2.5 focus:outline-none focus:border-[var(--color-brand)] bg-[var(--color-panel)] text-[var(--color-text)]"
             />
             <button
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
-              className="px-4 py-2.5 bg-[var(--color-ai)] text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="px-4 py-2.5 bg-[var(--color-ai)] text-black rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {isLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />

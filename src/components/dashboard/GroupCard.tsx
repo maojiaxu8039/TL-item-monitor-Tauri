@@ -274,7 +274,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                     >
                       <td className="py-3 px-4 font-medium text-[var(--color-text)]">{item.item_name || item.item_id}</td>
                       <td className="py-3 px-1 text-center text-[var(--color-text-subtle)]">{item.item_type || "—"}</td>
-                      <td className="py-3 px-1 text-center font-bold text-red-500">{item.current_price?.toFixed(1) || "—"}火</td>
+                      <td className="py-3 px-1 text-center font-bold text-[var(--color-danger)]">{item.current_price?.toFixed(1) || "—"}火</td>
                       <td className="py-3 px-1 text-center font-semibold text-[var(--color-brand-gold)]">¥{((item.current_price ?? 0) * rmbPer10kFire / 10000).toFixed(2)}</td>
                       <td className="py-3 px-1">
                         <input
@@ -360,7 +360,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                 <tfoot>
                   <tr className="border-t border-[rgba(255,184,0,0.2)] bg-[rgba(255,184,0,0.045)] font-semibold">
                     <td className="py-3 px-4 text-[var(--color-text)]" colSpan={2}>总计</td>
-                    <td className="py-3 px-1 text-center text-red-500 font-bold">{totalFire.toFixed(1)}火</td>
+                    <td className="py-3 px-1 text-center text-[var(--color-danger)] font-bold">{totalFire.toFixed(1)}火</td>
                     <td className="py-3 px-1 text-center font-bold text-[var(--color-brand-gold)]">¥{totalRmb.toFixed(2)}</td>
                     <td className="py-3 px-1 text-center text-[var(--color-text-subtle)]" colSpan={6}>—</td>
                   </tr>

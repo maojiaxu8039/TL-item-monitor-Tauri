@@ -409,7 +409,7 @@ export default function SettingsPage() {
                 size="sm"
                 onClick={() => setConfirmArchiveOpen(true)}
                 disabled={archiveMutation.isPending}
-                className="border-amber-200 text-amber-600 hover:bg-amber-50"
+                className="border-[rgba(255,184,0,0.25)] text-[var(--color-brand-gold)] hover:bg-[rgba(255,184,0,0.08)]"
               >
                 <Archive className="w-3.5 h-3.5 mr-1.5" />
                 {archiveMutation.isPending ? "归档中..." : "归档赛季"}
@@ -524,7 +524,7 @@ export default function SettingsPage() {
 
             {/* API Config Edit Form */}
             {editingApiSeason === seasonId && (
-              <div className="space-y-4 bg-amber-50 rounded-lg p-4 border border-amber-100">
+              <div className="space-y-4 bg-[rgba(255,184,0,0.08)] rounded-lg p-4 border border-[rgba(255,184,0,0.2)]">
                 {/* Qiandao API */}
                 <div>
                   <div className="text-xs font-medium text-[var(--color-text-subtle)] uppercase tracking-wider mb-2">
@@ -629,7 +629,7 @@ export default function SettingsPage() {
       {/* Price Alert settings */}
       <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
-          <AlertTriangle className="w-4 h-4 text-amber-500" />
+          <AlertTriangle className="w-4 h-4 text-[var(--color-brand-gold)]" />
           <h2 className="text-sm font-semibold text-[var(--color-text)]">价格预警设置</h2>
         </div>
 
@@ -747,7 +747,7 @@ export default function SettingsPage() {
       {/* Fire price settings */}
       <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">
-          <Bell className="w-4 h-4 text-red-500" />
+          <Bell className="w-4 h-4 text-[var(--color-danger)]" />
           <h2 className="text-sm font-semibold text-[var(--color-text)]">火价监控</h2>
         </div>
 
@@ -907,7 +907,7 @@ export default function SettingsPage() {
                 size="sm"
                 onClick={() => setConfirmClearOpen(true)}
                 disabled={clearMutation.isPending}
-                className="border-[rgba(239,68,68,0.25)] text-red-500 hover:bg-[rgba(239,68,68,0.1)]"
+                className="border-[rgba(239,68,68,0.25)] text-[var(--color-danger)] hover:bg-[rgba(239,68,68,0.1)]"
                 title="清空物品数据库，重新抓取"
               >
                 <Trash2 className={`w-3.5 h-3.5 ${clearMutation.isPending ? "animate-spin" : ""} mr-1.5`} />

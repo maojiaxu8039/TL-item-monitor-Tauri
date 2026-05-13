@@ -69,7 +69,7 @@ function SectionPicker({
           e.stopPropagation();
           setOpen(v => !v);
         }}
-        className="inline-flex items-center gap-1 px-3 py-1.5 bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-white text-xs rounded-lg hover:opacity-90 transition-opacity whitespace-nowrap shadow-sm"
+        className="inline-flex items-center gap-1 px-3 py-1.5 bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black text-xs rounded-lg hover:opacity-90 transition-opacity whitespace-nowrap shadow-sm"
       >
         <Plus className="w-3 h-3 flex-shrink-0" />
         <span>添加</span>
@@ -372,9 +372,9 @@ export default function ItemsPage() {
             >
               {compare && compare.history_price ? (
                 isUp ? (
-                  <TrendingUp className="w-3.5 h-3.5 text-red-500" />
+                  <TrendingUp className="w-3.5 h-3.5 text-[var(--color-danger)]" />
                 ) : (
-                  <TrendingDown className="w-3.5 h-3.5 text-green-500" />
+                  <TrendingDown className="w-3.5 h-3.5 text-[var(--color-success)]" />
                 )
               ) : (
                 <BarChart3 className="w-3.5 h-3.5 text-[var(--color-text-subtle)]" />
@@ -449,7 +449,7 @@ export default function ItemsPage() {
             value={stats.maxPrice.toFixed(2)}
             icon={ArrowUp}
             iconBg="bg-[rgba(239,68,68,0.1)]"
-            iconColor="text-red-500"
+            iconColor="text-[var(--color-danger)]"
             helper={<span className="text-xs text-[var(--color-text-subtle)]">火</span>}
           />
           <MetricCard
@@ -457,7 +457,7 @@ export default function ItemsPage() {
             value={stats.minPrice.toFixed(2)}
             icon={ArrowDown}
             iconBg="bg-[rgba(34,197,94,0.1)]"
-            iconColor="text-green-500"
+            iconColor="text-[var(--color-success)]"
             helper={<span className="text-xs text-[var(--color-text-subtle)]">火</span>}
           />
           <MetricCard

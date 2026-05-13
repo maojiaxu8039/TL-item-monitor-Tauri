@@ -149,8 +149,8 @@ export default function ImportExportPage() {
             label="上次备份"
             value={formatTimestamp(backupInfo.last_backup_at)}
             icon={Clock}
-            iconBg="bg-amber-50"
-            iconColor="text-amber-500"
+            iconBg="bg-[rgba(255,184,0,0.08)]"
+            iconColor="text-[var(--color-brand-gold)]"
           />
         </div>
       )}
@@ -178,7 +178,7 @@ export default function ImportExportPage() {
               <Button
                 onClick={() => importCsvMutation.mutate()}
                 disabled={importCsvMutation.isPending}
-                className="bg-[var(--color-brand-gold)] hover:opacity-90 text-white"
+                className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
               >
                 <Upload className="w-4 h-4 mr-1.5" />
                 {importCsvMutation.isPending ? "导入中..." : "选择 CSV 文件"}
@@ -187,7 +187,7 @@ export default function ImportExportPage() {
           </div>
 
           {importResult && (
-            <Surface padding="md" className={importResult.errors.length > 0 ? "bg-amber-50 border-amber-200" : "bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.25)]"}>
+            <Surface padding="md" className={importResult.errors.length > 0 ? "bg-[rgba(255,184,0,0.08)] border-[rgba(255,184,0,0.25)]" : "bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.25)]"}>
               <div className="flex items-center gap-2 mb-2">
                 <span className={`text-sm font-medium ${importResult.errors.length > 0 ? "text-[var(--color-brand-gold)]" : "text-[var(--color-success)]"}`}>
                   导入完成：成功 {importResult.imported} 条
@@ -199,7 +199,7 @@ export default function ImportExportPage() {
                 <>
                   <button
                     onClick={() => setShowImportDetails(!showImportDetails)}
-                    className="flex items-center gap-1 text-xs text-amber-600 hover:text-[var(--color-brand-gold)]"
+                    className="flex items-center gap-1 text-xs text-[var(--color-brand-gold)] hover:text-[var(--color-brand-gold)]"
                   >
                     {showImportDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                     {showImportDetails ? "收起详情" : "查看失败详情"}
@@ -208,13 +208,13 @@ export default function ImportExportPage() {
                   {showImportDetails && (
                     <div className="mt-2 space-y-1">
                       {importResult.errors.slice(0, 10).map((err, i) => (
-                        <div key={i} className="flex items-start gap-2 text-xs text-amber-600">
-                          <span className="text-amber-500">×</span>
+                        <div key={i} className="flex items-start gap-2 text-xs text-[var(--color-brand-gold)]">
+                          <span className="text-[var(--color-brand-gold)]">×</span>
                           <span>{err}</span>
                         </div>
                       ))}
                       {importResult.errors.length > 10 && (
-                        <div className="text-xs text-amber-500 mt-1">
+                        <div className="text-xs text-[var(--color-brand-gold)] mt-1">
                           ...还有 {importResult.errors.length - 10} 条错误
                         </div>
                       )}
@@ -254,7 +254,7 @@ export default function ImportExportPage() {
       <Surface padding="none">
         <div className="px-5 py-4 border-b border-[var(--color-border-soft)] bg-[var(--color-panel-soft)]">
           <div className="flex items-center gap-2">
-            <Download className="w-4 h-4 text-green-500" />
+            <Download className="w-4 h-4 text-[var(--color-success)]" />
             <h2 className="text-sm font-semibold text-[var(--color-text)]">导出数据</h2>
           </div>
         </div>
@@ -273,7 +273,7 @@ export default function ImportExportPage() {
             <Button
               onClick={() => handleExport(exportCsvMutation)}
               disabled={exportCsvMutation.isPending}
-              className="bg-[var(--color-success)] hover:opacity-90 text-white"
+              className="bg-[var(--color-success)] hover:opacity-90 text-black"
             >
               <Download className="w-4 h-4 mr-1.5" />
               {exportCsvMutation.isPending ? "导出中..." : "导出 CSV"}
@@ -293,7 +293,7 @@ export default function ImportExportPage() {
             <Button
               onClick={() => handleExport(exportFireMutation)}
               disabled={exportFireMutation.isPending}
-              className="bg-[var(--color-success)] hover:opacity-90 text-white"
+              className="bg-[var(--color-success)] hover:opacity-90 text-black"
             >
               <Download className="w-4 h-4 mr-1.5" />
               {exportFireMutation.isPending ? "导出中..." : "导出 CSV"}
@@ -313,7 +313,7 @@ export default function ImportExportPage() {
             <Button
               onClick={() => handleExport(backupMutation)}
               disabled={backupMutation.isPending}
-              className="bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] hover:opacity-90 text-white"
+              className="bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] hover:opacity-90 text-black"
             >
               <Database className="w-4 h-4 mr-1.5" />
               {backupMutation.isPending ? "备份中..." : "备份数据库"}

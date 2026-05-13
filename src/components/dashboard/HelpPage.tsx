@@ -52,8 +52,8 @@ export default function HelpPage() {
         <div className="flex items-start gap-3">
           <Info className="h-5 w-5 text-[var(--color-brand)] mt-0.5" />
           <div>
-            <h3 className="font-semibold text-blue-900">版本信息</h3>
-            <p className="text-blue-700 text-sm mt-1">
+            <h3 className="font-semibold text-[var(--color-text)]">版本信息</h3>
+            <p className="text-[var(--color-ai)] text-sm mt-1">
               TorchScan v2.0.0 · 基于 Tauri 2 + React 构建
             </p>
           </div>
