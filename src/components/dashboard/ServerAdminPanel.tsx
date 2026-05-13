@@ -101,7 +101,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
 
   if (connectionStatus === "disconnected") {
     return (
-      <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+      <div className="bg-[var(--color-panel)] rounded-xl border border-[var(--color-border-soft)] shadow-[var(--shadow-sm)] p-5">
         <div className="flex items-center gap-2">
           <Settings className="w-4 h-4 text-slate-300" />
           <span className="text-sm font-semibold text-slate-400">服务器管理</span>
@@ -114,7 +114,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
   }
 
   return (
-    <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+    <div className="bg-[var(--color-panel)] rounded-xl border border-[var(--color-border-soft)] shadow-[var(--shadow-sm)] overflow-hidden">
       {/* Header */}
       <button
         onClick={() => setIsOpen(!isOpen)}
@@ -182,7 +182,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
                 <button
                   onClick={loadApiConfig}
                   disabled={isLoading || !password}
-                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-sm rounded-lg hover:bg-amber-600 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 bg-[var(--color-warning)] text-white text-sm rounded-lg hover:opacity-90 disabled:opacity-50"
                 >
                   {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Settings className="w-4 h-4" />}
                   加载当前配置
@@ -253,7 +253,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
                     <button
                       onClick={handleSaveApiConfig}
                       disabled={isLoading}
-                      className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 disabled:opacity-50"
+                      className="flex items-center gap-2 px-4 py-2 bg-[var(--color-success)] text-white text-sm rounded-lg hover:opacity-90 disabled:opacity-50"
                     >
                       {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                       保存配置
@@ -307,7 +307,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
               <button
                 onClick={handleInitSeason}
                 disabled={isLoading || !password || !newSeasonId || !newSeasonStartedAt}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-sm rounded-lg hover:bg-amber-600 disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 bg-[var(--color-warning)] text-white text-sm rounded-lg hover:opacity-90 disabled:opacity-50"
               >
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 初始化新赛季

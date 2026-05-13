@@ -205,10 +205,10 @@ function HoardCard({
           <div
             className={`h-full rounded-full transition-all ${
               analysis.confidence >= 70
-                ? "bg-green-500"
+                ? "bg-[var(--color-success)]"
                 : analysis.confidence >= 40
-                ? "bg-amber-500"
-                : "bg-red-500"
+                ? "bg-[var(--color-brand-gold)]"
+                : "bg-[var(--color-danger)]"
             }`}
             style={{ width: `${analysis.confidence}%` }}
           />

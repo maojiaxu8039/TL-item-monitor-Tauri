@@ -731,8 +731,8 @@ export default function DataMonitorPage() {
                 disabled={isSyncing}
                 className={`px-3 py-1.5 text-xs ${
                   dataType === "fire"
-                    ? "bg-green-500 text-white"
-                    : "bg-white text-slate-600 hover:bg-[var(--color-panel-soft)]"
+                    ? "bg-[var(--color-success)] text-white"
+                    : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
                 } disabled:opacity-50`}
               >
                 火价
@@ -742,8 +742,8 @@ export default function DataMonitorPage() {
                 disabled={isSyncing}
                 className={`px-3 py-1.5 text-xs ${
                   dataType === "items"
-                    ? "bg-green-500 text-white"
-                    : "bg-white text-slate-600 hover:bg-[var(--color-panel-soft)]"
+                    ? "bg-[var(--color-success)] text-white"
+                    : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
                 } disabled:opacity-50`}
               >
                 物品价格
@@ -770,8 +770,8 @@ export default function DataMonitorPage() {
                 disabled={isSyncing}
                 className={`px-3 py-1.5 text-xs ${
                   syncMode === "expert"
-                    ? "bg-purple-500 text-white"
-                    : "bg-white text-slate-600 hover:bg-[var(--color-panel-soft)]"
+                    ? "bg-[var(--color-ai)] text-white"
+                    : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
                 } disabled:opacity-50`}
               >
                 专家服
@@ -813,7 +813,7 @@ export default function DataMonitorPage() {
             <button
               onClick={handleSync}
               disabled={isSyncing || connectionStatus !== "connected"}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-[var(--color-success)] text-white text-sm rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
             >
               {isSyncing ? (
                 <>

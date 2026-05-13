@@ -256,9 +256,9 @@ export default function AlertsPage() {
               className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
                 filter === tab.key
                   ? tab.color === "green"
-                    ? "bg-green-500 text-white font-medium"
-                    : "bg-slate-800 text-white font-medium"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    ? "bg-[var(--color-success)] text-white font-medium"
+                    : "bg-[var(--color-panel)] text-white font-medium"
+                  : "bg-[var(--color-panel-soft)] text-[var(--color-text-muted)] hover:bg-[var(--color-border)]"
               }`}
             >
               {tab.label} ({tab.count})

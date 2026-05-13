@@ -463,7 +463,7 @@ export default function AIAnalysisPage() {
             <button
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
-              className="px-4 py-2.5 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors disabled:opacity-50"
+              className="px-4 py-2.5 bg-[var(--color-ai)] text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {isLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />

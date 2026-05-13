@@ -644,7 +644,7 @@ export default function SettingsPage() {
               </div>
               {notificationPermission && (
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${notificationPermission.granted ? 'bg-green-500' : notificationPermission.denied ? 'bg-red-500' : 'bg-yellow-500'}`}></div>
+                  <div className={`w-2 h-2 rounded-full ${notificationPermission.granted ? 'bg-[var(--color-success)]' : notificationPermission.denied ? 'bg-[var(--color-danger)]' : 'bg-[var(--color-brand-gold)]'}`}></div>
                   <span className="text-xs text-slate-500">
                     {notificationPermission.granted ? '已授权' : notificationPermission.denied ? '已拒绝' : '未授权'}
                   </span>
@@ -883,12 +883,12 @@ export default function SettingsPage() {
                 }`}
               />
               {itemsSource === 'local' && jsonPathValidation && (
-                <div className={`flex items-center gap-1 text-xs ${jsonPathValidation.valid ? 'text-green-600' : 'text-red-500'}`}>
+                <div className={`flex items-center gap-1 text-xs ${jsonPathValidation.valid ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'}`}>
                   {jsonPathValidation.valid ? (
-                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                    <span className="w-2 h-2 rounded-full bg-[var(--color-success)]"></span>
                   ) : (
                     <>
-                      <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                      <span className="w-2 h-2 rounded-full bg-[var(--color-danger)]"></span>
                       <span className="max-w-[150px] truncate" title={jsonPathValidation.error_message || ''}>
                         {jsonPathValidation.error_message}
                       </span>
