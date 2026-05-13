@@ -222,16 +222,6 @@ export function DashboardStats() {
     return () => clearInterval(interval);
   }, [top3.length]);
 
-  const getLevelColor = (level: string) => {
-    switch (level) {
-      case "strong": return "bg-green-100 text-green-600 border-green-200";
-      case "good": return "bg-blue-100 text-blue-600 border-blue-200";
-      case "watch": return "bg-yellow-100 text-yellow-600 border-yellow-200";
-      case "avoid": return "bg-red-100 text-red-600 border-red-200";
-      default: return "bg-slate-100 text-slate-600 border-slate-200";
-    }
-  };
-
   const getLevelText = (level: string) => {
     switch (level) {
       case "strong": return "强烈推荐";
@@ -242,27 +232,18 @@ export function DashboardStats() {
     }
   };
 
-  const getRiskColor = (risk: string) => {
-    switch (risk) {
-      case "low": return "bg-green-50 text-green-600";
-      case "medium": return "bg-yellow-50 text-yellow-600";
-      case "high": return "bg-red-50 text-red-600";
-      default: return "bg-slate-50 text-slate-600";
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="grid grid-cols-4 gap-3">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="metric-card animate-pulse">
             <div className="flex items-center gap-2 mb-2">
-              <div className="p-1.5 rounded-lg bg-slate-100">
-                <Package className="w-4 h-4 text-slate-300" />
+              <div className="rounded-lg border border-[rgba(255,184,0,0.14)] bg-[rgba(255,184,0,0.08)] p-1.5">
+                <Package className="h-4 w-4 text-[var(--color-text-subtle)]" />
               </div>
-              <span className="text-xs text-slate-400 font-medium">加载中...</span>
+              <span className="text-xs font-medium text-[var(--color-text-subtle)]">加载中...</span>
             </div>
-            <div className="h-6 bg-slate-200 rounded w-3/4"></div>
+            <div className="h-6 w-3/4 rounded bg-[var(--color-panel-soft)]"></div>
           </div>
         ))}
       </div>
@@ -276,19 +257,19 @@ export function DashboardStats() {
           label="监控物品"
           value={stats.itemCount.toString()}
           icon={Package}
-          iconBg="bg-blue-50"
-          iconColor="text-blue-500"
-          helper={<span className="text-xs text-slate-400">个</span>}
+          iconBg="bg-[rgba(255,184,0,0.08)]"
+          iconColor="text-[var(--color-brand-gold)]"
+          helper={<span className="text-xs text-[var(--color-text-subtle)]">个</span>}
         />
         <MetricCard
           label="当前火价"
           value={stats.currentFire.toFixed(2)}
           icon={Flame}
-          iconBg="bg-red-50"
+          iconBg="bg-[rgba(239,68,68,0.1)]"
           iconColor="text-red-500"
           helper={
             <div className="flex items-center gap-1">
-              <span className="text-xs text-slate-400">元/万火</span>
+              <span className="text-xs text-[var(--color-text-subtle)]">元/万火</span>
               {summary?.fire?.increase_ratio !== null && summary?.fire?.increase_ratio !== undefined && (
                 <span className={`text-xs font-medium ${summary.fire.increase_ratio >= 0 ? "text-red-500" : "text-green-500"}`}>
                   {summary.fire.increase_ratio >= 0 ? "↑" : "↓"}{Math.abs(summary.fire.increase_ratio).toFixed(2)}%
@@ -301,35 +282,35 @@ export function DashboardStats() {
           label="历史火价"
           value={fireStats.avg.toFixed(2)}
           icon={History}
-          iconBg="bg-purple-50"
-          iconColor="text-purple-500"
+          iconBg="bg-[rgba(167,139,250,0.12)]"
+          iconColor="text-[var(--color-ai)]"
           helper={
             fireHistory.length > 0 ? (
               <div className="flex items-center gap-2 mt-1">
-                <span className="flex items-center gap-0.5 text-xs text-slate-400">
-                  <ArrowDown className="w-3 h-3 text-blue-500" />
+                <span className="flex items-center gap-0.5 text-xs text-[var(--color-text-subtle)]">
+                  <ArrowDown className="w-3 h-3 text-[var(--color-success)]" />
                   {fireStats.min.toFixed(2)}
                 </span>
-                <span className="flex items-center gap-0.5 text-xs text-slate-400">
+                <span className="flex items-center gap-0.5 text-xs text-[var(--color-text-subtle)]">
                   <ArrowUp className="w-3 h-3 text-red-500" />
                   {fireStats.max.toFixed(2)}
                 </span>
               </div>
-            ) : <span className="text-xs text-slate-400">元/万火</span>
+            ) : <span className="text-xs text-[var(--color-text-subtle)]">元/万火</span>
           }
         />
         <MetricCard
           label="策略收益"
           value={`${profitStatus === "profit" ? "+" : profitStatus === "loss" ? "-" : ""}${Math.abs(stats.profit).toFixed(2)}`}
           icon={profitStatus === "profit" ? TrendingUp : profitStatus === "loss" ? TrendingDown : Minus}
-          iconBg={profitStatus === "profit" ? "bg-red-50" : profitStatus === "loss" ? "bg-green-50" : "bg-slate-50"}
-          iconColor={profitStatus === "profit" ? "text-red-500" : profitStatus === "loss" ? "text-green-500" : "text-slate-400"}
+          iconBg={profitStatus === "profit" ? "bg-[rgba(239,68,68,0.1)]" : profitStatus === "loss" ? "bg-[rgba(34,197,94,0.1)]" : "bg-[rgba(255,255,255,0.04)]"}
+          iconColor={profitStatus === "profit" ? "text-red-500" : profitStatus === "loss" ? "text-green-500" : "text-[var(--color-text-subtle)]"}
           helper={
             allSectionItems.length > 0 ? (
               <span className={`text-xs font-medium ${stats.profitPercent >= 0 ? "text-red-500" : "text-green-500"}`}>
                 {stats.profitPercent >= 0 ? "↑" : "↓"}{Math.abs(stats.profitPercent).toFixed(2)}%
               </span>
-            ) : <span className="text-xs text-slate-400">元</span>
+            ) : <span className="text-xs text-[var(--color-text-subtle)]">元</span>
           }
         />
       </div>
@@ -338,22 +319,22 @@ export function DashboardStats() {
         <div className="surface p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Award className="w-4 h-4 text-yellow-500" />
-              <span className="text-sm font-medium text-slate-700">策略推荐榜 TOP3</span>
+              <Award className="w-4 h-4 text-[var(--color-brand-gold)]" />
+              <span className="text-sm font-medium text-[var(--color-text)]">策略推荐榜 TOP3</span>
             </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setCurrentIndex(prev => (prev - 1 + top3.length) % top3.length)}
-                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400"
+                className="rounded-lg p-1 text-[var(--color-text-subtle)] transition-colors hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-brand-gold)]"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="text-xs text-slate-400 w-8 text-center">
+              <span className="w-8 text-center text-xs text-[var(--color-text-subtle)]">
                 {currentIndex + 1}/{top3.length}
               </span>
               <button
                 onClick={() => setCurrentIndex(prev => (prev + 1) % top3.length)}
-                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400"
+                className="rounded-lg p-1 text-[var(--color-text-subtle)] transition-colors hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-brand-gold)]"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -368,15 +349,15 @@ export function DashboardStats() {
                 <div key={rec.strategy_id} className="w-full flex-shrink-0 px-1">
                   <div className="flex items-center gap-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                      index === 0 ? "bg-yellow-100 text-yellow-600" :
-                      index === 1 ? "bg-slate-100 text-slate-500" :
-                      "bg-orange-100 text-orange-500"
+                      index === 0 ? "border border-[rgba(255,184,0,0.35)] bg-[rgba(255,184,0,0.12)] text-[var(--color-brand-gold)]" :
+                      index === 1 ? "border border-[var(--color-border)] bg-[var(--color-panel-soft)] text-[var(--color-text-muted)]" :
+                      "border border-[rgba(255,106,0,0.3)] bg-[rgba(255,106,0,0.1)] text-[var(--color-brand)]"
                     }`}>
                       {index + 1}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-slate-900 text-sm truncate">{rec.strategy_name}</span>
+                        <span className="truncate text-sm font-medium text-[var(--color-text)]">{rec.strategy_name}</span>
                         <StatusBadge variant={rec.level === "strong" ? "success" : rec.level === "good" ? "info" : rec.level === "watch" ? "warning" : "danger"}>
                           {getLevelText(rec.level)}
                         </StatusBadge>
@@ -384,7 +365,7 @@ export function DashboardStats() {
                           {rec.risk_level === "low" ? "低风险" : rec.risk_level === "medium" ? "中风险" : "高风险"}
                         </StatusBadge>
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                      <div className="mt-1 flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
                         <span>评分: <span className="font-medium">{rec.score}</span></span>
                         <span>收益率: <span className={`font-medium ${rec.profit_ratio >= 0 ? "text-red-600" : "text-green-600"}`}>
                           {rec.profit_ratio >= 0 ? "+" : ""}{rec.profit_ratio.toFixed(1)}%
@@ -396,7 +377,7 @@ export function DashboardStats() {
                       {rec.reasons.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
                           {rec.reasons.slice(0, 2).map((reason, i) => (
-                            <span key={i} className="text-[10px] px-1.5 py-0.5 bg-green-50 text-green-600 rounded">
+                            <span key={i} className="rounded border border-[rgba(34,197,94,0.22)] bg-[rgba(34,197,94,0.1)] px-1.5 py-0.5 text-[10px] text-[var(--color-success)]">
                               {reason}
                             </span>
                           ))}
@@ -412,7 +393,7 @@ export function DashboardStats() {
                       }`}>
                         {rec.score}
                       </div>
-                      <div className="text-[10px] text-slate-400">分</div>
+                      <div className="text-[10px] text-[var(--color-text-subtle)]">分</div>
                     </div>
                   </div>
                 </div>
@@ -425,7 +406,7 @@ export function DashboardStats() {
                 key={index}
                 onClick={() => setCurrentIndex(index)}
                 className={`w-2 h-2 rounded-full transition-colors ${
-                  index === currentIndex ? "bg-blue-500" : "bg-slate-200"
+                  index === currentIndex ? "bg-[var(--color-brand-gold)]" : "bg-[var(--color-border)]"
                 }`}
               />
             ))}

@@ -17,7 +17,7 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
   if (!open) return null
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={handleBackdropClick}
     >
       <div className="relative z-10 w-full max-w-md animate-fade-in" onClick={e => e.stopPropagation()}>
@@ -31,7 +31,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTML
   <div 
     ref={ref} 
     className={cn(
-      "rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] shadow-[var(--shadow-lg)] animate-slide-up",
+      "animate-slide-up rounded-lg border border-[rgba(255,184,0,0.24)] bg-[var(--color-panel)] shadow-[var(--shadow-lg)]",
       className
     )} 
     onClick={e => e.stopPropagation()}

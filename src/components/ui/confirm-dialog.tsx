@@ -19,24 +19,24 @@ interface ConfirmDialogProps {
 const variantConfig = {
   warning: {
     icon: AlertTriangle,
-    iconClass: "text-amber-500",
-    bgClass: "bg-amber-50",
-    borderClass: "border-amber-200",
-    confirmClass: "bg-amber-500 hover:bg-amber-600 text-white",
+    iconClass: "text-[var(--color-brand-gold)]",
+    bgClass: "border-[rgba(255,184,0,0.28)] bg-[rgba(255,184,0,0.1)]",
+    borderClass: "border-[rgba(255,184,0,0.28)]",
+    confirmClass: "bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black hover:brightness-110",
   },
   info: {
     icon: Info,
-    iconClass: "text-blue-500",
-    bgClass: "bg-blue-50",
-    borderClass: "border-blue-200",
-    confirmClass: "bg-blue-500 hover:bg-blue-600 text-white",
+    iconClass: "text-sky-300",
+    bgClass: "border-[rgba(56,189,248,0.28)] bg-[rgba(56,189,248,0.1)]",
+    borderClass: "border-[rgba(56,189,248,0.28)]",
+    confirmClass: "bg-sky-500 text-black hover:brightness-110",
   },
   danger: {
     icon: XCircle,
-    iconClass: "text-red-500",
-    bgClass: "bg-red-50",
-    borderClass: "border-red-200",
-    confirmClass: "bg-red-500 hover:bg-red-600 text-white",
+    iconClass: "text-[var(--color-danger)]",
+    bgClass: "border-[rgba(239,68,68,0.32)] bg-[rgba(239,68,68,0.1)]",
+    borderClass: "border-[rgba(239,68,68,0.32)]",
+    confirmClass: "bg-[var(--color-danger)] text-white hover:brightness-110",
   },
 }
 
@@ -94,23 +94,23 @@ export function ConfirmDialog({
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
             className={cn(
-              "relative z-50 w-full max-w-sm mx-4 rounded-2xl border-2 bg-white p-6 shadow-2xl",
+              "relative z-50 w-full max-w-sm mx-4 rounded-lg border bg-[var(--color-panel)] p-6 shadow-[var(--shadow-lg)]",
               config.borderClass
             )}
           >
             <div className="flex items-start gap-4">
-              <div className={cn("flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center", config.bgClass)}>
+              <div className={cn("flex-shrink-0 w-12 h-12 rounded-lg border flex items-center justify-center", config.bgClass)}>
                 <Icon className={cn("w-6 h-6", config.iconClass)} />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
-                <div className="text-sm text-slate-600 leading-relaxed">
+                <h3 className="text-lg font-semibold text-[var(--color-text)] mb-2">{title}</h3>
+                <div className="text-sm text-[var(--color-text-muted)] leading-relaxed">
                   {message}
                 </div>
               </div>
               <button
                 onClick={handleCancel}
-                className="flex-shrink-0 p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600"
+                className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[rgba(255,184,0,0.1)] transition-colors text-[var(--color-text-subtle)] hover:text-[var(--color-brand-gold)]"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -120,7 +120,7 @@ export function ConfirmDialog({
               <button
                 onClick={handleCancel}
                 disabled={loading}
-                className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-[var(--color-text)] bg-[var(--color-panel-soft)] hover:bg-[rgba(255,184,0,0.1)] rounded-lg transition-colors disabled:opacity-50"
               >
                 {cancelText}
               </button>

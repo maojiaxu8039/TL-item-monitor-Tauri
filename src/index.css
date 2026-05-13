@@ -61,7 +61,7 @@
   }
 
   * {
-    border-color: hsl(var(--border));
+    border-color: var(--color-border);
   }
 
   body {
@@ -468,10 +468,12 @@
     background: rgba(255, 255, 255, 0.026);
   }
 
-  /* Surface - white bordered panel */
+  /* Surface - dark bordered panel */
   .surface {
-    background-color: var(--color-panel);
-    border: 1px solid var(--color-border);
+    background:
+      linear-gradient(180deg, rgba(255, 184, 0, 0.025), transparent 42%),
+      var(--color-panel);
+    border: 1px solid rgba(255, 184, 0, 0.14);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
   }
@@ -558,8 +560,10 @@
 
   /* Metric Card */
   .metric-card {
-    background-color: var(--color-panel);
-    border: 1px solid var(--color-border);
+    background:
+      linear-gradient(180deg, rgba(255, 184, 0, 0.035), transparent 58%),
+      var(--color-panel);
+    border: 1px solid rgba(255, 184, 0, 0.14);
     border-radius: var(--radius-lg);
     padding: 1rem;
     box-shadow: var(--shadow-sm);
@@ -574,6 +578,7 @@
     border-radius: var(--radius-md);
     margin-bottom: 0.75rem;
     border: 1px solid rgba(255, 184, 0, 0.18);
+    background-color: rgba(255, 184, 0, 0.08);
   }
 
   .metric-card-label {
@@ -635,7 +640,8 @@
   .segmented-control {
     display: inline-flex;
     align-items: center;
-    background-color: var(--color-app-bg);
+    border: 1px solid rgba(255, 184, 0, 0.16);
+    background-color: rgba(8, 10, 12, 0.82);
     border-radius: var(--radius-md);
     padding: 0.25rem;
     gap: 0.125rem;
@@ -661,8 +667,8 @@
   }
 
   .segmented-control-item-active {
-    background-color: var(--color-panel);
-    color: var(--color-primary);
+    background-color: rgba(255, 184, 0, 0.12);
+    color: var(--color-brand-gold);
     box-shadow: var(--shadow-sm);
   }
 
@@ -702,6 +708,7 @@
     align-items: flex-start;
     gap: 0.75rem;
     padding: 0.75rem 1rem;
+    border: 1px solid rgba(255, 184, 0, 0.14);
     border-radius: var(--radius-md);
     font-size: 0.875rem;
   }
@@ -760,7 +767,7 @@
 
   .btn:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px white, 0 0 0 4px var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-app-bg), 0 0 0 4px var(--color-primary);
   }
 
   .btn:disabled {
@@ -846,7 +853,7 @@
 
   .input:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px white, 0 0 0 4px var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-app-bg), 0 0 0 4px var(--color-primary);
   }
 
   .input:disabled {
@@ -873,7 +880,7 @@
 
   .select:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px white, 0 0 0 4px var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-app-bg), 0 0 0 4px var(--color-primary);
   }
 
   .select:disabled {
@@ -904,23 +911,23 @@
   }
 
   .badge-success {
-    background-color: rgb(240 253 244);
-    color: rgb(21 128 61);
+    background-color: rgba(34, 197, 94, 0.1);
+    color: var(--color-success);
   }
 
   .badge-warning {
-    background-color: rgb(255 251 235);
-    color: rgb(180 83 9);
+    background-color: rgba(255, 184, 0, 0.1);
+    color: var(--color-brand-gold);
   }
 
   .badge-danger {
-    background-color: rgb(254 242 242);
-    color: rgb(185 28 28);
+    background-color: rgba(239, 68, 68, 0.1);
+    color: var(--color-danger);
   }
 
   .badge-info {
-    background-color: rgb(239 246 255);
-    color: rgb(29 78 216);
+    background-color: rgba(56, 189, 248, 0.1);
+    color: rgb(125 211 252);
   }
 
   .table {
@@ -999,6 +1006,18 @@
     background-color: var(--color-panel) !important;
   }
 
+  .torchscan-theme .rounded-xl,
+  .torchscan-theme .rounded-2xl {
+    border-radius: var(--radius-lg) !important;
+  }
+
+  .torchscan-theme .shadow-md,
+  .torchscan-theme .shadow-lg,
+  .torchscan-theme .shadow-xl,
+  .torchscan-theme .shadow-2xl {
+    box-shadow: var(--shadow-md) !important;
+  }
+
   .torchscan-theme [class*="bg-slate-50"],
   .torchscan-theme [class*="bg-slate-100"],
   .torchscan-theme [class*="bg-slate-200"] {
@@ -1026,24 +1045,77 @@
   }
 
   .torchscan-theme .text-blue-500,
-  .torchscan-theme .text-blue-600 {
+  .torchscan-theme .text-blue-600,
+  .torchscan-theme .text-blue-700,
+  .torchscan-theme .text-blue-800 {
     color: var(--color-brand-gold) !important;
   }
 
   .torchscan-theme .bg-blue-50,
+  .torchscan-theme .bg-blue-100,
   .torchscan-theme .bg-purple-50,
+  .torchscan-theme .bg-purple-100,
   .torchscan-theme .bg-yellow-50,
+  .torchscan-theme .bg-yellow-100,
   .torchscan-theme .bg-amber-50,
+  .torchscan-theme .bg-amber-100,
   .torchscan-theme .bg-orange-100 {
     background-color: rgba(255, 184, 0, 0.1) !important;
   }
 
-  .torchscan-theme .bg-green-50 {
+  .torchscan-theme .bg-blue-500,
+  .torchscan-theme .bg-blue-600,
+  .torchscan-theme .hover\:bg-blue-600:hover {
+    background: linear-gradient(135deg, var(--color-brand), var(--color-brand-gold)) !important;
+  }
+
+  .torchscan-theme .bg-green-50,
+  .torchscan-theme .bg-green-100 {
     background-color: rgba(34, 197, 94, 0.1) !important;
   }
 
-  .torchscan-theme .bg-red-50 {
+  .torchscan-theme .bg-red-50,
+  .torchscan-theme .bg-red-100 {
     background-color: rgba(239, 68, 68, 0.1) !important;
+  }
+
+  .torchscan-theme [class*="border-blue-"],
+  .torchscan-theme [class*="border-yellow-"],
+  .torchscan-theme [class*="border-amber-"],
+  .torchscan-theme [class*="border-orange-"] {
+    border-color: rgba(255, 184, 0, 0.26) !important;
+  }
+
+  .torchscan-theme [class*="border-green-"] {
+    border-color: rgba(34, 197, 94, 0.28) !important;
+  }
+
+  .torchscan-theme [class*="border-red-"] {
+    border-color: rgba(239, 68, 68, 0.3) !important;
+  }
+
+  .torchscan-theme .text-green-600,
+  .torchscan-theme .text-green-700,
+  .torchscan-theme .text-green-800 {
+    color: var(--color-success) !important;
+  }
+
+  .torchscan-theme .text-red-600,
+  .torchscan-theme .text-red-700,
+  .torchscan-theme .text-red-800 {
+    color: var(--color-danger) !important;
+  }
+
+  .torchscan-theme .text-yellow-600,
+  .torchscan-theme .text-yellow-700,
+  .torchscan-theme .text-yellow-800,
+  .torchscan-theme .text-amber-600,
+  .torchscan-theme .text-amber-700,
+  .torchscan-theme .text-amber-800,
+  .torchscan-theme .text-orange-600,
+  .torchscan-theme .text-orange-700,
+  .torchscan-theme .text-orange-800 {
+    color: var(--color-brand-gold) !important;
   }
 
   .torchscan-theme input,

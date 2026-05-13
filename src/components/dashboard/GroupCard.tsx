@@ -1,4 +1,4 @@
-import { MoreHorizontal, Trash2, ChevronDown, ChevronRight, RefreshCw, Check, X } from "lucide-react"
+import { Trash2, ChevronDown, ChevronRight, RefreshCw, Check, X, GripVertical } from "lucide-react"
 import type { Section, SectionItem } from "@/lib/commands"
 import { cmd } from "@/lib/commands"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
@@ -131,12 +131,12 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
     const currentPrice = item.current_price ?? 0
     
     if (purchaseFirePrice === 0) {
-      return { text: "待评估", className: "bg-red-50 text-red-500" }
+      return { text: "待评估", className: "border-[rgba(255,184,0,0.28)] bg-[rgba(255,184,0,0.1)] text-[var(--color-brand-gold)]" }
     }
     if (currentPrice < purchaseFirePrice) {
-      return { text: "值的", className: "bg-green-50 text-green-600" }
+      return { text: "值的", className: "border-[rgba(34,197,94,0.3)] bg-[rgba(34,197,94,0.1)] text-[var(--color-success)]" }
     }
-    return { text: "不值的", className: "bg-slate-100 text-slate-500" }
+    return { text: "不值的", className: "border-[var(--color-border)] bg-[var(--color-panel-soft)] text-[var(--color-text-muted)]" }
   }, [])
 
   const { totalFire, totalRmb } = useMemo(() => {
@@ -157,34 +157,29 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
         transition={{ duration: 0.35, delay: 0.15 + index * 0.08 }}
-        className={`rounded-xl bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] border border-slate-100 overflow-hidden hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] transition-shadow ${isDragging ? "shadow-lg" : ""}`}
+        className={`overflow-hidden rounded-lg border bg-[var(--color-panel)] shadow-[var(--shadow-sm)] transition-all hover:border-[rgba(255,184,0,0.34)] hover:shadow-[var(--shadow-glow)] ${isDragging ? "border-[var(--color-brand-gold)] shadow-[var(--shadow-glow)]" : "border-[rgba(255,184,0,0.14)]"}`}
       >
-        <div className="flex items-center justify-between px-5 py-3.5 bg-slate-50/60 border-b border-slate-100">
+        <div className="flex items-center justify-between border-b border-[var(--color-border-soft)] bg-[rgba(255,184,0,0.035)] px-5 py-3.5">
           <div className="flex items-center gap-2.5">
             {dragHandleProps && (
               <div
                 {...dragHandleProps}
-                className="cursor-grab active:cursor-grabbing mr-1"
+                className="mr-1 cursor-grab rounded-md p-0.5 text-[var(--color-text-subtle)] transition-colors hover:text-[var(--color-brand-gold)] active:cursor-grabbing"
                 style={{ touchAction: "none" }}
+                title="拖动排序"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-slate-400 hover:text-slate-600">
-                  <circle cx="9" cy="5" r="1.5" />
-                  <circle cx="15" cy="5" r="1.5" />
-                  <circle cx="9" cy="12" r="1.5" />
-                  <circle cx="15" cy="12" r="1.5" />
-                  <circle cx="9" cy="19" r="1.5" />
-                  <circle cx="15" cy="19" r="1.5" />
-                </svg>
+                <GripVertical className="h-4 w-4" />
               </div>
             )}
             <button
               onClick={() => setCollapsed(!collapsed)}
-              className="flex items-center gap-1.5 hover:bg-slate-100 rounded-lg px-1.5 py-0.5 transition-colors"
+              className="flex items-center gap-1.5 rounded-lg px-1.5 py-0.5 text-[var(--color-text-subtle)] transition-colors hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-brand-gold)]"
+              title={collapsed ? "展开分组" : "收起分组"}
             >
               {collapsed ? (
-                <ChevronRight className="h-4 w-4 text-slate-400" />
+                <ChevronRight className="h-4 w-4" />
               ) : (
-                <ChevronDown className="h-4 w-4 text-slate-400" />
+                <ChevronDown className="h-4 w-4" />
               )}
             </button>
             {isEditing ? (
@@ -196,33 +191,35 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                   onChange={(e) => setEditName(e.target.value)}
                   onBlur={handleSaveEdit}
                   onKeyDown={handleKeyDown}
-                  className="h-6 px-2 text-[13px] font-semibold text-slate-700 bg-white border border-blue-400 rounded-md outline-none w-32"
+                  className="h-7 w-36 rounded-md border border-[var(--color-brand)] bg-[rgba(13,15,18,0.9)] px-2 text-[13px] font-semibold text-[var(--color-text)] outline-none"
                   autoFocus
                 />
                 <button
                   onClick={handleSaveEdit}
-                  className="p-1 rounded hover:bg-green-50 transition-colors"
+                  className="rounded p-1 text-[var(--color-success)] transition-colors hover:bg-[rgba(34,197,94,0.12)]"
                   disabled={updateSectionMutation.isPending}
+                  title="保存"
                 >
-                  <Check className="h-3.5 w-3.5 text-green-500" />
+                  <Check className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={handleCancelEdit}
-                  className="p-1 rounded hover:bg-red-50 transition-colors"
+                  className="rounded p-1 text-[var(--color-danger)] transition-colors hover:bg-[rgba(239,68,68,0.12)]"
+                  title="取消"
                 >
-                  <X className="h-3.5 w-3.5 text-red-400" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
               </div>
             ) : (
               <span
                 onClick={handleStartEdit}
-                className="text-[13px] font-semibold text-slate-700 hover:text-blue-500 cursor-pointer transition-colors"
+                className="cursor-pointer text-[13px] font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-brand-gold)]"
                 title="点击修改名称"
               >
                 {displayName}
               </span>
             )}
-            <span className="rounded-full bg-slate-200/70 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+            <span className="rounded-full border border-[rgba(255,184,0,0.18)] bg-[rgba(255,184,0,0.08)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-text-muted)]">
               {items.length}
             </span>
           </div>
@@ -232,10 +229,10 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                 await refetch()
                 toast.success(`${section.name} 已刷新`, { position: 'bottom-right' })
               }}
-              className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors"
+              className="rounded-lg p-1.5 text-[var(--color-text-subtle)] transition-colors hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-brand-gold)]"
               title="刷新分组"
             >
-              <RefreshCw className={`h-4 w-4 text-slate-400 hover:text-blue-500 ${isFetching ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
             </button>
             <DangerButton
               onClick={() => onDelete?.()}
@@ -243,23 +240,20 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
             >
               <Trash2 className="h-4 w-4" />
             </DangerButton>
-            <button className="p-1.5 rounded-lg hover:bg-slate-200/50 transition-colors">
-              <MoreHorizontal className="h-4 w-4 text-slate-400" />
-            </button>
           </div>
         </div>
 
         {!collapsed && (
           <div className="overflow-x-auto">
             {items.length === 0 && !isFetching && (
-              <div className="text-center py-8 text-slate-400 text-[13px]">
+              <div className="py-8 text-center text-[13px] text-[var(--color-text-subtle)]">
                 暂无物品，点击上方搜索框添加
               </div>
             )}
             {items.length > 0 && (
-              <table className="w-full text-[12px]">
+              <table className="w-full min-w-[980px] text-[12px]">
                 <thead>
-                  <tr className="text-slate-500 border-b border-slate-100 bg-slate-50/30">
+                  <tr className="border-b border-[var(--color-border-soft)] bg-[rgba(255,255,255,0.025)] text-[var(--color-text-muted)]">
                     <th className="text-left py-3 px-4 font-semibold w-[14%]">物品名称</th>
                     <th className="text-center py-3 px-1 font-semibold w-[8%]">类型</th>
                     <th className="text-center py-3 px-1 font-semibold w-[10%]">当前火价</th>
@@ -276,12 +270,12 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                   {items.map((item) => (
                     <tr
                       key={item.id}
-                      className="border-b border-slate-50 hover:bg-slate-50/40 transition-colors"
+                      className="border-b border-[var(--color-border-soft)] transition-colors hover:bg-[rgba(255,184,0,0.045)]"
                     >
-                      <td className="py-3 px-4 text-slate-700 font-medium">{item.item_name || item.item_id}</td>
-                      <td className="py-3 px-1 text-center text-slate-400">{item.item_type || "—"}</td>
+                      <td className="py-3 px-4 font-medium text-[var(--color-text)]">{item.item_name || item.item_id}</td>
+                      <td className="py-3 px-1 text-center text-[var(--color-text-subtle)]">{item.item_type || "—"}</td>
                       <td className="py-3 px-1 text-center font-bold text-red-500">{item.current_price?.toFixed(1) || "—"}火</td>
-                      <td className="py-3 px-1 text-center font-semibold text-blue-600">¥{((item.current_price ?? 0) * rmbPer10kFire / 10000).toFixed(2)}</td>
+                      <td className="py-3 px-1 text-center font-semibold text-[var(--color-brand-gold)]">¥{((item.current_price ?? 0) * rmbPer10kFire / 10000).toFixed(2)}</td>
                       <td className="py-3 px-1">
                         <input
                           type="number"
@@ -308,7 +302,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                               }
                             }
                           }}
-                          className="w-full text-center text-slate-500 bg-transparent border border-transparent hover:border-slate-300 focus:border-blue-400 rounded px-1 py-0.5 outline-none transition-colors"
+                          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-center text-[var(--color-text-muted)] outline-none transition-colors hover:border-[var(--color-border)] focus:border-[var(--color-brand)] focus:bg-[rgba(13,15,18,0.72)]"
                         />
                       </td>
                       <td className="py-3 px-1">
@@ -337,18 +331,18 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                               }
                             }
                           }}
-                          className="w-full text-center text-slate-400 bg-transparent border border-transparent hover:border-slate-300 focus:border-blue-400 rounded px-1 py-0.5 outline-none transition-colors"
+                          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-center text-[var(--color-text-muted)] outline-none transition-colors hover:border-[var(--color-border)] focus:border-[var(--color-brand)] focus:bg-[rgba(13,15,18,0.72)]"
                         />
                       </td>
-                      <td className="py-3 px-1 text-center text-green-600 font-medium">
+                      <td className="py-3 px-1 text-center font-medium text-[var(--color-success)]">
                         {calculateMorePerFire(item).toFixed(2)}
                       </td>
                       <td className="py-3 px-1 text-center">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${getItemEvaluation(item).className}`}>
+                        <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getItemEvaluation(item).className}`}>
                           {getItemEvaluation(item).text}
                         </span>
                       </td>
-                      <td className="py-3 px-1 text-center text-slate-400 text-[11px]">
+                      <td className="py-3 px-1 text-center text-[11px] text-[var(--color-text-subtle)]">
                         {item.last_time ? new Date(Number(item.last_time) * 1000).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }) : "—"}
                       </td>
                       <td className="py-3 px-3 text-center">
@@ -364,16 +358,11 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-slate-50/60 font-semibold border-t border-slate-100">
-                    <td className="py-3 px-4 text-slate-600">总计</td>
-                    <td className="py-3 px-1"></td>
+                  <tr className="border-t border-[rgba(255,184,0,0.2)] bg-[rgba(255,184,0,0.045)] font-semibold">
+                    <td className="py-3 px-4 text-[var(--color-text)]" colSpan={2}>总计</td>
                     <td className="py-3 px-1 text-center text-red-500 font-bold">{totalFire.toFixed(1)}火</td>
-                    <td className="py-3 px-1 text-center text-blue-600 font-bold">¥{totalRmb.toFixed(2)}</td>
-                    <td className="py-3 px-1 text-center text-slate-400">—</td>
-                    <td className="py-3 px-1 text-center text-slate-400">—</td>
-                    <td className="py-3 px-1 text-center text-slate-400">—</td>
-                    <td className="py-3 px-1 text-center text-slate-400">—</td>
-                    <td className="py-3 px-3"></td>
+                    <td className="py-3 px-1 text-center font-bold text-[var(--color-brand-gold)]">¥{totalRmb.toFixed(2)}</td>
+                    <td className="py-3 px-1 text-center text-[var(--color-text-subtle)]" colSpan={6}>—</td>
                   </tr>
                 </tfoot>
               </table>

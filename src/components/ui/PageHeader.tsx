@@ -18,8 +18,8 @@ export function PageHeader({
   description,
   iconAsset,
   icon: Icon,
-  iconBg = "bg-slate-100",
-  iconColor = "text-slate-600",
+  iconBg = "bg-[rgba(255,184,0,0.08)]",
+  iconColor = "text-[var(--color-brand-gold)]",
   actions,
   className,
 }: PageHeaderProps) {

@@ -173,13 +173,13 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
   }, [currentData, historyData]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-[950px] max-h-[85vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="flex max-h-[85vh] w-[950px] flex-col overflow-hidden rounded-lg border border-[rgba(255,184,0,0.24)] bg-[var(--color-panel)] shadow-[var(--shadow-lg)]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <div className="flex items-center justify-between border-b border-[var(--color-border-soft)] px-6 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-800">{itemName}</h2>
-            <p className="text-sm text-slate-400 mt-0.5">
+            <h2 className="text-lg font-semibold text-[var(--color-text)]">{itemName}</h2>
+            <p className="mt-0.5 text-sm text-[var(--color-text-subtle)]">
               {viewMode === "day" 
                 ? `第 ${currentDay} 天 24h 物价走势` 
                 : `全赛季物价走势`} · {currentSeason.toUpperCase()} vs {historySeason.toUpperCase()}
@@ -187,31 +187,32 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+            className="rounded-lg p-2 text-[var(--color-text-subtle)] transition-colors hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-brand-gold)]"
+            title="关闭"
           >
-            <X className="w-5 h-5 text-slate-400" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* View Mode Toggle */}
-        <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/50">
-          <div className="flex items-center gap-2">
+        <div className="border-b border-[var(--color-border-soft)] bg-[rgba(255,184,0,0.035)] px-6 py-3">
+          <div className="inline-flex items-center gap-1 rounded-lg border border-[rgba(255,184,0,0.16)] bg-[rgba(8,10,12,0.82)] p-1">
             <button
               onClick={() => setViewMode("day")}
-              className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+              className={`rounded-md px-4 py-2 text-sm transition-colors ${
                 viewMode === "day"
-                  ? "bg-blue-500 text-white"
-                  : "bg-white text-slate-600 hover:bg-slate-100"
+                  ? "bg-[rgba(255,184,0,0.14)] text-[var(--color-brand-gold)]"
+                  : "text-[var(--color-text-muted)] hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-text)]"
               }`}
             >
               当天24h
             </button>
             <button
               onClick={() => setViewMode("season")}
-              className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+              className={`rounded-md px-4 py-2 text-sm transition-colors ${
                 viewMode === "season"
-                  ? "bg-blue-500 text-white"
-                  : "bg-white text-slate-600 hover:bg-slate-100"
+                  ? "bg-[rgba(255,184,0,0.14)] text-[var(--color-brand-gold)]"
+                  : "text-[var(--color-text-muted)] hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-text)]"
               }`}
             >
               全赛季
@@ -221,36 +222,36 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
 
         {/* Stats */}
         {stats && (
-          <div className="grid grid-cols-4 gap-4 px-6 py-4 bg-slate-50/50">
-            <div className="bg-white rounded-xl border border-slate-100 p-3">
-              <div className="text-xs text-slate-400 mb-1">当前均价</div>
-              <div className="text-lg font-bold text-orange-600">
+          <div className="grid grid-cols-4 gap-4 bg-[rgba(255,255,255,0.018)] px-6 py-4">
+            <div className="rounded-lg border border-[rgba(255,184,0,0.14)] bg-[var(--color-panel-soft)] p-3">
+              <div className="mb-1 text-xs text-[var(--color-text-subtle)]">当前均价</div>
+              <div className="text-lg font-bold text-[var(--color-brand-gold)]">
                 {stats.currentAvg.toFixed(2)}
               </div>
-              <div className="text-xs text-slate-400">火</div>
+              <div className="text-xs text-[var(--color-text-subtle)]">火</div>
             </div>
-            <div className="bg-white rounded-xl border border-slate-100 p-3">
-              <div className="text-xs text-slate-400 mb-1">当前最高/最低</div>
-              <div className="text-lg font-bold text-slate-700">
+            <div className="rounded-lg border border-[rgba(255,184,0,0.14)] bg-[var(--color-panel-soft)] p-3">
+              <div className="mb-1 text-xs text-[var(--color-text-subtle)]">当前最高/最低</div>
+              <div className="text-lg font-bold text-[var(--color-text)]">
                 {stats.currentMax.toFixed(2)} / {stats.currentMin.toFixed(2)}
               </div>
-              <div className="text-xs text-slate-400">火</div>
+              <div className="text-xs text-[var(--color-text-subtle)]">火</div>
             </div>
             {stats.historyAvg && (
               <>
-                <div className="bg-white rounded-xl border border-slate-100 p-3">
-                  <div className="text-xs text-slate-400 mb-1">历史均价</div>
-                  <div className="text-lg font-bold text-blue-600">
+                <div className="rounded-lg border border-[rgba(255,184,0,0.14)] bg-[var(--color-panel-soft)] p-3">
+                  <div className="mb-1 text-xs text-[var(--color-text-subtle)]">历史均价</div>
+                  <div className="text-lg font-bold text-[var(--color-ai)]">
                     {stats.historyAvg.toFixed(2)}
                   </div>
-                  <div className="text-xs text-slate-400">火</div>
+                  <div className="text-xs text-[var(--color-text-subtle)]">火</div>
                 </div>
-                <div className="bg-white rounded-xl border border-slate-100 p-3">
-                  <div className="text-xs text-slate-400 mb-1">溢价率</div>
+                <div className="rounded-lg border border-[rgba(255,184,0,0.14)] bg-[var(--color-panel-soft)] p-3">
+                  <div className="mb-1 text-xs text-[var(--color-text-subtle)]">溢价率</div>
                   <div className={`text-lg font-bold ${(stats.premiumRate ?? 0) > 0 ? "text-green-500" : "text-red-500"}`}>
                     {(stats.premiumRate ?? 0) > 0 ? "↑" : "↓"} {Math.abs(stats.premiumRate ?? 0).toFixed(1)}%
                   </div>
-                  <div className="text-xs text-slate-400">vs 历史</div>
+                  <div className="text-xs text-[var(--color-text-subtle)]">vs 历史</div>
                 </div>
               </>
             )}
@@ -260,17 +261,17 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
         {/* Chart */}
         <div className="px-6 py-4" style={{ height: "400px" }}>
           {isLoading ? (
-            <div className="flex items-center justify-center h-full text-slate-400">
+            <div className="flex h-full items-center justify-center text-[var(--color-text-subtle)]">
               加载中...
             </div>
           ) : isError ? (
-            <div className="flex items-center justify-center h-full text-red-500">
+            <div className="flex h-full items-center justify-center text-red-500">
               加载失败: {String(errorMsg)}
             </div>
           ) : chartData.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+            <div className="flex h-full flex-col items-center justify-center text-[var(--color-text-subtle)]">
               <p>暂无数据</p>
-              <p className="text-xs mt-2">currentData: {currentData.length}, historyData: {historyData.length}</p>
+              <p className="mt-2 text-xs">currentData: {currentData.length}, historyData: {historyData.length}</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
@@ -279,7 +280,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
                   dataKey={viewMode === "day" ? "hour" : "day"}
                   tick={{ fontSize: 11, fill: "#9CA3AF" }}
                   tickLine={false}
-                  axisLine={{ stroke: "#E5E7EB" }}
+                  axisLine={{ stroke: "#2A2F36" }}
                   label={{ 
                     value: viewMode === "day" ? "小时" : "开服天数", 
                     position: "insideBottom", 
@@ -297,6 +298,13 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
                   label={{ value: "价格(火)", angle: -90, position: "insideLeft", fontSize: 12, fill: "#9CA3AF" }}
                 />
                 <Tooltip
+                  contentStyle={{
+                    background: "#111418",
+                    border: "1px solid rgba(255,184,0,0.24)",
+                    borderRadius: 8,
+                    color: "#e6e6e6",
+                  }}
+                  labelStyle={{ color: "#ffb800" }}
                   formatter={(value: any, name: string) => {
                     if (value === null) return ["—", name];
                     return [`${Number(value).toFixed(2)} 火`, name];
@@ -313,11 +321,11 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
                   type="monotone"
                   dataKey="current"
                   name={`${currentSeason.toUpperCase()} 当前赛季`}
-                  stroke="#3B82F6"
+                  stroke="#FFB800"
                   strokeWidth={2}
                   dot={false}
                   connectNulls
-                  activeDot={{ r: 4, fill: "#3B82F6" }}
+                  activeDot={{ r: 4, fill: "#FFB800" }}
                 />
                 <Line
                   type="monotone"
@@ -336,7 +344,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-400">
+        <div className="border-t border-[var(--color-border-soft)] bg-[rgba(255,184,0,0.035)] px-6 py-3 text-xs text-[var(--color-text-subtle)]">
           {viewMode === "day" 
             ? `对比两个赛季第 ${currentDay} 天的 24 小时物价走势` 
             : `对比两个赛季全周期的每日均价走势`}

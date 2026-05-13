@@ -18,12 +18,12 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium ${
+          className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-[var(--shadow-lg)] ${
             toast.type === "success"
-              ? "bg-green-50 text-green-700 border border-green-200"
+              ? "border border-[rgba(34,197,94,0.3)] bg-[rgba(34,197,94,0.12)] text-green-200"
               : toast.type === "error"
-              ? "bg-red-50 text-red-700 border border-red-200"
-              : "bg-amber-50 text-amber-700 border border-amber-200"
+              ? "border border-[rgba(239,68,68,0.32)] bg-[rgba(239,68,68,0.12)] text-red-200"
+              : "border border-[rgba(255,184,0,0.32)] bg-[rgba(255,184,0,0.12)] text-[var(--color-brand-gold)]"
           }`}
         >
           {toast.type === "success" ? (

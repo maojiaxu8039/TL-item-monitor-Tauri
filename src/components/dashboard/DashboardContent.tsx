@@ -127,7 +127,7 @@ export default function DashboardContent() {
         <Button
           variant="outline"
           onClick={() => setDialogOpen(true)}
-          className="mx-auto mt-1 w-full max-w-md rounded-xl border-2 border-dashed border-blue-300/70 py-3 text-blue-500 hover:bg-blue-50/50 hover:border-blue-400 transition-all h-auto text-[13px] font-medium"
+          className="mx-auto mt-1 h-auto w-full max-w-md border-dashed border-[rgba(255,184,0,0.34)] py-3 text-[13px] font-medium text-[var(--color-brand-gold)] hover:border-[var(--color-brand-gold)] hover:bg-[rgba(255,184,0,0.08)]"
         >
           <Plus className="h-4 w-4 mr-1.5" />
           添加分组

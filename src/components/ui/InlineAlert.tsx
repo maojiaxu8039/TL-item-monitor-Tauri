@@ -15,28 +15,28 @@ export function InlineAlert({
 }: InlineAlertProps) {
   const variantMap = {
     info: {
-      bg: "bg-blue-50",
-      text: "text-blue-800",
+      bg: "border-[rgba(56,189,248,0.28)] bg-[rgba(56,189,248,0.1)]",
+      text: "text-sky-200",
       icon: Info,
-      iconColor: "text-blue-500",
+      iconColor: "text-sky-300",
     },
     warning: {
-      bg: "bg-amber-50",
-      text: "text-amber-800",
+      bg: "border-[rgba(255,184,0,0.3)] bg-[rgba(255,184,0,0.1)]",
+      text: "text-[var(--color-brand-gold)]",
       icon: AlertTriangle,
-      iconColor: "text-amber-500",
+      iconColor: "text-[var(--color-brand-gold)]",
     },
     error: {
-      bg: "bg-red-50",
-      text: "text-red-800",
+      bg: "border-[rgba(239,68,68,0.32)] bg-[rgba(239,68,68,0.1)]",
+      text: "text-red-200",
       icon: AlertCircle,
-      iconColor: "text-red-500",
+      iconColor: "text-[var(--color-danger)]",
     },
     success: {
-      bg: "bg-green-50",
-      text: "text-green-800",
+      bg: "border-[rgba(34,197,94,0.3)] bg-[rgba(34,197,94,0.1)]",
+      text: "text-green-200",
       icon: CheckCircle,
-      iconColor: "text-green-500",
+      iconColor: "text-[var(--color-success)]",
     },
   };
 

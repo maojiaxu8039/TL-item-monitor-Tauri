@@ -232,8 +232,8 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       className="relative"
       ref={containerRef}
     >
-      <div className="flex items-center gap-3 rounded-xl bg-white p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] border border-slate-100">
-        <Select className="h-9 w-[110px] text-[13px] flex-shrink-0 bg-slate-50 border-slate-200 rounded-lg">
+      <div className="flex items-center gap-3 rounded-lg border border-[rgba(255,184,0,0.16)] bg-[var(--color-panel)] p-3 shadow-[var(--shadow-sm)]">
+        <Select className="h-9 w-[112px] flex-shrink-0 border-[rgba(255,184,0,0.18)] bg-[rgba(13,15,18,0.82)] text-[13px]">
           <option>全部类型</option>
           {itemTypes?.map((type) => (
             <option key={type} value={type}>{type}</option>
@@ -241,30 +241,30 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
         </Select>
 
         <div className="relative flex-1 min-w-0">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-subtle)]" />
           <Input
             ref={inputRef}
             value={searchValue}
             onChange={handleSearchChange}
             onFocus={() => searchValue.length >= 1 && setShowResults(true)}
             placeholder="输入物品名称搜索..."
-            className="pl-9 h-9 text-[13px] bg-slate-50 border-slate-200 rounded-lg focus-visible:ring-blue-500 focus-visible:ring-1"
+            className="h-9 border-[rgba(255,184,0,0.18)] bg-[rgba(13,15,18,0.82)] pl-9 text-[13px]"
           />
         </div>
 
-        <button onClick={handleImportList} className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50">
+        <Button onClick={handleImportList} variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-[13px]">
           <Upload className="h-3.5 w-3.5" />
           导入列表
-        </button>
-        <button onClick={handleExportList} className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50">
+        </Button>
+        <Button onClick={handleExportList} variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-[13px]">
           <Download className="h-3.5 w-3.5" />
           导出列表
-        </button>
+        </Button>
       </div>
 
       <AnimatePresence>
         {showResults && !searchResult && !error && searchValue.length >= 1 && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl border border-slate-200 shadow-lg z-50 p-4 text-sm text-slate-500 text-center">
+          <div className="absolute left-0 right-0 top-full z-50 mt-2 rounded-lg border border-[rgba(255,184,0,0.2)] bg-[var(--color-panel)] p-4 text-center text-sm text-[var(--color-text-muted)] shadow-[var(--shadow-lg)]">
             加载中...
           </div>
         )}
@@ -272,7 +272,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
           <motion.div
             initial={{ opacity: 0, y: -5 }}
             animate={{ opacity: 1, y: 0 }}
-            className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl border border-slate-200 shadow-lg z-50 p-4 text-sm text-slate-500 text-center"
+            className="absolute left-0 right-0 top-full z-50 mt-2 rounded-lg border border-[rgba(255,184,0,0.2)] bg-[var(--color-panel)] p-4 text-center text-sm text-[var(--color-text-muted)] shadow-[var(--shadow-lg)]"
           >
             未找到匹配的物品
           </motion.div>
@@ -283,31 +283,31 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -5 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl border border-slate-200 shadow-lg z-50 max-h-80 overflow-auto"
+            className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-auto rounded-lg border border-[rgba(255,184,0,0.2)] bg-[var(--color-panel)] shadow-[var(--shadow-lg)]"
           >
-            <div className="px-3 py-2 text-xs text-slate-400 border-b border-slate-100">
+            <div className="border-b border-[var(--color-border-soft)] px-3 py-2 text-xs text-[var(--color-text-subtle)]">
               找到 {searchResult.total} 个结果
             </div>
             {searchResult.items.map((item) => (
               <div
                 key={item.item_id}
-                className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
+                className="flex cursor-pointer items-center justify-between border-b border-[var(--color-border-soft)] px-4 py-2.5 transition-colors last:border-0 hover:bg-[rgba(255,184,0,0.06)]"
               >
                 <div className="flex-1" onClick={() => handleAddItem(item)}>
-                  <div className="text-sm font-medium text-slate-700">{item.name}</div>
-                  <div className="text-xs text-slate-400">{item.item_type || "—"} · {item.price}火</div>
+                  <div className="text-sm font-medium text-[var(--color-text)]">{item.name}</div>
+                  <div className="text-xs text-[var(--color-text-subtle)]">{item.item_type || "—"} · {item.price}火</div>
                 </div>
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-7 w-7 p-0 rounded-full hover:bg-blue-50"
+                  className="h-7 w-7 rounded-lg p-0"
                   onClick={(e) => {
                     e.stopPropagation()
                     handleAddItem(item)
                   }}
                   disabled={addItemMutation.isPending}
                 >
-                  <Plus className="h-4 w-4 text-blue-500" />
+                  <Plus className="h-4 w-4 text-[var(--color-brand-gold)]" />
                 </Button>
               </div>
             ))}
@@ -320,11 +320,11 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
           initial={{ opacity: 0, y: -5 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -5 }}
-          className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl border border-slate-200 shadow-lg z-50"
+          className="absolute left-0 right-0 top-full z-50 mt-2 rounded-lg border border-[rgba(255,184,0,0.2)] bg-[var(--color-panel)] shadow-[var(--shadow-lg)]"
         >
-          <div className="px-4 py-3 border-b border-slate-100">
-            <div className="text-sm font-medium text-slate-700">添加到分组</div>
-            <div className="text-xs text-slate-400 mt-0.5">{selectedItem.name}</div>
+          <div className="border-b border-[var(--color-border-soft)] px-4 py-3">
+            <div className="text-sm font-medium text-[var(--color-text)]">添加到分组</div>
+            <div className="mt-0.5 text-xs text-[var(--color-text-subtle)]">{selectedItem.name}</div>
           </div>
           <div className="max-h-60 overflow-auto py-1">
             {sections.map((section) => (
@@ -332,11 +332,11 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
                 key={section.id}
                 onClick={() => handleSelectSection(section.id)}
                 disabled={addItemMutation.isPending}
-                className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                className="flex w-full items-center justify-between px-4 py-2.5 text-left transition-colors hover:bg-[rgba(255,184,0,0.06)] disabled:opacity-50"
               >
-                <span className="text-sm text-slate-700">{section.name}</span>
+                <span className="text-sm text-[var(--color-text)]">{section.name}</span>
                 {addItemMutation.isPending && (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500" />
+                  <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-[var(--color-brand-gold)]" />
                 )}
               </button>
             ))}
