@@ -10,10 +10,7 @@ import {
   Plus,
   ChevronDown,
   Loader2,
-  Zap,
-  ArrowRight,
   Search,
-  Filter,
   BarChart2,
 } from "lucide-react";
 import { ItemPriceTrendModal } from "./ItemPriceTrendModal";
@@ -25,23 +22,14 @@ import { useToast } from "@/hooks/useToast";
 interface HoardAnalysis {
   item_id: string;
   item_name: string;
-  item_type: string | null;
-  volatility_score: number;
-  cycle_period: number;
-  price_range: number;
   current_price: number;
   avg_price: number;
   min_price: number;
   max_price: number;
-  best_buy_day: number;
-  best_buy_hour: number;
-  best_buy_price: number;
-  best_sell_day: number;
-  best_sell_hour: number;
-  best_sell_price: number;
-  expected_profit: number;
+  price_trend: string;
+  trend_percent: number;
+  recommendation: string;
   confidence: number;
-  recommendation: "hoard" | "sell" | "watch";
   reason: string;
 }
 
@@ -114,17 +102,17 @@ function HoardCard({
   onAddToSection: (sectionId: string, itemId: string, itemName: string, price: number) => void;
   onViewTrend: (itemId: string, itemName: string) => void;
 }) {
-  const isHoard = analysis.recommendation === "hoard";
+  const isBuy = analysis.recommendation === "buy";
   const isSell = analysis.recommendation === "sell";
 
   const getConfig = () => {
-    if (isHoard)
+    if (isBuy)
       return {
         border: "border-green-200",
         bg: "bg-green-50",
         badge: "bg-green-100 text-green-700",
         icon: ShoppingCart,
-        label: "建议囤货",
+        label: "建议入手",
       };
     if (isSell)
       return {
@@ -132,14 +120,14 @@ function HoardCard({
         bg: "bg-red-50",
         badge: "bg-red-100 text-red-700",
         icon: DollarSign,
-        label: "建议出货",
+        label: "建议出手",
       };
     return {
       border: "border-amber-200",
       bg: "bg-amber-50",
       badge: "bg-amber-100 text-amber-700",
       icon: Clock,
-      label: "继续观望",
+      label: "建议观望",
     };
   };
 
@@ -151,7 +139,7 @@ function HoardCard({
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-lg ${config.bg}`}>
-            <Icon className={`w-5 h-5 ${isHoard ? "text-green-600" : isSell ? "text-red-600" : "text-amber-600"}`} />
+            <Icon className={`w-5 h-5 ${isBuy ? "text-green-600" : isSell ? "text-red-600" : "text-amber-600"}`} />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -162,11 +150,6 @@ function HoardCard({
               >
                 {analysis.item_name}
               </h4>
-              {analysis.item_type && (
-                <span className="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">
-                  {analysis.item_type}
-                </span>
-              )}
               <button
                 onClick={() => onViewTrend(analysis.item_id, analysis.item_name)}
                 className="flex items-center gap-1 px-2 py-0.5 text-xs rounded border border-slate-200 hover:bg-slate-50 transition-colors"
@@ -195,53 +178,21 @@ function HoardCard({
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-3 mt-4">
         <div className="bg-slate-50 rounded-lg p-2.5">
-          <div className="text-xs text-slate-400 mb-1">波动评分</div>
-          <div className="text-sm font-bold text-slate-700">{analysis.volatility_score}/100</div>
+          <div className="text-xs text-slate-400 mb-1">当前价格</div>
+          <div className="text-sm font-bold text-slate-700">{analysis.current_price.toFixed(1)}</div>
         </div>
         <div className="bg-slate-50 rounded-lg p-2.5">
-          <div className="text-xs text-slate-400 mb-1">周期</div>
-          <div className="text-sm font-bold text-slate-700">{analysis.cycle_period}h</div>
+          <div className="text-xs text-slate-400 mb-1">均价</div>
+          <div className="text-sm font-bold text-slate-700">{analysis.avg_price.toFixed(1)}</div>
         </div>
         <div className="bg-slate-50 rounded-lg p-2.5">
           <div className="text-xs text-slate-400 mb-1">价格区间</div>
-          <div className="text-sm font-bold text-slate-700">{analysis.price_range.toFixed(2)}</div>
+          <div className="text-sm font-bold text-slate-700">{analysis.min_price.toFixed(1)} - {analysis.max_price.toFixed(1)}</div>
         </div>
         <div className="bg-slate-50 rounded-lg p-2.5">
-          <div className="text-xs text-slate-400 mb-1">预期收益</div>
-          <div className={`text-sm font-bold ${analysis.expected_profit > 0 ? "text-green-600" : "text-red-600"}`}>
-            {analysis.expected_profit > 0 ? "+" : ""}
-            {analysis.expected_profit.toFixed(1)}%
-          </div>
-        </div>
-      </div>
-
-      {/* Buy/Sell Timeline */}
-      <div className="mt-4 flex items-center gap-4">
-        <div className="flex-1 bg-green-50 border border-green-200 rounded-lg p-3">
-          <div className="flex items-center gap-2 mb-1.5">
-            <ShoppingCart className="w-3.5 h-3.5 text-green-600" />
-            <span className="text-xs font-medium text-green-700">最佳入手</span>
-          </div>
-          <div className="text-sm font-bold text-green-800">
-            {analysis.best_buy_price.toFixed(2)} 火
-          </div>
-          <div className="text-xs text-green-600 mt-0.5">
-            第{analysis.best_buy_day}天 {String(analysis.best_buy_hour).padStart(2, "0")}:00
-          </div>
-        </div>
-
-        <ArrowRight className="w-5 h-5 text-slate-300 flex-shrink-0" />
-
-        <div className="flex-1 bg-red-50 border border-red-200 rounded-lg p-3">
-          <div className="flex items-center gap-2 mb-1.5">
-            <DollarSign className="w-3.5 h-3.5 text-red-600" />
-            <span className="text-xs font-medium text-red-700">最佳出手</span>
-          </div>
-          <div className="text-sm font-bold text-red-800">
-            {analysis.best_sell_price.toFixed(2)} 火
-          </div>
-          <div className="text-xs text-red-600 mt-0.5">
-            第{analysis.best_sell_day}天 {String(analysis.best_sell_hour).padStart(2, "0")}:00
+          <div className="text-xs text-slate-400 mb-1">趋势</div>
+          <div className={`text-sm font-bold ${analysis.trend_percent > 0 ? "text-red-600" : analysis.trend_percent < 0 ? "text-green-600" : "text-slate-700"}`}>
+            {analysis.trend_percent > 0 ? "+" : ""}{analysis.trend_percent.toFixed(1)}%
           </div>
         </div>
       </div>
@@ -276,22 +227,9 @@ function HoardCard({
 export default function PriceAnalysisPage() {
   const { marketContext } = useSectionRefresh();
   const { toasts, addToast, dismissToast } = useToast();
-  const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchKeyword, setSearchKeyword] = useState("");
-  const [sortBy, setSortBy] = useState<"volatility" | "profit" | "confidence">("volatility");
+  const [sortBy, setSortBy] = useState<"price_asc" | "price_desc" | "trend">("trend");
   const [trendItem, setTrendItem] = useState<{ itemId: string; itemName: string } | null>(null);
-
-  // 获取物品列表
-  const { data: itemsData, isLoading: itemsLoading } = useQuery({
-    queryKey: ["items-search", marketContext.seasonId, marketContext.marketMode, "", "all", 1],
-    queryFn: () => cmd.searchItems("", 1, 100),
-  });
-
-  // 获取动态物品类型列表
-  const { data: itemTypes = [] } = useQuery({
-    queryKey: ["item-types"],
-    queryFn: cmd.getItemTypes,
-  });
 
   // 获取分组列表
   const { data: sections = [] } = useQuery({
@@ -300,47 +238,43 @@ export default function PriceAnalysisPage() {
   });
 
   // 生成分析数据
-  const analysisData = useMemo(() => {
-    // TODO: 等待后端实现真实的囤货分析功能
-    // 目前暂时返回空数组
-    return [];
-  }, [itemsData]);
+  const { data: analysisData = [], isLoading: analysisLoading } = useQuery({
+    queryKey: ["item-price-insights", marketContext.seasonId, marketContext.marketMode],
+    queryFn: cmd.getItemPriceInsights,
+    enabled: !!marketContext.seasonId,
+  });
 
   // 过滤和排序
   const filteredAnalysis = useMemo(() => {
     let data = [...analysisData];
-
-    // Category filter
-    if (selectedCategory !== "all") {
-      data = data.filter((a) => a.item_type === selectedCategory);
-    }
 
     // Search filter
     if (searchKeyword.trim()) {
       const keyword = searchKeyword.toLowerCase();
       data = data.filter(
         (a) =>
-          a.item_name.toLowerCase().includes(keyword) ||
-          (a.item_type && a.item_type.toLowerCase().includes(keyword))
+          a.item_name.toLowerCase().includes(keyword)
       );
     }
 
     // Sort
     data.sort((a, b) => {
       switch (sortBy) {
-        case "volatility":
-          return b.volatility_score - a.volatility_score;
-        case "profit":
-          return b.expected_profit - a.expected_profit;
-        case "confidence":
-          return b.confidence - a.confidence;
+        case "price_asc":
+          return a.current_price - b.current_price;
+        case "price_desc":
+          return b.current_price - a.current_price;
+        case "trend":
+          // Sort by recommendation priority: buy > wait > sell
+          const order: Record<string, number> = { buy: 0, wait: 1, sell: 2 };
+          return order[a.recommendation] - order[b.recommendation];
         default:
           return 0;
       }
     });
 
     return data;
-  }, [analysisData, selectedCategory, searchKeyword, sortBy]);
+  }, [analysisData, searchKeyword, sortBy]);
 
   // 添加到分组
   const handleAddToSection = useCallback(
@@ -357,10 +291,10 @@ export default function PriceAnalysisPage() {
 
   // 统计
   const stats = useMemo(() => {
-    const hoard = filteredAnalysis.filter((a) => a.recommendation === "hoard").length;
+    const buy = filteredAnalysis.filter((a) => a.recommendation === "buy").length;
     const sell = filteredAnalysis.filter((a) => a.recommendation === "sell").length;
-    const watch = filteredAnalysis.filter((a) => a.recommendation === "watch").length;
-    return { hoard, sell, watch, total: filteredAnalysis.length };
+    const wait = filteredAnalysis.filter((a) => a.recommendation === "wait").length;
+    return { buy, sell, wait, total: filteredAnalysis.length };
   }, [filteredAnalysis]);
 
   return (
@@ -381,7 +315,7 @@ export default function PriceAnalysisPage() {
       <div className="grid grid-cols-4 gap-4">
         <div className="bg-white rounded-xl border border-slate-100 p-4">
           <div className="flex items-center gap-2 mb-2">
-            <Zap className="w-4 h-4 text-purple-500" />
+            <BarChart3 className="w-4 h-4 text-purple-500" />
             <span className="text-sm text-slate-500">分析物品</span>
           </div>
           <div className="text-2xl font-bold text-slate-800">{stats.total}</div>
@@ -391,16 +325,16 @@ export default function PriceAnalysisPage() {
         <div className="bg-white rounded-xl border border-green-100 p-4">
           <div className="flex items-center gap-2 mb-2">
             <ShoppingCart className="w-4 h-4 text-green-500" />
-            <span className="text-sm text-slate-500">建议囤货</span>
+            <span className="text-sm text-slate-500">建议入手</span>
           </div>
-          <div className="text-2xl font-bold text-green-600">{stats.hoard}</div>
+          <div className="text-2xl font-bold text-green-600">{stats.buy}</div>
           <div className="text-xs text-slate-400">件物品</div>
         </div>
 
         <div className="bg-white rounded-xl border border-red-100 p-4">
           <div className="flex items-center gap-2 mb-2">
             <DollarSign className="w-4 h-4 text-red-500" />
-            <span className="text-sm text-slate-500">建议出货</span>
+            <span className="text-sm text-slate-500">建议出手</span>
           </div>
           <div className="text-2xl font-bold text-red-600">{stats.sell}</div>
           <div className="text-xs text-slate-400">件物品</div>
@@ -409,32 +343,15 @@ export default function PriceAnalysisPage() {
         <div className="bg-white rounded-xl border border-amber-100 p-4">
           <div className="flex items-center gap-2 mb-2">
             <Clock className="w-4 h-4 text-amber-500" />
-            <span className="text-sm text-slate-500">继续观望</span>
+            <span className="text-sm text-slate-500">建议观望</span>
           </div>
-          <div className="text-2xl font-bold text-amber-600">{stats.watch}</div>
+          <div className="text-2xl font-bold text-amber-600">{stats.wait}</div>
           <div className="text-xs text-slate-400">件物品</div>
         </div>
       </div>
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
-        {/* Type filter dropdown */}
-        <div className="relative">
-          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="pl-9 pr-8 py-2 border border-slate-200 rounded text-sm bg-white outline-none cursor-pointer appearance-none min-w-[120px]"
-          >
-            <option value="all">全部类型</option>
-            {itemTypes.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-        </div>
-
         {/* Search */}
         <div className="flex-1 relative min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -451,9 +368,9 @@ export default function PriceAnalysisPage() {
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400">排序:</span>
           {[
-            { key: "volatility" as const, label: "波动评分" },
-            { key: "profit" as const, label: "预期收益" },
-            { key: "confidence" as const, label: "置信度" },
+            { key: "trend" as const, label: "趋势" },
+            { key: "price_asc" as const, label: "价格低" },
+            { key: "price_desc" as const, label: "价格高" },
           ].map((s) => (
             <button
               key={s.key}
@@ -471,7 +388,7 @@ export default function PriceAnalysisPage() {
       </div>
 
       {/* Analysis List */}
-      {itemsLoading ? (
+      {analysisLoading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-8 h-8 text-slate-300 animate-spin" />
           <span className="ml-2 text-sm text-slate-400">分析中...</span>
@@ -480,7 +397,7 @@ export default function PriceAnalysisPage() {
         <div className="text-center py-16 text-slate-400 bg-white rounded-xl border border-slate-100">
           <BarChart3 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <div className="text-sm">暂无分析数据</div>
-          <div className="text-xs mt-1">请先获取物品数据</div>
+          <div className="text-xs mt-1">需要历史价格数据才能进行分析</div>
         </div>
       ) : (
         <div className="space-y-3">

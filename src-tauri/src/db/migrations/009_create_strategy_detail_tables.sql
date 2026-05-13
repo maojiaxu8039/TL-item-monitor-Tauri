@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS strategy_details (
     output_value REAL NOT NULL DEFAULT 0,
     defense_value REAL NOT NULL DEFAULT 0,
     remark TEXT,
+    image_url TEXT DEFAULT '',
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS strategy_detail_outputs (
     item_type TEXT NOT NULL DEFAULT '',
     count REAL NOT NULL DEFAULT 1,
     estimated_value REAL NOT NULL DEFAULT 0,
+    realtime_value REAL DEFAULT 0,
     remark TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
