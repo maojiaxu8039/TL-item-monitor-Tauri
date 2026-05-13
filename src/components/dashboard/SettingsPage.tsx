@@ -54,6 +54,7 @@ export default function SettingsPage() {
   const [priceAlertCooldown, setPriceAlertCooldown] = useState(600);
   const [systemNotifications, setSystemNotifications] = useState(true);
   const [voiceAlertEnabled, setVoiceAlertEnabled] = useState(false);
+  const [voiceAlertPath, setVoiceAlertPath] = useState("");
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionStatus | null>(null);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
@@ -233,6 +234,7 @@ export default function SettingsPage() {
         setPriceAlertCooldown(cfg.notification.price_alert_cooldown_seconds);
         setSystemNotifications(cfg.notification.system_notifications);
         setVoiceAlertEnabled(cfg.notification.voice_alert_enabled);
+        setVoiceAlertPath(cfg.notification.voice_alert_path || "");
         setLoaded(true);
         if (cfg.scrape.items_source === 'local') {
           cmd.validateJsonFile(cfg.scrape.items_json_path || defaultPath).then((v) => {
@@ -298,7 +300,7 @@ export default function SettingsPage() {
       notification: {
         system_notifications: systemNotifications,
         voice_alert_enabled: voiceAlertEnabled,
-        voice_alert_path: "",
+        voice_alert_path: voiceAlertPath,
         price_alert_enabled: priceAlertEnabled,
         price_alert_cooldown_seconds: priceAlertCooldown,
         quiet_start: null,
@@ -681,6 +683,22 @@ export default function SettingsPage() {
               <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
             </label>
           </div>
+
+          {voiceAlertEnabled && (
+            <div className="flex items-center justify-between pl-4 border-l-2 border-blue-200">
+              <div>
+                <div className="text-sm font-medium text-slate-600">语音文件路径</div>
+                <div className="text-xs text-slate-400 mt-0.5">支持 .mp3 或 .wav 文件（留空使用系统提示音）</div>
+              </div>
+              <input
+                type="text"
+                value={voiceAlertPath}
+                onChange={(e) => setVoiceAlertPath(e.target.value)}
+                placeholder="/path/to/alert.mp3"
+                className="w-64 text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+            </div>
+          )}
 
           <div className="flex items-center justify-between">
             <div>

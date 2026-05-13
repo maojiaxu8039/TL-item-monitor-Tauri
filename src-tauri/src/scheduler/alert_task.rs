@@ -95,12 +95,23 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
 
     let message = format_worth_notification(&worth_items);
 
-    if let Err(e) = send_notification(app, "🔥 发现值得购买的物品！", &message) {
-        warn!("Failed to send notification: {}", e);
+    if notification_config.system_notifications {
+        if let Err(e) = send_notification(app, "🔥 发现值得购买的物品！", &message) {
+            warn!("Failed to send notification: {}", e);
+        }
+    }
+
+    if notification_config.voice_alert_enabled && !notification_config.voice_alert_path.is_empty() {
+        play_voice_alert(&notification_config.voice_alert_path, 1);
     }
 }
 
 async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>) {
+    let notification_config: NotificationSettings = {
+        let config = state.config.read();
+        config.notification.clone()
+    };
+
     let ctx = state.active_context.read().clone();
     let season_id = ctx.season_id.clone();
     let market_mode_str = ctx.market_mode.as_str();
@@ -121,19 +132,21 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
 
     let now = chrono::Utc::now().timestamp();
 
-    for rule in enabled_rules {
+    for rule in &enabled_rules {
         if let Some(last_triggered) = rule.last_triggered_at {
             if now - last_triggered < rule.cooldown_seconds as i64 {
                 continue;
             }
         }
 
-        let triggered = evaluate_rule(&state.db, &season_id, market_mode_str, &rule).await;
+        let triggered = evaluate_rule(&state.db, &season_id, market_mode_str, rule).await;
 
         if triggered {
-            let message = format_rule_notification(&rule);
-            if let Err(e) = send_notification(app, "⚠️ 预警规则触发", &message) {
-                warn!("Failed to send notification: {}", e);
+            let message = format_rule_notification(rule);
+            if notification_config.system_notifications {
+                if let Err(e) = send_notification(app, "⚠️ 预警规则触发", &message) {
+                    warn!("Failed to send notification: {}", e);
+                }
             }
 
             if let Err(e) = repo_alerts::update_rule_last_triggered(&state.db, &rule.id, now).await
@@ -152,9 +165,18 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
                 error!("Failed to create alert event: {}", e);
             }
 
-            if let Err(e) = emit_alert_triggered(app, &rule, &message) {
+            if let Err(e) = emit_alert_triggered(app, rule, &message) {
                 warn!("Failed to emit alert triggered event: {}", e);
             }
+        }
+    }
+
+    if notification_config.voice_alert_enabled && !notification_config.voice_alert_path.is_empty() {
+        let has_triggered = enabled_rules.iter().any(|rule| {
+            rule.last_triggered_at.map(|t| now - t < rule.cooldown_seconds as i64).unwrap_or(false)
+        });
+        if has_triggered {
+            play_voice_alert(&notification_config.voice_alert_path, 1);
         }
     }
 }
@@ -294,4 +316,35 @@ fn emit_alert_triggered(
     });
     app.emit("alert-triggered", payload)?;
     Ok(())
+}
+
+fn play_voice_alert(voice_path: &str, count: usize) {
+    let voice_path = voice_path.to_string();
+    tokio::spawn(async move {
+        for _ in 0..count {
+            #[cfg(target_os = "macos")]
+            {
+                let _ = tokio::process::Command::new("afplay")
+                    .arg(&voice_path)
+                    .spawn()
+                    .map_err(|e| warn!("Failed to play voice on macOS: {}", e));
+            }
+            #[cfg(target_os = "windows")]
+            {
+                if voice_path.to_lowercase().ends_with(".mp3") || voice_path.to_lowercase().ends_with(".wav") {
+                    let _ = tokio::process::Command::new("powershell")
+                        .args(["-c", &format!("(New-Object System.Media.SoundPlayer '{}').PlaySync()", voice_path)])
+                        .spawn()
+                        .map_err(|e| warn!("Failed to play voice on Windows: {}", e));
+                } else {
+                    let _ = tokio::process::Command::new("powershell")
+                        .args(["-c", "[System.Media.SystemSounds]::Hand.Play()"])
+                        .spawn()
+                        .map_err(|e| warn!("Failed to play system sound on Windows: {}", e));
+                }
+            }
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        }
+        info!("Voice alert played {} time(s)", count);
+    });
 }
