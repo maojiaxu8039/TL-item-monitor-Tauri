@@ -359,7 +359,7 @@ export default function AlertsPage() {
               最近预警事件
             </h3>
           </div>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-[var(--color-border-soft)]">
             {events.slice(0, 10).map(event => (
               <div key={event.id} className="px-4 py-3 flex items-start gap-3 hover:bg-[var(--color-panel-soft)] transition-colors">
                 <AlertCircle className="w-4 h-4 text-[var(--color-brand-gold)] mt-0.5 shrink-0" />

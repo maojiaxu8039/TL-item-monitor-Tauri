@@ -165,7 +165,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
         </Button>
 
         <div className="torch-status-chip" title={dataSource === "api" ? "网络数据源" : "本地数据源"}>
-          <span className={cn("torch-status-dot", dataSource === "api" ? "bg-sky-400" : "bg-[var(--color-success)]")} />
+          <span className={cn("torch-status-dot", dataSource === "api" ? "bg-[var(--color-ai)]" : "bg-[var(--color-success)]")} />
           {dataSource === "api" ? "网络" : "本地"}
         </div>
 

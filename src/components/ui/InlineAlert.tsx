@@ -16,9 +16,9 @@ export function InlineAlert({
   const variantMap = {
     info: {
       bg: "border-[rgba(56,189,248,0.28)] bg-[rgba(56,189,248,0.1)]",
-      text: "text-sky-200",
+      text: "text-[var(--color-ai)]",
       icon: Info,
-      iconColor: "text-sky-300",
+      iconColor: "text-[var(--color-ai)]",
     },
     warning: {
       bg: "border-[rgba(255,184,0,0.3)] bg-[rgba(255,184,0,0.1)]",
@@ -28,13 +28,13 @@ export function InlineAlert({
     },
     error: {
       bg: "border-[rgba(239,68,68,0.32)] bg-[rgba(239,68,68,0.1)]",
-      text: "text-red-200",
+      text: "text-[var(--color-danger)]",
       icon: AlertCircle,
       iconColor: "text-[var(--color-danger)]",
     },
     success: {
       bg: "border-[rgba(34,197,94,0.3)] bg-[rgba(34,197,94,0.1)]",
-      text: "text-green-200",
+      text: "text-[var(--color-success)]",
       icon: CheckCircle,
       iconColor: "text-[var(--color-success)]",
     },

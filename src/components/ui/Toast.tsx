@@ -20,18 +20,18 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
           key={toast.id}
           className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-[var(--shadow-lg)] ${
             toast.type === "success"
-              ? "border border-[rgba(34,197,94,0.3)] bg-[rgba(34,197,94,0.12)] text-green-200"
+              ? "border border-[rgba(34,197,94,0.3)] bg-[rgba(34,197,94,0.12)] text-[var(--color-success)]"
               : toast.type === "error"
-              ? "border border-[rgba(239,68,68,0.32)] bg-[rgba(239,68,68,0.12)] text-red-200"
+              ? "border border-[rgba(239,68,68,0.32)] bg-[rgba(239,68,68,0.12)] text-[var(--color-danger)]"
               : "border border-[rgba(255,184,0,0.32)] bg-[rgba(255,184,0,0.12)] text-[var(--color-brand-gold)]"
           }`}
         >
           {toast.type === "success" ? (
-            <Check className="w-4 h-4 text-green-500" />
+            <Check className="w-4 h-4 text-[var(--color-success)]" />
           ) : toast.type === "error" ? (
-            <AlertCircle className="w-4 h-4 text-red-500" />
+            <AlertCircle className="w-4 h-4 text-[var(--color-danger)]" />
           ) : (
-            <AlertCircle className="w-4 h-4 text-amber-500" />
+            <AlertCircle className="w-4 h-4 text-[var(--color-brand-gold)]" />
           )}
           {toast.message}
           <button

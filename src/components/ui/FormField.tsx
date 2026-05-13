@@ -23,7 +23,7 @@ export function FormField({
       {label && (
         <label className="form-field-label">
           {label}
-          {required && <span className="text-red-500 ml-0.5">*</span>}
+          {required && <span className="text-[var(--color-danger)] ml-0.5">*</span>}
         </label>
       )}
       {description && <p className="form-field-description">{description}</p>}

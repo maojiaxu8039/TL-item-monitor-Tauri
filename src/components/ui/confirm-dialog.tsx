@@ -36,7 +36,7 @@ const variantConfig = {
     iconClass: "text-[var(--color-danger)]",
     bgClass: "border-[rgba(239,68,68,0.32)] bg-[rgba(239,68,68,0.1)]",
     borderClass: "border-[rgba(239,68,68,0.32)]",
-    confirmClass: "bg-[var(--color-danger)] text-white hover:brightness-110",
+    confirmClass: "bg-[var(--color-danger)] text-black hover:brightness-110",
   },
 }
 
