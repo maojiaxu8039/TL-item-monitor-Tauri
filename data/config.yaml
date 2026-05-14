@@ -1,0 +1,37 @@
+schema_version: 1
+scrape:
+  fire_price_mode: season_normal
+  fire_price_scrape_interval: 300
+  fire_price_scrape_enabled: true
+  items_source: api
+  items_json_path: ''
+  items_reload_interval: 300
+  auto_reload: true
+  expert_enabled: false
+desktop:
+  auto_start: false
+  tray_on_close: false
+  mini_mode: false
+  free_layout: false
+notification:
+  system_notifications: true
+  mac_desktop_notifications: true
+  win_desktop_notifications: true
+  voice_alert_enabled: false
+  voice_alert_path: ''
+  price_alert_enabled: true
+  price_alert_cooldown_seconds: 600
+  quiet_start: null
+  quiet_end: null
+deal:
+  bargain_enabled: true
+  bargain_threshold_percent: 30
+  sell_enabled: true
+  sell_threshold_percent: 30
+data:
+  history_retention: permanent
+  compress_history: false
+app:
+  season_id: ss12
+  language: zh-CN
+  auto_update: false

@@ -257,13 +257,13 @@ fn node_fallback_candidates() -> Vec<NodeFallbackCandidate> {
 
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
+            if let Some(contents_dir) = exe_dir.parent() {
+                push_unique_path(&mut resource_dirs, contents_dir.join("Resources"));
+                push_unique_path(&mut resource_dirs, exe_dir.join("Resources"));
+                push_unique_path(&mut resource_dirs, contents_dir.join("Resources/resources"));
+            }
             push_unique_path(&mut resource_dirs, exe_dir.join("resources"));
             push_unique_path(&mut resource_dirs, exe_dir.to_path_buf());
-
-            if let Some(contents_dir) = exe_dir.parent() {
-                push_unique_path(&mut resource_dirs, contents_dir.join("Resources/resources"));
-                push_unique_path(&mut resource_dirs, contents_dir.join("Resources"));
-            }
         }
     }
 
@@ -274,8 +274,6 @@ fn node_fallback_candidates() -> Vec<NodeFallbackCandidate> {
 
     let mut candidates = Vec::new();
     for dir in resource_dirs {
-        candidates.push(NodeFallbackCandidate::Script(dir.join("qiandao_fire.cjs")));
-        candidates.push(NodeFallbackCandidate::Script(dir.join("qiandao_fire.mjs")));
         candidates.push(NodeFallbackCandidate::Executable(dir.join(
             if cfg!(windows) {
                 "qiandao_fire.exe"
@@ -283,6 +281,8 @@ fn node_fallback_candidates() -> Vec<NodeFallbackCandidate> {
                 "qiandao_fire"
             },
         )));
+        candidates.push(NodeFallbackCandidate::Script(dir.join("qiandao_fire.cjs")));
+        candidates.push(NodeFallbackCandidate::Script(dir.join("qiandao_fire.mjs")));
     }
 
     candidates
