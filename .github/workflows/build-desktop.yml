@@ -34,9 +34,9 @@ jobs:
           cache: 'npm'
 
       - name: Setup Rust
-        run: |
-          rustup set default-host x86_64-pc-windows-msvc
-          rustup target add x86_64-pc-windows-msvc
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -74,9 +74,15 @@ jobs:
           cache: 'npm'
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          target: aarch64-apple-darwin
+          targets: aarch64-apple-darwin
+
+      - name: Verify Rust toolchain
+        run: |
+          which cargo
+          cargo --version
+          rustc --version
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
