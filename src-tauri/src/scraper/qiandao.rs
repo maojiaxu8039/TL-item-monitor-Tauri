@@ -3,6 +3,7 @@ use crate::core::state::FirePriceSnapshot;
 use chrono::Utc;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 
 const QIANDAO_API: &str = "https://api.qiandao.com";
 
@@ -151,22 +152,23 @@ async fn run_node_fallback(
     mode: &str,
 ) -> Result<FirePriceSnapshot, AppError> {
     let mut command = match candidate {
-        NodeFallbackCandidate::Script(path) => {
-            let mut command = tokio::process::Command::new("node");
+        NodeFallbackCandidate::Script { runner, path } => {
+            let mut command = tokio::process::Command::new(runner);
             command.arg(path);
             command
         }
-        NodeFallbackCandidate::Executable(path) => tokio::process::Command::new(path),
     };
 
     #[cfg(target_os = "windows")]
     {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        command.creation_flags(CREATE_NO_WINDOW);
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        command.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
     }
 
     let output = command
         .arg(if mode == "专家" { "pro" } else { "normal" })
+        .stdin(Stdio::null())
         .output()
         .await
         .map_err(|e| AppError::Scrape(format!("Script execution failed: {}", e)))?;
@@ -235,21 +237,19 @@ fn parse_node_output(stdout: &str) -> Result<NodeJsData, AppError> {
 
 #[derive(Debug, Clone)]
 enum NodeFallbackCandidate {
-    Script(PathBuf),
-    Executable(PathBuf),
+    Script { runner: &'static str, path: PathBuf },
 }
 
 impl NodeFallbackCandidate {
     fn path(&self) -> &Path {
         match self {
-            Self::Script(path) | Self::Executable(path) => path,
+            Self::Script { path, .. } => path,
         }
     }
 
     fn label(&self) -> String {
         match self {
-            Self::Script(path) => format!("node {}", path.display()),
-            Self::Executable(path) => path.display().to_string(),
+            Self::Script { runner, path } => format!("{} {}", runner, path.display()),
         }
     }
 }
@@ -280,18 +280,31 @@ fn node_fallback_candidates() -> Vec<NodeFallbackCandidate> {
 
     let mut candidates = Vec::new();
     for dir in resource_dirs {
-        candidates.push(NodeFallbackCandidate::Executable(dir.join(
-            if cfg!(windows) {
-                "qiandao_fire.exe"
-            } else {
-                "qiandao_fire"
-            },
-        )));
-        candidates.push(NodeFallbackCandidate::Script(dir.join("qiandao_fire.cjs")));
-        candidates.push(NodeFallbackCandidate::Script(dir.join("qiandao_fire.mjs")));
+        push_script_candidates(&mut candidates, dir.join("qiandao_fire.cjs"));
+        push_script_candidates(&mut candidates, dir.join("qiandao_fire.mjs"));
     }
 
     candidates
+}
+
+#[cfg(target_os = "windows")]
+fn push_script_candidates(candidates: &mut Vec<NodeFallbackCandidate>, path: PathBuf) {
+    candidates.push(NodeFallbackCandidate::Script {
+        runner: "nodew",
+        path: path.clone(),
+    });
+    candidates.push(NodeFallbackCandidate::Script {
+        runner: "node",
+        path,
+    });
+}
+
+#[cfg(not(target_os = "windows"))]
+fn push_script_candidates(candidates: &mut Vec<NodeFallbackCandidate>, path: PathBuf) {
+    candidates.push(NodeFallbackCandidate::Script {
+        runner: "node",
+        path,
+    });
 }
 
 fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {

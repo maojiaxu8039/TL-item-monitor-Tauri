@@ -7,12 +7,27 @@ use crate::core::events::{emit_fire_price_updated, FirePricePayload};
 use crate::core::state::{AppState, MarketMode};
 use crate::scraper;
 
+const INITIAL_FIRE_SCRAPE_DELAY_SECS: u64 = 20;
+
 pub async fn run_fire_scrape_task(
     app: tauri::AppHandle,
     state: Arc<AppState>,
     mut abort: broadcast::Receiver<()>,
 ) {
     info!("Fire price scraper task started");
+
+    tokio::select! {
+        _ = tokio::time::sleep(Duration::from_secs(INITIAL_FIRE_SCRAPE_DELAY_SECS)) => {}
+        result = abort.recv() => {
+            match result {
+                Ok(_) | Err(broadcast::error::RecvError::Closed) => {
+                    info!("Fire scrape task received abort during startup delay");
+                    return;
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {}
+            }
+        }
+    }
 
     let mut ticker = interval(Duration::from_secs(10));
     ticker.tick().await;

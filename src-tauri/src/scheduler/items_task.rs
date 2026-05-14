@@ -9,6 +9,8 @@ use crate::db::repo_item_realtime_prices;
 use crate::db::repo_items;
 use crate::scraper;
 
+const INITIAL_ITEMS_RELOAD_DELAY_SECS: u64 = 8;
+
 pub async fn run_items_reload_task(
     app: tauri::AppHandle,
     state: Arc<AppState>,
@@ -104,6 +106,16 @@ pub async fn run_items_reload_task(
                 wait_start.elapsed().as_secs()
             );
         } else {
+            if wait_or_abort(
+                &mut abort,
+                Duration::from_secs(INITIAL_ITEMS_RELOAD_DELAY_SECS),
+                "initial items refresh delay",
+            )
+            .await
+            {
+                break;
+            }
+
             let ctx = state.active_context.read().clone();
             match repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str())
                 .await
