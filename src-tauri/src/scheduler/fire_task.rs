@@ -47,7 +47,7 @@ pub async fn run_fire_scrape_task(
                     continue;
                 }
 
-                let interval_secs = config.scrape.fire_price_scrape_interval.max(60);
+                let interval_secs = config.scrape.fire_price_scrape_interval.max(30);
                 let expert_enabled = config.scrape.expert_enabled;
                 let ctx = state.active_context.read().clone();
                 let season_id = ctx.season_id.clone();

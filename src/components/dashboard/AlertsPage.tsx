@@ -10,7 +10,7 @@ import {
   ChevronRight,
   Search,
 } from "lucide-react";
-import { cmd, AlertRule, AlertEvent, ItemSearchResult } from "@/lib/commands";
+import { cmd, AlertRule, AlertEvent, ItemSearchResult, Section, SectionItem } from "@/lib/commands";
 import { useToast } from "@/hooks/useToast";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -32,6 +32,7 @@ const RULE_TYPES: { value: RuleType; label: string; description: string }[] = [
 
 interface CreateRuleForm {
   rule_type: RuleType;
+  section_id: string;
   item_id: string;
   threshold: number;
   cooldown_seconds: number;
@@ -56,6 +57,7 @@ export default function AlertsPage() {
   const { addToast } = useToast();
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [events, setEvents] = useState<AlertEvent[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set());
@@ -63,6 +65,7 @@ export default function AlertsPage() {
 
   const [createForm, setCreateForm] = useState<CreateRuleForm>({
     rule_type: "price_below",
+    section_id: "",
     item_id: "",
     threshold: 100,
     cooldown_seconds: 300,
@@ -72,14 +75,28 @@ export default function AlertsPage() {
   const [itemResults, setItemResults] = useState<ItemSearchResult[]>([]);
   const [selectedItemName, setSelectedItemName] = useState<string>("");
 
+  const getSectionName = (sectionId: string | null) => {
+    if (!sectionId) return "";
+    return sections.find(section => section.id === sectionId)?.name ?? sectionId;
+  };
+
+  const sectionItemToSearchResult = (item: SectionItem): ItemSearchResult => ({
+    item_id: item.item_id,
+    name: item.item_name || item.item_id,
+    item_type: item.item_type || "",
+    price: item.current_price || 0,
+  });
+
   const loadData = async () => {
     try {
-      const [rulesData, eventsData] = await Promise.all([
+      const [rulesData, eventsData, sectionsData] = await Promise.all([
         cmd.getAlertRules(),
         cmd.getAlertEvents(50),
+        cmd.getSections(),
       ]);
       setRules(rulesData);
       setEvents(eventsData);
+      setSections(sectionsData);
     } catch (e) {
       console.error("Failed to load alerts:", e);
       addToast("error", "加载预警规则失败");
@@ -92,13 +109,15 @@ export default function AlertsPage() {
     let mounted = true;
     const doLoad = async () => {
       try {
-        const [rulesData, eventsData] = await Promise.all([
+        const [rulesData, eventsData, sectionsData] = await Promise.all([
           cmd.getAlertRules(),
           cmd.getAlertEvents(50),
+          cmd.getSections(),
         ]);
         if (!mounted) return;
         setRules(rulesData);
         setEvents(eventsData);
+        setSections(sectionsData);
       } catch (e) {
         if (!mounted) return;
         console.error("Failed to load alerts:", e);
@@ -112,6 +131,10 @@ export default function AlertsPage() {
   }, []);
 
   const handleCreate = async () => {
+    if (!createForm.section_id.trim() && !createForm.item_id.trim()) {
+      addToast("warning", "请选择一个板块，或从搜索结果中选择一个物品");
+      return;
+    }
     if (selectedItemName && !createForm.item_id.trim()) {
       addToast("warning", "请先从搜索结果中选择物品");
       return;
@@ -123,7 +146,7 @@ export default function AlertsPage() {
     try {
       await cmd.createAlertRule(
         null,
-        null,
+        createForm.section_id || null,
         createForm.item_id || null,
         createForm.rule_type,
         createForm.threshold,
@@ -133,6 +156,7 @@ export default function AlertsPage() {
       setShowCreateDialog(false);
       setCreateForm({
         rule_type: "price_below",
+        section_id: "",
         item_id: "",
         threshold: 100,
         cooldown_seconds: 300,
@@ -154,6 +178,20 @@ export default function AlertsPage() {
       return;
     }
     try {
+      if (createForm.section_id) {
+        const sectionItems = await cmd.getSectionItems(createForm.section_id);
+        const normalizedKeyword = keyword.toLowerCase();
+        setItemResults(
+          sectionItems
+            .map(sectionItemToSearchResult)
+            .filter(item =>
+              item.name.toLowerCase().includes(normalizedKeyword) ||
+              item.item_id.toLowerCase().includes(normalizedKeyword)
+            )
+            .slice(0, 50)
+        );
+        return;
+      }
       const results = await cmd.searchItemsForArbitrage(keyword);
       setItemResults(results);
     } catch (err) {
@@ -163,9 +201,16 @@ export default function AlertsPage() {
   };
 
   const selectItem = (item: ItemSearchResult) => {
-    setCreateForm(prev => ({ ...prev, item_id: item.name }));
+    setCreateForm(prev => ({ ...prev, item_id: item.item_id }));
     setSelectedItemName(item.name);
     setItemSearch(item.name);
+    setItemResults([]);
+  };
+
+  const handleSectionChange = (sectionId: string) => {
+    setCreateForm(prev => ({ ...prev, section_id: sectionId, item_id: "" }));
+    setSelectedItemName("");
+    setItemSearch("");
     setItemResults([]);
   };
 
@@ -308,6 +353,11 @@ export default function AlertsPage() {
                             物品: {rule.item_id}
                           </div>
                         )}
+                        {rule.section_id && (
+                          <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">
+                            板块: {getSectionName(rule.section_id)}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-4 text-xs text-[var(--color-text-subtle)]">
@@ -379,9 +429,29 @@ export default function AlertsPage() {
         <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">
           <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
             <h3 className="text-sm font-semibold text-[var(--color-text)]">新建预警规则</h3>
-            <button onClick={() => setShowCreateDialog(false)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
+            <button
+              onClick={() => setShowCreateDialog(false)}
+              className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]"
+            >
+              ✕
+            </button>
           </div>
           <div className="p-5 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">关联板块</label>
+              <Select
+                value={createForm.section_id}
+                onChange={(e) => handleSectionChange(e.target.value)}
+              >
+                <option value="">不限定板块</option>
+                {sections.map(section => (
+                  <option key={section.id} value={section.id}>
+                    {section.name}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-[var(--color-text-subtle)] mt-1">选择板块后，空物品会监控该板块内全部物品</p>
+            </div>
             <div>
               <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">规则类型</label>
               <Select
@@ -413,7 +483,7 @@ export default function AlertsPage() {
                   <Input
                     value={itemSearch}
                     onChange={(e) => searchItems(e.target.value)}
-                    placeholder="搜索物品名称..."
+                    placeholder={createForm.section_id ? "搜索板块内物品..." : "搜索物品名称..."}
                     className="pl-10"
                   />
                 </div>
@@ -432,7 +502,11 @@ export default function AlertsPage() {
                   ))}
                 </div>
               )}
-              {!selectedItemName && <p className="text-xs text-[var(--color-text-subtle)] mt-1">留空则监控所有物品</p>}
+              {!selectedItemName && (
+                <p className="text-xs text-[var(--color-text-subtle)] mt-1">
+                  {createForm.section_id ? "留空则监控该板块所有物品" : "未选板块时必须选择一个物品"}
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">

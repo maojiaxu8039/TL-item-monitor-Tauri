@@ -146,8 +146,6 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             get_source_diagnostics,
             test_source_connection,
             get_deal_alerts,
-            archive_season,
-            init_new_season,
             list_seasons,
             get_season_api_config_cmd,
             set_season_api_config_cmd,

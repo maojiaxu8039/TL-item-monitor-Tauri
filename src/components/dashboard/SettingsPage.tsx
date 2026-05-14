@@ -1,17 +1,20 @@
 import { useState, useEffect } from "react";
 import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus, type JsonFileValidationResult, type SeasonInfo } from "@/lib/commands";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { RefreshCw, Save, Bell, Database, Globe, AlertTriangle, Trash2, Archive, Plus, Edit3, Key } from "lucide-react";
+import { RefreshCw, Save, Bell, Database, Globe, AlertTriangle, Trash2, Edit3, Key } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
+import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
 
 const INTERVAL_OPTIONS = [
+  { label: "30 秒", value: 30 },
+  { label: "1 分钟", value: 60 },
+  { label: "3 分钟", value: 180 },
   { label: "5 分钟", value: 300 },
   { label: "10 分钟", value: 600 },
   { label: "30 分钟", value: 1800 },
@@ -56,12 +59,6 @@ export default function SettingsPage() {
   const [voiceAlertPath, setVoiceAlertPath] = useState("");
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionStatus | null>(null);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
-  const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
-  const [confirmNewSeasonOpen, setConfirmNewSeasonOpen] = useState(false);
-  const [newSeasonId, setNewSeasonId] = useState("");
-  const [newSeasonName, setNewSeasonName] = useState("");
-  const [newSeasonStartedAt, setNewSeasonStartedAt] = useState("");
-  const [showNewSeasonForm, setShowNewSeasonForm] = useState(false);
 
   // API config editing state
   const [editingApiSeason, setEditingApiSeason] = useState<string | null>(null);
@@ -101,44 +98,6 @@ export default function SettingsPage() {
     },
     onError: (err) => {
       toast.error(`清空失败: ${err}`);
-    },
-  });
-
-  const archiveMutation = useMutation({
-    mutationFn: () => cmd.archiveSeason(seasonId),
-    onSuccess: (result) => {
-      toast.success(`赛季 ${result.season_id} 归档完成`, {
-        description: `物品: ${result.items_archived}, 火价记录: ${result.fire_records_archived}`,
-      });
-      seasonsQuery.refetch();
-    },
-    onError: (err: Error) => {
-      toast.error(`归档失败: ${err.message}`);
-    },
-  });
-
-  const initNewSeasonMutation = useMutation({
-    mutationFn: () => {
-      if (!newSeasonStartedAt) {
-        return Promise.reject(new Error("请输入开服时间"));
-      }
-      const startedAt = Math.floor(new Date(newSeasonStartedAt).getTime() / 1000);
-      if (startedAt <= 0) {
-        return Promise.reject(new Error("开服时间格式不正确"));
-      }
-      return cmd.initNewSeason(newSeasonId, newSeasonName || undefined, startedAt);
-    },
-    onSuccess: (result) => {
-      toast.success(`新赛季 ${result.season_id} 初始化完成`);
-      setSeasonId(result.season_id);
-      setNewSeasonId("");
-      setNewSeasonName("");
-      setNewSeasonStartedAt("");
-      setShowNewSeasonForm(false);
-      seasonsQuery.refetch();
-    },
-    onError: (err: Error) => {
-      toast.error(`初始化失败: ${err.message}`);
     },
   });
 
@@ -298,6 +257,8 @@ export default function SettingsPage() {
       },
       notification: {
         system_notifications: systemNotifications,
+        mac_desktop_notifications: systemNotifications,
+        win_desktop_notifications: systemNotifications,
         voice_alert_enabled: voiceAlertEnabled,
         voice_alert_path: voiceAlertPath,
         price_alert_enabled: priceAlertEnabled,
@@ -362,7 +323,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium text-[var(--color-text)]">当前赛季 ID</div>
-              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">归档当前赛季后可初始化新赛季</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">赛季归档与初始化由服务器端统一处理</div>
             </div>
             <StatusBadge variant="primary" className="px-4 py-1.5 text-sm font-semibold">
               {seasonId.toUpperCase()}
@@ -396,113 +357,6 @@ export default function SettingsPage() {
               </div>
             );
           })()}
-
-          {/* Archive current season */}
-          <div className="border-t border-[var(--color-border-soft)] pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-medium text-[var(--color-text)]">归档当前赛季</div>
-                <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">将 {seasonId} 数据打包为历史赛季</div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setConfirmArchiveOpen(true)}
-                disabled={archiveMutation.isPending}
-                className="border-[rgba(255,184,0,0.25)] text-[var(--color-brand-gold)] hover:bg-[rgba(255,184,0,0.08)]"
-              >
-                <Archive className="w-3.5 h-3.5 mr-1.5" />
-                {archiveMutation.isPending ? "归档中..." : "归档赛季"}
-              </Button>
-            </div>
-          </div>
-
-          {/* Initialize new season */}
-          <div className="border-t border-[var(--color-border-soft)] pt-4">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <div className="text-sm font-medium text-[var(--color-text)]">初始化新赛季</div>
-                <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">
-                  {seasonsQuery.data?.some(s => s.is_current)
-                    ? "请先归档当前赛季后再创建新赛季"
-                    : "当前无进行中的赛季，可以创建新赛季"
-                  }
-                </div>
-              </div>
-              {!showNewSeasonForm && (
-                <Button
-                  size="sm"
-                  onClick={() => setShowNewSeasonForm(true)}
-                  disabled={seasonsQuery.data?.some(s => s.is_current) ?? false}
-                >
-                  <Plus className="w-3.5 h-3.5 mr-1.5" />
-                  新建赛季
-                </Button>
-              )}
-            </div>
-
-            {showNewSeasonForm && (
-              <div className="space-y-4 bg-[var(--color-panel-soft)] rounded-lg p-4">
-                {/* Basic info */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-[var(--color-text-subtle)] block mb-1">赛季 ID *</label>
-                    <input
-                      type="text"
-                      value={newSeasonId}
-                      onChange={(e) => setNewSeasonId(e.target.value)}
-                      placeholder="如 ss13"
-                      className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-[var(--color-text-subtle)] block mb-1">赛季名称</label>
-                    <input
-                      type="text"
-                      value={newSeasonName}
-                      onChange={(e) => setNewSeasonName(e.target.value)}
-                      placeholder="如 SS13 赛季"
-                      className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-[var(--color-text-subtle)] block mb-1">开服时间 *</label>
-                    <input
-                      type="datetime-local"
-                      value={newSeasonStartedAt}
-                      onChange={(e) => setNewSeasonStartedAt(e.target.value)}
-                      className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
-                    />
-                    <p className="text-xs text-[var(--color-text-subtle)] mt-0.5">必填，请输入正确的开服时间</p>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShowNewSeasonForm(false);
-                      setNewSeasonId("");
-                      setNewSeasonName("");
-                      setNewSeasonStartedAt("");
-                    }}
-                  >
-                    取消
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => setConfirmNewSeasonOpen(true)}
-                    disabled={!newSeasonId || initNewSeasonMutation.isPending}
-                  >
-                    <Plus className="w-3.5 h-3.5 mr-1.5" />
-                    {initNewSeasonMutation.isPending ? "初始化中..." : "确认初始化"}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* API Config for Current Season */}
           <div className="border-t border-[var(--color-border-soft)] pt-4">
@@ -957,36 +811,6 @@ export default function SettingsPage() {
           clearMutation.mutate()
         }}
         loading={clearMutation.isPending}
-      />
-
-      <ConfirmDialog
-        open={confirmArchiveOpen}
-        onOpenChange={setConfirmArchiveOpen}
-        title="归档赛季"
-        message={`确定要将赛季 ${seasonId} 的数据归档吗？归档后会将数据打包到独立的归档文件中，并标记该赛季为已结束。`}
-        confirmText="归档"
-        cancelText="取消"
-        variant="warning"
-        onConfirm={() => {
-          setConfirmArchiveOpen(false)
-          archiveMutation.mutate()
-        }}
-        loading={archiveMutation.isPending}
-      />
-
-      <ConfirmDialog
-        open={confirmNewSeasonOpen}
-        onOpenChange={setConfirmNewSeasonOpen}
-        title="初始化新赛季"
-        message={`确定要初始化新赛季 ${newSeasonId} 吗？这会创建新的数据表用于记录新赛季的数据。`}
-        confirmText="初始化"
-        cancelText="取消"
-        variant="info"
-        onConfirm={() => {
-          setConfirmNewSeasonOpen(false)
-          initNewSeasonMutation.mutate()
-        }}
-        loading={initNewSeasonMutation.isPending}
       />
 
       {/* Save button */}

@@ -223,6 +223,8 @@ export interface DesktopSettings {
 
 export interface NotificationSettings {
   system_notifications: boolean;
+  mac_desktop_notifications: boolean;
+  win_desktop_notifications: boolean;
   voice_alert_enabled: boolean;
   voice_alert_path: string;
   price_alert_enabled: boolean;
@@ -610,10 +612,6 @@ export const cmd = {
     invoke<{ bargains: DealAlert[]; sells: DealAlert[] }>("get_deal_alerts"),
 
   // Season management
-  archiveSeason: (seasonId: string, archiveName?: string) =>
-    invoke<ArchiveResult>("archive_season", { seasonId, archiveName }),
-  initNewSeason: (seasonId: string, seasonName?: string, startedAt?: number) =>
-    invoke<NewSeasonResult>("init_new_season", { seasonId, seasonName, startedAt }),
   listSeasons: () =>
     invoke<SeasonInfo[]>("list_seasons"),
   getSeasonApiConfig: (seasonId: string) =>
@@ -690,23 +688,6 @@ export const cmd = {
   toggleArbitrageRecipeEnabled: (recipeId: string, enabled: boolean) =>
     invoke<OkResponse>("toggle_arbitrage_recipe_enabled", { recipeId, enabled }),
 };
-
-export interface ArchiveResult {
-  success: boolean;
-  season_id: string;
-  message: string;
-  items_archived: number;
-  fire_records_archived: number;
-  snapshot_records_archived: number;
-  archive_path: string | null;
-}
-
-export interface NewSeasonResult {
-  success: boolean;
-  season_id: string;
-  message: string;
-  tables_created: string[];
-}
 
 export interface SeasonInfo {
   season_id: string;

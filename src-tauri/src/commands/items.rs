@@ -2,8 +2,8 @@ use crate::commands::types::{DbStats, ItemsStats, OkResponse, SearchResult};
 use crate::core::paths::resolve_voice_alert_path;
 use crate::core::state::AppState;
 use crate::db::repo_history;
-use crate::db::repo_items;
 use crate::db::repo_item_realtime_prices;
+use crate::db::repo_items;
 use crate::scraper;
 use crate::services::send_notification;
 use std::sync::Arc;
@@ -269,9 +269,13 @@ pub async fn trigger_price_alert(
     let ctx = state.active_context.read().clone();
     let config = state.config.read().clone();
 
-    let all_section_items = crate::db::repo_sections::get_section_items(&state.db, &ctx.season_id)
-        .await
-        .map_err(|e| e.to_string())?;
+    let all_section_items = crate::db::repo_sections::get_section_items_for_context(
+        &state.db,
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     let worth_items: Vec<serde_json::Value> = all_section_items
         .into_iter()
@@ -289,9 +293,9 @@ pub async fn trigger_price_alert(
             } else {
                 0
             };
-            let item_name = item.item_name.unwrap_or_else(|| item.item_id.clone());
             serde_json::json!({
-                "item_name": item_name,
+                "section_name": item.section_name,
+                "item_name": item.item_name,
                 "current_price": format!("{:.2}", current_price),
                 "purchase_price": format!("{:.2}", purchase_price),
                 "savings": format!("-{:.0} ({:.0}%)", savings, savings_pct),
@@ -310,9 +314,13 @@ pub async fn trigger_price_alert(
             .iter()
             .map(|item| {
                 let name = item["item_name"].as_str().unwrap_or("未知");
+                let section = item["section_name"].as_str().unwrap_or("未分组");
                 let current = item["current_price"].as_str().unwrap_or("-");
                 let savings = item["savings"].as_str().unwrap_or("-");
-                format!("• {} | 当前: {} | 节省: {}\n", name, current, savings)
+                format!(
+                    "• {} / {} | 当前: {} | 节省: {}\n",
+                    section, name, current, savings
+                )
             })
             .collect::<Vec<_>>()
             .join("")
@@ -322,8 +330,9 @@ pub async fn trigger_price_alert(
             .take(3)
             .map(|item| {
                 let name = item["item_name"].as_str().unwrap_or("未知");
+                let section = item["section_name"].as_str().unwrap_or("未分组");
                 let savings = item["savings"].as_str().unwrap_or("-");
-                format!("• {} ({})", name, savings)
+                format!("• {} / {} ({})", section, name, savings)
             })
             .collect();
         format!(
@@ -492,7 +501,10 @@ pub async fn sync_items_batch(
     )
     .await
     {
-        Ok(inserted) => Ok(OkResponse::success(&format!("Batch synced: {} records", inserted))),
+        Ok(inserted) => Ok(OkResponse::success(&format!(
+            "Batch synced: {} records",
+            inserted
+        ))),
         Err(e) => Err(e.to_string()),
     }
 }
@@ -570,15 +582,23 @@ pub async fn get_realtime_fire_changes(
     let result = repo_item_realtime_prices::get_price_changes(&state.db)
         .await
         .map_err(|e| e.to_string())?;
-    
-    tracing::info!("get_realtime_fire_changes: returning {} items", result.len());
-    
+
+    tracing::info!(
+        "get_realtime_fire_changes: returning {} items",
+        result.len()
+    );
+
     // Log a sample of the results
     if !result.is_empty() {
         let sample = &result[0..std::cmp::min(3, result.len())];
         for item in sample {
-            tracing::info!("Sample: {} - current={}, change_5m={:?}, trend={}", 
-                item.name, item.current_price, item.change_rate_5m, item.trend);
+            tracing::info!(
+                "Sample: {} - current={}, change_5m={:?}, trend={}",
+                item.name,
+                item.current_price,
+                item.change_rate_5m,
+                item.trend
+            );
         }
     }
 

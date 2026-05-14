@@ -3,6 +3,20 @@ use crate::db::table_resolver::TableResolver;
 use chrono::Utc;
 use sqlx::SqlitePool;
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SectionAlertItem {
+    pub id: String,
+    pub section_id: String,
+    pub section_name: String,
+    pub item_id: String,
+    pub item_name: String,
+    pub item_type: Option<String>,
+    pub current_price: Option<f64>,
+    pub purchase_fire_price: f64,
+    pub count: i32,
+    pub more_value: f64,
+}
+
 pub async fn get_sections(
     pool: &SqlitePool,
 ) -> Result<Vec<Section>, crate::core::errors::AppError> {
@@ -118,6 +132,41 @@ pub async fn get_section_items(
         "#,
     )
     .bind(section_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows)
+}
+
+pub async fn get_section_items_for_context(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<Vec<SectionAlertItem>, crate::core::errors::AppError> {
+    let items_table = TableResolver::items_table(season_id, market_mode);
+    let rows: Vec<SectionAlertItem> = sqlx::query_as(&format!(
+        r#"
+        SELECT
+            si.id,
+            si.section_id,
+            s.name as section_name,
+            si.item_id,
+            COALESCE(i.name, si.item_name, si.item_id) as item_name,
+            COALESCE(i.item_type, si.item_type) as item_type,
+            i.price as current_price,
+            si.purchase_fire_price,
+            si.count,
+            si.more_value
+        FROM section_items si
+        INNER JOIN sections s ON s.id = si.section_id
+        LEFT JOIN {} i ON si.item_id = i.item_id
+        WHERE si.season_id = ? AND si.market_mode = ?
+        ORDER BY s.sort_order, si.sort_order, si.created_at
+        "#,
+        items_table
+    ))
+    .bind(season_id)
+    .bind(market_mode)
     .fetch_all(pool)
     .await?;
 

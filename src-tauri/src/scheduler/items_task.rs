@@ -79,7 +79,7 @@ pub async fn run_items_reload_task(
 
         info!("[ITEMS-TASK] auto_reload is enabled, proceeding with scrape...");
 
-        let current_interval = fresh_config.scrape.items_reload_interval.max(60);
+        let current_interval = fresh_config.scrape.items_reload_interval.max(30);
         let items_source = fresh_config.scrape.items_source.clone();
         let json_path = fresh_config.scrape.items_json_path.clone();
         let expert_enabled = fresh_config.scrape.expert_enabled;
