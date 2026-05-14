@@ -110,12 +110,9 @@ pub async fn run_items_reload_task(
             {
                 Ok(count) if count > 0 => {
                     info!(
-                        "[ITEMS-TASK] Database has {} items from startup, waiting {} seconds before first background refresh",
-                        count,
-                        current_interval
+                        "[ITEMS-TASK] Database has {} cached items, proceeding with first background refresh",
+                        count
                     );
-                    first_run = false;
-                    continue;
                 }
                 Ok(count) => {
                     info!("[ITEMS-TASK] Database is empty ({} items), proceeding with first scrape immediately", count);

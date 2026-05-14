@@ -159,6 +159,12 @@ async fn run_node_fallback(
         NodeFallbackCandidate::Executable(path) => tokio::process::Command::new(path),
     };
 
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
     let output = command
         .arg(if mode == "专家" { "pro" } else { "normal" })
         .output()

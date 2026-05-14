@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus, type JsonFileValidationResult, type SeasonInfo } from "@/lib/commands";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { RefreshCw, Save, Bell, BellRing, Database, Globe, AlertTriangle, Trash2, Edit3, Key, Volume2 } from "lucide-react";
+import { RefreshCw, Save, Bell, Database, Globe, AlertTriangle, Trash2, Edit3, Key } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageShell } from "@/components/ui/PageShell";
@@ -184,35 +184,6 @@ export default function SettingsPage() {
       toast.error(`加载配置失败: ${err}`);
     }
   };
-
-  const testNotificationMutation = useMutation<OkResponse, Error, void>({
-    mutationFn: async () => {
-      await cmd.saveConfig(buildConfig());
-      return cmd.testNotification();
-    },
-    onSuccess: (result) => {
-      toast.success(result.message);
-      cmd.getNotificationPermissionStatus().then((status) => {
-        setNotificationPermission(status);
-      }).catch(() => {});
-    },
-    onError: (err) => {
-      toast.error(`测试失败: ${err.message || err}`);
-    },
-  });
-
-  const triggerAlertMutation = useMutation<string, Error, void>({
-    mutationFn: async () => {
-      await cmd.saveConfig(buildConfig());
-      return cmd.triggerPriceAlert();
-    },
-    onSuccess: (result) => {
-      toast.success(result);
-    },
-    onError: (err) => {
-      toast.error(`触发失败: ${err.message || err}`);
-    },
-  });
 
   const requestPermissionMutation = useMutation<boolean, Error, void>({
     mutationFn: () => cmd.requestNotificationPermission(),
@@ -613,31 +584,6 @@ export default function SettingsPage() {
               </select>
             </div>
           )}
-
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--color-border-soft)]">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => testNotificationMutation.mutate()}
-              disabled={testNotificationMutation.isPending}
-            >
-              {voiceAlertEnabled ? (
-                <Volume2 className="w-4 h-4 mr-1.5" />
-              ) : (
-                <BellRing className="w-4 h-4 mr-1.5" />
-              )}
-              {testNotificationMutation.isPending ? "测试中..." : "测试通知/语音"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => triggerAlertMutation.mutate()}
-              disabled={triggerAlertMutation.isPending}
-            >
-              <AlertTriangle className="w-4 h-4 mr-1.5" />
-              {triggerAlertMutation.isPending ? "触发中..." : "触发满足条件预警"}
-            </Button>
-          </div>
 
         </div>
       </Surface>

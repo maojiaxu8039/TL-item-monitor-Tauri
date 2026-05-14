@@ -341,7 +341,12 @@ mod tests {
             &pool,
             &[
                 ("item-1".to_string(), "测试物品".to_string(), 200.0, now),
-                ("item-1".to_string(), "测试物品".to_string(), 100.0, now - 300),
+                (
+                    "item-1".to_string(),
+                    "测试物品".to_string(),
+                    100.0,
+                    now - 300,
+                ),
             ],
         )
         .await

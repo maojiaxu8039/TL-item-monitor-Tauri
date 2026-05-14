@@ -113,10 +113,7 @@ pub fn resolve_voice_alert_path(app: &tauri::AppHandle, configured_path: &str) -
             &mut candidates,
             resource_dir.join(DEFAULT_VOICE_ALERT_RESOURCE),
         );
-        push_unique_path(
-            &mut candidates,
-            resource_dir.join(DEFAULT_VOICE_ALERT_FILE),
-        );
+        push_unique_path(&mut candidates, resource_dir.join(DEFAULT_VOICE_ALERT_FILE));
     }
 
     if let Ok(exe) = std::env::current_exe() {

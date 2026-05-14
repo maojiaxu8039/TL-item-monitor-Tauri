@@ -13,7 +13,6 @@ use crate::scheduler::fire_task::run_fire_scrape_task;
 use crate::scheduler::history_task::run_hourly_snapshot_task;
 use crate::scheduler::items_task::run_items_reload_task;
 use crate::scheduler::SchedulerHandle;
-use crate::scraper;
 use parking_lot::RwLock;
 use serde::Deserialize;
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
@@ -165,170 +164,52 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
         AppConfig::default()
     });
 
-    // Always fetch latest fire price from API on startup
     let default_season = config.app.season_id.clone();
     let default_mode = config.scrape.fire_price_mode.clone();
-    let expert_enabled = config.scrape.expert_enabled;
+    let market_mode = market_mode_from_config(&default_mode);
 
-    tracing::info!("[STARTUP] Fetching latest fire price from API...");
+    tracing::info!(
+        "[STARTUP] Loading cached state for season={}, mode={}",
+        default_season,
+        market_mode.as_str()
+    );
 
-    // Scrape normal mode fire price (always)
-    let mut fire_price: Option<FirePriceSnapshot> = None;
-    match scraper::scrape_fire_price().await {
-        Ok(snapshot) => {
+    let fire_price = match repo_fire::get_latest_fire(&pool, &default_season, market_mode.as_str())
+        .await
+    {
+        Ok(Some(record)) => {
             tracing::info!(
-                "[STARTUP] Successfully fetched normal fire price: {} RMB/10K fire",
-                snapshot.rmb_per_10k_fire
+                "[STARTUP] Using cached fire price: {} RMB/10K fire",
+                record.rmb_per_10k_fire
             );
-            if let Err(e) =
-                repo_fire::insert_fire_record(&pool, &default_season, "season_normal", &snapshot)
-                    .await
-            {
-                tracing::warn!("[STARTUP] Failed to insert normal fire record: {}", e);
-            } else {
-                tracing::info!("[STARTUP] Successfully inserted normal fire record");
-            }
-            if default_mode == "season_normal" {
-                fire_price = Some(snapshot);
-            }
+            Some(fire_record_to_snapshot(record))
+        }
+        Ok(None) => {
+            tracing::info!("[STARTUP] No cached fire price found; background task will refresh it");
+            None
         }
         Err(e) => {
-            tracing::warn!(
-                "[STARTUP] Failed to fetch normal fire price: {}, trying database...",
-                e
-            );
-            // Fallback to database if API fails
-            if let Ok(Some(record)) =
-                repo_fire::get_latest_fire(&pool, &default_season, "season_normal").await
-            {
-                tracing::info!(
-                    "[STARTUP] Using cached normal fire price from database: {} RMB/10K fire",
-                    record.rmb_per_10k_fire
-                );
-                let snapshot = FirePriceSnapshot {
-                    price_per_wan: if record.fire_per_rmb > 0.0 {
-                        10000.0 / record.fire_per_rmb
-                    } else {
-                        0.0
-                    },
-                    rmb_per_10k_fire: record.rmb_per_10k_fire,
-                    fire_per_rmb: record.fire_per_rmb,
-                    increase_ratio: record.increase_ratio,
-                    trading_volume: record.trading_volume,
-                    source: record.source,
-                    source_time: record.source_time,
-                    scraped_at: record.scraped_at,
-                };
-                if default_mode == "season_normal" {
-                    fire_price = Some(snapshot);
-                }
-            }
-        }
-    }
-
-    // Scrape expert mode fire price if expert_enabled
-    if expert_enabled {
-        tracing::info!("[STARTUP] Expert mode enabled, fetching expert fire price...");
-        match scraper::qiandao::scrape_by_mode("专家").await {
-            Ok(snapshot) => {
-                tracing::info!(
-                    "[STARTUP] Successfully fetched expert fire price: {} RMB/10K fire",
-                    snapshot.rmb_per_10k_fire
-                );
-                if let Err(e) = repo_fire::insert_fire_record(
-                    &pool,
-                    &default_season,
-                    "season_expert",
-                    &snapshot,
-                )
-                .await
-                {
-                    tracing::warn!("[STARTUP] Failed to insert expert fire record: {}", e);
-                } else {
-                    tracing::info!("[STARTUP] Successfully inserted expert fire record");
-                }
-                if default_mode == "season_expert" {
-                    fire_price = Some(snapshot);
-                }
-            }
-            Err(e) => {
-                tracing::warn!("[STARTUP] Failed to fetch expert fire price: {}", e);
-            }
-        }
-    } else {
-        tracing::info!("[STARTUP] Expert mode disabled, skipping expert fire price scrape");
-    }
-
-    // Auto-import items: prefer API scrape, fall back to JSON file
-    // Always refresh from API on startup to get latest prices
-    let default_season = config.app.season_id.clone();
-    let _default_mode = config.scrape.fire_price_mode.clone();
-    let json_path = config.scrape.items_json_path.clone();
-    let json_exists = std::path::Path::new(&json_path).exists();
-
-    // Scrape modes based on expert_enabled setting
-    let expert_enabled = config.scrape.expert_enabled;
-
-    tracing::info!("[STARTUP] Fetching latest items from API...");
-    let normal_items =
-        scrape_mode_items(&default_season, "season_normal", &json_path, json_exists).await;
-
-    // Process normal mode items
-    let items_cache: Vec<Item> = match normal_items {
-        Ok(items) if !items.is_empty() => {
-            tracing::info!(
-                "[STARTUP] Successfully fetched {} normal items from API",
-                items.len()
-            );
-            if let Err(e) =
-                repo_items::bulk_insert_items(&pool, &default_season, "season_normal", &items).await
-            {
-                tracing::error!("[STARTUP] Failed to update normal items in database: {}", e);
-            } else {
-                tracing::info!("[STARTUP] Successfully updated normal items in database");
-            }
-            insert_realtime_prices(&pool, &items).await;
-            items
-        }
-        Ok(_) => {
-            tracing::warn!("[STARTUP] No normal items fetched from API");
-            Vec::new()
-        }
-        Err(e) => {
-            tracing::warn!("[STARTUP] Failed to fetch normal items from API: {}", e);
-            Vec::new()
+            tracing::warn!("[STARTUP] Failed to load cached fire price: {}", e);
+            None
         }
     };
 
-    // Process expert mode items only if expert_enabled is true
-    if expert_enabled {
-        match scrape_mode_items(&default_season, "season_expert", &json_path, json_exists).await {
-            Ok(items) if !items.is_empty() => {
-                tracing::info!(
-                    "[STARTUP] Successfully fetched {} expert items from API",
-                    items.len()
-                );
-                if let Err(e) =
-                    repo_items::bulk_insert_items(&pool, &default_season, "season_expert", &items)
-                        .await
-                {
-                    tracing::error!("[STARTUP] Failed to update expert items in database: {}", e);
-                } else {
-                    tracing::info!("[STARTUP] Successfully updated expert items in database");
-                }
-            }
-            Ok(_) => {
-                tracing::info!(
-                    "[STARTUP] Expert mode enabled but no data fetched (season may not be started)"
-                );
-            }
-            Err(e) => {
-                tracing::warn!("[STARTUP] Expert mode enabled but API failed: {}", e);
-            }
+    let items_cache = match repo_items::get_items_from_realtime_table(
+        &pool,
+        &default_season,
+        market_mode.as_str(),
+    )
+    .await
+    {
+        Ok(items) => {
+            tracing::info!("[STARTUP] Loaded {} cached items", items.len());
+            items
         }
-    } else {
-        tracing::info!("[STARTUP] Expert mode disabled, skipping expert items scrape");
-    }
+        Err(e) => {
+            tracing::warn!("[STARTUP] Failed to load cached items: {}", e);
+            Vec::new()
+        }
+    };
 
     // Cleanup old realtime records
     if let Err(e) = repo_item_realtime_prices::cleanup_old_records(&pool).await {
@@ -342,7 +223,7 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
         items_cache: RwLock::new(Arc::new(items_cache)),
         active_context: RwLock::new(MarketContext {
             season_id: config.app.season_id.clone(),
-            market_mode: MarketMode::SeasonNormal,
+            market_mode,
         }),
         task_status: RwLock::new(TaskStatus {
             fire_scrape_running: false,
@@ -358,64 +239,27 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
     Ok(state)
 }
 
-async fn scrape_mode_items(
-    season: &str,
-    mode: &str,
-    json_path: &str,
-    json_exists: bool,
-) -> Result<Vec<Item>, String> {
-    // Try API first
-    match scraper::scrape_items(season, mode).await {
-        Ok(items) => Ok(items),
-        Err(e) => {
-            tracing::warn!(
-                "[STARTUP] Failed to fetch {} items from API: {}, trying JSON file...",
-                mode,
-                e
-            );
-
-            // Fallback to JSON file if API fails
-            if json_exists {
-                tracing::info!(
-                    "[STARTUP] Loading {} items from JSON file: {}",
-                    mode,
-                    json_path
-                );
-                match load_items_from_json(season, mode, json_path) {
-                    Ok(items) => {
-                        tracing::info!(
-                            "[STARTUP] Loaded {} {} items from JSON file",
-                            items.len(),
-                            mode
-                        );
-                        Ok(items)
-                    }
-                    Err(e) => {
-                        tracing::warn!("[STARTUP] Failed to load {} from JSON: {}", mode, e);
-                        Err(e.to_string())
-                    }
-                }
-            } else {
-                Err(e.to_string())
-            }
-        }
+fn market_mode_from_config(mode: &str) -> MarketMode {
+    match mode {
+        "season_expert" => MarketMode::SeasonExpert,
+        _ => MarketMode::SeasonNormal,
     }
 }
 
-async fn insert_realtime_prices(pool: &SqlitePool, items: &[Item]) {
-    if items.is_empty() {
-        return;
-    }
-    let now = chrono::Utc::now().timestamp();
-    let realtime_records: Vec<(String, String, f64, i64)> = items
-        .iter()
-        .map(|item| (item.item_id.clone(), item.name.clone(), item.price, now))
-        .collect();
-
-    if let Err(e) =
-        repo_item_realtime_prices::batch_insert_realtime_prices(pool, &realtime_records).await
-    {
-        tracing::warn!("[STARTUP] Failed to insert realtime prices: {}", e);
+fn fire_record_to_snapshot(record: crate::db::models::FirePriceRecord) -> FirePriceSnapshot {
+    FirePriceSnapshot {
+        price_per_wan: if record.fire_per_rmb > 0.0 {
+            10000.0 / record.fire_per_rmb
+        } else {
+            0.0
+        },
+        rmb_per_10k_fire: record.rmb_per_10k_fire,
+        fire_per_rmb: record.fire_per_rmb,
+        increase_ratio: record.increase_ratio,
+        trading_volume: record.trading_volume,
+        source: record.source,
+        source_time: record.source_time,
+        scraped_at: record.scraped_at,
     }
 }
 

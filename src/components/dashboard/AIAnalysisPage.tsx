@@ -142,9 +142,9 @@ export default function AIAnalysisPage() {
   const [aiEnabled, setAiEnabled] = useState(() => {
     try {
       const saved = localStorage.getItem("ai_enabled");
-      return saved !== null ? JSON.parse(saved) : true;
+      return saved !== null ? JSON.parse(saved) : false;
     } catch {
-      return true;
+      return false;
     }
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -172,8 +172,13 @@ export default function AIAnalysisPage() {
   }, [messages]);
 
   useEffect(() => {
+    if (!aiEnabled) {
+      connectionTestIdRef.current += 1;
+      setConnectionStatus('disconnected');
+      return;
+    }
     testConnection(settings);
-  }, [settings.gatewayUrl, settings.gatewayToken]);
+  }, [aiEnabled, settings.gatewayUrl, settings.gatewayToken]);
 
   const testConnection = async (settingsToTest: AISettings = settings) => {
     const testId = ++connectionTestIdRef.current;
@@ -287,6 +292,10 @@ export default function AIAnalysisPage() {
   };
 
   const handleReconnect = () => {
+    if (!aiEnabled) {
+      addToast("warning", "AI功能已关闭，请先开启");
+      return;
+    }
     testConnection();
   };
 
@@ -350,6 +359,7 @@ export default function AIAnalysisPage() {
           {connectionStatus === "error" && (
             <button
               onClick={handleReconnect}
+              disabled={!aiEnabled}
               className="flex items-center gap-1 text-xs px-2 py-0.5 bg-[var(--color-danger)]/20 text-[var(--color-danger)] rounded-full hover:bg-[var(--color-danger)]/30"
             >
               <XCircle className="w-3 h-3" />
@@ -359,7 +369,8 @@ export default function AIAnalysisPage() {
 
           <button
             onClick={handleReconnect}
-            className="p-2 text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
+            disabled={!aiEnabled}
+            className="p-2 text-[var(--color-text-subtle)] hover:text-[var(--color-text)] disabled:opacity-40 disabled:cursor-not-allowed"
             title="重新连接"
           >
             <RefreshCw className="w-4 h-4" />
@@ -460,11 +471,12 @@ export default function AIAnalysisPage() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="输入问题..."
+              disabled={!aiEnabled}
               className="flex-1 text-sm border border-[var(--color-border)] rounded-lg px-4 py-2.5 focus:outline-none focus:border-[var(--color-brand)] bg-[var(--color-panel)] text-[var(--color-text)]"
             />
             <button
               onClick={handleSend}
-              disabled={isLoading || !input.trim()}
+              disabled={!aiEnabled || isLoading || !input.trim()}
               className="px-4 py-2.5 bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {isLoading ? (

@@ -155,7 +155,11 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
     );
 
     if desktop_notifications_enabled(&notification_config) {
-        let title = format!("🔥 发现 {} 件满足条件预警", worth_items.len());
+        let title = format!(
+            "🔥 发现 {} 件满足条件预警 {}",
+            worth_items.len(),
+            notification_time_label(now)
+        );
         if let Err(e) = send_notification(app, &title, &message) {
             warn!("Failed to send notification: {}", e);
         }
@@ -229,7 +233,8 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
             any_rule_triggered = true;
             let message = format_rule_notification(rule, &triggered_targets);
             if desktop_notifications_enabled(&notification_config) {
-                if let Err(e) = send_notification(app, "⚠️ 预警规则触发", &message) {
+                let title = format!("⚠️ 预警规则触发 {}", notification_time_label(now));
+                if let Err(e) = send_notification(app, &title, &message) {
                     warn!("Failed to send notification: {}", e);
                 }
             }
@@ -452,6 +457,16 @@ fn emit_alert_triggered(
     Ok(())
 }
 
+fn notification_time_label(timestamp: i64) -> String {
+    chrono::DateTime::from_timestamp(timestamp, 0)
+        .map(|dt| {
+            dt.with_timezone(&chrono::Local)
+                .format("%H:%M:%S")
+                .to_string()
+        })
+        .unwrap_or_else(|| timestamp.to_string())
+}
+
 fn should_send_worth_alert(now: i64, cooldown_seconds: i32) -> bool {
     let cooldown_seconds = cooldown_seconds.max(1) as i64;
     let last_triggered = WORTH_ALERT_LAST_TRIGGERED.get_or_init(|| Mutex::new(None));
@@ -517,14 +532,15 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
                 voice_path
             );
             let mut command = tokio::process::Command::new("powershell");
-            command
-                .creation_flags(CREATE_NO_WINDOW)
-                .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script]);
+            command.creation_flags(CREATE_NO_WINDOW).args([
+                "-NoProfile",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                &script,
+            ]);
 
-            match command
-                .status()
-                .await
-            {
+            match command.status().await {
                 Ok(status) if status.success() => played += 1,
                 Ok(status) => warn!("Voice alert player exited with status: {}", status),
                 Err(e) => warn!("Failed to play voice on Windows: {}", e),
