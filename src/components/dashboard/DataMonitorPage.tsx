@@ -346,7 +346,6 @@ export default function DataMonitorPage() {
       if (dataType === "items" && maxScrapedAt > 0) {
         localStorage.setItem("last_items_sync_timestamp", maxScrapedAt.toString());
         setLastItemsSyncTimestamp(maxScrapedAt);
-        console.log(`[Sync] Updated last_items_sync_timestamp to ${maxScrapedAt}`);
       }
 
       if (totalSuccess + totalFailed === 0) {
@@ -433,7 +432,6 @@ export default function DataMonitorPage() {
           const ts = parseInt(stored);
           if (ts > 0) {
             setLastItemsSyncTimestamp(ts);
-            console.log(`[Sync] Updated last_items_sync_timestamp to ${ts}`);
           }
         }
       }

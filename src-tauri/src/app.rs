@@ -2052,20 +2052,14 @@ pub fn start_background_tasks(
         let app = app.clone();
         let state = state.clone();
         state.task_status.write().items_reload_running = true;
-        tracing::info!("[DEBUG] About to spawn items_reload_task");
         std::thread::spawn(move || {
-            tracing::info!("[DEBUG] items_reload_task thread spawned");
             match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
             {
                 Ok(items_rt) => {
                     items_rt.block_on(async move {
-                        tracing::info!(
-                            "[DEBUG] items_reload_task runtime started, calling run_items_reload_task"
-                        );
                         run_items_reload_task(app, state, items_abort_rx).await;
-                        tracing::info!("[DEBUG] items_reload_task returned");
                     });
                 }
                 Err(e) => {
@@ -2073,7 +2067,6 @@ pub fn start_background_tasks(
                 }
             }
         });
-        tracing::info!("[DEBUG] items_reload_task spawned");
     }
 
     {

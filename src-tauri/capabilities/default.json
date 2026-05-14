@@ -64,6 +64,15 @@
     "opener:allow-open-url",
     "opener:allow-open-path",
     "process:default",
-    "process:allow-exit"
+    "process:allow-exit",
+    "http:default",
+    {
+      "identifier": "http:allow-fetch",
+      "allow": [
+        { "url": "https://luosan.iepose.cn/**" },
+        { "url": "http://*.vicp.fun/**" },
+        { "url": "https://*.vicp.fun/**" }
+      ]
+    }
   ]
 }
