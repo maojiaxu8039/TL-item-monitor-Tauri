@@ -1,6 +1,69 @@
 use tauri::AppHandle;
 use tauri_plugin_notification::{NotificationExt, PermissionState};
-use tracing::{error, info};
+use tracing::{error, info, warn};
+
+use crate::core::state::NotificationSettings;
+
+pub struct WorthAlertNotificationItem<'a> {
+    pub section_name: &'a str,
+    pub item_name: &'a str,
+    pub current_price: f64,
+    pub purchase_fire_price: f64,
+    pub count: i32,
+}
+
+pub fn desktop_notifications_enabled(settings: &NotificationSettings) -> bool {
+    if !settings.system_notifications {
+        return false;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        return settings.mac_desktop_notifications;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        return settings.win_desktop_notifications;
+    }
+
+    #[allow(unreachable_code)]
+    true
+}
+
+pub fn format_worth_alert_notification(items: &[WorthAlertNotificationItem<'_>]) -> String {
+    if items.is_empty() {
+        return "当前没有满足条件的物品".to_string();
+    }
+
+    let mut lines = Vec::new();
+    if items.len() > 1 {
+        lines.push(format!("共 {} 件满足条件:", items.len()));
+    }
+
+    for (i, item) in items.iter().take(5).enumerate() {
+        let savings = (item.purchase_fire_price - item.current_price) * item.count as f64;
+        let prefix = if items.len() > 1 {
+            format!("{}. ", i + 1)
+        } else {
+            String::new()
+        };
+        lines.push(format!(
+            "{}{} / {} | 实际火价: {:.1}火 | 节省: {:.1}火",
+            prefix,
+            item.section_name,
+            item.item_name,
+            item.current_price,
+            savings.max(0.0)
+        ));
+    }
+
+    if items.len() > 5 {
+        lines.push(format!("...还有 {} 件", items.len() - 5));
+    }
+
+    lines.join("\n")
+}
 
 /// Send a desktop notification via tauri-plugin-notification.
 /// Supports both macOS and Windows.
@@ -10,6 +73,22 @@ pub fn send_notification(app: &AppHandle, title: &str, body: &str) -> Result<(),
         "Attempting to send notification: title='{}', body='{}'",
         title, body
     );
+
+    #[cfg(target_os = "macos")]
+    {
+        match send_macos_notification(app, title, body) {
+            Ok(()) => {
+                info!("macOS notification sent successfully");
+                return Ok(());
+            }
+            Err(e) => {
+                warn!(
+                    "macOS native notification failed, falling back to Tauri notification: {}",
+                    e
+                );
+            }
+        }
+    }
 
     let notification = app.notification();
 
@@ -49,6 +128,7 @@ pub fn send_notification(app: &AppHandle, title: &str, body: &str) -> Result<(),
         .builder()
         .title(title)
         .body(body)
+        .sound("Default")
         .show()
         .map_err(|e| {
             error!("Notification failed: {}", e);
@@ -56,6 +136,32 @@ pub fn send_notification(app: &AppHandle, title: &str, body: &str) -> Result<(),
         })?;
 
     info!("Notification sent successfully");
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn send_macos_notification(app: &AppHandle, title: &str, body: &str) -> Result<(), String> {
+    let identifier = app.config().identifier.clone();
+
+    match mac_notification_sys::set_application(&identifier) {
+        Ok(()) => {
+            info!("macOS notification application set to {}", identifier);
+        }
+        Err(mac_notification_sys::error::Error::Application(
+            mac_notification_sys::error::ApplicationError::AlreadySet(_),
+        )) => {}
+        Err(e) => {
+            return Err(format!("failed to set macOS notification app: {}", e));
+        }
+    }
+
+    mac_notification_sys::Notification::new()
+        .title(title)
+        .message(body)
+        .default_sound()
+        .send()
+        .map_err(|e| format!("macOS notification failed: {}", e))?;
+
     Ok(())
 }
 

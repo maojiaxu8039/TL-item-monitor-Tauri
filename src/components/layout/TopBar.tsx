@@ -54,7 +54,8 @@ async function withWindow(action: "minimize" | "toggleMaximize" | "close") {
 }
 
 async function startDrag(e: MouseEvent) {
-  if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) return
+  if (e.button !== 0) return
+  if ((e.target as HTMLElement).closest("button, a, input, select, textarea, [role='button']")) return
   try {
     await getCurrentWindow().startDragging()
   } catch {}
@@ -129,8 +130,10 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       className="torch-topbar"
+      data-tauri-drag-region
+      onMouseDown={startDrag}
     >
-      <div className="torch-topbar-drag-region" data-tauri-drag-region onMouseDown={startDrag} />
+      <div className="torch-topbar-drag-region" data-tauri-drag-region />
       <button className="torch-brand" onClick={() => onPageChange("dashboard")} title="TorchScan">
         <img src="/torchscan/logo-mark.png" alt="TorchScan" className="torch-brand-logo" draggable={false} />
       </button>

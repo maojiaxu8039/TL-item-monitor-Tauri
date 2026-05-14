@@ -1,8 +1,8 @@
 # TorchScan UI 设计规则
 
-> 版本：2026-05-13  
-> 适用范围：TorchScan Tauri 桌面端前端界面、品牌资产、图标资产、页面组件。  
-> 目标：将项目统一为“深色熔岩金属风”的桌面数据监控工作台，延续设计稿中的火焰、金色描边、暗色面板和紧凑工具软件气质。
+> 版本：2026-05-14
+> 适用范围：TorchScan Tauri 桌面端前端界面、品牌资产、图标资产、页面组件。
+> 目标：将项目统一为"深色熔岩金属风"的桌面数据监控工作台，延续设计稿中的火焰、金色描边、暗色面板和紧凑工具软件气质。
 
 ## 1. 设计定位
 
@@ -34,7 +34,7 @@ TorchScan 是物价与火价监控工具，不是营销落地页。界面第一�
 
 ## 3. 色彩规范
 
-当前色彩令牌定义在 [src/index.css](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/index.css)。
+当前色彩令牌定义在 `src/index.css`。
 
 | Token | 色值 | 用途 |
 | --- | --- | --- |
@@ -60,15 +60,26 @@ TorchScan 是物价与火价监控工具，不是营销落地页。界面第一�
 - 表格、卡片和输入框用暗面板区分层级，优先靠边框而不是重阴影。
 - 红绿只表示语义状态，不作为页面品牌色随意使用。
 
+### 3.1 语义化颜色规则
+
+| 场景 | 颜色 | 示例 |
+| --- | --- | --- |
+| 价格上涨（盈利） | `--color-danger` | +5.2% |
+| 价格下跌（亏损） | `--color-success` | -3.1% |
+| 暴涨标签 | `StatusBadge variant="danger"` | 暴涨 |
+| 暴跌标签 | `StatusBadge variant="success"` | 暴跌 |
+| 出货机会 | 红色边框 | FireChangeCard |
+| 捡漏机会 | 绿色边框 | FireChangeCard |
+
 ## 4. 布局规则
 
 ### 4.1 应用壳层
 
 当前壳层为：
 
-- 顶部状态栏：[TopBar.tsx](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/components/layout/TopBar.tsx)
-- 左侧功能列表：[Sidebar.tsx](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/components/layout/Sidebar.tsx)
-- 主内容区：[App.tsx](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/app/App.tsx)
+- 顶部状态栏：`src/components/layout/TopBar.tsx`
+- 左侧功能列表：`src/components/layout/Sidebar.tsx`
+- 主内容区：`src/app/App.tsx`
 
 布局规则：
 
@@ -122,22 +133,17 @@ TorchScan 是物价与火价监控工具，不是营销落地页。界面第一�
 - 激活项使用金色文字、火橙左侧光效和暗金背景。
 - 悬停可轻微右移，但不能造成布局跳动。
 - 低高度窗口允许侧栏内部滚动。
+- 菜单项高度：`38px`，底部 logo 区域：`52px`
 
 ## 5. 图标与资产规则
 
 ### 5.1 资产目录
 
-品牌资产位置：
+品牌资产位置：`src/public/torchscan`
 
-[src/public/torchscan](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/public/torchscan/README.md)
+独立图标位置：`src/public/torchscan/icons`
 
-独立图标位置：
-
-[src/public/torchscan/icons](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/public/torchscan/icons/README.md)
-
-统一引用组件：
-
-[AssetIcon.tsx](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/components/brand/AssetIcon.tsx)
+统一引用组件：`src/components/brand/AssetIcon.tsx`
 
 ### 5.2 图标命名
 
@@ -179,52 +185,64 @@ TorchScan 是物价与火价监控工具，不是营销落地页。界面第一�
 
 ## 6. 组件规则
 
-### 6.1 Button
+### 6.1 统一 UI 组件
 
-按钮组件位置：
+核心组件位置：`src/components/ui/`
 
-[button.tsx](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/components/ui/button.tsx)
+| 组件 | 路径 | 用途 |
+| --- | --- | --- |
+| `PageShell` | `PageShell.tsx` | 页面容器，控制最大宽度 |
+| `PageHeader` | `PageHeader.tsx` | 页面标题栏，含图标、标题、描述、操作按钮 |
+| `Surface` | `Surface.tsx` | 面板容器，带品牌边框和阴影 |
+| `MetricCard` | `MetricCard.tsx` | 指标卡片，含图标、数值、标签 |
+| `StatusBadge` | `StatusBadge.tsx` | 状态徽章 |
+| `EmptyState` | `EmptyState.tsx` | 空状态提示 |
+| `LoadingState` | `LoadingState.tsx` | 统一加载状态组件 |
+| `Toolbar` | `Toolbar.tsx` | 工具栏 |
+
+### 6.2 Button
+
+按钮组件位置：`src/components/ui/button.tsx`
 
 规则：
 
-- 主按钮使用火橙到金色渐变。
+- 主按钮使用火橙到金色渐变 `bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))]`。
 - `outline` 用暗色面板和金色边框悬停。
 - `ghost` 用于顶部栏图标按钮、表格轻操作。
 - 危险操作用 `destructive` 或 `DangerButton`，不要只靠文字颜色表达危险。
+- `destructive` 按钮文字使用黑色：`text-black`
 
-### 6.2 Input / Select
+### 6.3 Input / Select
 
 输入控件位置：
 
-- [input.tsx](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/components/ui/input.tsx)
-- [select.tsx](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/components/ui/select.tsx)
+- `src/components/ui/input.tsx`
+- `src/components/ui/select.tsx`
 
 规则：
 
 - 背景使用 `--color-panel-soft`。
 - 边框使用 `--color-border`。
-- 聚焦态使用火橙 ring。
+- 聚焦态使用火橙 ring：`focus:ring-[var(--color-brand)]/30`。
 - Placeholder 使用弱文字色。
 
-### 6.3 Card / Surface
+### 6.4 Card / Surface
 
 卡片与面板位置：
 
-- [Card.tsx](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/components/ui/Card.tsx)
-- [Surface.tsx](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/components/ui/Surface.tsx)
+- `src/components/ui/Card.tsx`
+- `src/components/ui/Surface.tsx`
 
 规则：
 
-- 默认圆角不超过 `8px`。
+- 默认圆角不超过 `8px`（`--radius-lg`）。
 - 默认以边框建立层级，避免厚重投影。
 - 可交互卡片悬停时允许金色边框与轻微 glow。
 - 不要卡片套卡片。页面区块应是自然布局，卡片只用于独立数据项、表单面板、弹窗。
 
-### 6.4 MetricCard
+### 6.5 MetricCard
 
-指标卡片位置：
-
-[MetricCard.tsx](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/components/ui/MetricCard.tsx)
+指标卡片位置：`src/components/ui/MetricCard.tsx`
 
 规则：
 
@@ -233,11 +251,9 @@ TorchScan 是物价与火价监控工具，不是营销落地页。界面第一�
 - 图标容器使用暗底和细金边。
 - 火价、收益、风险必须使用语义颜色，不要全金色。
 
-### 6.5 StatusBadge
+### 6.6 StatusBadge
 
-状态徽章位置：
-
-[StatusBadge.tsx](/Users/mc/.openclaw/workspace/TL-item-monitor-Tauri/src/components/ui/StatusBadge.tsx)
+状态徽章位置：`src/components/ui/StatusBadge.tsx`
 
 规则：
 
@@ -246,6 +262,16 @@ TorchScan 是物价与火价监控工具，不是营销落地页。界面第一�
 - `danger`：风险、失败、删除。
 - `info`：信息提示、同步中。
 - `primary`：当前选中、关键状态。
+
+### 6.7 LoadingState
+
+统一加载状态组件位置：`src/components/ui/LoadingState.tsx`
+
+规则：
+
+- 深色面板、金色边框、品牌图标或小型火焰图标。
+- 文案按场景变化，例如「正在加载市场数据」「正在同步服务器状态」。
+- 避免全页面空白中只放一个灰色 spinner。
 
 ## 7. 页面设计规则
 
@@ -257,6 +283,7 @@ TorchScan 是物价与火价监控工具，不是营销落地页。界面第一�
 - 重要操作使用图标加文字；紧凑工具按钮可只用图标，但必须有 `title`。
 - 表格行 hover 用弱金色底，不使用浅蓝。
 - 页面背景不再使用白色或浅灰色大块。
+- 页面标题与侧边栏保持一致（如侧边栏为"物品追踪"，页面标题也为"物品追踪"）
 
 文字规则：
 
@@ -264,7 +291,7 @@ TorchScan 是物价与火价监控工具，不是营销落地页。界面第一�
 - 面板标题：`14px` 左右，半粗。
 - 表格文字：`12px - 13px`。
 - 指标数值：`24px` 左右，粗体。
-- 不在界面里写“如何使用此功能”的长说明，帮助页除外。
+- 不在界面里写"如何使用此功能"的长说明，帮助页除外。
 
 ## 8. 响应式规则
 
@@ -274,6 +301,14 @@ TorchScan 是物价与火价监控工具，不是营销落地页。界面第一�
 - `max-width: 980px`：侧栏收缩为图标栏。
 - 所有按钮文字必须不溢出容器。
 - 固定格式元素必须有稳定尺寸，避免 hover 或加载状态导致布局跳动。
+
+### 8.1 窗口尺寸验证
+
+每轮调整后至少检查以下窗口尺寸：
+
+- `1280x720`
+- `1440x900`
+- `1200x800`（接近 Tauri 默认窗口）
 
 ## 9. 动效规则
 
@@ -304,7 +339,43 @@ TorchScan 是物价与火价监控工具，不是营销落地页。界面第一�
 - 不要为了装饰添加大面积渐变球、光斑或无意义背景图。
 - 不要在页面里写大量功能说明文字。
 
-## 11. 后续扩展建议
+## 11. 开发规范
+
+### 11.1 页面结构模板
+
+```tsx
+<PageShell size="xl" className="space-y-5">
+  <PageHeader
+    title="页面标题"
+    description="页面描述"
+    iconAsset="对应的图标名"
+    actions={<ToolbarActions>操作按钮</ToolbarActions>}
+  />
+
+  <Surface padding="md">
+    {/* 内容 */}
+  </Surface>
+</PageShell>
+```
+
+### 11.2 圆角规格
+
+- 面板、卡片、弹窗主体：`8px`（`--radius-lg`）
+- 标签、状态点、开关等功能性圆形元素：可保留 `full radius`
+- 聊天气泡等特殊场景可单独保留较大圆角
+
+### 11.3 滚动条样式
+
+使用 `scrollbar-thin` 类统一滚动条样式：
+
+```css
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 184, 0, 0.32) transparent;
+}
+```
+
+## 12. 后续扩展建议
 
 如果继续深入改造，可以按这个顺序推进：
 
@@ -313,4 +384,3 @@ TorchScan 是物价与火价监控工具，不是营销落地页。界面第一�
 3. 为启动页补充独立 splash 资产。
 4. 将 Tauri 打包图标统一替换为 `torchscan` 品牌图标源。
 5. 为图表组件统一暗色 grid、axis、tooltip 和 series 颜色。
-

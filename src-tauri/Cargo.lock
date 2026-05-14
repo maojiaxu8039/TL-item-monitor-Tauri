@@ -5820,6 +5820,7 @@ dependencies = [
  "dirs 5.0.1",
  "futures-util",
  "log",
+ "mac-notification-sys",
  "once_cell",
  "parking_lot",
  "rand 0.8.6",

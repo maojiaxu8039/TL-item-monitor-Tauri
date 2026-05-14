@@ -5,7 +5,10 @@ use tracing::{error, info, warn};
 use crate::core::paths::resolve_voice_alert_path;
 use crate::core::state::{AppState, NotificationSettings};
 use crate::db::{repo_alerts, repo_sections};
-use crate::services::send_notification;
+use crate::services::{
+    desktop_notifications_enabled, format_worth_alert_notification, send_notification,
+    WorthAlertNotificationItem,
+};
 
 static WORTH_ALERT_LAST_TRIGGERED: OnceLock<Mutex<Option<i64>>> = OnceLock::new();
 
@@ -131,23 +134,30 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
         return;
     }
 
-    let message = format_worth_notification(&worth_items);
+    let notification_items: Vec<_> = worth_items
+        .iter()
+        .map(|item| WorthAlertNotificationItem {
+            section_name: item.section_name.as_str(),
+            item_name: item.item_name.as_str(),
+            current_price: item.current_price,
+            purchase_fire_price: item.purchase_fire_price,
+            count: item.count,
+        })
+        .collect();
+    let message = format_worth_alert_notification(&notification_items);
     info!(
-        "Worth alert channels: system_notifications={}, voice_alert_enabled={}, voice_alert_path='{}'",
+        "Worth alert channels: system_notifications={}, mac_desktop_notifications={}, win_desktop_notifications={}, voice_alert_enabled={}, voice_alert_path='{}'",
         notification_config.system_notifications,
+        notification_config.mac_desktop_notifications,
+        notification_config.win_desktop_notifications,
         notification_config.voice_alert_enabled,
         notification_config.voice_alert_path
     );
 
-    if notification_config.system_notifications {
-        if let Err(e) = send_notification(app, "🔥 发现值得购买的物品！", &message) {
+    if desktop_notifications_enabled(&notification_config) {
+        let title = format!("🔥 发现 {} 件满足条件预警", worth_items.len());
+        if let Err(e) = send_notification(app, &title, &message) {
             warn!("Failed to send notification: {}", e);
-        }
-    }
-
-    if notification_config.voice_alert_enabled {
-        if let Err(e) = play_configured_voice_alert(app, &notification_config, 1).await {
-            warn!("Failed to play worth item voice alert: {}", e);
         }
     }
 
@@ -158,7 +168,7 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
                 "rule_id": null,
                 "rule_type": "worth_item",
                 "threshold": item.purchase_fire_price,
-                "message": message,
+                "message": message.clone(),
                 "section_item_id": item.section_item_id.as_str(),
                 "section_id": item.section_id.as_str(),
                 "section_name": item.section_name.as_str(),
@@ -168,6 +178,12 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
             app,
         ) {
             warn!("Failed to emit worth item alert event: {}", e);
+        }
+    }
+
+    if notification_config.voice_alert_enabled {
+        if let Err(e) = play_configured_voice_alert(app, &notification_config, 1).await {
+            warn!("Failed to play worth item voice alert: {}", e);
         }
     }
 }
@@ -212,7 +228,7 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
         if !triggered_targets.is_empty() {
             any_rule_triggered = true;
             let message = format_rule_notification(rule, &triggered_targets);
-            if notification_config.system_notifications {
+            if desktop_notifications_enabled(&notification_config) {
                 if let Err(e) = send_notification(app, "⚠️ 预警规则触发", &message) {
                     warn!("Failed to send notification: {}", e);
                 }
@@ -373,40 +389,6 @@ fn price_matches_rule(current_price: f64, rule_type: &str, threshold: f64) -> bo
     }
 }
 
-fn format_worth_notification(items: &[WorthItem]) -> String {
-    if items.len() == 1 {
-        let item = &items[0];
-        let savings = (item.purchase_fire_price - item.current_price) * item.count as f64;
-        return format!(
-            "{} / {} 当前价格: {:.1}火\n购买价格: {:.1}火\n可节省约 {:.1}火",
-            item.section_name,
-            item.item_name,
-            item.current_price,
-            item.purchase_fire_price,
-            savings
-        );
-    }
-
-    let mut message = format!("共发现 {} 件值得购买的物品:\n\n", items.len());
-
-    for (i, item) in items.iter().take(5).enumerate() {
-        let savings = (item.purchase_fire_price - item.current_price) * item.count as f64;
-        message.push_str(&format!(
-            "{}. {} / {} - 可节省 {:.1}火\n",
-            i + 1,
-            item.section_name,
-            item.item_name,
-            savings
-        ));
-    }
-
-    if items.len() > 5 {
-        message.push_str(&format!("\n...还有 {} 件", items.len() - 5));
-    }
-
-    message
-}
-
 fn format_rule_notification(rule: &crate::db::models::AlertRule, targets: &[RuleTarget]) -> String {
     let rule_type_label = match rule.rule_type.as_str() {
         "price_below" => "价格低于",
@@ -529,7 +511,7 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
         {
             let voice_path = voice_path.replace('\'', "''");
             let script = format!(
-                "Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; $player.Open([Uri]'{}'); $player.Play(); Start-Sleep -Milliseconds 2500; $player.Close()",
+                "$done = $false; Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; Register-ObjectEvent -InputObject $player -EventName MediaEnded -Action {{ $script:done = $true }} | Out-Null; $player.Open([Uri]'{}'); $player.Play(); $deadline = (Get-Date).AddSeconds(30); while (-not $done -and (Get-Date) -lt $deadline) {{ Start-Sleep -Milliseconds 100 }}; $player.Close()",
                 voice_path
             );
             match tokio::process::Command::new("powershell")

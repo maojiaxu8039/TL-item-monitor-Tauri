@@ -5,7 +5,10 @@ use crate::db::repo_item_realtime_prices;
 use crate::db::repo_items;
 use crate::scheduler::alert_task::play_configured_voice_alert;
 use crate::scraper;
-use crate::services::send_notification;
+use crate::services::{
+    desktop_notifications_enabled, format_worth_alert_notification, send_notification,
+    WorthAlertNotificationItem,
+};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 use tauri_plugin_notification::{NotificationExt, PermissionState};
@@ -277,29 +280,12 @@ pub async fn trigger_price_alert(
     .await
     .map_err(|e| e.to_string())?;
 
-    let worth_items: Vec<serde_json::Value> = all_section_items
+    let worth_items: Vec<_> = all_section_items
         .into_iter()
         .filter(|item| {
             let purchase_price = item.purchase_fire_price;
             let current_price = item.current_price.unwrap_or(0.0);
             purchase_price > 0.0 && current_price > 0.0 && current_price < purchase_price
-        })
-        .map(|item| {
-            let purchase_price = item.purchase_fire_price;
-            let current_price = item.current_price.unwrap_or(0.0);
-            let savings = purchase_price - current_price;
-            let savings_pct = if purchase_price > 0.0 {
-                (savings / purchase_price * 100.0).round() as i32
-            } else {
-                0
-            };
-            serde_json::json!({
-                "section_name": item.section_name,
-                "item_name": item.item_name,
-                "current_price": format!("{:.2}", current_price),
-                "purchase_price": format!("{:.2}", purchase_price),
-                "savings": format!("-{:.0} ({:.0}%)", savings, savings_pct),
-            })
         })
         .collect();
 
@@ -308,43 +294,20 @@ pub async fn trigger_price_alert(
     }
 
     let count = worth_items.len();
+    let notification_items: Vec<_> = worth_items
+        .iter()
+        .map(|item| WorthAlertNotificationItem {
+            section_name: item.section_name.as_str(),
+            item_name: item.item_name.as_str(),
+            current_price: item.current_price.unwrap_or(0.0),
+            purchase_fire_price: item.purchase_fire_price,
+            count: item.count,
+        })
+        .collect();
+    let message = format_worth_alert_notification(&notification_items);
+    let title = format!("🔥 发现 {} 件满足条件预警", count);
 
-    let message = if count <= 3 {
-        worth_items
-            .iter()
-            .map(|item| {
-                let name = item["item_name"].as_str().unwrap_or("未知");
-                let section = item["section_name"].as_str().unwrap_or("未分组");
-                let current = item["current_price"].as_str().unwrap_or("-");
-                let savings = item["savings"].as_str().unwrap_or("-");
-                format!(
-                    "• {} / {} | 当前: {} | 节省: {}\n",
-                    section, name, current, savings
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("")
-    } else {
-        let top_items: Vec<String> = worth_items
-            .iter()
-            .take(3)
-            .map(|item| {
-                let name = item["item_name"].as_str().unwrap_or("未知");
-                let section = item["section_name"].as_str().unwrap_or("未分组");
-                let savings = item["savings"].as_str().unwrap_or("-");
-                format!("• {} / {} ({})", section, name, savings)
-            })
-            .collect();
-        format!(
-            "🔥 共 {} 件值得购买\n\n{}\n📍 查看全部物品详情",
-            count,
-            top_items.join("\n")
-        )
-    };
-
-    let title = format!("🔥 发现 {} 件值得购买的物品！", count);
-
-    if config.notification.system_notifications {
+    if desktop_notifications_enabled(&config.notification) {
         send_notification(&app, &title, &message).map_err(|e| e.to_string())?;
     }
 
@@ -354,7 +317,7 @@ pub async fn trigger_price_alert(
             .map_err(|e| format!("Voice alert failed: {}", e))?;
     }
 
-    if config.notification.system_notifications {
+    if desktop_notifications_enabled(&config.notification) {
         Ok(format!("发现 {} 件值得购买的物品，已发送通知", count))
     } else {
         Ok(format!("发现 {} 件值得购买的物品（通知已关闭）", count))

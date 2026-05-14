@@ -1,8 +1,12 @@
 use crate::commands::types::OkResponse;
 use crate::core::state::AppState;
+use crate::db::repo_sections;
 use crate::scheduler::alert_task::play_configured_voice_alert;
 use crate::services::worth_service::WorthResult;
-use crate::services::{evaluate_worth, send_notification};
+use crate::services::{
+    desktop_notifications_enabled, evaluate_worth, format_worth_alert_notification,
+    send_notification, WorthAlertNotificationItem,
+};
 use std::sync::Arc;
 use tauri::{Manager, State};
 
@@ -56,21 +60,67 @@ pub async fn test_notification(
     app: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
 ) -> Result<OkResponse, String> {
-    send_notification(&app, "🔔 通知测试", "TorchScan 通知功能正常！")
-        .map_err(|e| format!("Notification failed: {}", e))?;
-
+    let ctx = state.active_context.read().clone();
     let notification_config = {
         let config = state.config.read();
         config.notification.clone()
     };
 
+    let worth_items: Vec<_> = repo_sections::get_section_items_for_context(
+        &state.db,
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
+    )
+    .await
+    .map_err(|e| e.to_string())?
+    .into_iter()
+    .filter(|item| {
+        let purchase_price = item.purchase_fire_price;
+        let current_price = item.current_price.unwrap_or(0.0);
+        purchase_price > 0.0 && current_price > 0.0 && current_price < purchase_price
+    })
+    .collect();
+
+    if worth_items.is_empty() {
+        return Ok(OkResponse::success(
+            "当前没有满足条件的物品，未发送预警通知",
+        ));
+    }
+
+    let notification_items: Vec<_> = worth_items
+        .iter()
+        .map(|item| WorthAlertNotificationItem {
+            section_name: item.section_name.as_str(),
+            item_name: item.item_name.as_str(),
+            current_price: item.current_price.unwrap_or(0.0),
+            purchase_fire_price: item.purchase_fire_price,
+            count: item.count,
+        })
+        .collect();
+    let title = format!("🔥 发现 {} 件满足条件预警", worth_items.len());
+    let message = format_worth_alert_notification(&notification_items);
+
+    let desktop_enabled = desktop_notifications_enabled(&notification_config);
+    if desktop_enabled {
+        send_notification(&app, &title, &message)
+            .map_err(|e| format!("Notification failed: {}", e))?;
+    }
+
     if notification_config.voice_alert_enabled {
         play_configured_voice_alert(&app, &notification_config, 1)
             .await
             .map_err(|e| format!("Voice alert failed: {}", e))?;
-        Ok(OkResponse::success("Notification and voice sent"))
+        if desktop_enabled {
+            Ok(OkResponse::success("满足条件预警通知和语音已触发"))
+        } else {
+            Ok(OkResponse::success(
+                "系统通知已关闭，满足条件预警语音已触发",
+            ))
+        }
+    } else if desktop_enabled {
+        Ok(OkResponse::success("满足条件预警通知已触发"))
     } else {
-        Ok(OkResponse::success("Notification sent"))
+        Ok(OkResponse::success("系统通知和语音均已关闭，未发送提醒"))
     }
 }
 

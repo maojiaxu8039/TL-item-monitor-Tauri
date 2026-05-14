@@ -190,8 +190,8 @@ export default function SettingsPage() {
       await cmd.saveConfig(buildConfig());
       return cmd.testNotification();
     },
-    onSuccess: () => {
-      toast.success(voiceAlertEnabled ? "系统通知和语音测试已触发" : "系统通知测试已触发");
+    onSuccess: (result) => {
+      toast.success(result.message);
       cmd.getNotificationPermissionStatus().then((status) => {
         setNotificationPermission(status);
       }).catch(() => {});
