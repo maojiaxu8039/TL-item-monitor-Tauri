@@ -1,3 +1,5 @@
+#![allow(clippy::items_after_test_module)]
+
 use crate::core::paths;
 use crate::core::state::{
     AppConfig, AppState, FirePriceSnapshot, MarketContext, MarketMode, TaskStatus,

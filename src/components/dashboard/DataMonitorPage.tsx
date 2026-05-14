@@ -122,14 +122,10 @@ export default function DataMonitorPage() {
 
   const checkServerStatus = async (): Promise<ServerStatus | null> => {
     try {
-      const response = await fetch(`${serverUrl}/status`, {
-        signal: AbortSignal.timeout(5000)
-      });
-      if (!response.ok) throw new Error("Server error");
-      const data = await response.json();
+      const data = await cmd.fetchServerJson<{ success: boolean; data?: ServerStatus }>(`${serverUrl}/status`);
       if (data.success) {
         setConnectionStatus("connected");
-        return data.data;
+        return data.data ?? null;
       }
       return null;
     } catch {
@@ -264,11 +260,7 @@ export default function DataMonitorPage() {
 
         while (hasMore) {
           const url = `${baseUrl}&limit=${PAGE_SIZE}&offset=${offset}`;
-          const response = await fetch(url);
-
-          if (!response.ok) throw new Error("Failed to fetch fire data");
-
-          const result = await response.json();
+          const result = await cmd.fetchServerJson<{ success: boolean; data: FireHistoryRecord[]; error?: string }>(url);
           if (!result.success) throw new Error(result.error || "Unknown error");
 
           const records = result.data as FireHistoryRecord[];
@@ -302,11 +294,7 @@ export default function DataMonitorPage() {
 
         while (hasMore) {
           const url = `${baseUrl}&limit=${PAGE_SIZE}&offset=${offset}`;
-          const response = await fetch(url);
-
-          if (!response.ok) throw new Error("Failed to fetch items data");
-
-          const result = await response.json();
+          const result = await cmd.fetchServerJson<{ success: boolean; data: ItemsHistoryRecord[]; error?: string }>(url);
           if (!result.success) throw new Error(result.error || "Unknown error");
 
           const records = result.data as ItemsHistoryRecord[];
@@ -379,9 +367,7 @@ export default function DataMonitorPage() {
           ? `${serverUrl}/fire-history-all?mode=${modeParam}&limit=99999`
           : `${serverUrl}/fire-history?mode=${modeParam}&limit=${hours}`;
 
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("Failed to fetch fire data");
-        const data = await response.json();
+        const data = await cmd.fetchServerJson<{ success: boolean; data: FireHistoryRecord[]; error?: string }>(url);
         if (!data.success) throw new Error(data.error || "Unknown error");
 
         const records = data.data as FireHistoryRecord[];
@@ -403,9 +389,7 @@ export default function DataMonitorPage() {
         const timestampParam = lastItemsSyncTimestamp ? `&since_timestamp=${lastItemsSyncTimestamp}` : "";
         const url = `${serverUrl}/items-history-all?mode=${modeParam}${timestampParam}&limit=${hours === 99999 ? 99999 : hours * 10}`;
 
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("Failed to fetch items data");
-        const data = await response.json();
+        const data = await cmd.fetchServerJson<{ success: boolean; data: ItemsHistoryRecord[]; error?: string }>(url);
         if (!data.success) throw new Error(data.error || "Unknown error");
 
         const records = data.data as ItemsHistoryRecord[];

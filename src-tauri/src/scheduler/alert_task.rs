@@ -509,13 +509,19 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
         }
         #[cfg(target_os = "windows")]
         {
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
             let voice_path = voice_path.replace('\'', "''");
             let script = format!(
-                "$done = $false; Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; Register-ObjectEvent -InputObject $player -EventName MediaEnded -Action {{ $script:done = $true }} | Out-Null; $player.Open([Uri]'{}'); $player.Play(); $deadline = (Get-Date).AddSeconds(30); while (-not $done -and (Get-Date) -lt $deadline) {{ Start-Sleep -Milliseconds 100 }}; $player.Close()",
+                "$path = '{}'; $resolved = (Resolve-Path -LiteralPath $path).ProviderPath; $done = $false; Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; Register-ObjectEvent -InputObject $player -EventName MediaEnded -Action {{ $script:done = $true }} | Out-Null; $player.Open([System.Uri]::new($resolved)); $player.Play(); $deadline = (Get-Date).AddSeconds(30); while (-not $done -and (Get-Date) -lt $deadline) {{ Start-Sleep -Milliseconds 100 }}; $player.Close()",
                 voice_path
             );
-            match tokio::process::Command::new("powershell")
-                .args(["-NoProfile", "-Command", &script])
+            let mut command = tokio::process::Command::new("powershell");
+            command
+                .creation_flags(CREATE_NO_WINDOW)
+                .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script]);
+
+            match command
                 .status()
                 .await
             {

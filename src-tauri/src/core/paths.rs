@@ -4,6 +4,8 @@ use tauri::Manager;
 
 pub const APP_DATA_DIR_NAME: &str = "com.tlmonitor.app";
 pub const DEFAULT_VOICE_ALERT_RESOURCE: &str = "resources/audio/萝莉音.mp3";
+const DEFAULT_VOICE_ALERT_FILE: &str = "萝莉音.mp3";
+const DEFAULT_VOICE_ALERT_AUDIO_RESOURCE: &str = "audio/萝莉音.mp3";
 
 pub fn app_dir() -> PathBuf {
     // In debug mode, use project directory's data folder
@@ -105,17 +107,34 @@ pub fn resolve_voice_alert_path(app: &tauri::AppHandle, configured_path: &str) -
     if let Ok(resource_dir) = app.path().resource_dir() {
         push_unique_path(
             &mut candidates,
+            resource_dir.join(DEFAULT_VOICE_ALERT_AUDIO_RESOURCE),
+        );
+        push_unique_path(
+            &mut candidates,
             resource_dir.join(DEFAULT_VOICE_ALERT_RESOURCE),
+        );
+        push_unique_path(
+            &mut candidates,
+            resource_dir.join(DEFAULT_VOICE_ALERT_FILE),
         );
     }
 
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
+            push_unique_path(
+                &mut candidates,
+                exe_dir.join(DEFAULT_VOICE_ALERT_AUDIO_RESOURCE),
+            );
             push_unique_path(&mut candidates, exe_dir.join(DEFAULT_VOICE_ALERT_RESOURCE));
+            push_unique_path(&mut candidates, exe_dir.join(DEFAULT_VOICE_ALERT_FILE));
         }
     }
 
     if let Ok(current_dir) = std::env::current_dir() {
+        push_unique_path(
+            &mut candidates,
+            current_dir.join(DEFAULT_VOICE_ALERT_AUDIO_RESOURCE),
+        );
         push_unique_path(
             &mut candidates,
             current_dir.join(DEFAULT_VOICE_ALERT_RESOURCE),

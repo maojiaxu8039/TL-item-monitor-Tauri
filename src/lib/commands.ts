@@ -377,6 +377,8 @@ export interface SourceDiagnostic {
 
 export const cmd = {
   getDashboardSummary: () => invoke<DashboardSummary>("get_dashboard_summary"),
+  fetchServerJson: <T = unknown>(url: string) =>
+    invoke<T>("fetch_server_json_cmd", { url }),
   setActiveMarketContext: (seasonId: string, marketMode: string) =>
     invoke("set_active_market_context", { seasonId, marketMode }),
 

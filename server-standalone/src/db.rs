@@ -918,6 +918,7 @@ pub struct ItemSnapshotWithInfo {
     pub item_type: Option<String>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn get_items_history_all(
     pool: &SqlitePool,
     season_id: &str,

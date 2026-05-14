@@ -58,7 +58,9 @@ async function startDrag(e: MouseEvent) {
   if ((e.target as HTMLElement).closest("button, a, input, select, textarea, [role='button']")) return
   try {
     await getCurrentWindow().startDragging()
-  } catch {}
+  } catch {
+    // startDragging is unavailable outside the Tauri shell.
+  }
 }
 
 export function TopBar({ page, onPageChange }: TopBarProps) {

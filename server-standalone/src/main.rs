@@ -746,7 +746,7 @@ async fn handle_request(
                             }
                             if let Some(ref modes) = req.scrape_modes {
                                 let scrape_modes: Vec<config::ScrapeMode> = modes
-                                    .into_iter()
+                                    .iter()
                                     .map(|m| config::ScrapeMode {
                                         mode: m.mode.clone(),
                                         enabled: m.enabled,
@@ -767,7 +767,7 @@ async fn handle_request(
                                     }
                                     if let Some(ref modes) = req.scrape_modes {
                                         dynamic.scrape_modes = modes
-                                            .into_iter()
+                                            .iter()
                                             .map(|m| config::ScrapeMode {
                                                 mode: m.mode.clone(),
                                                 enabled: m.enabled,
@@ -1812,7 +1812,11 @@ async fn run_test_collection(state: &Arc<ServerState>) {
                     fire_price: fire_result.as_ref().ok().map(|f| f.rmb_per_10k_fire),
                     items_count: items_result.as_ref().ok().map(|i| i.len()),
                     items_success: Some(items_result.is_ok()),
-                    error: fire_result.as_ref().err().map(|s| s.clone()).or_else(|| items_result.as_ref().err().map(|s| s.clone())),
+                    error: fire_result
+                        .as_ref()
+                        .err()
+                        .cloned()
+                        .or_else(|| items_result.as_ref().err().cloned()),
                     collection_success: Some(fire_result.is_ok() && items_result.is_ok()),
                 };
 
