@@ -143,9 +143,10 @@ pub async fn get_price_changes(pool: &SqlitePool) -> Result<Vec<ItemPriceChange>
             // Within 30 minutes of 3h
             price_3h
                 .entry(item_id.clone())
-                .and_modify(|(existing_diff, _)| {
+                .and_modify(|(existing_diff, existing_price)| {
                     if diff_3h < *existing_diff {
                         *existing_diff = diff_3h;
+                        *existing_price = *fire_price;
                     }
                 })
                 .or_insert((diff_3h, *fire_price));
@@ -156,9 +157,10 @@ pub async fn get_price_changes(pool: &SqlitePool) -> Result<Vec<ItemPriceChange>
             // Within 15 minutes of 1h
             price_1h
                 .entry(item_id.clone())
-                .and_modify(|(existing_diff, _)| {
+                .and_modify(|(existing_diff, existing_price)| {
                     if diff_1h < *existing_diff {
                         *existing_diff = diff_1h;
+                        *existing_price = *fire_price;
                     }
                 })
                 .or_insert((diff_1h, *fire_price));
@@ -169,9 +171,10 @@ pub async fn get_price_changes(pool: &SqlitePool) -> Result<Vec<ItemPriceChange>
             // Within 10 minutes of 30m
             price_30m
                 .entry(item_id.clone())
-                .and_modify(|(existing_diff, _)| {
+                .and_modify(|(existing_diff, existing_price)| {
                     if diff_30m < *existing_diff {
                         *existing_diff = diff_30m;
+                        *existing_price = *fire_price;
                     }
                 })
                 .or_insert((diff_30m, *fire_price));
@@ -182,9 +185,10 @@ pub async fn get_price_changes(pool: &SqlitePool) -> Result<Vec<ItemPriceChange>
             // Within 10 minutes of 5m
             price_5m
                 .entry(item_id.clone())
-                .and_modify(|(existing_diff, _)| {
+                .and_modify(|(existing_diff, existing_price)| {
                     if diff_5m < *existing_diff {
                         *existing_diff = diff_5m;
+                        *existing_price = *fire_price;
                     }
                 })
                 .or_insert((diff_5m, *fire_price));
@@ -296,5 +300,59 @@ fn determine_trend(
         "fall".to_string()
     } else {
         "stable".to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn test_pool() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("test sqlite pool should connect");
+
+        sqlx::query(
+            r#"CREATE TABLE item_realtime_prices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                fire_price REAL NOT NULL,
+                scraped_at INTEGER NOT NULL,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch())
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("item_realtime_prices table should be created");
+
+        pool
+    }
+
+    #[tokio::test]
+    async fn picks_closest_past_price_when_calculating_change() {
+        let pool = test_pool().await;
+        let now = chrono::Utc::now().timestamp();
+
+        batch_insert_realtime_prices(
+            &pool,
+            &[
+                ("item-1".to_string(), "测试物品".to_string(), 200.0, now),
+                ("item-1".to_string(), "测试物品".to_string(), 100.0, now - 300),
+            ],
+        )
+        .await
+        .expect("test realtime prices should insert");
+
+        let changes = get_price_changes(&pool)
+            .await
+            .expect("price changes should calculate");
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].price_5m_ago, Some(100.0));
+        assert_eq!(changes[0].change_rate_5m, Some(100.0));
+        assert_eq!(changes[0].trend, "sharp_rise");
     }
 }
