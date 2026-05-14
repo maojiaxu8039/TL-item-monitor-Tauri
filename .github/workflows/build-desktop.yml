@@ -18,6 +18,7 @@ on:
 env:
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: short
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-windows:
@@ -91,11 +92,22 @@ jobs:
         env:
           CI: true
 
+      - name: Ad-hoc code sign
+        run: |
+          find src-tauri/target/release/bundle -name "*.app" -type d | while read app; do
+            codesign --force --deep --sign - "$app"
+            echo "Signed: $app"
+          done
+
       - name: Remove quarantine attribute
         run: |
           find src-tauri/target/release/bundle -name "*.app" -type d | while read app; do
             xattr -cr "$app"
             echo "Removed quarantine from: $app"
+          done
+          find src-tauri/target/release/bundle -name "*.dmg" -type f | while read dmg; do
+            xattr -cr "$dmg"
+            echo "Removed quarantine from: $dmg"
           done
 
       - name: Upload artifact

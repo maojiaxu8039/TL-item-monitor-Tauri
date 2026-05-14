@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from "react"
+import { useEffect, useState, type ChangeEvent, type MouseEvent } from "react"
 import { RefreshCw } from "lucide-react"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { motion } from "framer-motion"
@@ -51,6 +51,13 @@ async function withWindow(action: "minimize" | "toggleMaximize" | "close") {
   } catch {
     // Window APIs are only available in the Tauri shell.
   }
+}
+
+async function startDrag(e: MouseEvent) {
+  if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) return
+  try {
+    await getCurrentWindow().startDragging()
+  } catch {}
 }
 
 export function TopBar({ page, onPageChange }: TopBarProps) {
@@ -123,7 +130,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
       transition={{ duration: 0.3 }}
       className="torch-topbar"
     >
-      <div className="torch-topbar-drag-region" data-tauri-drag-region />
+      <div className="torch-topbar-drag-region" data-tauri-drag-region onMouseDown={startDrag} />
       <button className="torch-brand" onClick={() => onPageChange("dashboard")} title="TorchScan">
         <img src="/torchscan/logo-mark.png" alt="TorchScan" className="torch-brand-logo" draggable={false} />
       </button>

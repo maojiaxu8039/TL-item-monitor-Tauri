@@ -82,6 +82,7 @@
   .torchscan-theme {
     position: relative;
     min-height: 100vh;
+    overflow: hidden;
     color: var(--color-text);
     background:
       radial-gradient(circle at 17% -10%, rgba(255, 106, 0, 0.22), transparent 28rem),
