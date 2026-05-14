@@ -257,9 +257,10 @@ export default function PriceAnalysisPage() {
           return a.current_price - b.current_price;
         case "price_desc":
           return b.current_price - a.current_price;
-        case "trend":
+        case "trend": {
           const order: Record<string, number> = { buy: 0, wait: 1, sell: 2 };
           return order[a.recommendation] - order[b.recommendation];
+        }
         default:
           return 0;
       }

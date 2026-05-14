@@ -38,6 +38,8 @@ pub async fn run_price_alert_task(
 ) {
     info!("Price alert task started - checking for worth items and custom alert rules");
 
+    run_price_alert_checks(&app, &state).await;
+
     loop {
         tokio::select! {
             result = abort.recv() => {
@@ -56,11 +58,15 @@ pub async fn run_price_alert_task(
                 }
             }
             _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
-                check_worth_items(&app, &state).await;
-                check_custom_alert_rules(&app, &state).await;
+                run_price_alert_checks(&app, &state).await;
             }
         }
     }
+}
+
+async fn run_price_alert_checks(app: &tauri::AppHandle, state: &Arc<AppState>) {
+    check_worth_items(app, state).await;
+    check_custom_alert_rules(app, state).await;
 }
 
 async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
@@ -126,6 +132,12 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
     }
 
     let message = format_worth_notification(&worth_items);
+    info!(
+        "Worth alert channels: system_notifications={}, voice_alert_enabled={}, voice_alert_path='{}'",
+        notification_config.system_notifications,
+        notification_config.voice_alert_enabled,
+        notification_config.voice_alert_path
+    );
 
     if notification_config.system_notifications {
         if let Err(e) = send_notification(app, "🔥 发现值得购买的物品！", &message) {
@@ -134,7 +146,9 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
     }
 
     if notification_config.voice_alert_enabled {
-        play_configured_voice_alert(app, &notification_config, 1);
+        if let Err(e) = play_configured_voice_alert(app, &notification_config, 1).await {
+            warn!("Failed to play worth item voice alert: {}", e);
+        }
     }
 
     if let Some(item) = worth_items.first() {
@@ -244,7 +258,9 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
     }
 
     if notification_config.voice_alert_enabled && any_rule_triggered {
-        play_configured_voice_alert(app, &notification_config, 1);
+        if let Err(e) = play_configured_voice_alert(app, &notification_config, 1).await {
+            warn!("Failed to play custom rule voice alert: {}", e);
+        }
     }
 }
 
@@ -472,44 +488,68 @@ fn should_send_worth_alert(now: i64, cooldown_seconds: i32) -> bool {
     true
 }
 
-fn play_configured_voice_alert(
+pub async fn play_configured_voice_alert(
     app: &tauri::AppHandle,
     notification_config: &NotificationSettings,
     count: usize,
-) {
+) -> Result<usize, String> {
     match resolve_voice_alert_path(app, &notification_config.voice_alert_path) {
-        Some(path) => play_voice_alert(path, count),
+        Some(path) => {
+            info!("Playing voice alert from {}", path.display());
+            play_voice_alert(path, count).await
+        }
         None => {
-            warn!("Voice alert enabled, but no configured or bundled voice alert file was found")
+            let message =
+                "Voice alert enabled, but no configured or bundled voice alert file was found"
+                    .to_string();
+            warn!("{}", message);
+            Err(message)
         }
     }
 }
 
-fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) {
+async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Result<usize, String> {
     let voice_path = voice_path.to_string_lossy().to_string();
-    tokio::spawn(async move {
-        for _ in 0..count {
-            #[cfg(target_os = "macos")]
+    let mut played = 0;
+
+    for _ in 0..count {
+        #[cfg(target_os = "macos")]
+        {
+            match tokio::process::Command::new("afplay")
+                .arg(&voice_path)
+                .status()
+                .await
             {
-                let _ = tokio::process::Command::new("afplay")
-                    .arg(&voice_path)
-                    .spawn()
-                    .map_err(|e| warn!("Failed to play voice on macOS: {}", e));
+                Ok(status) if status.success() => played += 1,
+                Ok(status) => warn!("Voice alert player exited with status: {}", status),
+                Err(e) => warn!("Failed to play voice on macOS: {}", e),
             }
-            #[cfg(target_os = "windows")]
-            {
-                let voice_path = voice_path.replace('\'', "''");
-                let script = format!(
-                    "Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; $player.Open([Uri]'{}'); $player.Play(); Start-Sleep -Milliseconds 2500; $player.Close()",
-                    voice_path
-                );
-                let _ = tokio::process::Command::new("powershell")
-                    .args(["-NoProfile", "-Command", &script])
-                    .spawn()
-                    .map_err(|e| warn!("Failed to play voice on Windows: {}", e));
-            }
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }
-        info!("Voice alert played {} time(s)", count);
-    });
+        #[cfg(target_os = "windows")]
+        {
+            let voice_path = voice_path.replace('\'', "''");
+            let script = format!(
+                "Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; $player.Open([Uri]'{}'); $player.Play(); Start-Sleep -Milliseconds 2500; $player.Close()",
+                voice_path
+            );
+            match tokio::process::Command::new("powershell")
+                .args(["-NoProfile", "-Command", &script])
+                .status()
+                .await
+            {
+                Ok(status) if status.success() => played += 1,
+                Ok(status) => warn!("Voice alert player exited with status: {}", status),
+                Err(e) => warn!("Failed to play voice on Windows: {}", e),
+            }
+        }
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    }
+
+    info!("Voice alert played {}/{} time(s)", played, count);
+
+    if played == count {
+        Ok(played)
+    } else {
+        Err(format!("Voice alert played {}/{} time(s)", played, count))
+    }
 }

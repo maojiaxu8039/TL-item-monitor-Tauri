@@ -1,5 +1,6 @@
 import { motion } from "framer-motion"
-import { AssetIcon, type IconAssetName } from "@/components/brand/AssetIcon"
+import { AssetIcon } from "@/components/brand/AssetIcon"
+import { type IconAssetName } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import type { PageId } from "@/lib/commands"
 

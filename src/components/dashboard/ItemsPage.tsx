@@ -40,6 +40,7 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import { Surface } from "@/components/ui/Surface";
 import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 const COLUMN_HELPER = createColumnHelper<ItemData>();
 
@@ -421,7 +422,7 @@ export default function ItemsPage() {
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       <PageHeader
-        title="物价数据"
+        title="物品追踪"
         description="查看和管理游戏物品价格信息"
         iconAsset="item-tracking"
         actions={
@@ -539,11 +540,8 @@ export default function ItemsPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-16">
-                    <div className="flex items-center justify-center gap-3 text-[var(--color-text-subtle)]">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span className="text-sm">加载中...</span>
-                    </div>
+                  <td colSpan={6}>
+                    <LoadingState message="正在加载物品数据..." />
                   </td>
                 </tr>
               ) : items.length === 0 ? (

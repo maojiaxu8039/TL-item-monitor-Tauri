@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
-import { AssetIcon, type IconAssetName } from "@/components/brand/AssetIcon";
+import { AssetIcon } from "@/components/brand/AssetIcon";
+import { type IconAssetName } from "@/lib/icons";
 import { type ReactNode, type ElementType } from "react";
 
 interface PageHeaderProps {

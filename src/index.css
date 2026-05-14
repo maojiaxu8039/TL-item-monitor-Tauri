@@ -436,7 +436,7 @@
     display: flex;
     align-items: center;
     gap: 0.62rem;
-    min-height: 42px;
+    min-height: 38px;
     width: 100%;
     overflow: hidden;
     border: 1px solid transparent;
@@ -506,11 +506,11 @@
     align-items: center;
     justify-content: center;
     gap: 0.55rem;
-    margin: 0 0.75rem 0.65rem;
+    margin: 0 0.75rem 0.5rem;
     border: 1px solid rgba(255, 184, 0, 0.16);
     border-radius: 8px;
-    min-height: 62px;
-    padding: 0.45rem 0.65rem;
+    min-height: 52px;
+    padding: 0.35rem 0.65rem;
     background: rgba(255, 255, 255, 0.026);
     overflow: hidden;
   }

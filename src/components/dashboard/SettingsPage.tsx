@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus, type JsonFileValidationResult, type SeasonInfo } from "@/lib/commands";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { RefreshCw, Save, Bell, Database, Globe, AlertTriangle, Trash2, Edit3, Key } from "lucide-react";
+import { RefreshCw, Save, Bell, BellRing, Database, Globe, AlertTriangle, Trash2, Edit3, Key, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageShell } from "@/components/ui/PageShell";
@@ -69,6 +69,52 @@ export default function SettingsPage() {
     qiandao_spec_id_expert: "",
     luosi_season_id_normal: "",
     luosi_season_id_expert: "",
+  });
+
+  const buildConfig = (): AppConfig => ({
+    schema_version: 1,
+    scrape: {
+      fire_price_mode: "season_normal",
+      fire_price_scrape_enabled: fireEnabled,
+      fire_price_scrape_interval: fireInterval,
+      items_source: itemsSource,
+      items_json_path: jsonPath,
+      items_reload_interval: itemsInterval,
+      auto_reload: itemsEnabled,
+      expert_enabled: expertEnabled,
+    },
+    desktop: {
+      auto_start: false,
+      tray_on_close: true,
+      mini_mode: false,
+      free_layout: false,
+    },
+    notification: {
+      system_notifications: systemNotifications,
+      mac_desktop_notifications: systemNotifications,
+      win_desktop_notifications: systemNotifications,
+      voice_alert_enabled: voiceAlertEnabled,
+      voice_alert_path: voiceAlertPath,
+      price_alert_enabled: priceAlertEnabled,
+      price_alert_cooldown_seconds: priceAlertCooldown,
+      quiet_start: null,
+      quiet_end: null,
+    },
+    deal: {
+      bargain_enabled: true,
+      bargain_threshold_percent: 30,
+      sell_enabled: true,
+      sell_threshold_percent: 30,
+    },
+    data: {
+      history_retention: "permanent",
+      compress_history: false,
+    },
+    app: {
+      season_id: seasonId,
+      language: "zh-CN",
+      auto_update: false,
+    },
   });
 
   const seasonsQuery = useQuery<SeasonInfo[]>({
@@ -139,13 +185,32 @@ export default function SettingsPage() {
     }
   };
 
-  useMutation<string, Error, void>({
-    mutationFn: () => cmd.triggerPriceAlert(),
+  const testNotificationMutation = useMutation<OkResponse, Error, void>({
+    mutationFn: async () => {
+      await cmd.saveConfig(buildConfig());
+      return cmd.testNotification();
+    },
+    onSuccess: () => {
+      toast.success(voiceAlertEnabled ? "系统通知和语音测试已触发" : "系统通知测试已触发");
+      cmd.getNotificationPermissionStatus().then((status) => {
+        setNotificationPermission(status);
+      }).catch(() => {});
+    },
+    onError: (err) => {
+      toast.error(`测试失败: ${err.message || err}`);
+    },
+  });
+
+  const triggerAlertMutation = useMutation<string, Error, void>({
+    mutationFn: async () => {
+      await cmd.saveConfig(buildConfig());
+      return cmd.triggerPriceAlert();
+    },
     onSuccess: (result) => {
       toast.success(result);
     },
     onError: (err) => {
-      toast.error(`测试失败: ${err}`);
+      toast.error(`触发失败: ${err.message || err}`);
     },
   });
 
@@ -237,52 +302,7 @@ export default function SettingsPage() {
   };
 
   const handleSave = () => {
-    const config: AppConfig = {
-      schema_version: 1,
-      scrape: {
-        fire_price_mode: "season_normal",
-        fire_price_scrape_enabled: fireEnabled,
-        fire_price_scrape_interval: fireInterval,
-        items_source: itemsSource,
-        items_json_path: jsonPath,
-        items_reload_interval: itemsInterval,
-        auto_reload: itemsEnabled,
-        expert_enabled: expertEnabled,
-      },
-      desktop: {
-        auto_start: false,
-        tray_on_close: true,
-        mini_mode: false,
-        free_layout: false,
-      },
-      notification: {
-        system_notifications: systemNotifications,
-        mac_desktop_notifications: systemNotifications,
-        win_desktop_notifications: systemNotifications,
-        voice_alert_enabled: voiceAlertEnabled,
-        voice_alert_path: voiceAlertPath,
-        price_alert_enabled: priceAlertEnabled,
-        price_alert_cooldown_seconds: priceAlertCooldown,
-        quiet_start: null,
-        quiet_end: null,
-      },
-      deal: {
-        bargain_enabled: true,
-        bargain_threshold_percent: 30,
-        sell_enabled: true,
-        sell_threshold_percent: 30,
-      },
-      data: {
-        history_retention: "permanent",
-        compress_history: false,
-      },
-      app: {
-        season_id: seasonId,
-        language: "zh-CN",
-        auto_update: false,
-      },
-    };
-    saveMutation.mutate(config);
+    saveMutation.mutate(buildConfig());
   };
 
   const handleRefreshItems = () => {
@@ -594,6 +614,30 @@ export default function SettingsPage() {
             </div>
           )}
 
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--color-border-soft)]">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => testNotificationMutation.mutate()}
+              disabled={testNotificationMutation.isPending}
+            >
+              {voiceAlertEnabled ? (
+                <Volume2 className="w-4 h-4 mr-1.5" />
+              ) : (
+                <BellRing className="w-4 h-4 mr-1.5" />
+              )}
+              {testNotificationMutation.isPending ? "测试中..." : "测试通知/语音"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => triggerAlertMutation.mutate()}
+              disabled={triggerAlertMutation.isPending}
+            >
+              <AlertTriangle className="w-4 h-4 mr-1.5" />
+              {triggerAlertMutation.isPending ? "触发中..." : "触发满足条件预警"}
+            </Button>
+          </div>
 
         </div>
       </Surface>

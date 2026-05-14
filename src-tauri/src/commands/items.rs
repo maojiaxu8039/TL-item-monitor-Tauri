@@ -1,9 +1,9 @@
 use crate::commands::types::{DbStats, ItemsStats, OkResponse, SearchResult};
-use crate::core::paths::resolve_voice_alert_path;
 use crate::core::state::AppState;
 use crate::db::repo_history;
 use crate::db::repo_item_realtime_prices;
 use crate::db::repo_items;
+use crate::scheduler::alert_task::play_configured_voice_alert;
 use crate::scraper;
 use crate::services::send_notification;
 use std::sync::Arc;
@@ -349,34 +349,9 @@ pub async fn trigger_price_alert(
     }
 
     if config.notification.voice_alert_enabled {
-        if let Some(voice_path) =
-            resolve_voice_alert_path(&app, &config.notification.voice_alert_path)
-        {
-            tokio::spawn(async move {
-                #[cfg(target_os = "macos")]
-                {
-                    let _ = tokio::process::Command::new("afplay")
-                        .arg(&voice_path)
-                        .spawn();
-                }
-                #[cfg(target_os = "windows")]
-                {
-                    let voice_path = voice_path.to_string_lossy().replace('\'', "''");
-                    let script = format!(
-                        "Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; $player.Open([Uri]'{}'); $player.Play(); Start-Sleep -Milliseconds 2500; $player.Close()",
-                        voice_path
-                    );
-                    let _ = tokio::process::Command::new("powershell")
-                        .args(["-NoProfile", "-Command", &script])
-                        .spawn();
-                }
-            });
-            tracing::info!("Voice alert played for {} items", count);
-        } else {
-            tracing::warn!(
-                "Voice alert enabled, but no configured or bundled voice alert file was found"
-            );
-        }
+        play_configured_voice_alert(&app, &config.notification, 1)
+            .await
+            .map_err(|e| format!("Voice alert failed: {}", e))?;
     }
 
     if config.notification.system_notifications {

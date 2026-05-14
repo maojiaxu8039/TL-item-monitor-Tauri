@@ -273,7 +273,7 @@ export default function AlertsPage() {
   return (
     <PageShell size="xl" className="space-y-5">
       <PageHeader
-        title="预警规则"
+        title="提醒设置"
         description="设置价格预警，实时监控市场变化"
         iconAsset="alerts"
         actions={

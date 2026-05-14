@@ -8,7 +8,6 @@ import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { Toolbar } from "@/components/ui/Toolbar";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 
@@ -356,9 +355,9 @@ export default function FirePriceComparePage() {
       />
 
       <Surface padding="sm">
-        <Toolbar className="flex items-center justify-between flex-wrap gap-4">
+        <div className="space-y-3">
           <div className="flex items-center gap-3">
-            <span className="text-sm text-[var(--color-text-subtle)]">对比赛季</span>
+            <span className="text-sm text-[var(--color-text-subtle)] shrink-0">对比赛季</span>
             <select
               value={historySeason}
               onChange={(e) => setHistorySeason(e.target.value)}
@@ -382,7 +381,7 @@ export default function FirePriceComparePage() {
                   }}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                     timeRange === value && !useCustomRange
-                      ? "bg-[var(--color-panel)] text-[var(--color-text)] shadow-sm"
+                      ? "bg-[var(--color-brand)]/15 text-[var(--color-brand-gold)] shadow-sm border border-[var(--color-brand)]/30"
                       : "text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
                   }`}
                 >
@@ -419,7 +418,7 @@ export default function FirePriceComparePage() {
               )}
             </div>
           </div>
-        </Toolbar>
+        </div>
       </Surface>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

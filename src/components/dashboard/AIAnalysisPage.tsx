@@ -376,7 +376,7 @@ export default function AIAnalysisPage() {
       </div>
 
       <div className="flex-1 bg-[var(--color-panel)] rounded-xl border border-[var(--color-border)] overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-[var(--color-text-subtle)]">
               <Sparkles className="w-12 h-12 text-[var(--color-text-subtle)] mb-3" />
@@ -465,7 +465,7 @@ export default function AIAnalysisPage() {
             <button
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
-              className="px-4 py-2.5 bg-[var(--color-ai)] text-black rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="px-4 py-2.5 bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {isLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />

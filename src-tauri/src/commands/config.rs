@@ -1,5 +1,6 @@
 use crate::commands::types::OkResponse;
 use crate::core::state::AppState;
+use crate::scheduler::alert_task::play_configured_voice_alert;
 use crate::services::worth_service::WorthResult;
 use crate::services::{evaluate_worth, send_notification};
 use std::sync::Arc;
@@ -51,10 +52,26 @@ pub async fn evaluate_worth_cmd(
 }
 
 #[tauri::command]
-pub async fn test_notification(app: tauri::AppHandle) -> Result<OkResponse, String> {
+pub async fn test_notification(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<OkResponse, String> {
     send_notification(&app, "🔔 通知测试", "TorchScan 通知功能正常！")
         .map_err(|e| format!("Notification failed: {}", e))?;
-    Ok(OkResponse::success("Notification sent"))
+
+    let notification_config = {
+        let config = state.config.read();
+        config.notification.clone()
+    };
+
+    if notification_config.voice_alert_enabled {
+        play_configured_voice_alert(&app, &notification_config, 1)
+            .await
+            .map_err(|e| format!("Voice alert failed: {}", e))?;
+        Ok(OkResponse::success("Notification and voice sent"))
+    } else {
+        Ok(OkResponse::success("Notification sent"))
+    }
 }
 
 #[tauri::command]
