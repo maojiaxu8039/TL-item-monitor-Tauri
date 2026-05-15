@@ -5,7 +5,7 @@
 const http2 = require('http2');
 
 const mode = process.argv[2] === 'pro' ? '专家' : '普通';
-const defaultTagId = process.argv[2] === 'pro' ? '1560055' : '1560053';
+const defaultTagId = process.argv[2] === 'pro' ? '1560053' : '1560053';
 const defaultSpecId = process.argv[2] === 'pro' ? '267417' : '267416';
 const tagId = process.env.QIANDAO_TAG_ID || defaultTagId;
 const specId = process.env.QIANDAO_SPEC_ID || defaultSpecId;

@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 const QIANDAD_API = 'api.qiandao.com';
 const ENDPOINT = '/c2c-web/v1/common/currency-spu-price-list';
 
-const TAG_IDS = { normal: '1560053', pro: '1560055' };
+const TAG_IDS = { normal: '1560053', pro: '1560053' };
 const SPEC_IDS = { normal: '267416', pro: '267417' };
 
 function getModeFromArg() {
