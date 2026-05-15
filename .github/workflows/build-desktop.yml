@@ -86,7 +86,6 @@ jobs:
           type -a cargo
           cargo --version
           rustc --version
-          cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 --no-deps >/dev/null
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -103,7 +102,6 @@ jobs:
           export CARGO="$HOME/.cargo/bin/cargo"
           hash -r
           which cargo
-          cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 --no-deps >/dev/null
           npm run build:dmg
         env:
           CI: true
