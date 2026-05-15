@@ -505,7 +505,7 @@ scrape_modes:
 - **频率**: 每小时采集一次
 - **Mode 映射**:
   - 普通服: tagId=1560053, specId=267416
-  - 专家服: tagId=1560055, specId=267417
+  - 专家服: tagId=1560053, specId=267417
 
 #### 物品数据
 
@@ -719,7 +719,7 @@ async fn collect_all_modes(state) {
   "api_config": {
     "qiandao_tag_id_normal": "1560053",
     "qiandao_spec_id_normal": "267416",
-    "qiandao_tag_id_expert": "1560055",
+    "qiandao_tag_id_expert": "1560053",
     "qiandao_spec_id_expert": "267417",
     "luosi_season_id_normal": 1401,
     "luosi_season_id_expert": 1431

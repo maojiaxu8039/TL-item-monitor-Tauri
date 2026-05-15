@@ -88,7 +88,7 @@ impl Default for ApiConfig {
         Self {
             qiandao_tag_id_normal: "1560053".to_string(),
             qiandao_spec_id_normal: "267416".to_string(),
-            qiandao_tag_id_expert: "1560055".to_string(),
+            qiandao_tag_id_expert: "1560053".to_string(),
             qiandao_spec_id_expert: "267417".to_string(),
             luosi_season_id_normal: 1401,
             luosi_season_id_expert: 1431,
