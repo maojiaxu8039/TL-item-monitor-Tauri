@@ -285,7 +285,7 @@ fn parse_node_output(stdout: &str) -> Result<NodeJsData, AppError> {
 
 #[derive(Debug, Clone)]
 enum NodeFallbackCandidate {
-    Script { runner: &'static str, path: PathBuf },
+    Script { runner: String, path: PathBuf },
 }
 
 impl NodeFallbackCandidate {
@@ -338,21 +338,51 @@ fn node_fallback_candidates() -> Vec<NodeFallbackCandidate> {
 #[cfg(target_os = "windows")]
 fn push_script_candidates(candidates: &mut Vec<NodeFallbackCandidate>, path: PathBuf) {
     candidates.push(NodeFallbackCandidate::Script {
-        runner: "nodew",
+        runner: "nodew".to_string(),
         path: path.clone(),
     });
     candidates.push(NodeFallbackCandidate::Script {
-        runner: "node",
+        runner: "node".to_string(),
         path,
     });
 }
 
 #[cfg(not(target_os = "windows"))]
 fn push_script_candidates(candidates: &mut Vec<NodeFallbackCandidate>, path: PathBuf) {
-    candidates.push(NodeFallbackCandidate::Script {
-        runner: "node",
-        path,
-    });
+    for runner in node_runner_candidates() {
+        candidates.push(NodeFallbackCandidate::Script {
+            runner,
+            path: path.clone(),
+        });
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn node_runner_candidates() -> Vec<String> {
+    [
+        "/opt/homebrew/bin/node",
+        "/usr/local/bin/node",
+        "/usr/bin/node",
+        "node",
+    ]
+    .into_iter()
+    .filter(|runner| runner_exists(runner))
+    .map(str::to_string)
+    .collect()
+}
+
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+fn node_runner_candidates() -> Vec<String> {
+    ["node"]
+        .into_iter()
+        .filter(|runner| runner_exists(runner))
+        .map(str::to_string)
+        .collect()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn runner_exists(runner: &str) -> bool {
+    runner == "node" || Path::new(runner).exists()
 }
 
 fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
