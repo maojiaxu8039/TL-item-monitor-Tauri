@@ -1,5 +1,5 @@
 use crate::core::errors::AppError;
-use crate::core::state::FirePriceSnapshot;
+use crate::core::state::{FirePriceSnapshot, SeasonApiConfig};
 use chrono::Utc;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -18,27 +18,33 @@ pub async fn scrape_fire_price() -> Result<FirePriceSnapshot, AppError> {
 /// SYSTEM.FAIL for non-Node HTTP/2 client fingerprints. Keep the Node fallback
 /// so packaged builds do not silently lose the fire-price source.
 pub async fn scrape_by_mode(mode: &str) -> Result<FirePriceSnapshot, AppError> {
+    scrape_by_mode_with_api_config(mode, None).await
+}
+
+pub async fn scrape_by_mode_with_api_config(
+    mode: &str,
+    api_config: Option<&SeasonApiConfig>,
+) -> Result<FirePriceSnapshot, AppError> {
     tracing::info!("Starting fire price scrape for mode: {}", mode);
 
-    match scrape_via_rust(mode).await {
+    match scrape_via_rust(mode, api_config).await {
         Ok(snapshot) => Ok(snapshot),
         Err(e) => {
             tracing::warn!(
                 "Rust Qiandao scrape failed: {}; falling back to Node HTTP/2",
                 e
             );
-            scrape_via_node_script(mode).await
+            scrape_via_node_script(mode, api_config).await
         }
     }
 }
 
 /// Rust reqwest HTTP/2 implementation.
-async fn scrape_via_rust(mode: &str) -> Result<FirePriceSnapshot, AppError> {
-    let (tag_id, spec_id) = if mode == "专家" {
-        ("1560055", "267417")
-    } else {
-        ("1560053", "267416")
-    };
+async fn scrape_via_rust(
+    mode: &str,
+    api_config: Option<&SeasonApiConfig>,
+) -> Result<FirePriceSnapshot, AppError> {
+    let (tag_id, spec_id) = resolve_qiandao_params(mode, api_config);
 
     let timestamp = Utc::now().timestamp_millis().to_string();
     let body = serde_json::json!({
@@ -106,7 +112,10 @@ async fn scrape_via_rust(mode: &str) -> Result<FirePriceSnapshot, AppError> {
 }
 
 /// Node.js native HTTP/2 implementation.
-async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppError> {
+async fn scrape_via_node_script(
+    mode: &str,
+    api_config: Option<&SeasonApiConfig>,
+) -> Result<FirePriceSnapshot, AppError> {
     let candidates = node_fallback_candidates();
     if candidates.is_empty() {
         return Err(AppError::Scrape(
@@ -120,7 +129,7 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppErro
         .filter(|candidate| candidate.path().exists())
     {
         tracing::info!("Trying Qiandao Node fallback: {}", candidate.label());
-        match run_node_fallback(candidate, mode).await {
+        match run_node_fallback(candidate, mode, api_config).await {
             Ok(snapshot) => return Ok(snapshot),
             Err(err) => {
                 tracing::warn!("Qiandao Node fallback failed: {}", err);
@@ -150,7 +159,9 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, AppErro
 async fn run_node_fallback(
     candidate: &NodeFallbackCandidate,
     mode: &str,
+    api_config: Option<&SeasonApiConfig>,
 ) -> Result<FirePriceSnapshot, AppError> {
+    let (tag_id, spec_id) = resolve_qiandao_params(mode, api_config);
     let mut command = match candidate {
         NodeFallbackCandidate::Script { runner, path } => {
             let mut command = tokio::process::Command::new(runner);
@@ -168,6 +179,8 @@ async fn run_node_fallback(
 
     let output = command
         .arg(if mode == "专家" { "pro" } else { "normal" })
+        .env("QIANDAO_TAG_ID", tag_id)
+        .env("QIANDAO_SPEC_ID", spec_id)
         .stdin(Stdio::null())
         .output()
         .await
@@ -206,6 +219,41 @@ async fn run_node_fallback(
         source_time: Some(source_time),
         scraped_at: now_timestamp,
     })
+}
+
+fn resolve_qiandao_params(mode: &str, api_config: Option<&SeasonApiConfig>) -> (String, String) {
+    let default_config = SeasonApiConfig::default();
+    let config = api_config.unwrap_or(&default_config);
+
+    let (tag_id, spec_id, fallback_tag, fallback_spec) = if mode == "专家" {
+        (
+            config.qiandao_tag_id_expert.as_str(),
+            config.qiandao_spec_id_expert.as_str(),
+            "1560055",
+            "267417",
+        )
+    } else {
+        (
+            config.qiandao_tag_id_normal.as_str(),
+            config.qiandao_spec_id_normal.as_str(),
+            "1560053",
+            "267416",
+        )
+    };
+
+    (
+        non_empty_or(tag_id, fallback_tag).to_string(),
+        non_empty_or(spec_id, fallback_spec).to_string(),
+    )
+}
+
+fn non_empty_or<'a>(value: &'a str, fallback: &'a str) -> &'a str {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        fallback
+    } else {
+        trimmed
+    }
 }
 
 fn parse_node_output(stdout: &str) -> Result<NodeJsData, AppError> {

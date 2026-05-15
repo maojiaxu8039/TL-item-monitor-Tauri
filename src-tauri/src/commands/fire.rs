@@ -189,8 +189,12 @@ pub async fn refresh_fire_price(state: State<'_, Arc<AppState>>) -> Result<FireP
         MarketMode::SeasonExpert => "专家",
         _ => "普通",
     };
+    let api_config = crate::db::repo_season_api::get_season_api_config(&state.db, &ctx.season_id)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    let snapshot = scraper::qiandao::scrape_by_mode(mode_str).await?;
+    let snapshot =
+        scraper::qiandao::scrape_by_mode_with_api_config(mode_str, Some(&api_config)).await?;
 
     let _ = repo_fire::insert_fire_record(
         &state.db,

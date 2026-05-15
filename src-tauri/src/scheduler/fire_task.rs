@@ -66,10 +66,20 @@ pub async fn run_fire_scrape_task(
                 let expert_enabled = config.scrape.expert_enabled;
                 let ctx = state.active_context.read().clone();
                 let season_id = ctx.season_id.clone();
+                let api_config =
+                    match crate::db::repo_season_api::get_season_api_config(&state.db, &season_id)
+                        .await
+                    {
+                        Ok(config) => config,
+                        Err(e) => {
+                            error!("Failed to load season API config: {}", e);
+                            crate::core::state::SeasonApiConfig::default()
+                        }
+                    };
 
                 // Scrape normal mode fire price (always)
                 let normal_start = std::time::Instant::now();
-                match scraper::qiandao::scrape_by_mode("普通").await {
+                match scraper::qiandao::scrape_by_mode_with_api_config("普通", Some(&api_config)).await {
                     Ok(snapshot) => {
                         let duration_ms = normal_start.elapsed().as_millis() as i64;
 
@@ -132,7 +142,7 @@ pub async fn run_fire_scrape_task(
                 // Scrape expert mode fire price if expert_enabled
                 if expert_enabled {
                     let expert_start = std::time::Instant::now();
-                    match scraper::qiandao::scrape_by_mode("专家").await {
+                    match scraper::qiandao::scrape_by_mode_with_api_config("专家", Some(&api_config)).await {
                         Ok(snapshot) => {
                             let duration_ms = expert_start.elapsed().as_millis() as i64;
 

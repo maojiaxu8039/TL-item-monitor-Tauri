@@ -19,8 +19,8 @@ function makeSignature(timestamp, body, packageId = '1044') {
 
 async function fetchFirePrice(mode) {
   const timestamp = Date.now().toString();
-  const tagId = TAG_IDS[mode];
-  const specId = SPEC_IDS[mode];
+  const tagId = process.env.QIANDAO_TAG_ID || TAG_IDS[mode];
+  const specId = process.env.QIANDAO_SPEC_ID || SPEC_IDS[mode];
 
   const body = JSON.stringify({
     tagId,

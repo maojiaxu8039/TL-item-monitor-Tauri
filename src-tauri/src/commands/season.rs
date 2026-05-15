@@ -29,14 +29,14 @@ pub struct SeasonApiConfigResponse {
 #[tauri::command]
 pub async fn get_season_api_config_cmd(
     state: State<'_, Arc<AppState>>,
-    season_id: String,
+    #[allow(non_snake_case)] seasonId: String,
 ) -> Result<SeasonApiConfigResponse, String> {
-    let config = crate::db::repo_season_api::get_season_api_config(&state.db, &season_id)
+    let config = crate::db::repo_season_api::get_season_api_config(&state.db, &seasonId)
         .await
         .map_err(|e| e.to_string())?;
 
     Ok(SeasonApiConfigResponse {
-        season_id,
+        season_id: seasonId,
         qiandao_tag_id_normal: config.qiandao_tag_id_normal,
         qiandao_spec_id_normal: config.qiandao_spec_id_normal,
         qiandao_tag_id_expert: config.qiandao_tag_id_expert,
@@ -51,7 +51,7 @@ pub async fn get_season_api_config_cmd(
 #[allow(clippy::too_many_arguments)]
 pub async fn set_season_api_config_cmd(
     state: State<'_, Arc<AppState>>,
-    season_id: String,
+    #[allow(non_snake_case)] seasonId: String,
     qiandao_tag_id_normal: String,
     qiandao_spec_id_normal: String,
     qiandao_tag_id_expert: String,
@@ -68,7 +68,7 @@ pub async fn set_season_api_config_cmd(
         luosi_season_id_expert,
     };
 
-    crate::db::repo_season_api::set_season_api_config(&state.db, &season_id, &config)
+    crate::db::repo_season_api::set_season_api_config(&state.db, &seasonId, &config)
         .await
         .map_err(|e| e.to_string())?;
 

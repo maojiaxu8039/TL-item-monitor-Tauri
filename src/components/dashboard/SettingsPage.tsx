@@ -40,6 +40,16 @@ function getDefaultJsonPath(appDataDir: string): string {
   return `${appDataDir}/${DEFAULT_JSON_FILENAME}`;
 }
 
+function errorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
 export default function SettingsPage() {
   const [fireEnabled, setFireEnabled] = useState(true);
   const [fireInterval, setFireInterval] = useState(300);
@@ -163,8 +173,8 @@ export default function SettingsPage() {
       toast.success("API 配置已保存");
       setEditingApiSeason(null);
     },
-    onError: (err: Error) => {
-      toast.error(`保存失败: ${err.message}`);
+    onError: (err) => {
+      toast.error(`保存失败: ${errorMessage(err)}`);
     },
   });
 
@@ -181,7 +191,7 @@ export default function SettingsPage() {
       });
       setEditingApiSeason(seasonId);
     } catch (err) {
-      toast.error(`加载配置失败: ${err}`);
+      toast.error(`加载配置失败: ${errorMessage(err)}`);
     }
   };
 
