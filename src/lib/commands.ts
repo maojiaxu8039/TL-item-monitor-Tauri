@@ -400,8 +400,8 @@ export const cmd = {
   deleteSection: (id: string) => invoke<OkResponse>("delete_section", { id }),
   reorderSections: (ids: string[]) => invoke<OkResponse>("reorder_sections", { ids }),
 
-  getSectionItems: (sectionId: string) =>
-    invoke<SectionItem[]>("get_section_items", { sectionId }),
+  getSectionItems: (sectionId: string, seasonId: string, marketMode: string) =>
+    invoke<SectionItem[]>("get_section_items", { sectionId, seasonId, marketMode }),
   addSectionItem: (
     sectionId: string,
     seasonId: string,
@@ -619,7 +619,15 @@ export const cmd = {
   getSeasonApiConfig: (seasonId: string) =>
     invoke<SeasonApiConfigResponse>("get_season_api_config_cmd", { seasonId }),
   setSeasonApiConfig: (seasonId: string, config: SeasonApiConfigInput) =>
-    invoke<OkResponse>("set_season_api_config_cmd", { seasonId, ...config }),
+    invoke<OkResponse>("set_season_api_config_cmd", {
+      seasonId,
+      qiandaoTagIdNormal: config.qiandao_tag_id_normal,
+      qiandaoSpecIdNormal: config.qiandao_spec_id_normal,
+      qiandaoTagIdExpert: config.qiandao_tag_id_expert,
+      qiandaoSpecIdExpert: config.qiandao_spec_id_expert,
+      luosiSeasonIdNormal: config.luosi_season_id_normal,
+      luosiSeasonIdExpert: config.luosi_season_id_expert,
+    }),
 
   // Skills management
   getInstalledSkills: () => invoke<SkillInfo[]>("get_installed_skills"),

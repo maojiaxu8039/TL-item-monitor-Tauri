@@ -110,27 +110,27 @@ pub async fn reorder_sections(
 pub async fn get_section_items(
     pool: &SqlitePool,
     section_id: &str,
+    season_id: &str,
+    market_mode: &str,
 ) -> Result<Vec<SectionItem>, crate::core::errors::AppError> {
-    let rows: Vec<SectionItem> = sqlx::query_as(
+    let items_table = TableResolver::items_table(season_id, market_mode);
+    let rows: Vec<SectionItem> = sqlx::query_as(&format!(
         r#"
         SELECT
             si.id, si.section_id, si.season_id, si.market_mode, si.item_id,
-            COALESCE(n.name, e.name) as item_name,
-            COALESCE(n.item_type, e.item_type) as item_type,
-            COALESCE(n.price, e.price) as current_price,
+            COALESCE(i.name, si.item_id) as item_name,
+            i.item_type as item_type,
+            i.price as current_price,
             si.purchase_fire_price, si.count, si.more_value, si.sort_order,
-            CASE WHEN COALESCE(n.last_time, e.last_time) IS NOT NULL
-                 THEN CAST(COALESCE(n.last_time, e.last_time) AS TEXT)
-                 ELSE NULL
-            END as last_time,
+            CAST(i.last_time AS TEXT) as last_time,
             si.created_at, si.updated_at
         FROM section_items si
-        LEFT JOIN items_normal n ON si.item_id = n.item_id
-        LEFT JOIN items_expert e ON si.item_id = e.item_id
+        LEFT JOIN {} i ON si.item_id = i.item_id
         WHERE si.section_id = ?
         ORDER BY si.sort_order, si.created_at
         "#,
-    )
+        items_table
+    ))
     .bind(section_id)
     .fetch_all(pool)
     .await?;

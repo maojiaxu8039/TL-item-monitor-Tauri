@@ -32,7 +32,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
 
   const { data: items = [], refetch, isFetching } = useQuery({
     queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode, section.id],
-    queryFn: () => cmd.getSectionItems(section.id),
+    queryFn: () => cmd.getSectionItems(section.id, marketContext.seasonId, marketContext.marketMode),
   })
 
   const { data: dashboardSummary } = useQuery<DashboardSummary>({

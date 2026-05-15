@@ -57,6 +57,7 @@ pub async fn import_watchlist_csv(
 
 #[tauri::command]
 pub async fn export_watchlist_csv(state: State<'_, Arc<AppState>>) -> Result<String, String> {
+    let ctx = state.active_context.read().clone();
     let sections = repo_sections::get_sections(&state.db).await?;
     let mut wtr = csv::Writer::from_writer(vec![]);
 
@@ -73,7 +74,7 @@ pub async fn export_watchlist_csv(state: State<'_, Arc<AppState>>) -> Result<Str
     .map_err(|e| e.to_string())?;
 
     for section in sections {
-        let items = repo_sections::get_section_items(&state.db, &section.id).await?;
+        let items = repo_sections::get_section_items(&state.db, &section.id, &ctx.season_id, ctx.market_mode.as_str()).await?;
         for item in items {
             wtr.write_record([
                 &item.section_id,

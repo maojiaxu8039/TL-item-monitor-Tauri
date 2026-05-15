@@ -52,20 +52,20 @@ pub async fn get_season_api_config_cmd(
 pub async fn set_season_api_config_cmd(
     state: State<'_, Arc<AppState>>,
     #[allow(non_snake_case)] seasonId: String,
-    qiandao_tag_id_normal: String,
-    qiandao_spec_id_normal: String,
-    qiandao_tag_id_expert: String,
-    qiandao_spec_id_expert: String,
-    luosi_season_id_normal: i32,
-    luosi_season_id_expert: i32,
+    #[allow(non_snake_case)] qiandaoTagIdNormal: String,
+    #[allow(non_snake_case)] qiandaoSpecIdNormal: String,
+    #[allow(non_snake_case)] qiandaoTagIdExpert: String,
+    #[allow(non_snake_case)] qiandaoSpecIdExpert: String,
+    #[allow(non_snake_case)] luosiSeasonIdNormal: i32,
+    #[allow(non_snake_case)] luosiSeasonIdExpert: i32,
 ) -> Result<crate::commands::types::OkResponse, String> {
     let config = SeasonApiConfig {
-        qiandao_tag_id_normal,
-        qiandao_spec_id_normal,
-        qiandao_tag_id_expert,
-        qiandao_spec_id_expert,
-        luosi_season_id_normal,
-        luosi_season_id_expert,
+        qiandao_tag_id_normal: qiandaoTagIdNormal,
+        qiandao_spec_id_normal: qiandaoSpecIdNormal,
+        qiandao_tag_id_expert: qiandaoTagIdExpert,
+        qiandao_spec_id_expert: qiandaoSpecIdExpert,
+        luosi_season_id_normal: luosiSeasonIdNormal,
+        luosi_season_id_expert: luosiSeasonIdExpert,
     };
 
     crate::db::repo_season_api::set_season_api_config(&state.db, &seasonId, &config)
