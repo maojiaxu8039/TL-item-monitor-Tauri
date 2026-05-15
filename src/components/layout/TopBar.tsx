@@ -83,6 +83,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
   const { data: summary } = useQuery({
     queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getDashboardSummary(),
+    refetchInterval: 30000,
   })
 
   const switchModeMutation = useMutation({
@@ -95,11 +96,11 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
       const seasonId = summary?.season_name || "ss12"
       setMarketContext({ seasonId, marketMode: newMode })
       toast.success("已切换到" + (newMode === "season_normal" ? "赛季普通" : "赛季专家"))
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary", seasonId, newMode] })
-      queryClient.invalidateQueries({ queryKey: ["sections", seasonId, newMode] })
-      queryClient.invalidateQueries({ queryKey: ["section-items", seasonId, newMode] })
-      queryClient.invalidateQueries({ queryKey: ["items-search", seasonId, newMode] })
-      queryClient.invalidateQueries({ queryKey: ["fire-history", seasonId, newMode] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] })
+      queryClient.invalidateQueries({ queryKey: ["fire-history"] })
+      queryClient.invalidateQueries({ queryKey: ["sections"] })
+      queryClient.invalidateQueries({ queryKey: ["section-items"] })
+      queryClient.invalidateQueries({ queryKey: ["items-search"] })
     },
     onError: (error) => {
       toast.error(`切换失败: ${error}`)

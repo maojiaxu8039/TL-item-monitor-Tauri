@@ -51,7 +51,7 @@ export function DashboardStats() {
       const allItems: any[] = []
       for (const section of sections) {
         try {
-          const items = await cmd.getSectionItems(section.id)
+          const items = await cmd.getSectionItems(section.id, marketContext.seasonId, marketContext.marketMode)
           allItems.push(...items)
         } catch {
           // ignore

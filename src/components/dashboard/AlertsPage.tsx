@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cmd, AlertRule, AlertEvent, ItemSearchResult, Section, SectionItem } from "@/lib/commands";
 import { useToast } from "@/hooks/useToast";
+import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/input";
@@ -55,6 +56,7 @@ const getRuleTypeLabel = (ruleType: string) => {
 
 export default function AlertsPage() {
   const { addToast } = useToast();
+  const { marketContext } = useSectionRefresh();
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
@@ -179,7 +181,7 @@ export default function AlertsPage() {
     }
     try {
       if (createForm.section_id) {
-        const sectionItems = await cmd.getSectionItems(createForm.section_id);
+        const sectionItems = await cmd.getSectionItems(createForm.section_id, marketContext.seasonId, marketContext.marketMode);
         const normalizedKeyword = keyword.toLowerCase();
         setItemResults(
           sectionItems

@@ -1,4 +1,5 @@
 use crate::commands::types::{DashboardSummary, FirePriceUI, OkResponse};
+use crate::core::events::{emit_fire_price_updated, FirePricePayload};
 use crate::core::state::{AppState, FirePriceSnapshot, MarketMode};
 use crate::db::repo_fire;
 use crate::db::repo_history;
@@ -101,6 +102,7 @@ pub async fn set_active_market_context(
         "season_expert" => MarketMode::SeasonExpert,
         _ => MarketMode::SeasonNormal,
     };
+
     {
         let mut ctx = state.active_context.write();
         ctx.season_id = seasonId.clone();
@@ -114,28 +116,47 @@ pub async fn set_active_market_context(
         let _ = crate::core::config::save_config(&cfg);
     }
 
-    // Refresh fire price from DB for new context
-    match repo_fire::get_latest_fire(&state.db, &seasonId, mode.as_str()).await {
-        Ok(Some(record)) => {
-            let snapshot = FirePriceSnapshot {
-                price_per_wan: record.rmb_per_10k_fire,
-                rmb_per_10k_fire: record.rmb_per_10k_fire,
-                fire_per_rmb: record.fire_per_rmb,
-                increase_ratio: record.increase_ratio,
-                trading_volume: record.trading_volume,
-                source: record.source,
-                source_time: record.source_time,
-                scraped_at: record.scraped_at,
-            };
-            {
-                let mut fire = state.fire_price.write();
-                *fire = Some(snapshot);
+    // Immediately fetch fresh fire price for new context
+    let mode_str = match mode {
+        MarketMode::SeasonExpert => "专家",
+        _ => "普通",
+    };
+    match crate::db::repo_season_api::get_season_api_config(&state.db, &seasonId).await {
+        Ok(api_config) => {
+            match scraper::qiandao::scrape_by_mode_with_api_config(mode_str, Some(&api_config)).await {
+                Ok(snapshot) => {
+                    let _ = crate::db::repo_fire::insert_fire_record(
+                        &state.db,
+                        &seasonId,
+                        mode.as_str(),
+                        &snapshot,
+                    ).await;
+
+                    {
+                        let mut fire = state.fire_price.write();
+                        *fire = Some(snapshot.clone());
+                    }
+                    emit_fire_price_updated(&app, FirePricePayload {
+                        rmb_per_10k_fire: snapshot.rmb_per_10k_fire,
+                        fire_per_rmb: snapshot.fire_per_rmb,
+                        increase_ratio: snapshot.increase_ratio,
+                        trading_volume: snapshot.trading_volume.clone(),
+                        source: snapshot.source.clone(),
+                        source_time: snapshot.source_time.clone(),
+                        scraped_at: snapshot.scraped_at,
+                    });
+                    tracing::info!("Fire price refreshed for mode={}: {} RMB/10K", mode_str, snapshot.rmb_per_10k_fire);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to scrape fire price for mode={}: {}", mode_str, e);
+                    // Try to load from DB as fallback
+                    load_fire_from_db(&state, &app, &seasonId, mode.as_str()).await;
+                }
             }
         }
-        _ => {
-            // Clear fire price if no data for new context
-            let mut fire = state.fire_price.write();
-            *fire = None;
+        Err(e) => {
+            tracing::warn!("Failed to get season API config: {}", e);
+            load_fire_from_db(&state, &app, &seasonId, mode.as_str()).await;
         }
     }
 
@@ -149,37 +170,78 @@ pub async fn set_active_market_context(
     );
 
     // Refresh items cache for new context
-    // IMPORTANT: Clone the Arc<AppState> reference, not the AppState itself
-    // to ensure all tasks share the same state instance
     let mode_str = mode.as_str().to_string();
     let season_for_cache = seasonId.clone();
     let state_clone = Arc::clone(&state);
     tokio::spawn(async move {
-        match repo_items::get_items_from_realtime_table(
-            &state_clone.db,
-            &season_for_cache,
-            &mode_str,
-        )
-        .await
-        {
+        // First scrape fresh items
+        match crate::scraper::scrape_items(&season_for_cache, &mode_str).await {
             Ok(items) => {
-                let mut cache = state_clone.items_cache.write();
-                let count = items.len();
-                *cache = Arc::new(items);
-                tracing::info!(
-                    "Items cache refreshed for season={}, mode={}, count={}",
-                    season_for_cache,
-                    mode_str,
-                    count
-                );
+                let count = items.len() as i64;
+                if let Err(e) = crate::db::repo_items::bulk_insert_items(
+                    &state_clone.db,
+                    &season_for_cache,
+                    &mode_str,
+                    &items,
+                ).await {
+                    tracing::warn!("Failed to insert items: {}", e);
+                }
+                {
+                    let mut cache = state_clone.items_cache.write();
+                    *cache = Arc::new(items.clone());
+                }
+                tracing::info!("Items cache refreshed for season={}, mode={}, count={}", season_for_cache, mode_str, count);
             }
             Err(e) => {
-                tracing::warn!("Failed to refresh items cache: {}", e);
+                tracing::warn!("Failed to scrape items: {}", e);
+                // Try to load from DB as fallback
+                match repo_items::get_items_from_realtime_table(&state_clone.db, &season_for_cache, &mode_str).await {
+                    Ok(items) => {
+                        let mut cache = state_clone.items_cache.write();
+                        *cache = Arc::new(items);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to load items from DB: {}", e);
+                    }
+                }
             }
         }
     });
 
     Ok(OkResponse::success("Market context updated"))
+}
+
+async fn load_fire_from_db(state: &State<'_, Arc<AppState>>, app: &tauri::AppHandle, season_id: &str, market_mode: &str) {
+    match repo_fire::get_latest_fire(&state.db, season_id, market_mode).await {
+        Ok(Some(record)) => {
+            let snapshot = FirePriceSnapshot {
+                price_per_wan: record.rmb_per_10k_fire,
+                rmb_per_10k_fire: record.rmb_per_10k_fire,
+                fire_per_rmb: record.fire_per_rmb,
+                increase_ratio: record.increase_ratio,
+                trading_volume: record.trading_volume,
+                source: record.source,
+                source_time: record.source_time,
+                scraped_at: record.scraped_at,
+            };
+            let mut fire = state.fire_price.write();
+            *fire = Some(snapshot.clone());
+            drop(fire);
+            emit_fire_price_updated(app, FirePricePayload {
+                rmb_per_10k_fire: snapshot.rmb_per_10k_fire,
+                fire_per_rmb: snapshot.fire_per_rmb,
+                increase_ratio: snapshot.increase_ratio,
+                trading_volume: snapshot.trading_volume.clone(),
+                source: snapshot.source.clone(),
+                source_time: snapshot.source_time.clone(),
+                scraped_at: snapshot.scraped_at,
+            });
+        }
+        _ => {
+            let mut fire = state.fire_price.write();
+            *fire = None;
+        }
+    }
 }
 
 #[tauri::command]

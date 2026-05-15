@@ -103,7 +103,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       let csvContent = "\uFEFF分组名称,物品名称,购买火价,数量\n"
       
       for (const section of allSections) {
-        const sectionItems = await cmd.getSectionItems(section.id)
+        const sectionItems = await cmd.getSectionItems(section.id, marketContext.seasonId, marketContext.marketMode)
         for (const item of sectionItems) {
           csvContent += `"${section.name}","${item.item_name || ''}",${item.purchase_fire_price || ''},${item.count || ''}\n`
         }

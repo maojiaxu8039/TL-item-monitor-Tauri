@@ -28,13 +28,14 @@ export function useTauriEvents() {
 
     const setupListeners = async () => {
       try {
-        // Fire price updated → invalidate fire history and dashboard summary
+        // Fire price updated → invalidate fire history and dashboard summary, then refetch
         const unlistenFire = await listen("fire-price-updated", () => {
           if (!mountedRef.current) return;
           queryClient.invalidateQueries({ queryKey: ["fire-history"] });
           queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
           queryClient.invalidateQueries({ queryKey: ["season-summary"] });
           queryClient.invalidateQueries({ queryKey: ["season-trends"] });
+          queryClient.refetchQueries({ queryKey: ["dashboard-summary"] });
         });
         if (cleanupCalled) {
           unlistenFire();
@@ -56,7 +57,7 @@ export function useTauriEvents() {
         }
         unlisteners.push(unlistenItems);
 
-        // Market context changed → invalidate all context-dependent queries
+        // Market context changed → invalidate and refetch all context-dependent queries
         const unlistenContext = await listen("market-context-changed", () => {
           if (!mountedRef.current) return;
           queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
@@ -66,6 +67,7 @@ export function useTauriEvents() {
           queryClient.invalidateQueries({ queryKey: ["fire-history"] });
           queryClient.invalidateQueries({ queryKey: ["season-summary"] });
           queryClient.invalidateQueries({ queryKey: ["season-trends"] });
+          queryClient.refetchQueries({ queryKey: ["dashboard-summary"] });
         });
         if (cleanupCalled) {
           unlistenContext();
