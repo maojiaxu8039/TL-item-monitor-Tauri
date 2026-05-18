@@ -123,6 +123,8 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
       queryClient.invalidateQueries({ queryKey: ["sections"] })
       queryClient.invalidateQueries({ queryKey: ["section-items"] })
       queryClient.invalidateQueries({ queryKey: ["items-search"] })
+      queryClient.invalidateQueries({ queryKey: ["arbitrage-recipes"] })
+      queryClient.invalidateQueries({ queryKey: ["arbitrage-calculation"] })
     },
     onError: (error, newMode) => {
       setMarketMode(prevModeRef.current)

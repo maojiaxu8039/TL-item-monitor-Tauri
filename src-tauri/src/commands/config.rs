@@ -10,6 +10,8 @@ use crate::services::{
 use std::sync::Arc;
 use tauri::{Manager, State};
 
+use crate::core::state::MarketMode;
+
 #[tauri::command]
 pub async fn get_config(
     state: State<'_, Arc<AppState>>,
@@ -32,6 +34,10 @@ pub async fn save_config(
     {
         let mut ctx = state.active_context.write();
         ctx.season_id = config.app.season_id.clone();
+        ctx.market_mode = match config.scrape.fire_price_mode.as_str() {
+            "season_expert" => MarketMode::SeasonExpert,
+            _ => MarketMode::SeasonNormal,
+        };
     }
     // Then persist to disk
     crate::core::config::save_config(&config)?;

@@ -67,6 +67,8 @@ export function SectionRefreshProvider({ children }: { children: ReactNode }) {
     queryClient.invalidateQueries({ queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode] })
     queryClient.invalidateQueries({ queryKey: ["items-search", marketContext.seasonId, marketContext.marketMode] })
     queryClient.invalidateQueries({ queryKey: ["fire-history", marketContext.seasonId, marketContext.marketMode] })
+    queryClient.invalidateQueries({ queryKey: ["arbitrage-recipes"] })
+    queryClient.invalidateQueries({ queryKey: ["arbitrage-calculation"] })
   }, [queryClient, marketContext.seasonId, marketContext.marketMode])
 
   return (
