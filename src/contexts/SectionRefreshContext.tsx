@@ -13,6 +13,7 @@ interface SectionRefreshContextType {
   refreshData: () => void
   dataRefreshTrigger: number
   marketContext: MarketContext
+  marketContextReady: boolean
   setMarketContext: (ctx: MarketContext) => void
 }
 
@@ -22,6 +23,7 @@ const SectionRefreshContext = createContext<SectionRefreshContextType>({
   refreshData: () => {},
   dataRefreshTrigger: 0,
   marketContext: { seasonId: "ss12", marketMode: "season_normal" },
+  marketContextReady: false,
   setMarketContext: () => {},
 })
 
@@ -33,8 +35,8 @@ export function SectionRefreshProvider({ children }: { children: ReactNode }) {
     seasonId: "ss12",
     marketMode: "season_normal",
   })
+  const [marketContextReady, setMarketContextReady] = useState(false)
 
-  // 启动时从后端同步市场上下文
   useEffect(() => {
     let mounted = true
     cmd.getConfig().then((cfg) => {
@@ -43,7 +45,11 @@ export function SectionRefreshProvider({ children }: { children: ReactNode }) {
         seasonId: cfg.app.season_id || "ss12",
         marketMode: cfg.scrape.fire_price_mode || "season_normal",
       })
-    }).catch(() => {})
+      setMarketContextReady(true)
+    }).catch(() => {
+      if (!mounted) return
+      setMarketContextReady(true)
+    })
     return () => { mounted = false }
   }, [])
 
@@ -67,7 +73,7 @@ export function SectionRefreshProvider({ children }: { children: ReactNode }) {
   }, [queryClient, marketContext.seasonId, marketContext.marketMode])
 
   return (
-    <SectionRefreshContext.Provider value={{ refreshSections, refreshTrigger, refreshData, dataRefreshTrigger, marketContext, setMarketContext }}>
+    <SectionRefreshContext.Provider value={{ refreshSections, refreshTrigger, refreshData, dataRefreshTrigger, marketContext, marketContextReady, setMarketContext }}>
       {children}
     </SectionRefreshContext.Provider>
   )

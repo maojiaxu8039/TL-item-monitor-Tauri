@@ -35,7 +35,7 @@ export function useTauriEvents() {
           queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
           queryClient.invalidateQueries({ queryKey: ["season-summary"] });
           queryClient.invalidateQueries({ queryKey: ["season-trends"] });
-          queryClient.refetchQueries({ queryKey: ["dashboard-summary"] });
+          queryClient.refetchQueries({ queryKey: ["dashboard-summary"], type: "active" });
         });
         if (cleanupCalled) {
           unlistenFire();
@@ -67,7 +67,8 @@ export function useTauriEvents() {
           queryClient.invalidateQueries({ queryKey: ["fire-history"] });
           queryClient.invalidateQueries({ queryKey: ["season-summary"] });
           queryClient.invalidateQueries({ queryKey: ["season-trends"] });
-          queryClient.refetchQueries({ queryKey: ["dashboard-summary"] });
+          queryClient.invalidateQueries({ queryKey: ["realtime-fire-changes"] });
+          queryClient.refetchQueries({ queryKey: ["dashboard-summary"], type: "active" });
         });
         if (cleanupCalled) {
           unlistenContext();

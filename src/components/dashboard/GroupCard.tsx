@@ -25,7 +25,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
   const [editName, setEditName] = useState(section.name)
   const [displayName, setDisplayName] = useState(section.name)
   const inputRef = useRef<HTMLInputElement>(null)
-  const { refreshTrigger, marketContext } = useSectionRefresh()
+  const { refreshTrigger, marketContext, marketContextReady } = useSectionRefresh()
   
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null)
@@ -33,11 +33,13 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
   const { data: items = [], refetch, isFetching } = useQuery({
     queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode, section.id],
     queryFn: () => cmd.getSectionItems(section.id, marketContext.seasonId, marketContext.marketMode),
+    enabled: marketContextReady,
   })
 
   const { data: dashboardSummary } = useQuery<DashboardSummary>({
     queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getDashboardSummary(),
+    enabled: marketContextReady,
     staleTime: 5 * 60 * 1000,
   })
 

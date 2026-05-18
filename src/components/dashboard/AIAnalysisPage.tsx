@@ -149,7 +149,7 @@ export default function AIAnalysisPage() {
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const connectionTestIdRef = useRef(0);
-  const { marketContext } = useSectionRefresh();
+  const { marketContext, marketContextReady } = useSectionRefresh();
 
   useEffect(() => {
     localStorage.setItem("ai_enabled", JSON.stringify(aiEnabled));
@@ -212,6 +212,7 @@ export default function AIAnalysisPage() {
   const { data: fireData } = useQuery({
     queryKey: ["fire-history", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getFireHistory(24),
+    enabled: marketContextReady,
   });
 
   const handleSend = async () => {

@@ -223,7 +223,7 @@ function cn(...classes: (string | boolean | undefined | null)[]) {
 }
 
 export default function PriceAnalysisPage() {
-  const { marketContext } = useSectionRefresh();
+  const { marketContext, marketContextReady } = useSectionRefresh();
   const { addToast } = useToast();
   const [searchKeyword, setSearchKeyword] = useState("");
   const [sortBy, setSortBy] = useState<"price_asc" | "price_desc" | "trend">("trend");
@@ -232,12 +232,13 @@ export default function PriceAnalysisPage() {
   const { data: sections = [] } = useQuery({
     queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
     queryFn: cmd.getSections,
+    enabled: marketContextReady,
   });
 
   const { data: analysisData = [], isLoading: analysisLoading } = useQuery({
     queryKey: ["item-price-insights", marketContext.seasonId, marketContext.marketMode],
     queryFn: cmd.getItemPriceInsights,
-    enabled: !!marketContext.seasonId,
+    enabled: marketContextReady,
   });
 
   const filteredAnalysis = useMemo(() => {

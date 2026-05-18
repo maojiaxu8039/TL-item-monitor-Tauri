@@ -56,7 +56,7 @@ const getRuleTypeLabel = (ruleType: string) => {
 
 export default function AlertsPage() {
   const { addToast } = useToast();
-  const { marketContext } = useSectionRefresh();
+  const { marketContext, marketContextReady } = useSectionRefresh();
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
@@ -108,6 +108,7 @@ export default function AlertsPage() {
   };
 
   useEffect(() => {
+    if (!marketContextReady) return;
     let mounted = true;
     const doLoad = async () => {
       try {
@@ -130,7 +131,7 @@ export default function AlertsPage() {
     };
     doLoad();
     return () => { mounted = false; };
-  }, []);
+  }, [marketContextReady]);
 
   const handleCreate = async () => {
     if (!createForm.section_id.trim() && !createForm.item_id.trim()) {

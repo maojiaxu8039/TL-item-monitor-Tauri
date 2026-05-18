@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Calculator,
   Plus,
@@ -31,6 +31,7 @@ import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 
 const RECIPE_TYPES = [
   { value: "decompose", label: "分解" },
@@ -57,6 +58,7 @@ function getRecipeTypeStyle(type: string) {
 }
 
 export default function ArbitragePage() {
+  const { marketContext, marketContextReady } = useSectionRefresh();
   const [recipes, setRecipes] = useState<ArbitrageRecipe[]>([]);
   const [calculationResult, setCalculationResult] = useState<ArbitrageCalculationResult[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -70,6 +72,7 @@ export default function ArbitragePage() {
   const [lastCalculatedAt, setLastCalculatedAt] = useState<number | null>(null);
   const [showAllRecipes, setShowAllRecipes] = useState(true);
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [contextKey, setContextKey] = useState(`${marketContext.seasonId}-${marketContext.marketMode}`);
 
   const [newRecipe, setNewRecipe] = useState({
     name: "",
@@ -111,6 +114,16 @@ export default function ArbitragePage() {
     if (typeFilter === "all") return calculationResult;
     return calculationResult.filter(r => r.recipe_type === typeFilter);
   }, [calculationResult, typeFilter]);
+
+  // 当赛季/模式切换时，重新计算套利
+  useEffect(() => {
+    if (!marketContextReady) return;
+    const newKey = `${marketContext.seasonId}-${marketContext.marketMode}`;
+    if (newKey !== contextKey) {
+      setContextKey(newKey);
+      calculateAll();
+    }
+  }, [marketContext.seasonId, marketContext.marketMode, marketContextReady]);
 
   const loadRecipes = async () => {
     setLoading(true);

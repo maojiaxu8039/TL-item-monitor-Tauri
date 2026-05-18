@@ -20,11 +20,12 @@ interface StrategyRecommendation {
 }
 
 export function DashboardStats() {
-  const { marketContext } = useSectionRefresh()
+  const { marketContext, marketContextReady } = useSectionRefresh()
 
   const { data: summary, isLoading: summaryLoading } = useQuery<DashboardSummary>({
     queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getDashboardSummary(),
+    enabled: marketContextReady,
     staleTime: 30 * 1000,
     retry: 1,
     retryDelay: 1000,
@@ -33,6 +34,7 @@ export function DashboardStats() {
   const { data: fireHistory = [], isLoading: fireHistoryLoading } = useQuery<FireHistoryItem[]>({
     queryKey: ["fire-history", marketContext.seasonId, marketContext.marketMode, 24],
     queryFn: () => cmd.getFireHistory(24),
+    enabled: marketContextReady,
     staleTime: 60 * 1000,
     retry: 1,
     retryDelay: 1000,
@@ -41,6 +43,7 @@ export function DashboardStats() {
   const { data: sections = [], isLoading: sectionsLoading } = useQuery({
     queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getSections(),
+    enabled: marketContextReady,
     retry: 1,
     retryDelay: 1000,
   })
@@ -59,7 +62,7 @@ export function DashboardStats() {
       }
       return allItems
     },
-    enabled: sections.length > 0,
+    enabled: marketContextReady && sections.length > 0,
     retry: 1,
     retryDelay: 1000,
   })

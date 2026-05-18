@@ -64,7 +64,7 @@ async function startDrag(e: MouseEvent) {
 }
 
 export function TopBar({ page, onPageChange }: TopBarProps) {
-  const { refreshData, marketContext, setMarketContext } = useSectionRefresh()
+  const { refreshData, marketContext, marketContextReady, setMarketContext } = useSectionRefresh()
   const queryClient = useQueryClient()
   const [marketMode, setMarketMode] = useState(marketContext.marketMode)
   const [dataSource, setDataSource] = useState<"api" | "local">("api")
@@ -88,6 +88,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
   const { data: summary } = useQuery({
     queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getDashboardSummary(),
+    enabled: marketContextReady,
     refetchInterval: 10000,
   })
 

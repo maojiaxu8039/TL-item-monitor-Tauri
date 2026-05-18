@@ -23,7 +23,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
-  const { refreshSections, marketContext } = useSectionRefresh()
+  const { refreshSections, marketContext, marketContextReady } = useSectionRefresh()
 
   const { data: searchResult, error } = useQuery({
     queryKey: ["search", searchValue, marketContext.seasonId, marketContext.marketMode],
@@ -36,7 +36,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
         throw e;
       }
     },
-    enabled: searchValue.length >= 1,
+    enabled: searchValue.length >= 1 && marketContextReady,
   })
 
   const { data: itemTypes } = useQuery({

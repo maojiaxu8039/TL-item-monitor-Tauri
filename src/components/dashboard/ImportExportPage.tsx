@@ -29,11 +29,12 @@ function formatTimestamp(ts: number | null): string {
 export default function ImportExportPage() {
   const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
   const [showImportDetails, setShowImportDetails] = useState(false);
-  const { marketContext } = useSectionRefresh();
+  const { marketContext, marketContextReady } = useSectionRefresh();
 
   const { data: backupInfo, refetch: refetchBackupInfo } = useQuery({
     queryKey: ["backup-info", marketContext.seasonId, marketContext.marketMode],
     queryFn: cmd.getBackupInfo,
+    enabled: marketContextReady,
   });
 
   const importCsvMutation = useMutation({

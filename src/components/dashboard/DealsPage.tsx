@@ -171,7 +171,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
 export default function DealsPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState({ rise_threshold: 5, fall_threshold: 5 });
-  useSectionRefresh();
+  const { marketContext, marketContextReady } = useSectionRefresh();
 
   useEffect(() => {
     const savedSettings = localStorage.getItem("deals-settings");
@@ -181,8 +181,9 @@ export default function DealsPage() {
   }, []);
 
   const { data: fireChanges = [], isLoading, refetch } = useQuery({
-    queryKey: ["realtime-fire-changes"],
+    queryKey: ["realtime-fire-changes", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getRealtimeFireChanges(),
+    enabled: marketContextReady,
     refetchInterval: 60000,
     staleTime: 30000,
   });
