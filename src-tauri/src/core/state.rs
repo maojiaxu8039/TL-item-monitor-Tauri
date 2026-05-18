@@ -70,11 +70,14 @@ pub struct ScrapeSettings {
     pub fire_price_mode: String,
     pub fire_price_scrape_interval: u64,
     pub fire_price_scrape_enabled: bool,
+    pub fire_scrape_normal_enabled: bool,
+    pub fire_scrape_expert_enabled: bool,
     pub items_source: String,
     pub items_json_path: String,
     pub items_reload_interval: u64,
     pub auto_reload: bool,
-    pub expert_enabled: bool,
+    pub items_scrape_normal_enabled: bool,
+    pub items_scrape_expert_enabled: bool,
 }
 
 impl Default for ScrapeSettings {
@@ -83,11 +86,14 @@ impl Default for ScrapeSettings {
             fire_price_mode: "season_normal".to_string(),
             fire_price_scrape_interval: 300,
             fire_price_scrape_enabled: true,
+            fire_scrape_normal_enabled: true,
+            fire_scrape_expert_enabled: false,
             items_source: "api".to_string(),
             items_json_path: String::new(),
             items_reload_interval: 300,
             auto_reload: true,
-            expert_enabled: false,
+            items_scrape_normal_enabled: true,
+            items_scrape_expert_enabled: false,
         }
     }
 }

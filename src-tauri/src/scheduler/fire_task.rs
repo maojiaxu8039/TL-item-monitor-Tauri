@@ -29,7 +29,7 @@ pub async fn run_fire_scrape_task(
         }
     }
 
-    if let Err(e) = scrape_both_modes(&app, &state).await {
+    if let Err(e) = scrape_modes(&app, &state, true, false).await {
         error!("Initial fire price scrape failed: {}", e);
     }
 
@@ -68,7 +68,10 @@ pub async fn run_fire_scrape_task(
 
                 let interval_secs = config.scrape.fire_price_scrape_interval.max(30);
 
-                if let Err(e) = scrape_both_modes(&app, &state).await {
+                let scrape_normal = config.scrape.fire_scrape_normal_enabled;
+                let scrape_expert = config.scrape.fire_scrape_expert_enabled;
+
+                if let Err(e) = scrape_modes(&app, &state, scrape_normal, scrape_expert).await {
                     error!("Fire price scrape failed: {}", e);
                 }
 
@@ -83,7 +86,7 @@ pub async fn run_fire_scrape_task(
     }
 }
 
-async fn scrape_both_modes(app: &tauri::AppHandle, state: &Arc<AppState>) -> Result<(), String> {
+async fn scrape_modes(app: &tauri::AppHandle, state: &Arc<AppState>, scrape_normal: bool, scrape_expert: bool) -> Result<(), String> {
     let ctx = state.active_context.read().clone();
     let season_id = ctx.season_id.clone();
     let current_mode = ctx.market_mode;
@@ -92,7 +95,19 @@ async fn scrape_both_modes(app: &tauri::AppHandle, state: &Arc<AppState>) -> Res
         .await
         .map_err(|e| e.to_string())?;
 
-    for (mode_str, mode_key) in [("普通", MarketMode::SeasonNormal), ("专家", MarketMode::SeasonExpert)] {
+    let mut modes: Vec<(&str, MarketMode)> = Vec::new();
+    if scrape_normal {
+        modes.push(("普通", MarketMode::SeasonNormal));
+    }
+    if scrape_expert {
+        modes.push(("专家", MarketMode::SeasonExpert));
+    }
+
+    if modes.is_empty() {
+        return Ok(());
+    }
+
+    for (mode_str, mode_key) in modes {
         let start = std::time::Instant::now();
         match scraper::qiandao::scrape_by_mode_with_api_config(mode_str, Some(&api_config)).await {
             Ok(snapshot) => {

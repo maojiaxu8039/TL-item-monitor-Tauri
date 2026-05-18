@@ -207,11 +207,14 @@ export interface ScrapeSettings {
   fire_price_mode: string;
   fire_price_scrape_interval: number;
   fire_price_scrape_enabled: boolean;
+  fire_scrape_normal_enabled: boolean;
+  fire_scrape_expert_enabled: boolean;
   items_source: string;
   items_json_path: string;
   items_reload_interval: number;
   auto_reload: boolean;
-  expert_enabled: boolean;
+  items_scrape_normal_enabled: boolean;
+  items_scrape_expert_enabled: boolean;
 }
 
 export interface DesktopSettings {

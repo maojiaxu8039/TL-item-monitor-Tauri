@@ -53,10 +53,13 @@ function errorMessage(err: unknown): string {
 export default function SettingsPage() {
   const [fireEnabled, setFireEnabled] = useState(true);
   const [fireInterval, setFireInterval] = useState(300);
+  const [fireScrapeNormal, setFireScrapeNormal] = useState(true);
+  const [fireScrapeExpert, setFireScrapeExpert] = useState(false);
   const [itemsEnabled, setItemsEnabled] = useState(false);
   const [itemsInterval, setItemsInterval] = useState(300);
   const [itemsSource, setItemsSource] = useState("api");
-  const [expertEnabled, setExpertEnabled] = useState(false);
+  const [itemsScrapeNormal, setItemsScrapeNormal] = useState(true);
+  const [itemsScrapeExpert, setItemsScrapeExpert] = useState(false);
   const [jsonPath, setJsonPath] = useState("");
   const [jsonPathValidation, setJsonPathValidation] = useState<JsonFileValidationResult | null>(null);
   const [seasonId, setSeasonId] = useState("ss12");
@@ -87,11 +90,14 @@ export default function SettingsPage() {
       fire_price_mode: "season_normal",
       fire_price_scrape_enabled: fireEnabled,
       fire_price_scrape_interval: fireInterval,
+      fire_scrape_normal_enabled: fireScrapeNormal,
+      fire_scrape_expert_enabled: fireScrapeExpert,
       items_source: itemsSource,
       items_json_path: jsonPath,
       items_reload_interval: itemsInterval,
       auto_reload: itemsEnabled,
-      expert_enabled: expertEnabled,
+      items_scrape_normal_enabled: itemsScrapeNormal,
+      items_scrape_expert_enabled: itemsScrapeExpert,
     },
     desktop: {
       auto_start: false,
@@ -228,10 +234,13 @@ export default function SettingsPage() {
         if (!mounted) return;
         setFireEnabled(cfg.scrape.fire_price_scrape_enabled);
         setFireInterval(cfg.scrape.fire_price_scrape_interval);
+        setFireScrapeNormal(cfg.scrape.fire_scrape_normal_enabled ?? true);
+        setFireScrapeExpert(cfg.scrape.fire_scrape_expert_enabled ?? false);
         setItemsEnabled(cfg.scrape.auto_reload);
         setItemsInterval(cfg.scrape.items_reload_interval);
         setItemsSource(cfg.scrape.items_source);
-        setExpertEnabled(cfg.scrape.expert_enabled ?? false);
+        setItemsScrapeNormal(cfg.scrape.items_scrape_normal_enabled ?? true);
+        setItemsScrapeExpert(cfg.scrape.items_scrape_expert_enabled ?? false);
         setJsonPath(cfg.scrape.items_json_path || defaultPath);
         setSeasonId(cfg.app.season_id);
         setPriceAlertEnabled(cfg.notification.price_alert_enabled);
@@ -640,6 +649,45 @@ export default function SettingsPage() {
               ))}
             </select>
           </div>
+
+          <div className="border-t border-[var(--color-border-soft)] pt-4 mt-4">
+            <div className="text-xs font-medium text-[var(--color-text-subtle)] uppercase tracking-wider mb-3">
+              采集范围
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between pl-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-[var(--color-success)]"></div>
+                  <div className="text-sm text-[var(--color-text)]">普通服火价</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={fireScrapeNormal}
+                    onChange={(e) => setFireScrapeNormal(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between pl-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-[var(--color-ai)]"></div>
+                  <div className="text-sm text-[var(--color-text)]">专家服火价</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={fireScrapeExpert}
+                    onChange={(e) => setFireScrapeExpert(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
       </Surface>
 
@@ -704,20 +752,43 @@ export default function SettingsPage() {
             </select>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-medium text-[var(--color-text)]">同步专家服数据</div>
-              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">同时抓取赛季专家的物品价格数据</div>
+          <div className="border-t border-[var(--color-border-soft)] pt-4 mt-4">
+            <div className="text-xs font-medium text-[var(--color-text-subtle)] uppercase tracking-wider mb-3">
+              同步范围
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={expertEnabled}
-                onChange={(e) => setExpertEnabled(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-            </label>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between pl-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-[var(--color-success)]"></div>
+                  <div className="text-sm text-[var(--color-text)]">普通服物品</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={itemsScrapeNormal}
+                    onChange={(e) => setItemsScrapeNormal(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between pl-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-[var(--color-ai)]"></div>
+                  <div className="text-sm text-[var(--color-text)]">专家服物品</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={itemsScrapeExpert}
+                    onChange={(e) => setItemsScrapeExpert(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                </label>
+              </div>
+            </div>
           </div>
 
           <div className={`flex items-center justify-between ${itemsSource === 'local' ? 'opacity-100' : 'opacity-50'}`}>

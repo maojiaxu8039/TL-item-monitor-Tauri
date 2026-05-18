@@ -21,11 +21,12 @@ pub async fn run_items_reload_task(
 
     let cfg = crate::core::config::load_config().unwrap_or_default();
     info!(
-        "[ITEMS-TASK] Loaded config: auto_reload={}, interval={}s, source={}, expert_enabled={}",
+        "[ITEMS-TASK] Loaded config: auto_reload={}, interval={}s, source={}, scrape_normal={}, scrape_expert={}",
         cfg.scrape.auto_reload,
         cfg.scrape.items_reload_interval,
         cfg.scrape.items_source,
-        cfg.scrape.expert_enabled
+        cfg.scrape.items_scrape_normal_enabled,
+        cfg.scrape.items_scrape_expert_enabled
     );
 
     info!("[ITEMS-TASK] Starting main loop");
@@ -84,7 +85,8 @@ pub async fn run_items_reload_task(
         let current_interval = fresh_config.scrape.items_reload_interval.max(30);
         let items_source = fresh_config.scrape.items_source.clone();
         let json_path = fresh_config.scrape.items_json_path.clone();
-        let expert_enabled = fresh_config.scrape.expert_enabled;
+        let scrape_normal = fresh_config.scrape.items_scrape_normal_enabled;
+        let scrape_expert = fresh_config.scrape.items_scrape_expert_enabled;
 
         if !first_run {
             let wait_start = std::time::Instant::now();
@@ -150,10 +152,15 @@ pub async fn run_items_reload_task(
 
         // Scrape normal mode items
         info!("[ITEMS-TASK] Fetching normal items from {}", items_source);
-        // Scrape both modes concurrently
-        let normal_future = scrape_for_mode(&season_id, "season_normal", &items_source, &json_path);
+        let normal_future = async {
+            if scrape_normal {
+                Some(scrape_for_mode(&season_id, "season_normal", &items_source, &json_path).await)
+            } else {
+                None
+            }
+        };
         let expert_future = async {
-            if expert_enabled {
+            if scrape_expert {
                 Some(scrape_for_mode(&season_id, "season_expert", &items_source, &json_path).await)
             } else {
                 None
@@ -162,20 +169,23 @@ pub async fn run_items_reload_task(
 
         let (normal_result, expert_result) = tokio::join!(normal_future, expert_future);
 
-        match &normal_result {
-            Ok(items) => {
-                info!("[ITEMS-TASK] Normal items fetched: {} items", items.len());
-                consecutive_errors = 0;
-            }
-            Err(e) => {
-                info!("[ITEMS-TASK] Normal items fetch FAILED: {}", e);
-                consecutive_errors += 1;
-            }
-        }
-
         // Process normal mode
-        let normal_count =
-            process_scrape_result(&state, &normal_result, &season_id, "season_normal").await;
+        let normal_count = if let Some(result) = normal_result {
+            match &result {
+                Ok(items) => {
+                    info!("[ITEMS-TASK] Normal items fetched: {} items", items.len());
+                    consecutive_errors = 0;
+                }
+                Err(e) => {
+                    info!("[ITEMS-TASK] Normal items fetch FAILED: {}", e);
+                    consecutive_errors += 1;
+                }
+            }
+            process_scrape_result(&state, &result, &season_id, "season_normal").await
+        } else {
+            info!("[ITEMS-TASK] Normal mode disabled, skipping normal items");
+            0
+        };
         info!(
             "[ITEMS-TASK] Normal mode processing complete, count={}",
             normal_count

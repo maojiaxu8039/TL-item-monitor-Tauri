@@ -16,6 +16,8 @@ struct LegacyAppConfig {
     items_json_path: String,
     items_reload_interval: u64,
     auto_reload: bool,
+    #[serde(default)]
+    expert_enabled: bool,
     season_id: String,
 }
 
@@ -30,6 +32,7 @@ impl Default for LegacyAppConfig {
             items_json_path: String::new(),
             items_reload_interval: 300,
             auto_reload: true,
+            expert_enabled: false,
             season_id: "ss12".to_string(),
         }
     }
@@ -64,11 +67,14 @@ pub fn load_config() -> Result<AppConfig, String> {
                 fire_price_mode: flat.fire_price_mode,
                 fire_price_scrape_interval: flat.fire_price_scrape_interval,
                 fire_price_scrape_enabled: flat.fire_price_scrape_enabled,
+                fire_scrape_normal_enabled: true,
+                fire_scrape_expert_enabled: flat.expert_enabled,
                 items_source: flat.items_source,
                 items_json_path: flat.items_json_path,
                 items_reload_interval: flat.items_reload_interval,
                 auto_reload: flat.auto_reload,
-                expert_enabled: false,
+                items_scrape_normal_enabled: true,
+                items_scrape_expert_enabled: flat.expert_enabled,
             },
             desktop: DesktopSettings::default(),
             notification: NotificationSettings::default(),
