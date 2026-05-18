@@ -52,6 +52,7 @@ pub async fn reorder_sections(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn get_section_items(
     state: State<'_, Arc<AppState>>,
     sectionId: String,

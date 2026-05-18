@@ -3,7 +3,6 @@ use crate::core::state::{FirePriceSnapshot, SeasonApiConfig};
 use chrono::Utc;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::time::Duration;
 
 const QIANDAO_API: &str = "https://api.qiandao.com";
@@ -174,6 +173,7 @@ async fn run_node_fallback(
 
         #[cfg(target_os = "windows")]
         {
+            use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
             const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
             command.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
