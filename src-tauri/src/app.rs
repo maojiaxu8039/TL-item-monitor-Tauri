@@ -174,25 +174,27 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
         market_mode.as_str()
     );
 
-    let fire_price = match repo_fire::get_latest_fire(&pool, &default_season, market_mode.as_str())
-        .await
-    {
-        Ok(Some(record)) => {
-            tracing::info!(
-                "[STARTUP] Using cached fire price: {} RMB/10K fire",
-                record.rmb_per_10k_fire
-            );
-            Some(fire_record_to_snapshot(record))
+    let mut fire_prices: std::collections::HashMap<MarketMode, crate::core::state::FirePriceSnapshot> = std::collections::HashMap::new();
+
+    for (mode_str, mode_key) in [("season_normal", MarketMode::SeasonNormal), ("season_expert", MarketMode::SeasonExpert)] {
+        match repo_fire::get_latest_fire(&pool, &default_season, mode_str).await {
+            Ok(Some(record)) => {
+                let snapshot = fire_record_to_snapshot(record);
+                tracing::info!(
+                    "[STARTUP] Using cached {} fire price: {} RMB/10K fire",
+                    mode_str,
+                    snapshot.rmb_per_10k_fire
+                );
+                fire_prices.insert(mode_key, snapshot);
+            }
+            Ok(None) => {
+                tracing::info!("[STARTUP] No cached {} fire price found", mode_str);
+            }
+            Err(e) => {
+                tracing::warn!("[STARTUP] Failed to load cached {} fire price: {}", mode_str, e);
+            }
         }
-        Ok(None) => {
-            tracing::info!("[STARTUP] No cached fire price found; background task will refresh it");
-            None
-        }
-        Err(e) => {
-            tracing::warn!("[STARTUP] Failed to load cached fire price: {}", e);
-            None
-        }
-    };
+    }
 
     let items_cache = match repo_items::get_items_from_realtime_table(
         &pool,
@@ -219,7 +221,7 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
     let state = AppState {
         db: pool,
         config: RwLock::new(config.clone()),
-        fire_price: RwLock::new(fire_price),
+        fire_prices: RwLock::new(fire_prices),
         items_cache: RwLock::new(Arc::new(items_cache)),
         active_context: RwLock::new(MarketContext {
             season_id: config.app.season_id.clone(),

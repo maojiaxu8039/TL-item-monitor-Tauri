@@ -19,10 +19,15 @@ pub struct TrayState {
 }
 
 fn get_fire_price_display(app: &AppHandle) -> String {
-    app.state::<Arc<crate::core::state::AppState>>()
-        .fire_price
+    let state = app.state::<Arc<crate::core::state::AppState>>();
+    let ctx = state.active_context.read().clone();
+    let fire_price = state
+        .fire_prices
         .read()
-        .as_ref()
+        .get(&ctx.market_mode)
+        .cloned();
+    
+    fire_price
         .map(|s| format!("{:.2}", s.price_per_wan))
         .unwrap_or_else(|| "无".to_string())
 }
@@ -53,8 +58,8 @@ async fn refresh_and_sync_fire_price(app: AppHandle) {
         }
         // Update in-memory state
         {
-            let mut fire = state.fire_price.write();
-            *fire = Some(snapshot.clone());
+            let mut fire_prices = state.fire_prices.write();
+            fire_prices.insert(ctx.market_mode, snapshot.clone());
         }
         {
             let mut status = state.task_status.write();

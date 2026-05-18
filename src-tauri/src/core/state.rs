@@ -1,12 +1,13 @@
 // core/state.rs — Application state using sqlx
 use parking_lot::RwLock;
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub struct AppState {
     pub db: SqlitePool,
     pub config: RwLock<AppConfig>,
-    pub fire_price: RwLock<Option<FirePriceSnapshot>>,
+    pub fire_prices: RwLock<HashMap<MarketMode, FirePriceSnapshot>>,
     pub items_cache: RwLock<Arc<Vec<crate::db::models::Item>>>,
     pub active_context: RwLock<MarketContext>,
     pub task_status: RwLock<TaskStatus>,
@@ -19,7 +20,7 @@ impl Clone for AppState {
         Self {
             db: self.db.clone(),
             config: RwLock::new(self.config.read().clone()),
-            fire_price: RwLock::new(self.fire_price.read().clone()),
+            fire_prices: RwLock::new(self.fire_prices.read().clone()),
             items_cache: RwLock::new(self.items_cache.read().clone()),
             active_context: RwLock::new(self.active_context.read().clone()),
             task_status: RwLock::new(self.task_status.read().clone()),
@@ -36,7 +37,7 @@ impl AppState {
         Self {
             db: self.db.clone(),
             config: RwLock::new(self.config.read().clone()),
-            fire_price: RwLock::new(self.fire_price.read().clone()),
+            fire_prices: RwLock::new(self.fire_prices.read().clone()),
             items_cache: RwLock::new(self.items_cache.read().clone()),
             active_context: RwLock::new(self.active_context.read().clone()),
             task_status: RwLock::new(self.task_status.read().clone()),
@@ -249,7 +250,7 @@ pub struct MarketContext {
     pub market_mode: MarketMode,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MarketMode {
     SeasonNormal,

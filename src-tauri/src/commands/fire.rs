@@ -14,7 +14,8 @@ pub async fn get_dashboard_summary(
     state: State<'_, Arc<AppState>>,
 ) -> Result<DashboardSummary, String> {
     let ctx = state.active_context.read().clone();
-    let fire = state.fire_price.read().clone();
+    let fire_prices = state.fire_prices.read().clone();
+    let fire = fire_prices.get(&ctx.market_mode).cloned();
     let status = state.task_status.read().clone();
 
     let (item_count, db_count, totals) = tokio::join!(
@@ -133,8 +134,8 @@ pub async fn set_active_market_context(
                     ).await;
 
                     {
-                        let mut fire = state.fire_price.write();
-                        *fire = Some(snapshot.clone());
+                        let mut fire_prices = state.fire_prices.write();
+                        fire_prices.insert(mode, snapshot.clone());
                     }
                     emit_fire_price_updated(&app, FirePricePayload {
                         rmb_per_10k_fire: snapshot.rmb_per_10k_fire,
@@ -212,6 +213,11 @@ pub async fn set_active_market_context(
 }
 
 async fn load_fire_from_db(state: &State<'_, Arc<AppState>>, app: &tauri::AppHandle, season_id: &str, market_mode: &str) {
+    let mode = match market_mode {
+        "season_expert" => MarketMode::SeasonExpert,
+        _ => MarketMode::SeasonNormal,
+    };
+    
     match repo_fire::get_latest_fire(&state.db, season_id, market_mode).await {
         Ok(Some(record)) => {
             let snapshot = FirePriceSnapshot {
@@ -224,9 +230,9 @@ async fn load_fire_from_db(state: &State<'_, Arc<AppState>>, app: &tauri::AppHan
                 source_time: record.source_time,
                 scraped_at: record.scraped_at,
             };
-            let mut fire = state.fire_price.write();
-            *fire = Some(snapshot.clone());
-            drop(fire);
+            let mut fire_prices = state.fire_prices.write();
+            fire_prices.insert(mode, snapshot.clone());
+            drop(fire_prices);
             emit_fire_price_updated(app, FirePricePayload {
                 rmb_per_10k_fire: snapshot.rmb_per_10k_fire,
                 fire_per_rmb: snapshot.fire_per_rmb,
@@ -238,8 +244,8 @@ async fn load_fire_from_db(state: &State<'_, Arc<AppState>>, app: &tauri::AppHan
             });
         }
         _ => {
-            let mut fire = state.fire_price.write();
-            *fire = None;
+            let mut fire_prices = state.fire_prices.write();
+            fire_prices.remove(&mode);
         }
     }
 }
@@ -267,8 +273,8 @@ pub async fn refresh_fire_price(state: State<'_, Arc<AppState>>) -> Result<FireP
     .await;
 
     {
-        let mut fire = state.fire_price.write();
-        *fire = Some(snapshot.clone());
+        let mut fire_prices = state.fire_prices.write();
+        fire_prices.insert(ctx.market_mode, snapshot.clone());
     }
 
     Ok(FirePriceUI::from(snapshot))

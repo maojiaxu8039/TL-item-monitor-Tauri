@@ -74,16 +74,17 @@ export function DashboardStats() {
 
   const isLoading = summaryLoading || fireHistoryLoading || sectionsLoading || sectionItemsLoading || strategiesLoading
 
-  const rmbPer10kFire = summary?.fire?.rmb_per_10k_fire ?? 61.87
+  const rmbPer10kFire = summary?.fire?.rmb_per_10k_fire
+  const hasFirePrice = rmbPer10kFire !== null && rmbPer10kFire !== undefined
 
   const stats = {
     itemCount: summary?.item_count ?? 0,
-    currentFire: rmbPer10kFire,
+    currentFire: hasFirePrice ? rmbPer10kFire : null,
     profit: 0,
     profitPercent: 0,
   }
 
-  if (allSectionItems.length > 0) {
+  if (allSectionItems.length > 0 && hasFirePrice) {
     let totalPurchaseValue = 0
     let totalCurrentValue = 0
 
@@ -263,19 +264,21 @@ export function DashboardStats() {
         />
         <MetricCard
           label="当前火价"
-          value={stats.currentFire.toFixed(2)}
+          value={hasFirePrice ? stats.currentFire!.toFixed(2) : "获取中..."}
           icon={Flame}
           iconBg="bg-[rgba(239,68,68,0.1)]"
           iconColor="text-[var(--color-danger)]"
           helper={
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-[var(--color-text-subtle)]">元/万火</span>
-              {summary?.fire?.increase_ratio !== null && summary?.fire?.increase_ratio !== undefined && (
-                <span className={`text-xs font-medium ${summary.fire.increase_ratio >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
-                  {summary.fire.increase_ratio >= 0 ? "↑" : "↓"}{Math.abs(summary.fire.increase_ratio).toFixed(2)}%
-                </span>
-              )}
-            </div>
+            hasFirePrice ? (
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-[var(--color-text-subtle)]">元/万火</span>
+                {summary?.fire?.increase_ratio !== null && summary?.fire?.increase_ratio !== undefined && (
+                  <span className={`text-xs font-medium ${summary.fire.increase_ratio >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
+                    {summary.fire.increase_ratio >= 0 ? "↑" : "↓"}{Math.abs(summary.fire.increase_ratio).toFixed(2)}%
+                  </span>
+                )}
+              </div>
+            ) : null
           }
         />
         <MetricCard

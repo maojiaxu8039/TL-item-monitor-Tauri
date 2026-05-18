@@ -31,10 +31,10 @@ async fn record_hourly_snapshot(state: &Arc<AppState>, snapshot_at: i64) {
 
     let result = async {
         let ctx = state.active_context.read().clone();
-        let fire_opt = state.fire_price.read().clone();
+        let fire_prices = state.fire_prices.read().clone();
         let items = state.items_cache.read().clone();
 
-        if let Some(ref fire) = fire_opt {
+        if let Some(fire) = fire_prices.get(&ctx.market_mode) {
             if let Err(e) = repo_history::insert_fire_snapshot(
                 &state.db,
                 &ctx.season_id,
