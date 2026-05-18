@@ -1,5 +1,6 @@
-import { createContext, useContext, useCallback, useState, type ReactNode } from "react"
+import { createContext, useContext, useCallback, useEffect, useState, type ReactNode } from "react"
 import { useQueryClient } from "@tanstack/react-query"
+import { cmd } from "@/lib/commands"
 
 interface MarketContext {
   seasonId: string
@@ -32,6 +33,19 @@ export function SectionRefreshProvider({ children }: { children: ReactNode }) {
     seasonId: "ss12",
     marketMode: "season_normal",
   })
+
+  // 启动时从后端同步市场上下文
+  useEffect(() => {
+    let mounted = true
+    cmd.getConfig().then((cfg) => {
+      if (!mounted) return
+      setMarketContextState({
+        seasonId: cfg.app.season_id || "ss12",
+        marketMode: cfg.scrape.fire_price_mode || "season_normal",
+      })
+    }).catch(() => {})
+    return () => { mounted = false }
+  }, [])
 
   const setMarketContext = useCallback((ctx: MarketContext) => {
     setMarketContextState(ctx)

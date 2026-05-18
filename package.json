@@ -6,10 +6,10 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
-    "prebuild": "node scripts/clean-tauri-bundles.mjs",
-    "prebuild:dmg": "node scripts/clean-tauri-bundles.mjs macos dmg",
+    "prebuild": "node scripts/clean-tauri-bundles.mjs && node scripts/download-embedded-node.mjs",
+    "prebuild:dmg": "node scripts/clean-tauri-bundles.mjs macos dmg && node scripts/download-embedded-node.mjs",
     "build:dmg": "tauri build --bundles dmg",
-    "prebuild:all": "node scripts/clean-tauri-bundles.mjs",
+    "prebuild:all": "node scripts/clean-tauri-bundles.mjs && node scripts/download-embedded-node.mjs",
     "build:all": "tauri build",
     "debug": "RUST_BACKTRACE=1 cargo test",
     "vite:dev": "vite",

@@ -57,7 +57,14 @@ function fetchPrice(cb) {
   });
 }
 
+const TIMEOUT_MS = 10000;
+const timeout = setTimeout(() => {
+  process.stderr.write('[ERROR] Request timeout after ' + TIMEOUT_MS + 'ms\n');
+  process.exit(1);
+}, TIMEOUT_MS);
+
 fetchPrice(data => {
+  clearTimeout(timeout);
   if (data.error) {
     process.stdout.write(JSON.stringify({ error: data.error }) + '\n');
     return;

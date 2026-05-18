@@ -70,6 +70,11 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
   const [dataSource, setDataSource] = useState<"api" | "local">("api")
   const [notificationEnabled, setNotificationEnabled] = useState(true)
 
+  // 同步后端市场模式到本地状态
+  useEffect(() => {
+    setMarketMode(marketContext.marketMode)
+  }, [marketContext.marketMode])
+
   useEffect(() => {
     let mounted = true
     cmd.getConfig().then((cfg) => {
@@ -83,7 +88,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
   const { data: summary } = useQuery({
     queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getDashboardSummary(),
-    refetchInterval: 30000,
+    refetchInterval: 10000,
   })
 
   const switchModeMutation = useMutation({

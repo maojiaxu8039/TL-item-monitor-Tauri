@@ -1467,26 +1467,30 @@ async fn seed_seasons(pool: &SqlitePool) -> Result<(), String> {
     let now = chrono::Utc::now().timestamp();
 
     let seasons = vec![
-        ("ss12", "SS12 当前赛季", "ss12", 1),
-        ("ss11", "SS11 历史赛季", "ss11", 0),
-        ("ss10", "SS10 历史赛季", "ss10", 0),
+        ("ss12", "SS12 当前赛季", "ss12", 1, 1776384000),
     ];
 
-    for (id, name, code, is_current) in seasons {
+    for (id, name, code, is_current, started_at) in seasons {
         sqlx::query(
-            r#"INSERT OR IGNORE INTO seasons (id, name, code, is_current, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?)"#,
+            r#"INSERT OR REPLACE INTO seasons (id, name, code, is_current, started_at, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(id)
         .bind(name)
         .bind(code)
         .bind(is_current)
+        .bind(started_at)
         .bind(now)
         .bind(now)
         .execute(pool)
         .await
         .map_err(|e| format!("Failed to seed season {}: {}", id, e))?;
     }
+
+    sqlx::query("DELETE FROM seasons WHERE id NOT IN ('ss12')")
+        .execute(pool)
+        .await
+        .ok();
 
     tracing::info!("Seasons seed data ensured");
 

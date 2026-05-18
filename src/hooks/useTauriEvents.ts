@@ -127,6 +127,9 @@ export function useTauriEvents() {
           return;
         }
         unlisteners.push(unlistenDb);
+
+        // 注册完成后主动刷新一次 dashboard-summary，捕获可能在监听器注册前已更新的数据
+        queryClient.refetchQueries({ queryKey: ["dashboard-summary"] });
       } catch (error) {
         console.error("[useTauriEvents] Failed to setup listeners:", error);
       }

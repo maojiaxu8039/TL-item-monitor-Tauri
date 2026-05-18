@@ -40,9 +40,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "resources/qiandao_fire.cjs",
-      "resources/qiandao_fire.mjs",
-      "resources/audio/萝莉音.mp3"
+      "resources/*",
+      "resources/audio/*"
     ],
     "windows": {
       "webviewInstallMode": {

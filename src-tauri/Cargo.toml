@@ -61,6 +61,7 @@ futures-util = "0.3"
 
 # Random number generation
 rand = "0.8"
+libc = "0.2.186"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 mac-notification-sys = "0.6"
