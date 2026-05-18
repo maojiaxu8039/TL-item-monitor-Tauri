@@ -102,13 +102,13 @@ jobs:
       - name: Download embedded Node.js
         run: node scripts/download-embedded-node.mjs
 
-      - name: Build Tauri app
+      - name: Build Tauri app (macOS)
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           export CARGO="$HOME/.cargo/bin/cargo"
           hash -r
           which cargo
-          npm run build:dmg
+          npm run build -- --bundles app
         env:
           CI: true
 
@@ -125,10 +125,6 @@ jobs:
             xattr -cr "$app"
             echo "Removed quarantine from: $app"
           done
-          find src-tauri/target/release/bundle -name "*.dmg" -type f | while read dmg; do
-            xattr -cr "$dmg"
-            echo "Removed quarantine from: $dmg"
-          done
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -136,6 +132,5 @@ jobs:
         with:
           name: macos-app
           path: |
-            src-tauri/target/release/bundle/**/*.dmg
             src-tauri/target/release/bundle/**/*.app
           retention-days: 7
