@@ -124,12 +124,10 @@ export default function DataMonitorPage() {
     try {
       const data = await cmd.fetchServerJson<{ success: boolean; data?: ServerStatus }>(`${serverUrl}/status`);
       if (data.success) {
-        setConnectionStatus("connected");
         return data.data ?? null;
       }
       return null;
     } catch {
-      setConnectionStatus("disconnected");
       return null;
     }
   };

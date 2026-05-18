@@ -38,11 +38,9 @@ pub async fn get_recipe_with_details(
     pool: &SqlitePool,
     recipe_id: &str,
 ) -> Result<Option<ArbitrageRecipeWithDetails>, AppError> {
-    let recipe = get_recipe_by_id(pool, recipe_id).await?;
-    if recipe.is_none() {
+    let Some(recipe) = get_recipe_by_id(pool, recipe_id).await? else {
         return Ok(None);
-    }
-    let recipe = recipe.unwrap();
+    };
 
     let ingredients: Vec<ArbitrageIngredient> = sqlx::query_as(
         "SELECT id, recipe_id, item_name, count, created_at, updated_at 

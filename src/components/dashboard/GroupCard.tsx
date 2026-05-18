@@ -16,7 +16,7 @@ interface GroupCardProps {
   onDelete?: () => void
   onRefetch?: () => void
   isDragging?: boolean
-  dragHandleProps?: any
+  dragHandleProps?: React.HTMLAttributes<HTMLDivElement>
 }
 
 export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging = false, dragHandleProps }: GroupCardProps) {
@@ -44,6 +44,22 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
   })
 
   const rmbPer10kFire = dashboardSummary?.fire?.rmb_per_10k_fire ?? 61.87
+
+  // Track edited input values for controlled inputs
+  const [editValues, setEditValues] = useState<Record<string, { purchaseFirePrice: string; moreValue: string }>>({})
+
+  useEffect(() => {
+    setEditValues(prev => {
+      const next: Record<string, { purchaseFirePrice: string; moreValue: string }> = {}
+      for (const item of items) {
+        next[item.item_id] = {
+          purchaseFirePrice: prev[item.item_id]?.purchaseFirePrice ?? String(item.purchase_fire_price ?? ""),
+          moreValue: prev[item.item_id]?.moreValue ?? String(item.more_value ?? ""),
+        }
+      }
+      return next
+    })
+  }, [items])
 
   useEffect(() => {
     if (refreshTrigger > 0) {
@@ -281,14 +297,23 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                       <td className="py-3 px-1">
                         <input
                           type="number"
-                          defaultValue={item.purchase_fire_price || undefined}
+                          value={editValues[item.item_id]?.purchaseFirePrice ?? ""}
                           placeholder="—"
+                          onChange={(e) => {
+                            setEditValues(prev => ({
+                              ...prev,
+                              [item.item_id]: { ...prev[item.item_id], purchaseFirePrice: e.target.value }
+                            }))
+                          }}
                           onBlur={(e) => {
                             const value = e.target.value
                             if (value) {
                               const num = parseFloat(value)
                               if (!isNaN(num)) {
-                                updateItemMutation.mutate({ itemId: item.item_id, updates: { purchaseFirePrice: num } })
+                                updateItemMutation.mutate(
+                                  { itemId: item.item_id, updates: { purchaseFirePrice: num } },
+                                  { onSuccess: () => setEditValues(prev => { const n = { ...prev }; delete n[item.item_id]; return n }) }
+                                )
                               }
                             }
                           }}
@@ -299,7 +324,10 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                               if (value) {
                                 const num = parseFloat(value)
                                 if (!isNaN(num)) {
-                                  updateItemMutation.mutate({ itemId: item.item_id, updates: { purchaseFirePrice: num } })
+                                  updateItemMutation.mutate(
+                                    { itemId: item.item_id, updates: { purchaseFirePrice: num } },
+                                    { onSuccess: () => setEditValues(prev => { const n = { ...prev }; delete n[item.item_id]; return n }) }
+                                  )
                                 }
                               }
                             }
@@ -310,14 +338,23 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                       <td className="py-3 px-1">
                         <input
                           type="number"
-                          defaultValue={item.more_value || undefined}
+                          value={editValues[item.item_id]?.moreValue ?? ""}
                           placeholder="—"
+                          onChange={(e) => {
+                            setEditValues(prev => ({
+                              ...prev,
+                              [item.item_id]: { ...prev[item.item_id], moreValue: e.target.value }
+                            }))
+                          }}
                           onBlur={(e) => {
                             const value = e.target.value
                             if (value) {
                               const num = parseFloat(value)
                               if (!isNaN(num)) {
-                                updateItemMutation.mutate({ itemId: item.item_id, updates: { moreValue: num } })
+                                updateItemMutation.mutate(
+                                  { itemId: item.item_id, updates: { moreValue: num } },
+                                  { onSuccess: () => setEditValues(prev => { const n = { ...prev }; delete n[item.item_id]; return n }) }
+                                )
                               }
                             }
                           }}
@@ -328,7 +365,10 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                               if (value) {
                                 const num = parseFloat(value)
                                 if (!isNaN(num)) {
-                                  updateItemMutation.mutate({ itemId: item.item_id, updates: { moreValue: num } })
+                                  updateItemMutation.mutate(
+                                    { itemId: item.item_id, updates: { moreValue: num } },
+                                    { onSuccess: () => setEditValues(prev => { const n = { ...prev }; delete n[item.item_id]; return n }) }
+                                  )
                                 }
                               }
                             }

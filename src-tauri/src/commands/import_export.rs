@@ -100,7 +100,8 @@ pub async fn export_watchlist_csv(state: State<'_, Arc<AppState>>) -> Result<Str
 #[tauri::command]
 pub async fn get_backup_info(state: State<'_, Arc<AppState>>) -> Result<BackupInfo, String> {
     let db_path = paths::db_path();
-    let db_size_kb = std::fs::metadata(&db_path)
+    let db_size_kb = tokio::fs::metadata(&db_path)
+        .await
         .map(|m| m.len() as f64 / 1024.0)
         .unwrap_or(0.0);
 
@@ -122,13 +123,12 @@ pub async fn backup_database(
 ) -> Result<OkResponse, String> {
     let db_path = paths::db_path();
 
-    // WAL mode: need to checkpoint before copying to ensure all data is in main db file
     sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
         .execute(&state.db)
         .await
         .map_err(|e| format!("WAL checkpoint 失败: {}", e))?;
 
-    std::fs::copy(&db_path, &dest_path).map_err(|e| format!("备份失败: {}", e))?;
+    tokio::fs::copy(&db_path, &dest_path).await.map_err(|e| format!("备份失败: {}", e))?;
 
     let now = chrono::Utc::now().timestamp().to_string();
     let _ = repo_config::save_config(&state.db, "last_backup_at", &now).await;
@@ -143,44 +143,42 @@ pub async fn restore_database(
 ) -> Result<OkResponse, String> {
     let db_path = paths::db_path();
 
-    // Validate source file exists and is a valid SQLite database
-    if !std::path::Path::new(&src_path).exists() {
+    if !tokio::fs::try_exists(&src_path).await.unwrap_or(false) {
         return Err("恢复失败: 源文件不存在".to_string());
     }
 
-    let metadata = std::fs::metadata(&src_path).map_err(|e| format!("无法读取源文件: {}", e))?;
+    let metadata = tokio::fs::metadata(&src_path).await.map_err(|e| format!("无法读取源文件: {}", e))?;
     if metadata.len() < 512 {
         return Err("恢复失败: 源文件太小，可能不是有效的数据库".to_string());
     }
 
-    // Check SQLite magic header
     let mut header = [0u8; 16];
-    let mut file = std::fs::File::open(&src_path).map_err(|e| format!("无法打开源文件: {}", e))?;
-    std::io::Read::read_exact(&mut file, &mut header)
-        .map_err(|e| format!("无法读取文件头: {}", e))?;
+    let mut file = tokio::fs::File::open(&src_path).await.map_err(|e| format!("无法打开源文件: {}", e))?;
+    tokio::io::AsyncReadExt::read_exact(&mut file, &mut header).await.map_err(|e| format!("无法读取文件头: {}", e))?;
     if &header[0..6] != b"SQLite" {
         return Err("恢复失败: 源文件不是有效的 SQLite 数据库".to_string());
     }
 
-    // Remove WAL files before restore to avoid corruption
+    drop(file);
+
     let wal_path = db_path.with_extension("db-wal");
     let shm_path = db_path.with_extension("db-shm");
-    let _ = std::fs::remove_file(&wal_path);
-    let _ = std::fs::remove_file(&shm_path);
+    let _ = tokio::fs::remove_file(&wal_path).await;
+    let _ = tokio::fs::remove_file(&shm_path).await;
 
-    std::fs::copy(&src_path, &db_path).map_err(|e| format!("恢复失败: {}", e))?;
+    tokio::fs::copy(&src_path, &db_path).await.map_err(|e| format!("恢复失败: {}", e))?;
     Ok(OkResponse::success("数据库已恢复 — 请重启应用"))
 }
 
 #[tauri::command]
 pub async fn write_file(path: String, base64_content: String) -> Result<OkResponse, String> {
     let bytes = base64::decode(&base64_content).map_err(|e| format!("Base64解码错误: {}", e))?;
-    std::fs::write(&path, bytes).map_err(|e| format!("写入文件错误: {}", e))?;
+    tokio::fs::write(&path, bytes).await.map_err(|e| format!("写入文件错误: {}", e))?;
     Ok(OkResponse::success("文件已写入"))
 }
 
 #[tauri::command]
 pub async fn read_file(path: String) -> Result<String, String> {
-    let bytes = std::fs::read(&path).map_err(|e| format!("读取文件错误: {}", e))?;
+    let bytes = tokio::fs::read(&path).await.map_err(|e| format!("读取文件错误: {}", e))?;
     Ok(base64::encode(&bytes))
 }

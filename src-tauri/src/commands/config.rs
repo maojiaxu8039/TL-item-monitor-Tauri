@@ -129,14 +129,14 @@ pub async fn open_log_dir() -> Result<OkResponse, String> {
     let logs_dir = crate::core::paths::logs_dir();
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("explorer")
+        tokio::process::Command::new("explorer")
             .arg(&logs_dir)
             .spawn()
             .ok();
     }
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open")
+        tokio::process::Command::new("open")
             .arg(&logs_dir)
             .spawn()
             .ok();

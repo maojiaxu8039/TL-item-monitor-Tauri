@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 import type { SyncJobState, SyncFailure } from "@/lib/commands";
 
 type DataType = "fire" | "items";
@@ -70,18 +70,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const restoreSyncJob = useCallback(() => {
     const saved = loadSyncState();
     if (saved?.syncJob && saved.syncJob.status === "running") {
-      setSyncJobState({ ...saved.syncJob, status: "idle" });
+      setSyncJob({ ...saved.syncJob, status: "idle" });
     }
-  }, []);
+  }, [setSyncJob]);
 
   const clearSyncJob = useCallback(() => {
     setSyncJobState(null);
     localStorage.removeItem(STORAGE_KEY);
   }, []);
-
-  useEffect(() => {
-    saveSyncState(syncJob);
-  }, [syncJob]);
 
   return (
     <SyncContext.Provider value={{ syncJob, setSyncJob, isSyncing, restoreSyncJob, clearSyncJob }}>

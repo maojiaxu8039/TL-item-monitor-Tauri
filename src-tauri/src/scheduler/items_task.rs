@@ -290,6 +290,7 @@ async fn scrape_for_mode(
             mode, season_id, mode
         );
         crate::app::load_items_from_json(season_id, mode, json_path)
+            .await
             .map_err(|e| format!("JSON load failed for {}: {}", mode, e))
     }
 }

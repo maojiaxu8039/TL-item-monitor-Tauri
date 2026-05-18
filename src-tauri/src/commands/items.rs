@@ -106,7 +106,7 @@ pub async fn validate_json_file(json_path: String) -> Result<JsonFileValidationR
         });
     }
 
-    let content = match std::fs::read_to_string(&json_path) {
+    let content = match tokio::fs::read_to_string(&json_path).await {
         Ok(c) => c,
         Err(e) => {
             return Ok(JsonFileValidationResult {
@@ -169,6 +169,7 @@ pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats,
     } else {
         tracing::info!("reload_items: loading from JSON file: {}", json_path);
         crate::app::load_items_from_json(&season_id, "season_normal", &json_path)
+            .await
             .map_err(|e| format!("Failed to load JSON: {}", e))?
     };
 
@@ -216,7 +217,8 @@ pub async fn get_db_stats(state: State<'_, Arc<AppState>>) -> Result<DbStats, St
         .unwrap_or(0);
 
     let db_path = crate::core::paths::db_path();
-    let db_size_kb = std::fs::metadata(&db_path)
+    let db_size_kb = tokio::fs::metadata(&db_path)
+        .await
         .map(|m| m.len() as f64 / 1024.0)
         .map_err(|e| {
             tracing::warn!("Failed to get db metadata: {}, returning 0", e);

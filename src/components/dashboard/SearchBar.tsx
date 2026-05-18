@@ -17,26 +17,42 @@ interface SearchBarProps {
 
 export function SearchBar({ sections = [] }: SearchBarProps) {
   const [searchValue, setSearchValue] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [showResults, setShowResults] = useState(false)
   const [selectedItem, setSelectedItem] = useState<ItemData | null>(null)
   const [showSectionMenu, setShowSectionMenu] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { refreshSections, marketContext, marketContextReady } = useSectionRefresh()
 
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+    searchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearch(searchValue)
+    }, 300)
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [searchValue])
+
   const { data: searchResult, error } = useQuery({
-    queryKey: ["search", searchValue, marketContext.seasonId, marketContext.marketMode],
+    queryKey: ["search", debouncedSearch, marketContext.seasonId, marketContext.marketMode],
     queryFn: async () => {
       try {
-        const result = await cmd.searchItems(searchValue, 1, 20);
+        const result = await cmd.searchItems(debouncedSearch, 1, 20);
         return result;
       } catch (e) {
         console.error("SearchBar queryFn error:", e);
         throw e;
       }
     },
-    enabled: searchValue.length >= 1 && marketContextReady,
+    enabled: debouncedSearch.length >= 1 && marketContextReady,
   })
 
   const { data: itemTypes } = useQuery({
@@ -149,16 +165,20 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
         let imported = 0
         const errors: string[] = []
 
+        const allSections = await cmd.getSections()
+        const sectionMap = new Map<string, Section>()
+        for (const s of allSections) {
+          sectionMap.set(s.name, s)
+        }
+
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim()
           if (!line) continue
 
-          // Parse CSV line: "分组名称","物品名称",购买火价,数量
           const match = line.match(/^"([^"]+)","([^"]+)"(?:,([^,]*))?(?:,([^,]*))?$/)
           if (match) {
             const [, sectionName, itemName, purchaseFirePrice, count] = match
             try {
-              // Search for item by name to get item_id
               const searchResult = await cmd.searchItems(itemName, 1, 5)
               const item = searchResult.items.find((it: ItemData) => it.name === itemName)
 
@@ -167,13 +187,15 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
                 continue
               }
 
-              const sections = await cmd.getSections()
-              let section = sections.find(s => s.name === sectionName)
+              let section = sectionMap.get(sectionName)
 
               if (!section) {
                 await cmd.createSection(sectionName)
                 const newSections = await cmd.getSections()
-                section = newSections.find(s => s.name === sectionName)
+                for (const s of newSections) {
+                  sectionMap.set(s.name, s)
+                }
+                section = sectionMap.get(sectionName)
               }
 
               if (section) {
@@ -188,8 +210,8 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
                 )
                 imported++
               }
-            } catch (err: any) {
-              const errorMsg = String(err)
+            } catch (err: unknown) {
+              const errorMsg = err instanceof Error ? err.message : String(err)
               if (errorMsg.includes("UNIQUE constraint failed")) {
                 errors.push(`第${i + 1}行: 物品"${itemName}"已在分组"${sectionName}"中`)
               } else {

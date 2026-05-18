@@ -377,28 +377,7 @@ async fn handle_request(
 ) {
     use tokio::io::AsyncReadExt;
 
-    // Add read timeout to prevent slowloris attacks
     let read_timeout = std::time::Duration::from_secs(30);
-
-    let client_ip = client_addr.ip().to_string();
-
-    {
-        let dynamic = state.dynamic_config.read().await;
-        if dynamic.rate_limit_enabled {
-            drop(dynamic);
-            let mut limiter = state.rate_limiter.write().await;
-            if !limiter.is_allowed(&client_ip) {
-                warn!("客户端 {} 请求过于频繁，已限流", client_ip);
-                let response = "HTTP/1.1 429 Too Many Requests\r\nContent-Type: text/plain\r\nContent-Length: 29\r\n\r\nRate limit exceeded, try again";
-                let _ = tokio::io::AsyncWriteExt::write_all(
-                    &mut tokio::io::BufWriter::new(stream),
-                    response.as_bytes(),
-                )
-                .await;
-                return;
-            }
-        }
-    }
 
     let mut stream = stream;
     let mut buffer = Vec::new();
@@ -409,9 +388,8 @@ async fn handle_request(
 
     let read_start = std::time::Instant::now();
     loop {
-        // Check read timeout
         if read_start.elapsed() > read_timeout {
-            warn!("客户端 {} 读取超时", client_ip);
+            warn!("客户端 {} 读取超时", client_addr.ip());
             let response = "HTTP/1.1 408 Request Timeout\r\nContent-Type: text/plain\r\nContent-Length: 15\r\n\r\nRequest timeout";
             let _ = tokio::io::AsyncWriteExt::write_all(
                 &mut tokio::io::BufWriter::new(&mut stream),
@@ -474,10 +452,31 @@ async fn handle_request(
                 return;
             }
             Err(_) => {
-                warn!("客户端 {} 读取超时", client_ip);
+                warn!("客户端 {} 读取超时", client_addr.ip());
                 let response = "HTTP/1.1 408 Request Timeout\r\nContent-Type: text/plain\r\nContent-Length: 15\r\n\r\nRequest timeout";
                 let _ = tokio::io::AsyncWriteExt::write_all(
                     &mut tokio::io::BufWriter::new(&mut stream),
+                    response.as_bytes(),
+                )
+                .await;
+                return;
+            }
+        }
+    }
+
+    let request = String::from_utf8_lossy(&buffer);
+    let client_ip = get_client_ip(&request, client_addr);
+
+    {
+        let dynamic = state.dynamic_config.read().await;
+        if dynamic.rate_limit_enabled {
+            drop(dynamic);
+            let mut limiter = state.rate_limiter.write().await;
+            if !limiter.is_allowed(&client_ip) {
+                warn!("客户端 {} 请求过于频繁，已限流", client_ip);
+                let response = "HTTP/1.1 429 Too Many Requests\r\nContent-Type: text/plain\r\nContent-Length: 29\r\n\r\nRate limit exceeded, try again";
+                let _ = tokio::io::AsyncWriteExt::write_all(
+                    &mut tokio::io::BufWriter::new(stream),
                     response.as_bytes(),
                 )
                 .await;
@@ -541,20 +540,19 @@ async fn handle_request(
             let dynamic = state.dynamic_config.read().await;
             let cors_list = &dynamic.cors_allowed_origins;
             let cors_header = if let Some(ref orig) = origin {
-                if cors_list.is_empty()
-                    || cors_list.iter().any(|o| o == orig)
-                {
-                    orig.clone()
-                } else {
-                    warn!("CORS origin rejected: {}", orig);
-                    return send_options_response(stream, "CORS origin not allowed").await;
-                }
-            } else {
-                cors_list
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| "http://localhost:8080".to_string())
-            };
+        if cors_list.iter().any(|o| o == orig)
+        {
+            orig.clone()
+        } else {
+            warn!("CORS origin rejected: {}", orig);
+            return send_options_response(stream, "CORS origin not allowed").await;
+        }
+    } else {
+        cors_list
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "http://localhost:8080".to_string())
+    };
             return send_options_response_with_cors(stream, &cors_header).await;
         }
         ("GET", "/") | ("GET", "/status") => {
@@ -1424,6 +1422,24 @@ fn get_origin_header(request: &str) -> Option<String> {
     None
 }
 
+fn get_client_ip(request: &str, fallback: std::net::SocketAddr) -> String {
+    for line in request.lines() {
+        if line.len() > 15 && line[..15].eq_ignore_ascii_case("x-forwarded-for:") {
+            let value = line[15..].trim();
+            if let Some(first_ip) = value.split(',').next() {
+                let trimmed = first_ip.trim();
+                if !trimmed.is_empty() {
+                    return trimmed.to_string();
+                }
+            }
+        }
+        if line.len() > 10 && line[..10].eq_ignore_ascii_case("x-real-ip:") {
+            return line[10..].trim().to_string();
+        }
+    }
+    fallback.ip().to_string()
+}
+
 async fn send_response(
     stream: tokio::net::TcpStream,
     status: u16,
@@ -1432,7 +1448,7 @@ async fn send_response(
     allowed_origins: &[String],
 ) {
     let cors_header = if let Some(ref orig) = origin {
-        if allowed_origins.is_empty() || allowed_origins.iter().any(|o| o == orig) {
+        if allowed_origins.iter().any(|o| o == orig) {
             orig.clone()
         } else {
             warn!("CORS origin rejected: {}", orig);

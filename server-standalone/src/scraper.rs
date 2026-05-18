@@ -25,25 +25,31 @@ fn safe_truncate(s: &str, max_len: usize) -> String {
 }
 
 static HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
-    Client::builder()
+    let builder = Client::builder()
         .timeout(Duration::from_secs(30))
         .pool_max_idle_per_host(1)
         .tcp_keepalive(Some(Duration::from_secs(60)))
-        .tcp_nodelay(true)
-        .danger_accept_invalid_certs(true)
-        .build()
-        .expect("Failed to create HTTP client")
+        .tcp_nodelay(true);
+    let builder = if cfg!(debug_assertions) {
+        builder.danger_accept_invalid_certs(true)
+    } else {
+        builder
+    };
+    builder.build().expect("Failed to create HTTP client")
 });
 
 static QIANDAO_CLIENT: Lazy<Client> = Lazy::new(|| {
-    Client::builder()
+    let builder = Client::builder()
         .timeout(Duration::from_secs(15))
         .pool_max_idle_per_host(1)
         .tcp_keepalive(Some(Duration::from_secs(60)))
-        .tcp_nodelay(true)
-        .danger_accept_invalid_certs(true)
-        .build()
-        .expect("Failed to create Qiandao HTTP client")
+        .tcp_nodelay(true);
+    let builder = if cfg!(debug_assertions) {
+        builder.danger_accept_invalid_certs(true)
+    } else {
+        builder
+    };
+    builder.build().expect("Failed to create Qiandao HTTP client")
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

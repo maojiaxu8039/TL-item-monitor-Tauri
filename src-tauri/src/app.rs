@@ -38,7 +38,7 @@ struct JsonItemEntry {
 }
 
 /// Load and parse JSON file, returning items ready for bulk insert.
-pub fn load_items_from_json(
+pub async fn load_items_from_json(
     season_id: &str,
     market_mode: &str,
     json_path: &str,
@@ -46,7 +46,8 @@ pub fn load_items_from_json(
     let path = std::path::PathBuf::from(json_path);
     tracing::info!("load_items_from_json: reading from {:?}", path);
 
-    let content = std::fs::read_to_string(&path)
+    let content = tokio::fs::read_to_string(&path)
+        .await
         .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
     tracing::info!(
         "load_items_from_json: JSON file size = {} bytes",
@@ -120,7 +121,7 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
     let db_url = format!("sqlite:{}?mode=rwc", db_path.display());
 
     if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).ok();
+        tokio::fs::create_dir_all(parent).await.ok();
     }
 
     let pool = SqlitePoolOptions::new()
@@ -408,6 +409,10 @@ async fn run_legacy_migrations(pool: &SqlitePool, current_version: i64) -> Resul
         apply_snapshot_metadata_migration(pool).await?;
         record_migration(pool, 7).await?;
     }
+    if current_version < 8 {
+        tracing::info!("Applying migration v8: placeholder (no-op)");
+        record_migration(pool, 8).await?;
+    }
     if current_version < 9 {
         tracing::info!("Applying migration v9: create strategy detail tables");
         ensure_strategy_detail_schema(pool).await?;
@@ -537,7 +542,7 @@ async fn apply_strategy_outputs_realtime_value_migration(pool: &SqlitePool) -> R
                 buy_price REAL NOT NULL DEFAULT 0,
                 sell_price REAL NOT NULL DEFAULT 0,
                 profit_rate REAL NOT NULL DEFAULT 0,
-                realtime_value REAL DEFAULT 0,
+                realtime_value REAL NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
                 FOREIGN KEY (strategy_id) REFERENCES strategies(id) ON DELETE CASCADE
@@ -615,7 +620,8 @@ async fn create_migration_backup(
         .parent()
         .map(|parent| parent.join("backups"))
         .unwrap_or_else(paths::backups_dir);
-    std::fs::create_dir_all(&backup_dir)
+    tokio::fs::create_dir_all(&backup_dir)
+        .await
         .map_err(|e| format!("Failed to create migration backup directory: {}", e))?;
 
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S%.3f");
@@ -630,10 +636,14 @@ async fn create_migration_backup(
         .await
         .map_err(|e| format!("Failed to checkpoint database before backup: {}", e))?;
 
-    let backup_sql = format!(
-        "VACUUM INTO '{}'",
-        backup_path.to_string_lossy().replace('\'', "''")
-    );
+    let canonical_path = backup_path.canonicalize()
+        .unwrap_or_else(|_| backup_path.clone());
+    let path_str = canonical_path.to_string_lossy();
+    // 防御路径注入：VACUUM INTO 不支持参数化，必须手动验证路径安全
+    if path_str.contains('\0') || path_str.contains('\n') || path_str.contains('\r') || path_str.contains('\'') {
+        return Err("Invalid backup path: contains unsafe characters".to_string());
+    }
+    let backup_sql = format!("VACUUM INTO '{}'", path_str);
     sqlx::query(&backup_sql)
         .execute(pool)
         .await
@@ -956,7 +966,7 @@ async fn ensure_strategy_detail_child_tables(pool: &SqlitePool) -> Result<(), St
             item_type TEXT NOT NULL DEFAULT '',
             count REAL NOT NULL DEFAULT 1,
             estimated_value REAL NOT NULL DEFAULT 0,
-            realtime_value REAL DEFAULT 0,
+            realtime_value REAL NOT NULL DEFAULT 0,
             remark TEXT,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
@@ -978,7 +988,7 @@ async fn ensure_strategy_detail_child_tables(pool: &SqlitePool) -> Result<(), St
         pool,
         "strategy_detail_outputs",
         "realtime_value",
-        "REAL DEFAULT 0",
+        "REAL NOT NULL DEFAULT 0",
     )
     .await?;
     add_column_if_missing(pool, "strategy_detail_outputs", "remark", "TEXT").await?;
@@ -1904,20 +1914,8 @@ pub fn start_background_tasks(
         let app = app.clone();
         let state = state.clone();
         state.task_status.write().items_reload_running = true;
-        std::thread::spawn(move || {
-            match tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(items_rt) => {
-                    items_rt.block_on(async move {
-                        run_items_reload_task(app, state, items_abort_rx).await;
-                    });
-                }
-                Err(e) => {
-                    tracing::error!("Failed to create items reload runtime: {}", e);
-                }
-            }
+        rt.spawn(async move {
+            run_items_reload_task(app, state, items_abort_rx).await;
         });
     }
 

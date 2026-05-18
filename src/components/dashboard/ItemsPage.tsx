@@ -263,12 +263,12 @@ export default function ItemsPage() {
           addToast("success", `已添加到分组`);
           queryClient.invalidateQueries({ queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode] });
         })
-        .catch((err: any) => {
+        .catch((err: unknown) => {
           const errorMsg = String(err);
           if (errorMsg.includes("物品已存在于该分组中")) {
             addToast("error", `"${item.name}" 已存在于该分组中`);
           } else {
-            addToast("error", `添加失败: ${err}`);
+            addToast("error", `添加失败: ${errorMsg}`);
           }
         });
     },

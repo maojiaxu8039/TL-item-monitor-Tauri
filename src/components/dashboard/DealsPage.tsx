@@ -174,9 +174,13 @@ export default function DealsPage() {
   const { marketContext, marketContextReady } = useSectionRefresh();
 
   useEffect(() => {
-    const savedSettings = localStorage.getItem("deals-settings");
-    if (savedSettings) {
-      setSettings(JSON.parse(savedSettings));
+    try {
+      const savedSettings = localStorage.getItem("deals-settings");
+      if (savedSettings) {
+        setSettings(JSON.parse(savedSettings));
+      }
+    } catch {
+      // ignore corrupted localStorage data
     }
   }, []);
 

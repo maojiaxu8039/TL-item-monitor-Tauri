@@ -6,6 +6,7 @@ use tauri::{
     AppHandle, Manager,
 };
 use tokio::sync::Mutex;
+use tracing::info;
 
 use crate::core::events::{emit_fire_price_updated, FirePricePayload};
 use crate::db::repo_fire;
@@ -33,6 +34,25 @@ fn get_fire_price_display(app: &AppHandle) -> String {
 }
 
 /// Refresh fire price from web and update tray tooltip.
+async fn graceful_shutdown(app: &tauri::AppHandle) {
+    info!("Initiating graceful shutdown...");
+
+    if let Some(state) = app.try_state::<Arc<crate::core::state::AppState>>() {
+        if let Some(handle) = state.scheduler_handle.read().as_ref() {
+            handle.shutdown();
+        }
+        let db_pool = state.db.clone();
+        drop(state);
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(async {
+            db_pool.close().await;
+        });
+    }
+
+    info!("Graceful shutdown complete, exiting");
+    app.exit(0);
+}
+
 async fn refresh_and_sync_fire_price(app: AppHandle) {
     let snapshot = match scraper::scrape_fire_price().await {
         Ok(s) => s,
@@ -89,16 +109,13 @@ async fn refresh_and_sync_fire_price(app: AppHandle) {
 pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.handle().clone();
 
-    // Initial fire price text for tooltip
     let initial_price = get_fire_price_display(&app_handle);
     let initial_tooltip = format!("TorchScan · 火价: {}元/万火", initial_price);
 
-    // Build menu items
     let show_item = MenuItemBuilder::with_id("show", "打开 TorchScan").build(app)?;
     let refresh_item = MenuItemBuilder::with_id("refresh", "刷新火价").build(app)?;
     let quit_item = MenuItemBuilder::with_id("quit", "退出").build(app)?;
 
-    // Disabled fire price display item
     let fire_text = format!("火价: {}元/万火", initial_price);
     let fire_item = MenuItemBuilder::with_id("fire_price", &fire_text)
         .enabled(false)
@@ -113,14 +130,35 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .item(&quit_item)
         .build()?;
 
-    // Create and store TrayState for potential tooltip updates
     let tray_state = TrayState {
         tooltip: Arc::new(Mutex::new(initial_tooltip.clone())),
     };
     app.manage(tray_state);
 
-    let tray_icon = Image::from_bytes(include_bytes!("../icons/tray.png"))
-        .expect("Failed to load TorchScan tray icon");
+    // 1x1 transparent PNG as ultimate fallback
+    const TRANSPARENT_PNG: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
+        0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x60, 0x00, 0x00, 0x00,
+        0x02, 0x00, 0x01, 0xE2, 0x21, 0xBC, 0x33, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+
+    let tray_icon = match Image::from_bytes(include_bytes!("../icons/tray.png")) {
+        Ok(icon) => icon,
+        Err(e1) => {
+            tracing::warn!("Failed to load tray icon, trying fallback: {}", e1);
+            match Image::from_bytes(include_bytes!("../icons/32x32.png")) {
+                Ok(icon) => icon,
+                Err(e2) => {
+                    tracing::error!("Fallback tray icon also failed: {}. Using transparent placeholder.", e2);
+                    Image::from_bytes(TRANSPARENT_PNG)
+                        .expect("Built-in transparent PNG must be valid")
+                }
+            }
+        }
+    };
 
     let _tray = TrayIconBuilder::new()
         .icon(tray_icon)
@@ -140,7 +178,10 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 });
             }
             "quit" => {
-                app.exit(0);
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    graceful_shutdown(&app).await;
+                });
             }
             _ => {}
         })

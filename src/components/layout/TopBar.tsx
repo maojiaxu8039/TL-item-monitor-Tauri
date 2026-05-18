@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type MouseEvent } from "react"
+import { useEffect, useState, useRef, memo, type ChangeEvent, type MouseEvent } from "react"
 import { RefreshCw } from "lucide-react"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { motion } from "framer-motion"
@@ -10,6 +10,16 @@ import { Select } from "@/components/ui/select"
 import { cmd, type PageId } from "@/lib/commands"
 import { cn } from "@/lib/utils"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
+
+const FireStaleTag = memo(function FireStaleTag({ scrapedAt }: { scrapedAt: number }) {
+  const isStale = Date.now() / 1000 - scrapedAt > 3600;
+  if (!isStale) return null;
+  return (
+    <span className="ml-1 rounded bg-[rgba(239,68,68,0.15)] px-1 py-0 text-[10px] font-medium text-[var(--color-danger)]" title={`数据已过期 (${new Date(scrapedAt * 1000).toLocaleString('zh-CN')})，点击刷新获取最新`}>
+      缓存
+    </span>
+  );
+});
 
 const PAGE_TITLES: Record<PageId, string> = {
   dashboard: "市场监控",
@@ -69,10 +79,12 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
   const [marketMode, setMarketMode] = useState(marketContext.marketMode)
   const [dataSource, setDataSource] = useState<"api" | "local">("api")
   const [notificationEnabled, setNotificationEnabled] = useState(true)
+  const prevModeRef = useRef(marketContext.marketMode)
+  const summaryRef = useRef<string | undefined>(undefined)
 
-  // 同步后端市场模式到本地状态
   useEffect(() => {
     setMarketMode(marketContext.marketMode)
+    prevModeRef.current = marketContext.marketMode
   }, [marketContext.marketMode])
 
   useEffect(() => {
@@ -92,14 +104,18 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
     refetchInterval: 10000,
   })
 
+  useEffect(() => {
+    summaryRef.current = summary?.season_name
+  }, [summary?.season_name])
+
   const switchModeMutation = useMutation({
     mutationFn: async (newMode: string) => {
-      const seasonId = summary?.season_name || "ss12"
+      const seasonId = summaryRef.current || "ss12"
       await cmd.setActiveMarketContext(seasonId, newMode)
       return newMode
     },
     onSuccess: (newMode) => {
-      const seasonId = summary?.season_name || "ss12"
+      const seasonId = summaryRef.current || "ss12"
       setMarketContext({ seasonId, marketMode: newMode })
       toast.success("已切换到" + (newMode === "season_normal" ? "赛季普通" : "赛季专家"))
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] })
@@ -108,7 +124,8 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
       queryClient.invalidateQueries({ queryKey: ["section-items"] })
       queryClient.invalidateQueries({ queryKey: ["items-search"] })
     },
-    onError: (error) => {
+    onError: (error, newMode) => {
+      setMarketMode(prevModeRef.current)
       toast.error(`切换失败: ${error}`)
     },
   })
@@ -129,6 +146,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
 
   const handleModeChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const newMode = e.target.value
+    prevModeRef.current = marketMode
     setMarketMode(newMode)
     switchModeMutation.mutate(newMode)
   }
@@ -170,6 +188,9 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
             {summary?.fire?.rmb_per_10k_fire?.toFixed(2) || "—"}
           </span>
           <span className="text-[var(--color-text-subtle)]">元/万火</span>
+          {summary?.fire && (
+            <FireStaleTag scrapedAt={summary.fire.scraped_at} />
+          )}
         </div>
 
         <Button

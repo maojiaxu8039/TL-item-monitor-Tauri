@@ -20,7 +20,6 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
   const [newSeasonStartedAt, setNewSeasonStartedAt] = useState("");
   
   // API Config
-  const [, setApiConfig] = useState<ServerApiConfig | null>(null);
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
   const [editedConfig, setEditedConfig] = useState<ServerApiConfig | null>(null);
 
@@ -32,8 +31,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
     setIsLoading(true);
     try {
       const config = await serverAdmin.getApiConfig(serverUrl, password);
-      setApiConfig(config);
-      setEditedConfig(config);
+      setEditedConfig(config.api_config);
       setIsConfigLoaded(true);
       toast.success("API配置已加载");
     } catch (err) {
@@ -91,7 +89,6 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
     try {
       await serverAdmin.updateApiConfig(serverUrl, password, editedConfig);
       toast.success("API配置已更新（重启服务器后生效）");
-      setApiConfig(editedConfig);
     } catch (err) {
       toast.error(`保存失败: ${err}`);
     } finally {

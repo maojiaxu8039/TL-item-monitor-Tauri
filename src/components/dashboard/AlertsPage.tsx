@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Bell,
   Plus,
@@ -174,34 +174,49 @@ export default function AlertsPage() {
     }
   };
 
-  const searchItems = async (keyword: string) => {
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const searchItems = useCallback(async (keyword: string) => {
     setItemSearch(keyword);
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
     if (keyword.length < 1) {
       setItemResults([]);
       return;
     }
-    try {
-      if (createForm.section_id) {
-        const sectionItems = await cmd.getSectionItems(createForm.section_id, marketContext.seasonId, marketContext.marketMode);
-        const normalizedKeyword = keyword.toLowerCase();
-        setItemResults(
-          sectionItems
-            .map(sectionItemToSearchResult)
-            .filter(item =>
-              item.name.toLowerCase().includes(normalizedKeyword) ||
-              item.item_id.toLowerCase().includes(normalizedKeyword)
-            )
-            .slice(0, 50)
-        );
-        return;
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        if (createForm.section_id) {
+          const sectionItems = await cmd.getSectionItems(createForm.section_id, marketContext.seasonId, marketContext.marketMode);
+          const normalizedKeyword = keyword.toLowerCase();
+          setItemResults(
+            sectionItems
+              .map(sectionItemToSearchResult)
+              .filter(item =>
+                item.name.toLowerCase().includes(normalizedKeyword) ||
+                item.item_id.toLowerCase().includes(normalizedKeyword)
+              )
+              .slice(0, 50)
+          );
+          return;
+        }
+        const results = await cmd.searchItemsForArbitrage(keyword);
+        setItemResults(results);
+      } catch (err) {
+        console.error("[Alerts] Search items error:", err);
+        setItemResults([]);
       }
-      const results = await cmd.searchItemsForArbitrage(keyword);
-      setItemResults(results);
-    } catch (err) {
-      console.error("[Alerts] Search items error:", err);
-      setItemResults([]);
-    }
-  };
+    }, 300);
+  }, [createForm.section_id, marketContext.seasonId, marketContext.marketMode]);
 
   const selectItem = (item: ItemSearchResult) => {
     setCreateForm(prev => ({ ...prev, item_id: item.item_id }));

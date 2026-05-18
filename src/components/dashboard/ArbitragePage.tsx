@@ -115,17 +115,7 @@ export default function ArbitragePage() {
     return calculationResult.filter(r => r.recipe_type === typeFilter);
   }, [calculationResult, typeFilter]);
 
-  // 当赛季/模式切换时，重新计算套利
-  useEffect(() => {
-    if (!marketContextReady) return;
-    const newKey = `${marketContext.seasonId}-${marketContext.marketMode}`;
-    if (newKey !== contextKey) {
-      setContextKey(newKey);
-      calculateAll();
-    }
-  }, [marketContext.seasonId, marketContext.marketMode, marketContextReady]);
-
-  const loadRecipes = async () => {
+  const loadRecipes = useCallback(async () => {
     setLoading(true);
     try {
       const data = await cmd.getArbitrageRecipes();
@@ -135,9 +125,9 @@ export default function ArbitragePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const calculateAll = async (forceShowAll?: boolean) => {
+  const calculateAll = useCallback(async (forceShowAll?: boolean) => {
     setCalculating(true);
     try {
       const result = await cmd.calculateArbitrage(undefined, undefined, forceShowAll ?? showAllRecipes);
@@ -157,7 +147,17 @@ export default function ArbitragePage() {
     } finally {
       setCalculating(false);
     }
-  };
+  }, [showAllRecipes]);
+
+  // 当赛季/模式切换时，重新计算套利
+  useEffect(() => {
+    if (!marketContextReady) return;
+    const newKey = `${marketContext.seasonId}-${marketContext.marketMode}`;
+    if (newKey !== contextKey) {
+      setContextKey(newKey);
+      calculateAll();
+    }
+  }, [marketContext.seasonId, marketContext.marketMode, marketContextReady, contextKey, calculateAll]);
 
   const refreshPrices = async () => {
     setRefreshingPrice(true);
@@ -463,8 +463,9 @@ export default function ArbitragePage() {
   };
 
   useEffect(() => {
+    if (!marketContextReady) return;
     loadRecipes().then(() => calculateAll());
-  }, []);
+  }, [marketContextReady, loadRecipes, calculateAll]);
 
   return (
     <PageShell size="xl" className="space-y-5">

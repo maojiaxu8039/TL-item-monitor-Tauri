@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { cmd } from "@/lib/commands";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, type UseMutationResult } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
@@ -125,7 +125,7 @@ export default function ImportExportPage() {
     },
   });
 
-  const handleExport = (mutation: any) => {
+  const handleExport = (mutation: { mutate: () => void }) => {
     mutation.mutate();
   };
 

@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS strategy_outputs (
     buy_price REAL NOT NULL DEFAULT 0,
     sell_price REAL NOT NULL DEFAULT 0,
     profit_rate REAL NOT NULL DEFAULT 0,
-    realtime_value REAL,
+    realtime_value REAL NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     FOREIGN KEY (strategy_id) REFERENCES strategies(id) ON DELETE CASCADE

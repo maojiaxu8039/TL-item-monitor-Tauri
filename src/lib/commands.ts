@@ -861,6 +861,11 @@ export interface UpdateOutputRequest {
   remark: string | null;
 }
 
+export interface ScrapeMode {
+  mode: "normal" | "expert";
+  enabled: boolean;
+}
+
 export interface ServerApiConfig {
   qiandao_tag_id_normal: string;
   qiandao_spec_id_normal: string;
@@ -868,6 +873,19 @@ export interface ServerApiConfig {
   qiandao_spec_id_expert: string;
   luosi_season_id_normal: number;
   luosi_season_id_expert: number;
+}
+
+export interface ServerFullConfig {
+  season_id: string;
+  http_port: number;
+  cors_allowed_origins: string[];
+  rate_limit: {
+    enabled: boolean;
+    requests_per_minute: number;
+    burst_size: number;
+  };
+  api_config: ServerApiConfig;
+  scrape_modes: ScrapeMode[];
 }
 
 export interface ServerAdminResponse {
@@ -886,7 +904,7 @@ export const serverAdmin = {
       .then(res => res.json())
       .then((data: ServerAdminResponse) => {
         if (!data.success) throw new Error(data.error || "获取配置失败");
-        return data.data?.api_config as ServerApiConfig;
+        return data.data as ServerFullConfig;
       }),
 
   initSeason: (serverUrl: string, password: string, seasonId: string, startedAt: number, seasonName?: string) =>
@@ -910,6 +928,18 @@ export const serverAdmin = {
       .then(res => res.json())
       .then((data: ServerAdminResponse) => {
         if (!data.success) throw new Error(data.error || "更新配置失败");
+        return data.data;
+      }),
+
+  updateScrapeModes: (serverUrl: string, password: string, scrapeModes: ScrapeMode[]) =>
+    fetch(`${serverUrl}/api/admin/update-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password, scrape_modes: scrapeModes }),
+    })
+      .then(res => res.json())
+      .then((data: ServerAdminResponse) => {
+        if (!data.success) throw new Error(data.error || "更新采集模式失败");
         return data.data;
       }),
 };

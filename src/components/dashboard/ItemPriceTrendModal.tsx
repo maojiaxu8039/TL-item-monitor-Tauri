@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
-import { cmd, SeasonInfo } from "@/lib/commands";
+import { cmd, SeasonInfo, ItemHistoryRecord } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 
 interface Props {
@@ -49,25 +49,25 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
 
 
 
-  const currentDayQuery = useQuery({
+  const currentDayQuery = useQuery<ItemHistoryRecord[]>({
     queryKey: ["item-trend-current-day", itemId, currentSeason, currentDay],
     queryFn: () => cmd.getItemHistoryByDay(itemId, currentSeason, currentDay),
     enabled: !!itemId && !!currentSeason,
   });
 
-  const historyDayQuery = useQuery({
+  const historyDayQuery = useQuery<ItemHistoryRecord[]>({
     queryKey: ["item-trend-history-day", itemId, historySeason, currentDay],
     queryFn: () => cmd.getItemHistoryByDay(itemId, historySeason, currentDay),
     enabled: !!itemId && !!historySeason,
   });
 
-  const currentSeasonQuery = useQuery({
+  const currentSeasonQuery = useQuery<ItemHistoryRecord[]>({
     queryKey: ["item-trend-current-season", itemId, currentSeason],
     queryFn: () => cmd.getItemHistoryBySeason(itemId, currentSeason, 1000),
     enabled: !!itemId && !!currentSeason && viewMode === "season",
   });
 
-  const historySeasonQuery = useQuery({
+  const historySeasonQuery = useQuery<ItemHistoryRecord[]>({
     queryKey: ["item-trend-history-season", itemId, historySeason],
     queryFn: () => cmd.getItemHistoryBySeason(itemId, historySeason, 1000),
     enabled: !!itemId && !!historySeason && viewMode === "season",
@@ -100,7 +100,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
     if (viewMode === "day") {
       const dataMap = new Map<number, HourData>();
 
-      currentData.forEach((record: any) => {
+      currentData.forEach((record) => {
         const hour = new Date(record.scraped_at * 1000).getHours();
         if (!dataMap.has(hour)) {
           dataMap.set(hour, { hour, current: null, history: null });
@@ -108,7 +108,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
         dataMap.get(hour)!.current = record.fire_price;
       });
 
-      historyData.forEach((record: any) => {
+      historyData.forEach((record) => {
         const hour = new Date(record.scraped_at * 1000).getHours();
         if (!dataMap.has(hour)) {
           dataMap.set(hour, { hour, current: null, history: null });
@@ -120,7 +120,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
     } else {
       const dataMap = new Map<number, DayData>();
 
-      currentData.forEach((record: any) => {
+      currentData.forEach((record) => {
         const day = Math.floor((record.scraped_at - currentSeasonStart) / 86400) + 1;
         if (!dataMap.has(day)) {
           dataMap.set(day, { day, current: null, history: null });
@@ -128,7 +128,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
         dataMap.get(day)!.current = record.fire_price;
       });
 
-      historyData.forEach((record: any) => {
+      historyData.forEach((record) => {
         const day = Math.floor((record.scraped_at - historySeasonStart) / 86400) + 1;
         if (!dataMap.has(day)) {
           dataMap.set(day, { day, current: null, history: null });
@@ -143,8 +143,8 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
   const stats = useMemo(() => {
     if (currentData.length === 0) return null;
 
-    const currentPrices = currentData.map((r: any) => r.fire_price);
-    const currentAvg = currentPrices.reduce((a: number, b: number) => a + b, 0) / currentPrices.length;
+    const currentPrices = currentData.map((r) => r.fire_price);
+    const currentAvg = currentPrices.reduce((a, b) => a + b, 0) / currentPrices.length;
     const currentMax = Math.max(...currentPrices);
     const currentMin = Math.min(...currentPrices);
 
@@ -154,8 +154,8 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
     let premiumRate = null;
 
     if (historyData.length > 0) {
-      const historyPrices = historyData.map((r: any) => r.fire_price);
-      historyAvg = historyPrices.reduce((a: number, b: number) => a + b, 0) / historyPrices.length;
+      const historyPrices = historyData.map((r) => r.fire_price);
+      historyAvg = historyPrices.reduce((a, b) => a + b, 0) / historyPrices.length;
       historyMax = Math.max(...historyPrices);
       historyMin = Math.min(...historyPrices);
       premiumRate = ((currentAvg - historyAvg) / historyAvg * 100);

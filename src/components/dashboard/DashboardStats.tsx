@@ -1,11 +1,30 @@
 import { useQuery } from "@tanstack/react-query"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, memo } from "react"
 import { Package, Flame, TrendingUp, TrendingDown, Minus, History, ArrowUp, ArrowDown, Award, ChevronLeft, ChevronRight } from "lucide-react"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { MetricCard } from "@/components/ui/MetricCard"
 import { StatusBadge } from "@/components/ui/StatusBadge"
 import { cmd } from "@/lib/commands"
-import type { DashboardSummary, FireHistoryItem, StrategyWithCosts } from "@/lib/commands"
+import type { DashboardSummary, FireHistoryItem, StrategyWithCosts, FirePriceUI, SectionItem } from "@/lib/commands"
+
+const FirePriceHelper = memo(function FirePriceHelper({ fire }: { fire: FirePriceUI }) {
+  const isStale = Date.now() / 1000 - fire.scraped_at > 3600;
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-xs text-[var(--color-text-subtle)]">元/万火</span>
+      {fire.increase_ratio !== null && fire.increase_ratio !== undefined && (
+        <span className={`text-xs font-medium ${fire.increase_ratio >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
+          {fire.increase_ratio >= 0 ? "↑" : "↓"}{Math.abs(fire.increase_ratio).toFixed(2)}%
+        </span>
+      )}
+      {isStale && (
+        <span className="rounded bg-[rgba(239,68,68,0.15)] px-1 text-[10px] font-medium text-[var(--color-danger)]" title={`数据已过期 (${new Date(fire.scraped_at * 1000).toLocaleString('zh-CN')})`}>
+          缓存
+        </span>
+      )}
+    </div>
+  );
+});
 
 interface StrategyRecommendation {
   strategy_id: string;
@@ -49,9 +68,9 @@ export function DashboardStats() {
   })
 
   const { data: allSectionItems = [], isLoading: sectionItemsLoading } = useQuery({
-    queryKey: ["all-section-items", marketContext.seasonId, marketContext.marketMode],
+    queryKey: ["all-section-items", marketContext.seasonId, marketContext.marketMode, sections.map(s => s.id).join(",")],
     queryFn: async () => {
-      const allItems: any[] = []
+      const allItems: SectionItem[] = []
       for (const section of sections) {
         try {
           const items = await cmd.getSectionItems(section.id, marketContext.seasonId, marketContext.marketMode)
@@ -273,14 +292,7 @@ export function DashboardStats() {
           iconColor="text-[var(--color-danger)]"
           helper={
             hasFirePrice ? (
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-[var(--color-text-subtle)]">元/万火</span>
-                {summary?.fire?.increase_ratio !== null && summary?.fire?.increase_ratio !== undefined && (
-                  <span className={`text-xs font-medium ${summary.fire.increase_ratio >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
-                    {summary.fire.increase_ratio >= 0 ? "↑" : "↓"}{Math.abs(summary.fire.increase_ratio).toFixed(2)}%
-                  </span>
-                )}
-              </div>
+              <FirePriceHelper fire={summary.fire} />
             ) : null
           }
         />

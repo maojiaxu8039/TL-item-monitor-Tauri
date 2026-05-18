@@ -183,6 +183,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
         .setup(move |app| {
             let handle = app.handle().clone();
 
+            let init_start = std::time::Instant::now();
             let state: Arc<torchscan::core::state::AppState> = rt_handle.block_on(async {
                 match init_app(&handle).await {
                     Ok(state) => Ok(Arc::new(state)),
@@ -192,6 +193,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             })?;
+            info!("App initialization completed in {:?}", init_start.elapsed());
 
             app.manage(state.clone());
 

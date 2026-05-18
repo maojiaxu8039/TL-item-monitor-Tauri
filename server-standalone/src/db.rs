@@ -141,8 +141,6 @@ async fn get_season_start(pool: &SqlitePool, season_id: &str) -> Result<i64, Str
 fn get_fallback_season_start(season_id: &str) -> Option<i64> {
     match season_id {
         "ss12" => Some(1776384000),
-        "ss11" => Some(1768521600),
-        "ss10" => Some(1760140800),
         _ => None,
     }
 }
@@ -177,8 +175,6 @@ pub async fn get_current_season(pool: &SqlitePool) -> Option<String> {
 fn get_migration_started_at(season_id: &str) -> i64 {
     match season_id {
         "ss12" => 1776384000,
-        "ss11" => 1768521600,
-        "ss10" => 1760140800,
         _ => 0,
     }
 }
@@ -219,8 +215,8 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
     let seasons = get_all_seasons_list(pool).await;
 
     let seasons_to_migrate = if seasons.is_empty() {
-        info!("seasons 表为空，使用默认赛季列表: ss12, ss11");
-        vec!["ss12".to_string(), "ss11".to_string()]
+        info!("seasons 表为空，使用默认赛季列表: ss12");
+        vec!["ss12".to_string()]
     } else {
         seasons
     };
@@ -339,7 +335,9 @@ pub async fn insert_fire_snapshot(
     let season_start = get_season_start(pool, season_id).await?;
     let season_day = calculate_season_day(season_start, scraped_at);
 
-    sqlx::query(&format!(
+    let mut tx = pool.begin().await.map_err(|e| format!("开始事务失败: {}", e))?;
+
+    let result = sqlx::query(&format!(
         r#"
         INSERT OR IGNORE INTO {}
         (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day)
@@ -355,13 +353,15 @@ pub async fn insert_fire_snapshot(
     .bind(&fire.source_time)
     .bind(scraped_at)
     .bind(season_day)
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .map_err(|e| format!("插入火价快照失败: {}", e))?;
 
+    tx.commit().await.map_err(|e| format!("提交事务失败: {}", e))?;
+
     info!(
-        "火价快照已保存: {} (scraped_at: {}, season_day: {})",
-        fire.rmb_per_10k_fire, scraped_at, season_day
+        "火价快照已保存: {} (scraped_at: {}, season_day: {}, rows: {})",
+        fire.rmb_per_10k_fire, scraped_at, season_day, result.rows_affected()
     );
     Ok(())
 }
@@ -642,20 +642,31 @@ pub async fn wal_checkpoint(pool: &SqlitePool) -> Result<WalCheckpointResult, St
         .await
         .map_err(|e| format!("获取空闲页数失败: {}", e))?;
 
-    let wal_size: i64 = sqlx::query_scalar("PRAGMA wal_checkpoint(PASSIVE)")
+    sqlx::query("PRAGMA wal_checkpoint(PASSIVE)")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("WAL checkpoint 执行失败: {}", e))?;
+
+    let wal_path: (String,) = sqlx::query_as("PRAGMA database_list")
         .fetch_one(pool)
         .await
-        .map_err(|e| format!("WAL checkpoint 失败: {}", e))?;
+        .map_err(|e| format!("获取数据库路径失败: {}", e))?;
+    let wal_path = wal_path.0;
+
+    let wal_file = format!("{}-wal", wal_path);
+    let wal_bytes: i64 = std::fs::metadata(&wal_file)
+        .map(|m| m.len() as i64)
+        .unwrap_or(0);
 
     info!(
-        "WAL checkpoint 完成: 数据库页数={}, 空闲页数={}, WAL页数={}",
-        page_count, freelist_count, wal_size
+        "WAL checkpoint 完成: 数据库页数={}, 空闲页数={}, WAL文件大小={} bytes",
+        page_count, freelist_count, wal_bytes
     );
 
     Ok(WalCheckpointResult {
         page_count,
         freelist_count,
-        wal_pages_checkpointed: wal_size,
+        wal_pages_checkpointed: wal_bytes,
     })
 }
 

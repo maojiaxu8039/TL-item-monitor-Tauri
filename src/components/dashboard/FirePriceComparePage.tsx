@@ -78,7 +78,7 @@ export default function FirePriceComparePage() {
     return range?.dayRange ?? null;
   };
 
-  const buildChartData = (): ChartPoint[] => {
+  const chartData = useMemo(() => {
     const dayRange = getDayRange();
 
     let filteredCurrent = currentData;
@@ -136,9 +136,7 @@ export default function FirePriceComparePage() {
         history: historyByDayHour.get(key) ?? null,
       };
     });
-  };
-
-  const chartData = buildChartData();
+  }, [currentData, historyData, timeRange, useCustomRange, customDayRange]);
 
   const allValues = chartData.flatMap(d => [d.current, d.history]).filter((v): v is number => v !== null);
   const minValue = allValues.length > 0 ? Math.min(...allValues) : 0;
@@ -505,7 +503,7 @@ export default function FirePriceComparePage() {
                 axisLine={false}
               />
               <Tooltip
-                formatter={(value: any) => [`¥${Number(value).toFixed(2)}/万火`]}
+                formatter={(value: number | string) => [`¥${Number(value).toFixed(2)}/万火`]}
                 contentStyle={{ borderRadius: "8px", border: "1px solid var(--color-border)", fontSize: "12px" }}
               />
               <Line
