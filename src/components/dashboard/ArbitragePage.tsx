@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   Calculator,
   Plus,
@@ -73,6 +73,8 @@ export default function ArbitragePage() {
   const [showAllRecipes, setShowAllRecipes] = useState(true);
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [contextKey, setContextKey] = useState(`${marketContext.seasonId}-${marketContext.marketMode}`);
+  const [lastMode, setLastMode] = useState(marketContext.marketMode);
+  const pendingRef = useRef(false);
 
   const [newRecipe, setNewRecipe] = useState({
     name: "",
@@ -151,13 +153,27 @@ export default function ArbitragePage() {
 
   // 当赛季/模式切换时，重新计算套利
   useEffect(() => {
-    if (!marketContextReady) return;
-    const newKey = `${marketContext.seasonId}-${marketContext.marketMode}`;
-    if (newKey !== contextKey) {
-      setContextKey(newKey);
-      calculateAll();
+    if (!marketContextReady || pendingRef.current) return;
+    
+    if (marketContext.marketMode !== lastMode) {
+      pendingRef.current = true;
+      setLastMode(marketContext.marketMode);
+      setContextKey(`${marketContext.seasonId}-${marketContext.marketMode}`);
+      setCalculating(true);
+      cmd.calculateArbitrage(marketContext.seasonId, marketContext.marketMode, showAllRecipes)
+        .then(result => {
+          setCalculationResult(result.recipes);
+          setLastCalculatedAt(result.calculated_at);
+        })
+        .catch(err => {
+          console.error("[Arbitrage] Switch mode error:", err);
+        })
+        .finally(() => {
+          setCalculating(false);
+          pendingRef.current = false;
+        });
     }
-  }, [marketContext.seasonId, marketContext.marketMode, marketContextReady, contextKey, calculateAll]);
+  }, [marketContext.marketMode, marketContext.seasonId, marketContextReady, lastMode, showAllRecipes]);
 
   const refreshPrices = async () => {
     setRefreshingPrice(true);

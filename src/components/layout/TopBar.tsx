@@ -115,8 +115,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
       return newMode
     },
     onSuccess: (newMode) => {
-      const seasonId = summaryRef.current || "ss12"
-      setMarketContext({ seasonId, marketMode: newMode })
+      setMarketContext({ seasonId: marketContext.seasonId, marketMode: newMode })
       toast.success("已切换到" + (newMode === "season_normal" ? "赛季普通" : "赛季专家"))
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] })
       queryClient.invalidateQueries({ queryKey: ["fire-history"] })
