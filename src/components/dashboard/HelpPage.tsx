@@ -94,14 +94,14 @@ export default function HelpPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => window.open("https://github.com", "_blank")}
+          onClick={() => window.open("https://github.com", "_blank", "noopener,noreferrer")}
         >
           <ExternalLink className="h-4 w-4 mr-1.5" />
           GitHub
         </Button>
         <Button
           size="sm"
-          onClick={() => window.open("https://discord.com", "_blank")}
+          onClick={() => window.open("https://discord.com", "_blank", "noopener,noreferrer")}
         >
           <MessageSquare className="h-4 w-4 mr-1.5" />
           加入讨论

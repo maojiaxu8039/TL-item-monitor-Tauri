@@ -7,13 +7,14 @@ export interface Toast {
 }
 
 const AUTO_DISMISS_MS = 3000;
+let toastIdCounter = 0;
 
 export function useToast() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const addToast = useCallback((type: Toast["type"], message: string) => {
-    const id = String(Date.now());
+    const id = `${Date.now()}-${++toastIdCounter}`;
     setToasts((prev) => [...prev, { id, message, type }]);
 
     const timer = setTimeout(() => {

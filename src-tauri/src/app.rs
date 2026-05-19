@@ -1599,6 +1599,7 @@ async fn generate_season_snapshots(
 ) -> Result<(), String> {
     use crate::db::table_resolver::TableResolver;
 
+    TableResolver::validate(season_id, mode).map_err(|e| e.to_string())?;
     let item_snapshots = TableResolver::item_snapshots_table(season_id, mode);
     let fire_snapshots = TableResolver::fire_price_snapshots_table(season_id, mode);
 

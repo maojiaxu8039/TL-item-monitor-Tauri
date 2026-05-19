@@ -113,6 +113,7 @@ pub async fn get_section_items(
     season_id: &str,
     market_mode: &str,
 ) -> Result<Vec<SectionItem>, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let items_table = TableResolver::items_table(season_id, market_mode);
     let rows: Vec<SectionItem> = sqlx::query_as(&format!(
         r#"
@@ -143,6 +144,7 @@ pub async fn get_section_items_for_context(
     season_id: &str,
     market_mode: &str,
 ) -> Result<Vec<SectionAlertItem>, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let items_table = TableResolver::items_table(season_id, market_mode);
     let rows: Vec<SectionAlertItem> = sqlx::query_as(&format!(
         r#"
@@ -203,6 +205,8 @@ pub async fn add_section_item(
 
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().timestamp();
+
+    TableResolver::validate(season_id, market_mode)?;
 
     let items_table = TableResolver::items_table(season_id, market_mode);
     let last_time: Option<String> = sqlx::query_scalar::<_, Option<i64>>(&format!(
@@ -308,6 +312,7 @@ pub async fn get_totals(
     season_id: &str,
     market_mode: &str,
 ) -> Result<(f64, f64), crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let items_table = TableResolver::items_table(season_id, market_mode);
     let rows: Vec<(f64, i32, Option<f64>)> = sqlx::query_as(&format!(
         r#"

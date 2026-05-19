@@ -3,6 +3,7 @@ use crate::core::paths;
 use crate::core::state::AppState;
 use crate::db::repo_config;
 use crate::db::repo_sections;
+use crate::db::table_resolver::TableResolver;
 use std::sync::Arc;
 use tauri::State;
 
@@ -29,6 +30,11 @@ pub async fn import_watchlist_csv(
                     record.get(4).and_then(|s| s.parse().ok()).unwrap_or(0.0);
                 let count: i32 = record.get(5).and_then(|s| s.parse().ok()).unwrap_or(1);
                 let more_value: f64 = record.get(6).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+
+                if let Err(e) = TableResolver::validate(season_id, market_mode) {
+                    error_list.push(format!("行 {}: {}", idx + 2, e));
+                    continue;
+                }
 
                 match repo_sections::add_section_item(
                     &state.db,

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { devLog } from "@/lib/devLog";
+import { DEFAULT_HISTORY_SEASON } from "@/lib/constants";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -150,7 +151,7 @@ export default function ItemsPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [page, setPage] = useState(1);
   const { toasts, addToast, dismissToast } = useToast();
-  const [historySeason, setHistorySeason] = useState("ss11");
+  const [historySeason, setHistorySeason] = useState(DEFAULT_HISTORY_SEASON);
   const [trendItem, setTrendItem] = useState<{ itemId: string; name: string } | null>(null);
   const [dayFilter, setDayFilter] = useState("all");
 
@@ -233,7 +234,7 @@ export default function ItemsPage() {
     return compareMap.get(itemId) ?? null;
   }, [compareMap]);
 
-  const items = searchResult?.items ?? [];
+  const items = useMemo(() => searchResult?.items ?? [], [searchResult?.items]);
   const total = searchResult?.total ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const startItem = (page - 1) * PAGE_SIZE + 1;
@@ -273,7 +274,7 @@ export default function ItemsPage() {
           }
         });
     },
-    [queryClient, marketContext.seasonId, marketContext.marketMode]
+    [queryClient, marketContext.seasonId, marketContext.marketMode, addToast]
   );
 
   const columns = useMemo(

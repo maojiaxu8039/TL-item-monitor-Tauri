@@ -392,7 +392,7 @@ export default function DataMonitorPage() {
     }
 
     refetchStatus();
-  }, [dataType, syncMode, timeRange, serverUrl, marketContext, refetchStatus]);
+  }, [dataType, syncMode, timeRange, serverUrl, marketContext, refetchStatus, lastItemsSyncTimestamp, setSyncJob]);
 
   const syncMutation = useMutation({
     mutationFn: async () => {

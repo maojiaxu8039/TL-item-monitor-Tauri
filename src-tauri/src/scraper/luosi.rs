@@ -4,6 +4,9 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::collections::HashMap;
 
+// SECURITY NOTE: This third-party API endpoint only supports HTTP (not HTTPS).
+// The upstream service provider does not offer TLS, so all traffic to this
+// endpoint is unencrypted. No sensitive credentials are transmitted.
 const LUOSI_BASE_URL: &str = "http://115.231.176.101:8080/get";
 
 static LUOSI_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {

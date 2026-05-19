@@ -129,7 +129,7 @@ export default function AlertsPage() {
     };
     doLoad();
     return () => { mounted = false; };
-  }, [marketContextReady]);
+  }, [marketContextReady, addToast]);
 
   const handleCreate = async () => {
     if (!createForm.section_id.trim() && !createForm.item_id.trim()) {

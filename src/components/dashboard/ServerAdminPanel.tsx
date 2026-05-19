@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Settings, ChevronDown, ChevronUp, Key, Plus, Save, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { serverAdmin, type ServerApiConfig } from "@/lib/commands";
@@ -14,6 +14,13 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
   const [password, setPassword] = useState("");
   const [activeTab, setActiveTab] = useState<"init-season" | "api-config">("api-config");
   const [isLoading, setIsLoading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
   
   // Init Season
   const [newSeasonId, setNewSeasonId] = useState("");
@@ -23,6 +30,13 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
   const [editedConfig, setEditedConfig] = useState<ServerApiConfig | null>(null);
 
+  const getSignal = () => {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    return controller.signal;
+  };
+
   const loadApiConfig = async () => {
     if (!password) {
       toast.error("请先输入管理员密码");
@@ -30,7 +44,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
     }
     setIsLoading(true);
     try {
-      const config = await serverAdmin.getApiConfig(serverUrl, password);
+      const config = await serverAdmin.getApiConfig(serverUrl, password, getSignal());
       setEditedConfig(config.api_config);
       setIsConfigLoaded(true);
       toast.success("API配置已加载");
@@ -64,7 +78,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
     
     setIsLoading(true);
     try {
-      await serverAdmin.initSeason(serverUrl, password, newSeasonId, startedAt);
+      await serverAdmin.initSeason(serverUrl, password, newSeasonId, startedAt, undefined, getSignal());
       toast.success(`新赛季 ${newSeasonId} 初始化成功`);
       setNewSeasonId("");
       setNewSeasonStartedAt("");
@@ -87,7 +101,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
     
     setIsLoading(true);
     try {
-      await serverAdmin.updateApiConfig(serverUrl, password, editedConfig);
+      await serverAdmin.updateApiConfig(serverUrl, password, editedConfig, getSignal());
       toast.success("API配置已更新（重启服务器后生效）");
     } catch (err) {
       toast.error(`保存失败: ${err}`);

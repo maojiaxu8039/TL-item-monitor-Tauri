@@ -49,6 +49,7 @@ pub async fn insert_fire_record(
     snapshot: &crate::core::state::FirePriceSnapshot,
 ) -> Result<FirePriceRecord, crate::core::errors::AppError> {
     let now = Utc::now().timestamp();
+    TableResolver::validate(season_id, market_mode)?;
     let table = TableResolver::fire_price_table(season_id, market_mode);
 
     let result = sqlx::query(
@@ -97,6 +98,7 @@ pub async fn get_latest_fire(
     season_id: &str,
     market_mode: &str,
 ) -> Result<Option<FirePriceRecord>, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let table = TableResolver::fire_price_table(season_id, market_mode);
     let record: Option<FirePriceRecord> = sqlx::query_as(
         &format!(
@@ -118,6 +120,7 @@ pub async fn get_fire_history(
     hours: i64,
 ) -> Result<Vec<serde_json::Value>, crate::core::errors::AppError> {
     let cutoff = Utc::now().timestamp() - (hours * 3600);
+    TableResolver::validate(season_id, market_mode)?;
     let table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
 
     let records: Vec<FirePriceSnapshotRecord> = sqlx::query_as(
@@ -175,6 +178,8 @@ pub async fn get_previous_season_fire_by_season_day(
     let hour_start = prev_day_start + (current_hour as i64) * SECONDS_PER_HOUR;
     let hour_end = hour_start + SECONDS_PER_HOUR;
 
+    TableResolver::validate(prev_season_id, market_mode)?;
+
     let prev_table = TableResolver::fire_price_snapshots_table(prev_season_id, market_mode);
 
     let record: Option<FirePriceRecord> = sqlx::query_as(
@@ -214,6 +219,8 @@ pub async fn get_previous_season_fire_nearest(
     let target_time =
         prev_season_start + (prev_season_day as i64 - 1) * SECONDS_PER_DAY + SECONDS_PER_HOUR;
 
+    TableResolver::validate(prev_season_id, market_mode)?;
+
     let prev_table = TableResolver::fire_price_snapshots_table(prev_season_id, market_mode);
 
     let record: Option<FirePriceRecord> = sqlx::query_as(
@@ -238,6 +245,7 @@ pub async fn get_fire_history_all(
     limit: i32,
     offset: i32,
 ) -> Result<Vec<serde_json::Value>, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
 
     let records: Vec<FirePriceSnapshotRecord> = sqlx::query_as(

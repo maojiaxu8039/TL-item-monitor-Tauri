@@ -895,11 +895,12 @@ export interface ServerAdminResponse {
 }
 
 export const serverAdmin = {
-  getApiConfig: (serverUrl: string, password: string) =>
+  getApiConfig: (serverUrl: string, password: string, signal?: AbortSignal) =>
     fetch(`${serverUrl}/api/admin/config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password }),
+      signal,
     })
       .then(res => res.json())
       .then((data: ServerAdminResponse) => {
@@ -907,11 +908,12 @@ export const serverAdmin = {
         return data.data as ServerFullConfig;
       }),
 
-  initSeason: (serverUrl: string, password: string, seasonId: string, startedAt: number, seasonName?: string) =>
+  initSeason: (serverUrl: string, password: string, seasonId: string, startedAt: number, seasonName?: string, signal?: AbortSignal) =>
     fetch(`${serverUrl}/admin/init-season`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password, season_id: seasonId, started_at: startedAt, season_name: seasonName }),
+      signal,
     })
       .then(res => res.json())
       .then((data: ServerAdminResponse) => {
@@ -919,11 +921,12 @@ export const serverAdmin = {
         return data.data;
       }),
 
-  updateApiConfig: (serverUrl: string, password: string, apiConfig: ServerApiConfig) =>
+  updateApiConfig: (serverUrl: string, password: string, apiConfig: ServerApiConfig, signal?: AbortSignal) =>
     fetch(`${serverUrl}/admin/update-api-config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password, api_config: apiConfig }),
+      signal,
     })
       .then(res => res.json())
       .then((data: ServerAdminResponse) => {
@@ -931,11 +934,12 @@ export const serverAdmin = {
         return data.data;
       }),
 
-  updateScrapeModes: (serverUrl: string, password: string, scrapeModes: ScrapeMode[]) =>
+  updateScrapeModes: (serverUrl: string, password: string, scrapeModes: ScrapeMode[], signal?: AbortSignal) =>
     fetch(`${serverUrl}/api/admin/update-config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password, scrape_modes: scrapeModes }),
+      signal,
     })
       .then(res => res.json())
       .then((data: ServerAdminResponse) => {

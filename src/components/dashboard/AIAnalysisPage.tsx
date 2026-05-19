@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { cmd } from "@/lib/commands";
@@ -32,8 +32,9 @@ interface ChatMessage {
   timestamp: number;
 }
 
+let messageIdCounter = 0;
 function generateMessageId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+  return `${Date.now()}-${++messageIdCounter}`;
 }
 
 const DEFAULT_SETTINGS = {
@@ -171,16 +172,7 @@ export default function AIAnalysisPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => {
-    if (!aiEnabled) {
-      connectionTestIdRef.current += 1;
-      setConnectionStatus('disconnected');
-      return;
-    }
-    testConnection(settings);
-  }, [aiEnabled, settings.gatewayUrl, settings.gatewayToken]);
-
-  const testConnection = async (settingsToTest: AISettings = settings) => {
+  const testConnection = useCallback(async (settingsToTest: AISettings = settings) => {
     const testId = ++connectionTestIdRef.current;
     setConnectionStatus('connecting');
 
@@ -207,7 +199,16 @@ export default function AIAnalysisPage() {
       setConnectionStatus('error');
       addToast("error", "无法连接到OpenClaw Gateway");
     }
-  };
+  }, [settings, addToast]);
+
+  useEffect(() => {
+    if (!aiEnabled) {
+      connectionTestIdRef.current += 1;
+      setConnectionStatus('disconnected');
+      return;
+    }
+    testConnection(settings);
+  }, [aiEnabled, settings, testConnection]);
 
   const { data: fireData } = useQuery({
     queryKey: ["fire-history", marketContext.seasonId, marketContext.marketMode],

@@ -73,13 +73,15 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
     enabled: !!itemId && !!historySeason && viewMode === "season",
   });
 
-  const currentData = viewMode === "day" 
-    ? (currentDayQuery.data || [])
-    : (currentSeasonQuery.data || []);
-  
-  const historyData = viewMode === "day"
-    ? (historyDayQuery.data || [])
-    : (historySeasonQuery.data || []);
+  const currentData = useMemo(() =>
+    viewMode === "day" ? (currentDayQuery.data || []) : (currentSeasonQuery.data || []),
+    [viewMode, currentDayQuery.data, currentSeasonQuery.data]
+  );
+
+  const historyData = useMemo(() =>
+    viewMode === "day" ? (historyDayQuery.data || []) : (historySeasonQuery.data || []),
+    [viewMode, historyDayQuery.data, historySeasonQuery.data]
+  );
 
   const isLoading = viewMode === "day"
     ? (currentDayQuery.isLoading || historyDayQuery.isLoading)

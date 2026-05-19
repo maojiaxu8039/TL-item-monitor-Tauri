@@ -41,6 +41,8 @@ pub async fn insert_item_price_snapshots(
         return Ok(0);
     }
 
+    TableResolver::validate(season_id, market_mode)?;
+
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
     let season_start = get_season_start_from_db(pool, season_id).await?;
     let season_day = calculate_season_day(snapshot_at, season_start);
@@ -82,6 +84,7 @@ pub async fn insert_fire_snapshot(
     let season_day = calculate_season_day(scraped_at, season_start);
 
     // 1. Write to real-time fire_price table (latest price)
+    TableResolver::validate(season_id, market_mode)?;
     let realtime_table = TableResolver::fire_price_table(season_id, market_mode);
     sqlx::query(
         &format!(
@@ -104,6 +107,7 @@ pub async fn insert_fire_snapshot(
     .await?;
 
     // 2. Write to fire_price_snapshots table (hourly history)
+    TableResolver::validate(season_id, market_mode)?;
     let snapshots_table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
     sqlx::query(
         &format!(
@@ -148,7 +152,9 @@ pub async fn insert_fire_snapshots_batch(
 
     let now = Utc::now().timestamp();
     let season_start = get_season_start_from_db(pool, season_id).await?;
+    TableResolver::validate(season_id, market_mode)?;
     let realtime_table = TableResolver::fire_price_table(season_id, market_mode);
+    TableResolver::validate(season_id, market_mode)?;
     let snapshots_table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
 
     let mut tx = pool.begin().await?;
@@ -214,6 +220,7 @@ pub async fn get_item_history(
     item_id: &str,
     limit: i64,
 ) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
     tracing::info!(
         "get_item_history: table={}, item_id={}, season_id={}, market_mode={}",
@@ -245,6 +252,7 @@ pub async fn get_all_item_history(
     hours: i64,
 ) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
     let since = chrono::Utc::now().timestamp() - hours * SECONDS_PER_HOUR;
+    TableResolver::validate(season_id, market_mode)?;
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
     let records = sqlx::query_as::<_, ItemHistoryRecord>(&format!(
         "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at \
@@ -279,6 +287,7 @@ pub async fn get_item_history_by_day(
     item_id: &str,
     season_day: i32,
 ) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
     let season_start = get_season_start_from_db(pool, season_id).await?;
 
@@ -346,7 +355,9 @@ pub async fn get_items_price_compare(
     market_mode: &str,
     day_filter: Option<i32>,
 ) -> Result<Vec<ItemPriceCompare>, crate::core::errors::AppError> {
+    TableResolver::validate(current_season, market_mode)?;
     let current_snapshots_table = TableResolver::item_snapshots_table(current_season, market_mode);
+    TableResolver::validate(history_season, market_mode)?;
     let history_snapshots_table = TableResolver::item_snapshots_table(history_season, market_mode);
 
     tracing::info!(
@@ -499,10 +510,10 @@ pub async fn get_fire_price_compare(
     market_mode: &str,
 ) -> Result<FirePriceCompareResult, AppError> {
     let now = Utc::now().timestamp();
-    let current_snapshots_table =
-        TableResolver::fire_price_snapshots_table(current_season, market_mode);
-    let history_snapshots_table =
-        TableResolver::fire_price_snapshots_table(history_season, market_mode);
+    TableResolver::validate(current_season, market_mode)?;
+    let current_snapshots_table = TableResolver::fire_price_snapshots_table(current_season, market_mode);
+    TableResolver::validate(history_season, market_mode)?;
+    let history_snapshots_table = TableResolver::fire_price_snapshots_table(history_season, market_mode);
 
     let current_record: Option<(f64, i64, i64)> = sqlx::query_as(&format!(
         "SELECT rmb_per_10k_fire, scraped_at, season_day FROM {} \
@@ -689,6 +700,7 @@ pub async fn insert_item_snapshot(
     _last_time: Option<i64>,
     recorded_at: i64,
 ) -> Result<(), AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
     let season_start = get_season_start_from_db(pool, season_id).await?;
     let season_day = calculate_season_day(recorded_at, season_start);
@@ -728,6 +740,8 @@ pub async fn insert_item_snapshots_batch(
         return Ok(0);
     }
 
+    TableResolver::validate(season_id, market_mode)?;
+
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
     let season_start = get_season_start_from_db(pool, season_id).await?;
 
@@ -765,7 +779,9 @@ pub async fn get_season_summary(
     market_mode: &str,
 ) -> Result<SeasonSummary, crate::core::errors::AppError> {
     let since_24h = Utc::now().timestamp() - SECONDS_PER_DAY;
+    TableResolver::validate(season_id, market_mode)?;
     let items_table = TableResolver::items_table(season_id, market_mode);
+    TableResolver::validate(season_id, market_mode)?;
     let fire_table = TableResolver::fire_price_table(season_id, market_mode);
 
     let row = sqlx::query_as::<_, SeasonSummary>(
@@ -805,6 +821,7 @@ pub async fn get_season_trends(
     hours: i64,
 ) -> Result<Vec<SeasonTrendHour>, crate::core::errors::AppError> {
     let since = Utc::now().timestamp() - hours * SECONDS_PER_HOUR;
+    TableResolver::validate(season_id, market_mode)?;
     let fire_table = TableResolver::fire_price_table(season_id, market_mode);
 
     let records = sqlx::query_as::<_, SeasonTrendHour>(&format!(

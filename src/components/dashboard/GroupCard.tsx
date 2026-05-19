@@ -25,7 +25,14 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
   const [editName, setEditName] = useState(section.name)
   const [displayName, setDisplayName] = useState(section.name)
   const inputRef = useRef<HTMLInputElement>(null)
+  const selectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { refreshTrigger, marketContext, marketContextReady } = useSectionRefresh()
+
+  useEffect(() => {
+    return () => {
+      if (selectTimeoutRef.current) clearTimeout(selectTimeoutRef.current)
+    }
+  }, [])
   
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null)
@@ -113,7 +120,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
   const handleStartEdit = useCallback(() => {
     setEditName(displayName)
     setIsEditing(true)
-    setTimeout(() => inputRef.current?.select(), 0)
+    selectTimeoutRef.current = setTimeout(() => inputRef.current?.select(), 0)
   }, [displayName])
 
   const handleSaveEdit = useCallback(() => {

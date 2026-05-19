@@ -862,7 +862,7 @@ export default function SettingsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.open("https://github.com/your-repo/releases", "_blank")}
+            onClick={() => window.open("https://github.com/your-repo/releases", "_blank", "noopener,noreferrer")}
           >
             检查更新
           </Button>

@@ -27,10 +27,20 @@ interface ChartPoint {
   history: number | null;
 }
 
+import { DEFAULT_HISTORY_SEASON } from "@/lib/constants";
+
 const SS12_START = 1776355200;
 
+const timeRanges: { label: string; value: TimeRange; dayRange: DayRange }[] = [
+  { label: "第1-3天", value: "3d", dayRange: { start: 1, end: 3 } },
+  { label: "第1-7天", value: "7d", dayRange: { start: 1, end: 7 } },
+  { label: "第1-14天", value: "14d", dayRange: { start: 1, end: 14 } },
+  { label: "第1-30天", value: "30d", dayRange: { start: 1, end: 30 } },
+  { label: "整个赛季", value: "all", dayRange: { start: 1, end: 999 } },
+];
+
 export default function FirePriceComparePage() {
-  const [historySeason, setHistorySeason] = useState("ss11");
+  const [historySeason, setHistorySeason] = useState(DEFAULT_HISTORY_SEASON);
   const [timeRange, setTimeRange] = useState<TimeRange>("all");
   const [customDayRange, setCustomDayRange] = useState<DayRange>({ start: 1, end: 7 });
   const [useCustomRange, setUseCustomRange] = useState(false);
@@ -38,14 +48,6 @@ export default function FirePriceComparePage() {
 
   const currentSeason = marketContext.seasonId;
   const marketMode = marketContext.marketMode;
-
-  const timeRanges: { label: string; value: TimeRange; dayRange: DayRange }[] = [
-    { label: "第1-3天", value: "3d", dayRange: { start: 1, end: 3 } },
-    { label: "第1-7天", value: "7d", dayRange: { start: 1, end: 7 } },
-    { label: "第1-14天", value: "14d", dayRange: { start: 1, end: 14 } },
-    { label: "第1-30天", value: "30d", dayRange: { start: 1, end: 30 } },
-    { label: "整个赛季", value: "all", dayRange: { start: 1, end: 999 } },
-  ];
 
   const currentQuery = useQuery({
     queryKey: ["fire-trend-current", currentSeason, marketMode, timeRange],
@@ -61,8 +63,8 @@ export default function FirePriceComparePage() {
     enabled: !!historySeason,
   });
 
-  const currentData: FireDataPoint[] = (currentQuery.data || []) as FireDataPoint[];
-  const historyData: FireDataPoint[] = (historyQuery.data || []) as FireDataPoint[];
+  const currentData = useMemo(() => (currentQuery.data || []) as FireDataPoint[], [currentQuery.data]);
+  const historyData = useMemo(() => (historyQuery.data || []) as FireDataPoint[], [historyQuery.data]);
 
   const currentMaxDay = useMemo(() => {
     const now = Date.now() / 1000;
@@ -70,17 +72,13 @@ export default function FirePriceComparePage() {
     return Math.max(1, daysSinceStart);
   }, []);
 
-  const getDayRange = (): DayRange | null => {
-    if (useCustomRange) {
-      return customDayRange;
-    }
+  const dayRange = useMemo((): DayRange | null => {
+    if (useCustomRange) return customDayRange;
     const range = timeRanges.find(r => r.value === timeRange);
     return range?.dayRange ?? null;
-  };
+  }, [useCustomRange, customDayRange, timeRange]);
 
   const chartData = useMemo(() => {
-    const dayRange = getDayRange();
-
     let filteredCurrent = currentData;
     let filteredHistory = historyData;
 
@@ -136,7 +134,7 @@ export default function FirePriceComparePage() {
         history: historyByDayHour.get(key) ?? null,
       };
     });
-  }, [currentData, historyData, timeRange, useCustomRange, customDayRange]);
+  }, [currentData, historyData, dayRange]);
 
   const allValues = chartData.flatMap(d => [d.current, d.history]).filter((v): v is number => v !== null);
   const minValue = allValues.length > 0 ? Math.min(...allValues) : 0;
@@ -146,7 +144,6 @@ export default function FirePriceComparePage() {
     Math.ceil(maxValue * 1.1)
   ];
 
-  const dayRange = getDayRange();
   const filteredCurrentData = dayRange !== null
     ? currentData.filter(r => r.season_day >= dayRange.start && r.season_day <= dayRange.end)
     : currentData;

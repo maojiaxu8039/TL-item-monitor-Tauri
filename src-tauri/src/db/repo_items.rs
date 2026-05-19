@@ -27,6 +27,7 @@ pub async fn search_items(
 ) -> Result<(Vec<Item>, i64), crate::core::errors::AppError> {
     let offset = (page - 1) * page_size;
     let pattern = format!("%{}%", keyword);
+    TableResolver::validate(season_id, market_mode)?;
     let items_table = TableResolver::items_table(season_id, market_mode);
 
     let mut conditions = vec!["name LIKE ?".to_string()];
@@ -93,6 +94,7 @@ pub async fn get_items_count(
     season_id: &str,
     market_mode: &str,
 ) -> Result<i64, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let items_table = TableResolver::items_table(season_id, market_mode);
     let (count,): (i64,) = sqlx::query_as(&format!(
         "SELECT COUNT(DISTINCT item_id) FROM {}",
@@ -116,6 +118,7 @@ pub async fn bulk_insert_items(
     }
 
     // Real-time tables don't have season suffix, but we pass season_id for consistency
+    TableResolver::validate(season_id, market_mode)?;
     let table = TableResolver::items_table(season_id, market_mode);
     let mut tx = pool.begin().await?;
 
@@ -145,7 +148,9 @@ pub async fn get_db_record_count(pool: &SqlitePool) -> Result<i64, crate::core::
 
     for season in &season_ids {
         for mode in ["season_normal", "season_expert"] {
+            TableResolver::validate(season, mode)?;
             let snapshots_table = TableResolver::item_snapshots_table(season, mode);
+            TableResolver::validate(season, mode)?;
             let fire_snapshots_table = TableResolver::fire_price_snapshots_table(season, mode);
 
             let item_sql = format!("SELECT COUNT(DISTINCT item_id) FROM {}", snapshots_table);
@@ -173,6 +178,7 @@ pub async fn get_distinct_item_types(
     season_id: &str,
     market_mode: &str,
 ) -> Result<Vec<String>, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let items_table = TableResolver::items_table(season_id, market_mode);
     let types: Vec<(String,)> = sqlx::query_as(
         &format!(
@@ -192,6 +198,7 @@ pub async fn get_items_by_season(
     season_id: &str,
     market_mode: &str,
 ) -> Result<Vec<Item>, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let snapshots_table = TableResolver::item_snapshots_table(season_id, market_mode);
     let items: Vec<Item> = sqlx::query_as(&format!(
         r#"
@@ -228,6 +235,7 @@ pub async fn get_items_from_realtime_table(
     season_id: &str,
     market_mode: &str,
 ) -> Result<Vec<Item>, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let items_table = TableResolver::items_table(season_id, market_mode);
     let items: Vec<Item> = sqlx::query_as(&format!(
         r#"
@@ -257,6 +265,7 @@ pub async fn clear_items(
     season_id: &str,
     market_mode: &str,
 ) -> Result<(), crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let snapshots_table = TableResolver::item_snapshots_table(season_id, market_mode);
     sqlx::query(&format!("DELETE FROM {}", snapshots_table))
         .execute(pool)
@@ -281,6 +290,7 @@ pub async fn search_items_simple(
     market_mode: &str,
     keyword: &str,
 ) -> Result<Vec<ItemSearchResult>, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let items_table = TableResolver::items_table(season_id, market_mode);
     let pattern = format!("%{}%", keyword);
 

@@ -161,7 +161,7 @@ export default function StrategiesPage() {
 
   useEffect(() => {
     loadStrategies();
-  }, []);
+  }, [loadStrategies]);
 
   const toggleExpand = useCallback((id: string) => {
     setExpandedIds(prev => {
@@ -275,7 +275,7 @@ export default function StrategiesPage() {
     } catch (e) {
       toast.error("删除策略失败");
     }
-  }, []);
+  }, [loadStrategies]);
 
   const handleAddCost = async () => {
     if (!costForm.item_id.trim() && !costForm.item_name.trim()) {
@@ -331,7 +331,7 @@ export default function StrategiesPage() {
     } catch (e) {
       toast.error("删除成本失败");
     }
-  }, []);
+  }, [loadStrategies]);
 
   const handleDeleteOutput = useCallback(async (id: string) => {
     try {
@@ -341,7 +341,7 @@ export default function StrategiesPage() {
     } catch (e) {
       toast.error("删除产出失败");
     }
-  }, []);
+  }, [loadStrategies]);
 
   const handleRefreshPrices = useCallback(async (strategyId: string) => {
     setRefreshing(strategyId);
@@ -354,7 +354,7 @@ export default function StrategiesPage() {
     } finally {
       setRefreshing(null);
     }
-  }, []);
+  }, [loadStrategies]);
 
   const openCostDialog = useCallback((strategyId: string) => {
     setCostForm({
@@ -426,22 +426,22 @@ export default function StrategiesPage() {
 
   const handleItemSelect = useCallback((item: ItemData) => {
     if (showCostDialog) {
-      setCostForm({
-        ...costForm,
+      setCostForm(prev => ({
+        ...prev,
         item_id: item.item_id,
         item_name: item.name,
         cost_type: guessCostType(item.name, item.item_type),
-      });
+      }));
       setItemSearchResults([]);
     } else if (showOutputDialog) {
-      setOutputForm({
-        ...outputForm,
+      setOutputForm(prev => ({
+        ...prev,
         item_name: item.name,
         item_type: item.item_type,
-      });
+      }));
       setItemSearchResults([]);
     }
-  }, []);
+  }, [showCostDialog, showOutputDialog]);
 
   const getLabelColor = (label: string) => {
     switch (label) {

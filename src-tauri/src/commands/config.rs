@@ -133,6 +133,11 @@ pub async fn test_notification(
 #[tauri::command]
 pub async fn open_log_dir() -> Result<OkResponse, String> {
     let logs_dir = crate::core::paths::logs_dir();
+    if !tokio::fs::try_exists(&logs_dir).await.unwrap_or(false) {
+        tokio::fs::create_dir_all(&logs_dir)
+            .await
+            .map_err(|e| format!("Failed to create logs directory: {}", e))?;
+    }
     #[cfg(target_os = "windows")]
     {
         tokio::process::Command::new("explorer")

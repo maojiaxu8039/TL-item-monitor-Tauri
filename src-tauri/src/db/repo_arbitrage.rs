@@ -314,6 +314,8 @@ pub async fn get_item_prices_by_name(
         return Ok(HashMap::new());
     }
 
+    TableResolver::validate(season_id, market_mode)?;
+
     let items_table = TableResolver::items_table(season_id, market_mode);
     let mut prices = HashMap::new();
 
@@ -350,6 +352,8 @@ pub async fn get_item_lowest_prices_by_name(
     if item_names.is_empty() {
         return Ok(HashMap::new());
     }
+
+    TableResolver::validate(season_id, market_mode)?;
 
     let items_table = TableResolver::items_table(season_id, market_mode);
     let mut prices = HashMap::new();

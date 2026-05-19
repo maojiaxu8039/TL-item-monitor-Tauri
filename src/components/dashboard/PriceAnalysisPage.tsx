@@ -16,6 +16,7 @@ import {
 import { ItemPriceTrendModal } from "./ItemPriceTrendModal";
 import { useToast } from "@/hooks/useToast";
 import { PageShell } from "@/components/ui/PageShell";
+import { DEFAULT_HISTORY_SEASON } from "@/lib/constants";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -404,7 +405,7 @@ export default function PriceAnalysisPage() {
         <ItemPriceTrendModal
           itemId={trendItem.itemId}
           itemName={trendItem.itemName}
-          historySeason="ss11"
+          historySeason={DEFAULT_HISTORY_SEASON}
           currentDay={1}
           onClose={() => setTrendItem(null)}
         />
