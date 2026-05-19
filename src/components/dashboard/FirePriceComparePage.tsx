@@ -53,6 +53,7 @@ export default function FirePriceComparePage() {
     queryKey: ["fire-trend-current", currentSeason, marketMode, timeRange],
     queryFn: () => cmd.getFireHistoryBySeason(currentSeason, marketMode, 99999),
     refetchInterval: 60000,
+    staleTime: 30 * 1000,
     enabled: !!currentSeason,
   });
 
@@ -60,6 +61,7 @@ export default function FirePriceComparePage() {
     queryKey: ["fire-trend-history", historySeason, marketMode, timeRange],
     queryFn: () => cmd.getFireHistoryBySeason(historySeason, marketMode, 99999),
     refetchInterval: 60000,
+    staleTime: 30 * 1000,
     enabled: !!historySeason,
   });
 
@@ -178,23 +180,11 @@ export default function FirePriceComparePage() {
     setTimeRange("all");
   };
 
-  const renderBestTimeAnalysis = () => {
+  const bestTimeAnalysis = useMemo(() => {
     if (filteredCurrentData.length === 0) return null;
+    if (filteredCurrentData.length < 2) return { insufficient: true };
 
     const sortedData = [...filteredCurrentData].sort((a, b) => a.scraped_at - b.scraped_at);
-
-    if (sortedData.length < 2) {
-      return (
-        <Surface padding="md">
-          <div className="flex items-center gap-2 mb-4">
-            <CalendarDays className="w-4 h-4 text-[var(--color-text-subtle)]" />
-            <h3 className="text-sm font-semibold text-[var(--color-text)]">最佳交易时段分析</h3>
-          </div>
-          <EmptyState description="数据不足，无法分析" />
-        </Surface>
-      );
-    }
-
     const allPrices = sortedData.map(r => r.rmb_per_10k_fire);
     const avgPrice = allPrices.reduce((a, b) => a + b, 0) / allPrices.length;
     const minPrice = Math.min(...allPrices);
@@ -207,24 +197,20 @@ export default function FirePriceComparePage() {
       day: sortedData[globalMinIdx].season_day,
       hour: new Date(sortedData[globalMinIdx].scraped_at * 1000).getHours(),
       price: minPrice,
-      timestamp: sortedData[globalMinIdx].scraped_at,
     };
 
     const maxPoint = {
       day: sortedData[globalMaxIdx].season_day,
       hour: new Date(sortedData[globalMaxIdx].scraped_at * 1000).getHours(),
       price: maxPrice,
-      timestamp: sortedData[globalMaxIdx].scraped_at,
     };
 
-    const groupByDay = new Map<number, { hour: number; price: number; timestamp: number }[]>();
+    const groupByDay = new Map<number, { hour: number; price: number }[]>();
     sortedData.forEach(r => {
       const day = r.season_day;
       const hour = new Date(r.scraped_at * 1000).getHours();
-      if (!groupByDay.has(day)) {
-        groupByDay.set(day, []);
-      }
-      groupByDay.get(day)!.push({ hour, price: r.rmb_per_10k_fire, timestamp: r.scraped_at });
+      if (!groupByDay.has(day)) groupByDay.set(day, []);
+      groupByDay.get(day)!.push({ hour, price: r.rmb_per_10k_fire });
     });
 
     const dailyStats = Array.from(groupByDay.entries()).map(([day, points]) => {
@@ -234,7 +220,7 @@ export default function FirePriceComparePage() {
       const minPoint = points.find(p => p.price === min)!;
       const maxPoint = points.find(p => p.price === max)!;
       const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-      return { day, min, max, avg, minHour: minPoint.hour, maxHour: maxPoint.hour, minTimestamp: minPoint.timestamp, maxTimestamp: maxPoint.timestamp };
+      return { day, min, max, avg, minHour: minPoint.hour, maxHour: maxPoint.hour };
     });
 
     const avgDailyAvg = dailyStats.reduce((a, d) => a + d.avg, 0) / dailyStats.length;
@@ -242,7 +228,7 @@ export default function FirePriceComparePage() {
     const lowDays = dailyStats.filter(d => d.avg < avgDailyAvg * 0.9).sort((a, b) => a.min - b.min);
     const highDays = dailyStats.filter(d => d.avg > avgDailyAvg * 1.1).sort((a, b) => b.max - a.max);
 
-    const bestBuyTime = lowDays.length > 0 
+    const bestBuyTime = lowDays.length > 0
       ? {
           day: lowDays[0].day,
           hour: lowDays[0].minHour,
@@ -269,6 +255,25 @@ export default function FirePriceComparePage() {
           price: maxPoint.price,
           reason: `第${maxPoint.day}天 ${String(maxPoint.hour).padStart(2, '0')}:00 出现全赛季最高价 ${maxPoint.price.toFixed(0)}元`
         };
+
+    return { bestBuyTime, bestSellTime, avgPrice, minPrice, maxPrice, insufficient: false };
+  }, [filteredCurrentData]);
+
+  const renderBestTimeAnalysis = () => {
+    if (!bestTimeAnalysis) return null;
+    if (bestTimeAnalysis.insufficient) {
+      return (
+        <Surface padding="md">
+          <div className="flex items-center gap-2 mb-4">
+            <CalendarDays className="w-4 h-4 text-[var(--color-text-subtle)]" />
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">最佳交易时段分析</h3>
+          </div>
+          <EmptyState description="数据不足，无法分析" />
+        </Surface>
+      );
+    }
+
+    const { bestBuyTime, bestSellTime, avgPrice, minPrice, maxPrice } = bestTimeAnalysis;
 
     return (
       <Surface padding="md">

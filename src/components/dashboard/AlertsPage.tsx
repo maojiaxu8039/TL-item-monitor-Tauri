@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Bell,
   Plus,
@@ -74,6 +74,11 @@ export default function AlertsPage() {
   });
 
   const [itemSearch, setItemSearch] = useState("");
+
+  const { enabledCount, disabledCount } = useMemo(() => ({
+    enabledCount: rules.filter(r => r.enabled === 1).length,
+    disabledCount: rules.filter(r => r.enabled === 0).length,
+  }), [rules]);
   const [itemResults, setItemResults] = useState<ItemSearchResult[]>([]);
   const [selectedItemName, setSelectedItemName] = useState<string>("");
 
@@ -89,7 +94,7 @@ export default function AlertsPage() {
     price: item.current_price || 0,
   });
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [rulesData, eventsData, sectionsData] = await Promise.all([
         cmd.getAlertRules(),
@@ -104,7 +109,7 @@ export default function AlertsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [addToast]);
 
   useEffect(() => {
     if (!marketContextReady) return;
@@ -129,7 +134,7 @@ export default function AlertsPage() {
     };
     doLoad();
     return () => { mounted = false; };
-  }, [marketContextReady, addToast]);
+  }, [marketContextReady, marketContext.seasonId, marketContext.marketMode, addToast]);
 
   const handleCreate = async () => {
     if (!createForm.section_id.trim() && !createForm.item_id.trim()) {
@@ -302,8 +307,8 @@ export default function AlertsPage() {
         <div className="flex items-center gap-2">
           {[
             { key: "all", label: "全部", count: rules.length, color: "slate" },
-            { key: "enabled", label: "启用中", count: rules.filter(r => r.enabled === 1).length, color: "green" },
-            { key: "disabled", label: "已停用", count: rules.filter(r => r.enabled === 0).length, color: "slate" },
+            { key: "enabled", label: "启用中", count: enabledCount, color: "green" },
+            { key: "disabled", label: "已停用", count: disabledCount, color: "slate" },
           ].map(tab => (
             <button
               key={tab.key}

@@ -186,7 +186,7 @@ export default function DealsPage() {
 
   const { data: fireChanges = [], isLoading, refetch } = useQuery({
     queryKey: ["realtime-fire-changes", marketContext.seasonId, marketContext.marketMode],
-    queryFn: () => cmd.getRealtimeFireChanges(),
+    queryFn: () => cmd.getRealtimeFireChanges(marketContext.seasonId, marketContext.marketMode),
     enabled: marketContextReady,
     refetchInterval: 60000,
     staleTime: 30000,
@@ -197,7 +197,7 @@ export default function DealsPage() {
     localStorage.setItem("deals-settings", JSON.stringify(newSettings));
   }, []);
 
-  const riseItems = fireChanges.filter(item => {
+  const riseItems = useMemo(() => fireChanges.filter(item => {
     if (!item.trend.includes("rise")) return false;
     const maxChange = Math.max(
       Math.abs(item.change_rate_3h ?? 0),
@@ -206,9 +206,9 @@ export default function DealsPage() {
       Math.abs(item.change_rate_5m ?? 0)
     );
     return maxChange >= settings.rise_threshold;
-  });
+  }), [fireChanges, settings.rise_threshold]);
 
-  const fallItems = fireChanges.filter(item => {
+  const fallItems = useMemo(() => fireChanges.filter(item => {
     if (!item.trend.includes("fall")) return false;
     const maxChange = Math.max(
       Math.abs(item.change_rate_3h ?? 0),
@@ -217,7 +217,7 @@ export default function DealsPage() {
       Math.abs(item.change_rate_5m ?? 0)
     );
     return maxChange >= settings.fall_threshold;
-  });
+  }), [fireChanges, settings.fall_threshold]);
 
   return (
     <PageShell size="xl" className="h-full flex flex-col">

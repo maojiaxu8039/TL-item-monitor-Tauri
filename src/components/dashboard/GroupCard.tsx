@@ -4,7 +4,7 @@ import { cmd } from "@/lib/commands"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { DangerButton } from "@/components/ui/danger-button"
 import { motion } from "framer-motion"
-import { useState, useEffect, useRef, useMemo, useCallback } from "react"
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
@@ -41,6 +41,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
     queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode, section.id],
     queryFn: () => cmd.getSectionItems(section.id, marketContext.seasonId, marketContext.marketMode),
     enabled: marketContextReady,
+    staleTime: 60 * 1000,
   })
 
   const { data: dashboardSummary } = useQuery<DashboardSummary>({
@@ -175,6 +176,23 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
     }, { totalFire: 0, totalRmb: 0 })
   }, [items, rmbPer10kFire])
 
+  const handleValueChange = useCallback((itemId: string, field: string, value: string) => {
+    setEditValues(prev => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], [field]: value }
+    }))
+  }, [])
+
+  const commitValue = useCallback((itemId: string, field: string, value: string) => {
+    if (!value) return
+    const num = parseFloat(value)
+    if (isNaN(num)) return
+    updateItemMutation.mutate(
+      { itemId, updates: { [field]: num } },
+      { onSuccess: () => setEditValues(prev => { const n = { ...prev }; delete n[itemId]; return n }) }
+    )
+  }, [updateItemMutation])
+
   return (
     <>
       <motion.div
@@ -302,85 +320,21 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                       <td className="py-3 px-1 text-center font-bold text-[var(--color-danger)]">{item.current_price?.toFixed(1) || "—"}火</td>
                       <td className="py-3 px-1 text-center font-semibold text-[var(--color-brand-gold)]">¥{((item.current_price ?? 0) * rmbPer10kFire / 10000).toFixed(2)}</td>
                       <td className="py-3 px-1">
-                        <input
-                          type="number"
+                        <EditableNumberCell
+                          itemId={item.item_id}
+                          field="purchaseFirePrice"
                           value={editValues[item.item_id]?.purchaseFirePrice ?? ""}
-                          placeholder="—"
-                          onChange={(e) => {
-                            setEditValues(prev => ({
-                              ...prev,
-                              [item.item_id]: { ...prev[item.item_id], purchaseFirePrice: e.target.value }
-                            }))
-                          }}
-                          onBlur={(e) => {
-                            const value = e.target.value
-                            if (value) {
-                              const num = parseFloat(value)
-                              if (!isNaN(num)) {
-                                updateItemMutation.mutate(
-                                  { itemId: item.item_id, updates: { purchaseFirePrice: num } },
-                                  { onSuccess: () => setEditValues(prev => { const n = { ...prev }; delete n[item.item_id]; return n }) }
-                                )
-                              }
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              const target = e.currentTarget as HTMLInputElement
-                              const value = target.value
-                              if (value) {
-                                const num = parseFloat(value)
-                                if (!isNaN(num)) {
-                                  updateItemMutation.mutate(
-                                    { itemId: item.item_id, updates: { purchaseFirePrice: num } },
-                                    { onSuccess: () => setEditValues(prev => { const n = { ...prev }; delete n[item.item_id]; return n }) }
-                                  )
-                                }
-                              }
-                            }
-                          }}
-                          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-center text-[var(--color-text-muted)] outline-none transition-colors hover:border-[var(--color-border)] focus:border-[var(--color-brand)] focus:bg-[rgba(13,15,18,0.72)]"
+                          onChange={handleValueChange}
+                          onCommit={commitValue}
                         />
                       </td>
                       <td className="py-3 px-1">
-                        <input
-                          type="number"
+                        <EditableNumberCell
+                          itemId={item.item_id}
+                          field="moreValue"
                           value={editValues[item.item_id]?.moreValue ?? ""}
-                          placeholder="—"
-                          onChange={(e) => {
-                            setEditValues(prev => ({
-                              ...prev,
-                              [item.item_id]: { ...prev[item.item_id], moreValue: e.target.value }
-                            }))
-                          }}
-                          onBlur={(e) => {
-                            const value = e.target.value
-                            if (value) {
-                              const num = parseFloat(value)
-                              if (!isNaN(num)) {
-                                updateItemMutation.mutate(
-                                  { itemId: item.item_id, updates: { moreValue: num } },
-                                  { onSuccess: () => setEditValues(prev => { const n = { ...prev }; delete n[item.item_id]; return n }) }
-                                )
-                              }
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              const target = e.currentTarget as HTMLInputElement
-                              const value = target.value
-                              if (value) {
-                                const num = parseFloat(value)
-                                if (!isNaN(num)) {
-                                  updateItemMutation.mutate(
-                                    { itemId: item.item_id, updates: { moreValue: num } },
-                                    { onSuccess: () => setEditValues(prev => { const n = { ...prev }; delete n[item.item_id]; return n }) }
-                                  )
-                                }
-                              }
-                            }
-                          }}
-                          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-center text-[var(--color-text-muted)] outline-none transition-colors hover:border-[var(--color-border)] focus:border-[var(--color-brand)] focus:bg-[rgba(13,15,18,0.72)]"
+                          onChange={handleValueChange}
+                          onCommit={commitValue}
                         />
                       </td>
                       <td className="py-3 px-1 text-center font-medium text-[var(--color-success)]">
@@ -434,3 +388,39 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
     </>
   )
 }
+
+interface EditableNumberCellProps {
+  itemId: string;
+  field: string;
+  value: string;
+  onChange: (itemId: string, field: string, value: string) => void;
+  onCommit: (itemId: string, field: string, value: string) => void;
+}
+
+const EditableNumberCell = React.memo(function EditableNumberCell({ itemId, field, value, onChange, onCommit }: EditableNumberCellProps) {
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(itemId, field, e.target.value)
+  }, [onChange, itemId, field])
+
+  const handleBlur = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+    onCommit(itemId, field, e.target.value)
+  }, [onCommit, itemId, field])
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      onCommit(itemId, field, e.currentTarget.value)
+    }
+  }, [onCommit, itemId, field])
+
+  return (
+    <input
+      type="number"
+      value={value}
+      placeholder="—"
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-center text-[var(--color-text-muted)] outline-none transition-colors hover:border-[var(--color-border)] focus:border-[var(--color-brand)] focus:bg-[rgba(13,15,18,0.72)]"
+    />
+  )
+})

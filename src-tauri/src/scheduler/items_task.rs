@@ -355,6 +355,8 @@ async fn process_scrape_result(
                     if let Err(e) = repo_item_realtime_prices::batch_insert_realtime_prices(
                         &state.db,
                         &realtime_records,
+                        season_id,
+                        mode,
                     )
                     .await
                     {

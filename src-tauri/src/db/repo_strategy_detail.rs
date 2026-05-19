@@ -351,55 +351,52 @@ pub async fn delete_strategy_output(
 /// Optimized: batch fetch all item prices in a single query per table
 async fn get_all_item_prices(
     pool: &SqlitePool,
-) -> Result<(HashMap<String, f64>, HashMap<String, f64>), crate::core::errors::AppError> {
-    let normal_prices: Vec<(String, f64)> =
-        sqlx::query_as("SELECT item_id, price FROM items_normal")
-            .fetch_all(pool)
-            .await?;
-    let expert_prices: Vec<(String, f64)> =
+    market_mode: &str,
+) -> Result<HashMap<String, f64>, crate::core::errors::AppError> {
+    let prices: Vec<(String, f64)> = if market_mode == "expert" {
         sqlx::query_as("SELECT item_id, price FROM items_expert")
             .fetch_all(pool)
-            .await?;
+            .await?
+    } else {
+        sqlx::query_as("SELECT item_id, price FROM items_normal")
+            .fetch_all(pool)
+            .await?
+    };
 
-    let mut normal_map = HashMap::new();
-    for (id, price) in normal_prices {
-        normal_map.insert(id, price);
+    let mut map = HashMap::new();
+    for (id, price) in prices {
+        map.insert(id, price);
     }
 
-    let mut expert_map = HashMap::new();
-    for (id, price) in expert_prices {
-        expert_map.insert(id, price);
-    }
-
-    Ok((normal_map, expert_map))
+    Ok(map)
 }
 
 async fn get_all_item_prices_by_name(
     pool: &SqlitePool,
-) -> Result<(HashMap<String, f64>, HashMap<String, f64>), crate::core::errors::AppError> {
-    let normal_prices: Vec<(String, f64)> = sqlx::query_as("SELECT name, price FROM items_normal")
-        .fetch_all(pool)
-        .await?;
-    let expert_prices: Vec<(String, f64)> = sqlx::query_as("SELECT name, price FROM items_expert")
-        .fetch_all(pool)
-        .await?;
+    market_mode: &str,
+) -> Result<HashMap<String, f64>, crate::core::errors::AppError> {
+    let prices: Vec<(String, f64)> = if market_mode == "expert" {
+        sqlx::query_as("SELECT name, price FROM items_expert")
+            .fetch_all(pool)
+            .await?
+    } else {
+        sqlx::query_as("SELECT name, price FROM items_normal")
+            .fetch_all(pool)
+            .await?
+    };
 
-    let mut normal_map = HashMap::new();
-    for (name, price) in normal_prices {
-        normal_map.insert(name, price);
+    let mut map = HashMap::new();
+    for (name, price) in prices {
+        map.insert(name, price);
     }
 
-    let mut expert_map = HashMap::new();
-    for (name, price) in expert_prices {
-        expert_map.insert(name, price);
-    }
-
-    Ok((normal_map, expert_map))
+    Ok(map)
 }
 
 pub async fn get_strategy_with_costs(
     pool: &SqlitePool,
     strategy_id: &str,
+    market_mode: &str,
 ) -> Result<Option<StrategyWithCosts>, crate::core::errors::AppError> {
     let strategy = get_strategy_detail(pool, strategy_id).await?;
     let strategy = match strategy {
@@ -411,14 +408,13 @@ pub async fn get_strategy_with_costs(
     let mut outputs = get_strategy_outputs(pool, strategy_id).await?;
 
     // Batch fetch all prices once instead of N+1 queries
-    let (normal_prices, expert_prices) = get_all_item_prices(pool).await?;
-    let (normal_name_prices, expert_name_prices) = get_all_item_prices_by_name(pool).await?;
+    let prices = get_all_item_prices(pool, market_mode).await?;
+    let name_prices = get_all_item_prices_by_name(pool, market_mode).await?;
 
     let mut total_cost_fire = 0.0;
     for cost in &mut costs {
-        let current_price = normal_prices
+        let current_price = prices
             .get(&cost.item_id)
-            .or_else(|| expert_prices.get(&cost.item_id))
             .copied()
             .unwrap_or(0.0);
         if cost.is_realtime {
@@ -430,9 +426,8 @@ pub async fn get_strategy_with_costs(
 
     let mut total_output_value = 0.0;
     for output in &mut outputs {
-        let current_price = normal_name_prices
+        let current_price = name_prices
             .get(&output.item_name)
-            .or_else(|| expert_name_prices.get(&output.item_name))
             .copied()
             .unwrap_or(0.0);
         output.realtime_value = current_price;
@@ -458,6 +453,7 @@ pub async fn get_strategy_with_costs(
 /// Highly optimized: batch fetch all strategies with costs in minimal queries
 pub async fn get_all_strategies_with_costs(
     pool: &SqlitePool,
+    market_mode: &str,
 ) -> Result<Vec<StrategyWithCosts>, crate::core::errors::AppError> {
     let strategies = get_strategy_details(pool).await?;
     let total_count = strategies.len();
@@ -472,8 +468,8 @@ pub async fn get_all_strategies_with_costs(
     let all_outputs = get_strategy_outputs_batch(pool, &strategy_ids).await?;
 
     // Batch fetch all prices in 2 queries instead of N
-    let (normal_prices, expert_prices) = get_all_item_prices(pool).await?;
-    let (normal_name_prices, expert_name_prices) = get_all_item_prices_by_name(pool).await?;
+    let prices = get_all_item_prices(pool, market_mode).await?;
+    let name_prices = get_all_item_prices_by_name(pool, market_mode).await?;
 
     let mut result = Vec::with_capacity(total_count);
 
@@ -483,9 +479,8 @@ pub async fn get_all_strategies_with_costs(
 
         let mut total_cost_fire = 0.0;
         for cost in &mut costs {
-            let current_price = normal_prices
+            let current_price = prices
                 .get(&cost.item_id)
-                .or_else(|| expert_prices.get(&cost.item_id))
                 .copied()
                 .unwrap_or(0.0);
             if cost.is_realtime {
@@ -497,9 +492,8 @@ pub async fn get_all_strategies_with_costs(
 
         let mut total_output_value = 0.0;
         for output in &mut outputs {
-            let current_price = normal_name_prices
+            let current_price = name_prices
                 .get(&output.item_name)
-                .or_else(|| expert_name_prices.get(&output.item_name))
                 .copied()
                 .unwrap_or(0.0);
             output.realtime_value = current_price;

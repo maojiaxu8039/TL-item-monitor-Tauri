@@ -28,6 +28,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::{broadcast, RwLock};
 use tokio::sync::Mutex as TokioMutex;
 use tokio::net::TcpStream;
+use tokio::time::{timeout, Duration as TokioDuration};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 use futures_util::{SinkExt, StreamExt};
 use tracing::{debug, error, info, warn, Level};
@@ -53,6 +54,7 @@ struct ServerState {
     season_cache: Arc<RwLock<Option<SeasonCache>>>,
     dynamic_config: Arc<RwLock<DynamicConfig>>,
     ws_broadcaster: Arc<RwLock<WsBroadcaster>>,
+    response_cache: Arc<RwLock<std::collections::HashMap<String, (String, std::time::Instant)>>>,
 }
 
 struct WsBroadcaster {
@@ -280,6 +282,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         season_cache: Arc::new(RwLock::new(None)),
         dynamic_config: Arc::new(RwLock::new(dynamic_config)),
         ws_broadcaster: Arc::new(RwLock::new(WsBroadcaster::new())),
+        response_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
     });
 
     let http_state = state.clone();
@@ -810,7 +813,8 @@ async fn handle_request(
                 get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(99999);
+                .unwrap_or(99999)
+                .clamp(1, 10_000);
 
             let min_day: Option<i32> = get_query_param(query_string, "min_day")
                 .and_then(|s| s.parse().ok());
@@ -835,24 +839,36 @@ async fn handle_request(
                 .unwrap_or_default();
                 (400, body)
             } else {
-                match db::get_fire_history(&state.db, &season_id, market_mode, limit, min_day, max_day).await {
-                    Ok(records) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse {
-                            success: true,
-                            data: Some(records),
-                            error: None,
-                        })
-                        .unwrap_or_default();
-                        (200, body)
-                    }
-                    Err(e) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
-                            success: false,
-                            data: None,
-                            error: Some(e),
-                        })
-                        .unwrap_or_default();
-                        (500, body)
+                let cache_key = format!("/fire-history?{}", query_string);
+                let cached = {
+                    let cache = state.response_cache.read().await;
+                    cache.get(&cache_key).and_then(|(body, ts)| {
+                        if ts.elapsed() < Duration::from_secs(10) { Some(body.clone()) } else { None }
+                    })
+                };
+                if let Some(body) = cached {
+                    (200, body)
+                } else {
+                    match db::get_fire_history(&state.db, &season_id, market_mode, limit, min_day, max_day).await {
+                        Ok(records) => {
+                            let body = serde_json::to_string_pretty(&ApiResponse {
+                                success: true,
+                                data: Some(records),
+                                error: None,
+                            })
+                            .unwrap_or_default();
+                            state.response_cache.write().await.insert(cache_key, (body.clone(), Instant::now()));
+                            (200, body)
+                        }
+                        Err(e) => {
+                            let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                success: false,
+                                data: None,
+                                error: Some(e),
+                            })
+                            .unwrap_or_default();
+                            (500, body)
+                        }
                     }
                 }
             }
@@ -863,7 +879,8 @@ async fn handle_request(
             let item_id = get_query_param(query_string, "item_id");
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(24);
+                .unwrap_or(24)
+                .clamp(1, 10_000);
 
             let market_mode = if mode == "expert" {
                 "season_expert"
@@ -922,7 +939,8 @@ async fn handle_request(
                 get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(99999);
+                .unwrap_or(99999)
+                .clamp(1, 10_000);
             let offset: i32 = get_query_param(query_string, "offset")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0);
@@ -952,25 +970,37 @@ async fn handle_request(
                 .unwrap_or_default();
                 (400, body)
             } else {
-                match db::get_items_history_all(&state.db, &season_id, market_mode, limit, offset, min_day, max_day, since_timestamp).await
-                {
-                    Ok(records) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse {
-                            success: true,
-                            data: Some(records),
-                            error: None,
-                        })
-                        .unwrap_or_default();
-                        (200, body)
-                    }
-                    Err(e) => {
-                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
-                            success: false,
-                            data: None,
-                            error: Some(e),
-                        })
-                        .unwrap_or_default();
-                        (500, body)
+                let cache_key = format!("/items-history-all?{}", query_string);
+                let cached = {
+                    let cache = state.response_cache.read().await;
+                    cache.get(&cache_key).and_then(|(body, ts)| {
+                        if ts.elapsed() < Duration::from_secs(10) { Some(body.clone()) } else { None }
+                    })
+                };
+                if let Some(body) = cached {
+                    (200, body)
+                } else {
+                    match db::get_items_history_all(&state.db, &season_id, market_mode, limit, offset, min_day, max_day, since_timestamp).await
+                    {
+                        Ok(records) => {
+                            let body = serde_json::to_string_pretty(&ApiResponse {
+                                success: true,
+                                data: Some(records),
+                                error: None,
+                            })
+                            .unwrap_or_default();
+                            state.response_cache.write().await.insert(cache_key, (body.clone(), Instant::now()));
+                            (200, body)
+                        }
+                        Err(e) => {
+                            let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                                success: false,
+                                data: None,
+                                error: Some(e),
+                            })
+                            .unwrap_or_default();
+                            (500, body)
+                        }
                     }
                 }
             }
@@ -980,7 +1010,8 @@ async fn handle_request(
                 get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(99999);
+                .unwrap_or(99999)
+                .clamp(1, 10_000);
             let offset: i32 = get_query_param(query_string, "offset")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0);
@@ -1076,24 +1107,36 @@ async fn handle_request(
         ("GET", "/stats") => {
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
-            match db::get_season_stats(&state.db, &season_id).await {
-                Ok(stats) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse {
-                        success: true,
-                        data: Some(stats),
-                        error: None,
-                    })
-                    .unwrap_or_default();
-                    (200, body)
-                }
-                Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
-                        success: false,
-                        data: None,
-                        error: Some(e),
-                    })
-                    .unwrap_or_default();
-                    (500, body)
+            let cache_key = format!("/stats?{}", query_string);
+            let cached = {
+                let cache = state.response_cache.read().await;
+                cache.get(&cache_key).and_then(|(body, ts)| {
+                    if ts.elapsed() < Duration::from_secs(60) { Some(body.clone()) } else { None }
+                })
+            };
+            if let Some(body) = cached {
+                (200, body)
+            } else {
+                match db::get_season_stats(&state.db, &season_id).await {
+                    Ok(stats) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse {
+                            success: true,
+                            data: Some(stats),
+                            error: None,
+                        })
+                        .unwrap_or_default();
+                        state.response_cache.write().await.insert(cache_key, (body.clone(), Instant::now()));
+                        (200, body)
+                    }
+                    Err(e) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
+                        (500, body)
+                    }
                 }
             }
         }
@@ -1465,12 +1508,19 @@ async fn send_response(
     );
 
     let mut buf_writer = tokio::io::BufWriter::new(stream);
-    if let Err(e) = buf_writer.write_all(response.as_bytes()).await {
-        warn!("发送响应失败: {}", e);
-        return;
+    match timeout(TokioDuration::from_secs(10), buf_writer.write_all(response.as_bytes())).await {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => {
+            warn!("发送响应失败: {}", e);
+            return;
+        }
+        Err(_) => {
+            warn!("发送响应超时");
+            return;
+        }
     }
-    if let Err(e) = buf_writer.flush().await {
-        warn!("刷新响应失败: {}", e);
+    if let Err(_) = timeout(TokioDuration::from_secs(5), buf_writer.flush()).await {
+        warn!("刷新响应超时");
     }
 }
 
@@ -1488,12 +1538,19 @@ async fn send_error_response(stream: tokio::net::TcpStream, status: u16, message
     );
 
     let mut buf_writer = tokio::io::BufWriter::new(stream);
-    if let Err(e) = buf_writer.write_all(response.as_bytes()).await {
-        warn!("发送错误响应失败: {}", e);
-        return;
+    match timeout(TokioDuration::from_secs(10), buf_writer.write_all(response.as_bytes())).await {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => {
+            warn!("发送错误响应失败: {}", e);
+            return;
+        }
+        Err(_) => {
+            warn!("发送错误响应超时");
+            return;
+        }
     }
-    if let Err(e) = buf_writer.flush().await {
-        warn!("刷新错误响应失败: {}", e);
+    if let Err(_) = timeout(TokioDuration::from_secs(5), buf_writer.flush()).await {
+        warn!("刷新错误响应超时");
     }
 }
 

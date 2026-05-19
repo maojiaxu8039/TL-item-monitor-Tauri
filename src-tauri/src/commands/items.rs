@@ -520,9 +520,11 @@ pub async fn get_items_price_compare(
 #[tauri::command]
 pub async fn get_realtime_fire_changes(
     state: State<'_, Arc<AppState>>,
+    season_id: String,
+    market_mode: String,
 ) -> Result<Vec<repo_item_realtime_prices::ItemPriceChange>, String> {
-    tracing::info!("get_realtime_fire_changes called");
-    let result = repo_item_realtime_prices::get_price_changes(&state.db)
+    tracing::info!("get_realtime_fire_changes called for {}/{}", season_id, market_mode);
+    let result = repo_item_realtime_prices::get_price_changes(&state.db, &season_id, &market_mode)
         .await
         .map_err(|e| e.to_string())?;
 

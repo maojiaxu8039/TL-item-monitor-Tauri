@@ -597,8 +597,8 @@ export const cmd = {
     }
     return invoke<ItemPriceCompare[]>("get_items_price_compare", params);
   },
-  getRealtimeFireChanges: () =>
-    invoke<FirePriceChangeItem[]>("get_realtime_fire_changes"),
+  getRealtimeFireChanges: (seasonId: string, marketMode: string) =>
+    invoke<FirePriceChangeItem[]>("get_realtime_fire_changes", { seasonId, marketMode }),
   getFirePriceInsight: () =>
     invoke<FirePriceInsight>("get_fire_price_insight"),
   getItemPriceInsights: () =>
@@ -652,7 +652,8 @@ export const cmd = {
   getStrategyDetails: () => invoke<StrategyDetail[]>("get_strategy_details"),
   getStrategyWithCosts: (id: string) =>
     invoke<StrategyWithCosts | null>("get_strategy_with_costs", { id }),
-  getAllStrategiesWithCosts: () => invoke<StrategyWithCosts[]>("get_all_strategies_with_costs"),
+  getAllStrategiesWithCosts: (marketMode: string) =>
+    invoke<StrategyWithCosts[]>("get_all_strategies_with_costs", { marketMode }),
   createStrategyDetail: (req: CreateStrategyRequest) =>
     invoke<string>("create_strategy_detail", { req }),
   updateStrategyDetail: (req: UpdateStrategyRequest) =>

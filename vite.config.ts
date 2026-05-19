@@ -39,6 +39,8 @@ export default defineConfig({
             if (id.includes("@tauri-apps")) return "vendor-tauri";
             if (id.includes("framer-motion")) return "vendor-motion";
             if (id.includes("dnd-kit")) return "vendor-dnd";
+            if (id.includes("react") || id.includes("react-dom") || id.includes("scheduler")) return "vendor-react";
+            if (id.includes("lucide-react")) return "vendor-icons";
             return "vendor-others";
           }
         },

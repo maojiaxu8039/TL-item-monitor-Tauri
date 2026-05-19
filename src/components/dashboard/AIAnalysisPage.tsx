@@ -214,9 +214,10 @@ export default function AIAnalysisPage() {
     queryKey: ["fire-history", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getFireHistory(24),
     enabled: marketContextReady,
+    staleTime: 60 * 1000,
   });
 
-  const handleSend = async () => {
+  const handleSend = useCallback(async () => {
     if (!input.trim()) return;
     if (!aiEnabled) {
       addToast("warning", "AI功能已关闭，请在右上角开启");
@@ -261,7 +262,6 @@ export default function AIAnalysisPage() {
         throw new Error(result.message);
       }
     } catch (error) {
-      // error handled by toast
       addToast("error", "AI调用失败，请检查配置");
       setMessages((prev) => [
         ...prev,
@@ -275,7 +275,7 @@ export default function AIAnalysisPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [input, aiEnabled, fireData, marketContext.seasonId, settings.gatewayUrl, settings.gatewayToken, addToast]);
 
   const handleSaveSettings = async (newSettings: AISettings) => {
     try {

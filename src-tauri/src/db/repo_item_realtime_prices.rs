@@ -52,6 +52,8 @@ pub async fn insert_realtime_price(
 pub async fn batch_insert_realtime_prices(
     pool: &SqlitePool,
     records: &[(String, String, f64, i64)],
+    season_id: &str,
+    market_mode: &str,
 ) -> Result<usize, AppError> {
     if records.is_empty() {
         return Ok(0);
@@ -63,14 +65,16 @@ pub async fn batch_insert_realtime_prices(
     for chunk in records.chunks(2000) {
         let mut query_builder: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
             sqlx::query_builder::QueryBuilder::new(
-                "INSERT INTO item_realtime_prices (item_id, name, fire_price, scraped_at) ",
+                "INSERT INTO item_realtime_prices (item_id, name, fire_price, scraped_at, season_id, market_mode) ",
             );
 
         query_builder.push_values(chunk, |mut b, (item_id, name, fire_price, scraped_at)| {
             b.push_bind(item_id)
                 .push_bind(name)
                 .push_bind(fire_price)
-                .push_bind(scraped_at);
+                .push_bind(scraped_at)
+                .push_bind(season_id)
+                .push_bind(market_mode);
         });
 
         let result = query_builder.build().execute(&mut *tx).await?;
@@ -92,7 +96,11 @@ pub async fn cleanup_old_records(pool: &SqlitePool) -> Result<usize, AppError> {
     Ok(result.rows_affected() as usize)
 }
 
-pub async fn get_price_changes(pool: &SqlitePool) -> Result<Vec<ItemPriceChange>, AppError> {
+pub async fn get_price_changes(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<Vec<ItemPriceChange>, AppError> {
     let now = chrono::Utc::now().timestamp();
     let cutoff = now - 3 * SECONDS_PER_HOUR;
 
@@ -100,11 +108,13 @@ pub async fn get_price_changes(pool: &SqlitePool) -> Result<Vec<ItemPriceChange>
         r#"
             SELECT item_id, name, fire_price, scraped_at 
             FROM item_realtime_prices 
-            WHERE scraped_at > ?
+            WHERE scraped_at > ? AND season_id = ? AND market_mode = ?
             ORDER BY scraped_at DESC
         "#,
     )
     .bind(cutoff)
+    .bind(season_id)
+    .bind(market_mode)
     .fetch_all(pool)
     .await?;
 
@@ -322,7 +332,9 @@ mod tests {
                 name TEXT NOT NULL,
                 fire_price REAL NOT NULL,
                 scraped_at INTEGER NOT NULL,
-                created_at INTEGER NOT NULL DEFAULT (unixepoch())
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                season_id TEXT NOT NULL DEFAULT '',
+                market_mode TEXT NOT NULL DEFAULT ''
             )"#,
         )
         .execute(&pool)
@@ -348,11 +360,13 @@ mod tests {
                     now - 300,
                 ),
             ],
+            "ss12",
+            "expert",
         )
         .await
         .expect("test realtime prices should insert");
 
-        let changes = get_price_changes(&pool)
+        let changes = get_price_changes(&pool, "ss12", "expert")
             .await
             .expect("price changes should calculate");
         assert_eq!(changes.len(), 1);

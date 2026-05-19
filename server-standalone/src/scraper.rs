@@ -27,7 +27,7 @@ fn safe_truncate(s: &str, max_len: usize) -> String {
 fn build_http_client(timeout_secs: u64) -> Result<Client, String> {
     let builder = Client::builder()
         .timeout(Duration::from_secs(timeout_secs))
-        .pool_max_idle_per_host(1)
+        .pool_max_idle_per_host(10)
         .tcp_keepalive(Some(Duration::from_secs(60)))
         .tcp_nodelay(true);
     let builder = if cfg!(debug_assertions) {

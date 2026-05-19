@@ -268,6 +268,8 @@ export default function DataMonitorPage() {
     let allFailures: SyncFailure[] = [];
     let hasMore = true;
     let maxScrapedAt = 0;
+    let pageCount = 0;
+    let lastUiUpdate = Date.now();
 
     try {
       if (dataType === "fire") {
@@ -302,7 +304,12 @@ export default function DataMonitorPage() {
             total: records.length < PAGE_SIZE ? processedCount : processedCount + (PAGE_SIZE - records.length),
             failures: allFailures.slice(0, 10),
           };
-          setSyncJob(job);
+          pageCount++;
+          const now = Date.now();
+          if (pageCount % 5 === 0 || now - lastUiUpdate >= 500 || records.length < PAGE_SIZE) {
+            setSyncJob(job);
+            lastUiUpdate = now;
+          }
 
           if (records.length < PAGE_SIZE) {
             hasMore = false;
@@ -343,7 +350,12 @@ export default function DataMonitorPage() {
             total: records.length < PAGE_SIZE ? processedCount : processedCount + (PAGE_SIZE - records.length),
             failures: allFailures.slice(0, 10),
           };
-          setSyncJob(job);
+          pageCount++;
+          const now = Date.now();
+          if (pageCount % 5 === 0 || now - lastUiUpdate >= 500 || records.length < PAGE_SIZE) {
+            setSyncJob(job);
+            lastUiUpdate = now;
+          }
 
           if (records.length < PAGE_SIZE) {
             hasMore = false;

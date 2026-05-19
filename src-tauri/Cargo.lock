@@ -3921,9 +3921,7 @@ dependencies = [
  "cookie",
  "cookie_store",
  "encoding_rs",
- "futures-channel",
  "futures-core",
- "futures-util",
  "h2",
  "http",
  "http-body",
@@ -5894,7 +5892,6 @@ checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 name = "torchscan"
 version = "1.0.0"
 dependencies = [
- "anyhow",
  "base64 0.4.2",
  "chrono",
  "csv",

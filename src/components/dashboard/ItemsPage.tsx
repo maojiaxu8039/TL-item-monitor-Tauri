@@ -187,15 +187,18 @@ export default function ItemsPage() {
   const { data: sections = [] } = useQuery({
     queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
     queryFn: cmd.getSections,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: itemTypes = [] } = useQuery({
     queryKey: ["item-types"],
     queryFn: cmd.getItemTypes,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: priceCompareData, isLoading: isCompareLoading, error: compareError } = useQuery({
     queryKey: ["items-compare", marketContext.seasonId, historySeason, marketContext.marketMode, dayFilter],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       try {
         const result = await cmd.getItemsPriceCompare(

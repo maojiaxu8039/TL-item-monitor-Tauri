@@ -1001,7 +1001,7 @@ async fn ensure_item_realtime_prices_schema(pool: &SqlitePool) -> Result<(), Str
 
     if table_exists(pool, "item_realtime_prices").await? {
         let columns = table_columns(pool, "item_realtime_prices").await?;
-        let required = ["item_id", "name", "fire_price", "scraped_at", "created_at"];
+        let required = ["item_id", "name", "fire_price", "scraped_at", "created_at", "season_id", "market_mode"];
         if !has_columns(&columns, &required) {
             if let Some(backup_name) = backup_table(pool, "item_realtime_prices").await? {
                 backup = Some((backup_name, columns));
@@ -1028,7 +1028,9 @@ async fn ensure_item_realtime_prices_schema(pool: &SqlitePool) -> Result<(), Str
             name TEXT NOT NULL,
             fire_price REAL NOT NULL,
             scraped_at INTEGER NOT NULL,
-            created_at INTEGER NOT NULL DEFAULT (unixepoch())
+            created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+            season_id TEXT NOT NULL DEFAULT '',
+            market_mode TEXT NOT NULL DEFAULT ''
         )"#,
     )
     .execute(pool)
@@ -1058,8 +1060,8 @@ async fn ensure_item_realtime_prices_schema(pool: &SqlitePool) -> Result<(), Str
             };
 
             sqlx::query(&format!(
-                "INSERT INTO item_realtime_prices (item_id, name, fire_price, scraped_at, created_at)
-                 SELECT item_id, COALESCE({}, ''), COALESCE({}, 0), scraped_at, COALESCE({}, unixepoch())
+                "INSERT INTO item_realtime_prices (item_id, name, fire_price, scraped_at, created_at, season_id, market_mode)
+                 SELECT item_id, COALESCE({}, ''), COALESCE({}, 0), scraped_at, COALESCE({}, unixepoch()), '', ''
                  FROM {}
                  WHERE item_id IS NOT NULL AND scraped_at IS NOT NULL",
                 name_expr, price_expr, created_expr, backup_name

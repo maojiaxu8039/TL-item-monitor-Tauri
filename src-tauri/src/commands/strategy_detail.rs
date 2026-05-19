@@ -20,7 +20,8 @@ pub async fn get_strategy_with_costs(
     state: State<'_, Arc<AppState>>,
     id: String,
 ) -> Result<Option<StrategyWithCosts>, String> {
-    repo_strategy_detail::get_strategy_with_costs(&state.db, &id)
+    let ctx = state.active_context.read().clone();
+    repo_strategy_detail::get_strategy_with_costs(&state.db, &id, ctx.market_mode.as_str())
         .await
         .map_err(|e| e.to_string())
 }
@@ -28,8 +29,9 @@ pub async fn get_strategy_with_costs(
 #[tauri::command]
 pub async fn get_all_strategies_with_costs(
     state: State<'_, Arc<AppState>>,
+    market_mode: String,
 ) -> Result<Vec<StrategyWithCosts>, String> {
-    repo_strategy_detail::get_all_strategies_with_costs(&state.db)
+    repo_strategy_detail::get_all_strategies_with_costs(&state.db, &market_mode)
         .await
         .map_err(|e| e.to_string())
 }
@@ -187,7 +189,8 @@ pub async fn refresh_strategy_fire_prices(
         }
     }
 
-    repo_strategy_detail::get_strategy_with_costs(&state.db, &strategy_id)
+    let ctx = state.active_context.read().clone();
+    repo_strategy_detail::get_strategy_with_costs(&state.db, &strategy_id, ctx.market_mode.as_str())
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Strategy not found".to_string())

@@ -63,6 +63,7 @@ export function DashboardStats() {
     queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getSections(),
     enabled: marketContextReady,
+    staleTime: 5 * 60 * 1000,
     retry: 1,
     retryDelay: 1000,
   })
@@ -70,16 +71,12 @@ export function DashboardStats() {
   const { data: allSectionItems = [], isLoading: sectionItemsLoading } = useQuery({
     queryKey: ["all-section-items", marketContext.seasonId, marketContext.marketMode, sections.map(s => s.id).join(",")],
     queryFn: async () => {
-      const allItems: SectionItem[] = []
-      for (const section of sections) {
-        try {
-          const items = await cmd.getSectionItems(section.id, marketContext.seasonId, marketContext.marketMode)
-          allItems.push(...items)
-        } catch {
-          // ignore
-        }
-      }
-      return allItems
+      const results = await Promise.all(
+        sections.map(s =>
+          cmd.getSectionItems(s.id, marketContext.seasonId, marketContext.marketMode).catch(() => [] as SectionItem[])
+        )
+      );
+      return results.flat();
     },
     enabled: marketContextReady && sections.length > 0,
     retry: 1,
@@ -87,8 +84,8 @@ export function DashboardStats() {
   })
 
   const { data: strategies = [], isLoading: strategiesLoading } = useQuery<StrategyWithCosts[]>({
-    queryKey: ["strategies"],
-    queryFn: () => cmd.getAllStrategiesWithCosts(),
+    queryKey: ["strategies", marketContext.marketMode],
+    queryFn: () => cmd.getAllStrategiesWithCosts(marketContext.marketMode),
     staleTime: 60 * 1000,
     retry: 1,
     retryDelay: 1000,
@@ -99,30 +96,27 @@ export function DashboardStats() {
   const rmbPer10kFire = summary?.fire?.rmb_per_10k_fire
   const hasFirePrice = rmbPer10kFire !== null && rmbPer10kFire !== undefined
 
-  const stats = {
-    itemCount: summary?.item_count ?? 0,
-    currentFire: hasFirePrice ? rmbPer10kFire : null,
-    profit: 0,
-    profitPercent: 0,
-  }
-
-  if (allSectionItems.length > 0 && hasFirePrice) {
-    let totalPurchaseValue = 0
-    let totalCurrentValue = 0
-
-    for (const item of allSectionItems) {
-      const purchasePrice = item.purchase_fire_price ?? 0
-      const currentPrice = item.current_price ?? 0
-
-      totalPurchaseValue += purchasePrice
-      totalCurrentValue += currentPrice
+  const stats = useMemo(() => {
+    const s = {
+      itemCount: summary?.item_count ?? 0,
+      currentFire: hasFirePrice ? rmbPer10kFire : null,
+      profit: 0,
+      profitPercent: 0,
+    };
+    if (allSectionItems.length > 0 && hasFirePrice) {
+      let totalPurchaseValue = 0;
+      let totalCurrentValue = 0;
+      for (const item of allSectionItems) {
+        totalPurchaseValue += item.purchase_fire_price ?? 0;
+        totalCurrentValue += item.current_price ?? 0;
+      }
+      if (totalPurchaseValue > 0) {
+        s.profit = (totalCurrentValue - totalPurchaseValue) * rmbPer10kFire / 10000;
+        s.profitPercent = ((totalCurrentValue - totalPurchaseValue) / totalPurchaseValue) * 100;
+      }
     }
-
-    if (totalPurchaseValue > 0) {
-      stats.profit = (totalCurrentValue - totalPurchaseValue) * rmbPer10kFire / 10000
-      stats.profitPercent = ((totalCurrentValue - totalPurchaseValue) / totalPurchaseValue) * 100
-    }
-  }
+    return s;
+  }, [summary, allSectionItems, hasFirePrice, rmbPer10kFire]);
 
   const getProfitStatus = () => {
     if (stats.profit > 0) return "profit"
@@ -132,22 +126,19 @@ export function DashboardStats() {
 
   const profitStatus = getProfitStatus()
 
-  const fireStats = {
-    min: 0,
-    max: 0,
-    avg: 0,
-    change: 0,
-  }
-
-  if (fireHistory.length > 0) {
-    const prices = fireHistory.map(h => h.rmb_per_10k_fire)
-    fireStats.min = Math.min(...prices)
-    fireStats.max = Math.max(...prices)
-    fireStats.avg = prices.reduce((a, b) => a + b, 0) / prices.length
-    fireStats.change = fireHistory.length >= 2 && fireHistory[0].rmb_per_10k_fire !== 0
-      ? ((fireHistory[fireHistory.length - 1].rmb_per_10k_fire - fireHistory[0].rmb_per_10k_fire) / fireHistory[0].rmb_per_10k_fire) * 100
-      : 0
-  }
+  const fireStats = useMemo(() => {
+    const fs = { min: 0, max: 0, avg: 0, change: 0 };
+    if (fireHistory.length > 0) {
+      const prices = fireHistory.map(h => h.rmb_per_10k_fire);
+      fs.min = Math.min(...prices);
+      fs.max = Math.max(...prices);
+      fs.avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+      fs.change = fireHistory.length >= 2 && fireHistory[0].rmb_per_10k_fire !== 0
+        ? ((fireHistory[fireHistory.length - 1].rmb_per_10k_fire - fireHistory[0].rmb_per_10k_fire) / fireHistory[0].rmb_per_10k_fire) * 100
+        : 0;
+    }
+    return fs;
+  }, [fireHistory]);
 
   const recommendations = useMemo((): StrategyRecommendation[] => {
     if (strategies.length === 0) return [];

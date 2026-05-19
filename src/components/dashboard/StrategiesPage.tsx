@@ -27,6 +27,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { cmd, StrategyWithCosts, ItemData } from "@/lib/commands";
+import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { toast } from "sonner";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -98,6 +99,7 @@ export interface StrategyRecommendation {
 }
 
 export default function StrategiesPage() {
+  const { marketContext, marketContextReady } = useSectionRefresh();
   const [activeTab, setActiveTab] = useState<StrategyTab>("strategies");
   const [strategies, setStrategies] = useState<StrategyWithCosts[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -147,7 +149,7 @@ export default function StrategiesPage() {
 
   const loadStrategies = useCallback(async () => {
     try {
-      const data = await cmd.getAllStrategiesWithCosts();
+      const data = await cmd.getAllStrategiesWithCosts(marketContext.marketMode);
       if (!mountedRef.current) return;
       const sorted = [...data].sort((a, b) => b.profit_ratio - a.profit_ratio);
       setStrategies(sorted);
@@ -157,11 +159,12 @@ export default function StrategiesPage() {
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, []);
+  }, [marketContext.marketMode]);
 
   useEffect(() => {
+    if (!marketContextReady) return;
     loadStrategies();
-  }, [loadStrategies]);
+  }, [marketContextReady, loadStrategies]);
 
   const toggleExpand = useCallback((id: string) => {
     setExpandedIds(prev => {
@@ -487,6 +490,8 @@ export default function StrategiesPage() {
     }
   };
 
+  const strategyMap = useMemo(() => new Map(strategies.map(s => [s.id, s])), [strategies]);
+
   const calculateRecommendations = useMemo((): StrategyRecommendation[] => {
     if (strategies.length === 0) return [];
 
@@ -738,7 +743,7 @@ export default function StrategiesPage() {
           ) : (
             <div className="space-y-3">
               {calculateRecommendations.map((rec, index) => {
-                const strategy = strategies.find(s => s.id === rec.strategy_id);
+                const strategy = strategyMap.get(rec.strategy_id);
                 return (
                   <div
                     key={rec.strategy_id}

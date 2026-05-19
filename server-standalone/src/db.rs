@@ -1,6 +1,8 @@
 use serde::Serialize;
 use sqlx::{Row, SqlitePool};
 use tracing::{error, info, warn};
+use std::sync::{Mutex, OnceLock};
+use std::collections::HashMap;
 
 use crate::scraper::{FirePriceSnapshot, Item};
 
@@ -107,6 +109,24 @@ async fn add_column_if_missing(
     .await
     .map_err(|e| format!("补充字段 {}.{} 失败: {}", table, column, e))?;
     Ok(())
+}
+
+fn season_start_cache() -> &'static Mutex<HashMap<String, i64>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, i64>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+async fn get_cached_season_start(pool: &SqlitePool, season_id: &str) -> Result<i64, String> {
+    if let Ok(cache) = season_start_cache().lock() {
+        if let Some(&start) = cache.get(season_id) {
+            return Ok(start);
+        }
+    }
+    let start = get_season_start(pool, season_id).await?;
+    if let Ok(mut cache) = season_start_cache().lock() {
+        cache.insert(season_id.to_string(), start);
+    }
+    Ok(start)
 }
 
 async fn get_season_start(pool: &SqlitePool, season_id: &str) -> Result<i64, String> {
@@ -247,6 +267,8 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", table, e))?;
+        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)", table, table))
+            .execute(pool).await.ok();
 
         let items_table = format!("item_snapshots_{}_normal", season);
         sqlx::query(&format!(
@@ -267,6 +289,10 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", items_table, e))?;
+        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_item_scraped ON {}(item_id, scraped_at DESC)", items_table, items_table))
+            .execute(pool).await.ok();
+        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)", items_table, items_table))
+            .execute(pool).await.ok();
         add_column_if_missing(pool, &items_table, "name", "TEXT NOT NULL DEFAULT ''").await?;
         add_column_if_missing(pool, &items_table, "item_type", "TEXT NOT NULL DEFAULT ''").await?;
         add_column_if_missing(pool, &items_table, "season_day", "INTEGER NOT NULL DEFAULT 1").await?;
@@ -292,6 +318,8 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", expert_table, e))?;
+        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)", expert_table, expert_table))
+            .execute(pool).await.ok();
 
         let expert_items_table = format!("item_snapshots_{}_expert", season);
         sqlx::query(&format!(
@@ -312,6 +340,10 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", expert_items_table, e))?;
+        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_item_scraped ON {}(item_id, scraped_at DESC)", expert_items_table, expert_items_table))
+            .execute(pool).await.ok();
+        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)", expert_items_table, expert_items_table))
+            .execute(pool).await.ok();
         add_column_if_missing(pool, &expert_items_table, "name", "TEXT NOT NULL DEFAULT ''").await?;
         add_column_if_missing(pool, &expert_items_table, "item_type", "TEXT NOT NULL DEFAULT ''").await?;
         add_column_if_missing(pool, &expert_items_table, "season_day", "INTEGER NOT NULL DEFAULT 1").await?;
@@ -332,7 +364,7 @@ pub async fn insert_fire_snapshot(
 ) -> Result<(), String> {
     let mode = MarketMode::parse(market_mode);
     let table = mode.fire_table(season_id);
-    let season_start = get_season_start(pool, season_id).await?;
+    let season_start = get_cached_season_start(pool, season_id).await?;
     let season_day = calculate_season_day(season_start, scraped_at);
 
     let mut tx = pool.begin().await.map_err(|e| format!("开始事务失败: {}", e))?;
@@ -366,7 +398,7 @@ pub async fn insert_fire_snapshot(
     Ok(())
 }
 
-const BATCH_SIZE: usize = 500;
+const BATCH_SIZE: usize = 150;
 
 pub async fn insert_items_snapshots(
     pool: &SqlitePool,
@@ -378,7 +410,7 @@ pub async fn insert_items_snapshots(
 ) -> Result<usize, String> {
     let mode = MarketMode::parse(market_mode);
     let table = mode.items_table(season_id);
-    let season_start = get_season_start(pool, season_id).await?;
+    let season_start = get_cached_season_start(pool, season_id).await?;
     let season_day = calculate_season_day(season_start, scraped_at);
     let mut total_count = 0;
 
@@ -656,7 +688,7 @@ pub async fn wal_checkpoint(pool: &SqlitePool) -> Result<WalCheckpointResult, St
     let wal_path = wal_path.0;
 
     let wal_file = format!("{}-wal", wal_path);
-    let wal_bytes: i64 = std::fs::metadata(&wal_file)
+    let wal_bytes: i64 = tokio::fs::metadata(&wal_file).await
         .map(|m| m.len() as i64)
         .unwrap_or(0);
 
@@ -695,29 +727,20 @@ pub async fn get_season_stats(pool: &SqlitePool, season_id: &str) -> Result<Seas
     let table_expert_fire = format!("fire_price_snapshots_{}_expert", season_id);
     let table_expert_items = format!("item_snapshots_{}_expert", season_id);
 
-    let normal_fire_count: i64 =
-        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table_normal_fire))
-            .fetch_one(pool)
-            .await
-            .unwrap_or(0);
-
-    let normal_items_count: i64 =
-        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table_normal_items))
-            .fetch_one(pool)
-            .await
-            .unwrap_or(0);
-
-    let expert_fire_count: i64 =
-        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table_expert_fire))
-            .fetch_one(pool)
-            .await
-            .unwrap_or(0);
-
-    let expert_items_count: i64 =
-        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table_expert_items))
-            .fetch_one(pool)
-            .await
-            .unwrap_or(0);
+    let q_normal_fire = format!("SELECT COUNT(*) FROM {}", table_normal_fire);
+    let q_normal_items = format!("SELECT COUNT(*) FROM {}", table_normal_items);
+    let q_expert_fire = format!("SELECT COUNT(*) FROM {}", table_expert_fire);
+    let q_expert_items = format!("SELECT COUNT(*) FROM {}", table_expert_items);
+    let (normal_fire_count, normal_items_count, expert_fire_count, expert_items_count) = tokio::join!(
+        sqlx::query_scalar(&q_normal_fire).fetch_one(pool),
+        sqlx::query_scalar(&q_normal_items).fetch_one(pool),
+        sqlx::query_scalar(&q_expert_fire).fetch_one(pool),
+        sqlx::query_scalar(&q_expert_items).fetch_one(pool),
+    );
+    let normal_fire_count: i64 = normal_fire_count.unwrap_or(0);
+    let normal_items_count: i64 = normal_items_count.unwrap_or(0);
+    let expert_fire_count: i64 = expert_fire_count.unwrap_or(0);
+    let expert_items_count: i64 = expert_items_count.unwrap_or(0);
 
     Ok(SeasonStats {
         normal_fire_count,

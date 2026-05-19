@@ -118,6 +118,14 @@ export default function ArbitragePage() {
     return calculationResult.filter(r => r.recipe_type === typeFilter);
   }, [calculationResult, typeFilter]);
 
+  const recipeMap = useMemo(() => {
+    const map = new Map<string, ArbitrageRecipe>();
+    for (const r of recipes) {
+      map.set(r.id, r);
+    }
+    return map;
+  }, [recipes]);
+
   const loadRecipes = useCallback(async () => {
     setLoading(true);
     try {
@@ -653,7 +661,7 @@ export default function ArbitragePage() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          const recipe = recipes.find(r => r.id === result.recipe_id);
+                          const recipe = recipeMap.get(result.recipe_id);
                           if (recipe) openEditDialog(recipe);
                         }}
                         className="p-1.5 rounded-lg hover:bg-[var(--color-panel-soft)] transition-colors text-[var(--color-text-subtle)] hover:text-[var(--color-brand-gold)]"
