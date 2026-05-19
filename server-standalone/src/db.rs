@@ -484,17 +484,17 @@ pub async fn get_fire_history(
     let mode = MarketMode::parse(market_mode);
     let table = mode.fire_table(season_id);
 
-    let where_clause = match (min_day, max_day) {
+    let (where_clause, binds) = match (min_day, max_day) {
         (Some(min), Some(max)) if min > 0 && max > 0 => {
-            format!(" WHERE season_day >= {} AND season_day <= {} ", min, max)
+            (" WHERE season_day >= ? AND season_day <= ? ", vec![min as i64, max as i64])
         }
         (Some(min), _) if min > 0 => {
-            format!(" WHERE season_day >= {} ", min)
+            (" WHERE season_day >= ? ", vec![min as i64])
         }
         (_, Some(max)) if max > 0 => {
-            format!(" WHERE season_day <= {} ", max)
+            (" WHERE season_day <= ? ", vec![max as i64])
         }
-        _ => String::new(),
+        _ => ("", vec![]),
     };
 
     let query = format!(
@@ -509,9 +509,11 @@ pub async fn get_fire_history(
         where_clause
     );
 
-    let rows = sqlx::query(&query)
-        .bind(limit)
-        .fetch_all(pool)
+    let mut q = sqlx::query(&query).bind(limit);
+    for b in binds {
+        q = q.bind(b);
+    }
+    let rows = q.fetch_all(pool)
         .await
         .map_err(|e| format!("查询火价快照失败: {}", e))?;
 
@@ -943,24 +945,30 @@ pub async fn get_items_history_all(
     let mode = MarketMode::parse(market_mode);
     let table = mode.items_table(season_id);
 
-    let mut conditions: Vec<String> = Vec::new();
+    let mut conditions: Vec<&str> = Vec::new();
+    let mut binds: Vec<i64> = Vec::new();
     
     if let (Some(min), Some(max)) = (min_day, max_day) {
         if min > 0 && max > 0 {
-            conditions.push(format!(" season_day >= {} AND season_day <= {} ", min, max));
+            conditions.push(" season_day >= ? AND season_day <= ? ");
+            binds.push(min as i64);
+            binds.push(max as i64);
         }
     } else if let Some(min) = min_day {
         if min > 0 {
-            conditions.push(format!(" season_day >= {} ", min));
+            conditions.push(" season_day >= ? ");
+            binds.push(min as i64);
         }
     } else if let Some(max) = max_day {
         if max > 0 {
-            conditions.push(format!(" season_day <= {} ", max));
+            conditions.push(" season_day <= ? ");
+            binds.push(max as i64);
         }
     }
     
     if let Some(ts) = since_timestamp {
-        conditions.push(format!(" scraped_at > {} ", ts))
+        conditions.push(" scraped_at > ? ");
+        binds.push(ts);
     }
     
     let where_clause = if conditions.is_empty() {
@@ -982,10 +990,11 @@ pub async fn get_items_history_all(
         where_clause
     );
 
-    let rows = sqlx::query(&query)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(pool)
+    let mut q = sqlx::query(&query).bind(limit).bind(offset);
+    for b in binds {
+        q = q.bind(b);
+    }
+    let rows = q.fetch_all(pool)
         .await
         .map_err(|e| format!("查询所有物品快照失败: {}", e))?;
 

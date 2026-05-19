@@ -391,6 +391,9 @@ pub async fn sync_items_record(
     state: State<'_, Arc<AppState>>,
     params: SyncItemsRecordParams,
 ) -> Result<OkResponse, String> {
+    if let Err(e) = crate::db::table_resolver::TableResolver::validate(&params.season_id, &params.market_mode) {
+        return Err(e.to_string());
+    }
     match repo_history::insert_item_snapshot(
         &state.db,
         &params.season_id,

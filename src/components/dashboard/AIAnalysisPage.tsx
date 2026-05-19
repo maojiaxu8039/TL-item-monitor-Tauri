@@ -260,7 +260,7 @@ export default function AIAnalysisPage() {
         throw new Error(result.message);
       }
     } catch (error) {
-      console.error('[OpenClaw] Send error:', error);
+      // error handled by toast
       addToast("error", "AI调用失败，请检查配置");
       setMessages((prev) => [
         ...prev,

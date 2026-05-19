@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { devLog } from "@/lib/devLog";
 import type { SyncJobState, SyncFailure } from "@/lib/commands";
 
 type DataType = "fire" | "items";
@@ -50,7 +51,7 @@ function saveSyncState(job: SyncJobState | null) {
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
-    console.error("[SyncContext] Failed to save state:", e);
+    devLog.error("[SyncContext] Failed to save state:", e);
   }
 }
 

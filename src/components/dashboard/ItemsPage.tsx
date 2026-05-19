@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { devLog } from "@/lib/devLog";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -202,7 +203,7 @@ export default function ItemsPage() {
         );
         return result;
       } catch (err) {
-        console.error("getItemsPriceCompare error:", err);
+        devLog.error("getItemsPriceCompare error:", err);
         throw err;
       }
     },

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { queryClient } from "@/lib/query";
 import { toast } from "sonner";
+import { devLog } from "@/lib/devLog";
 
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI__" in window;
@@ -132,7 +133,7 @@ export function useTauriEvents() {
         // 注册完成后主动刷新一次 dashboard-summary，捕获可能在监听器注册前已更新的数据
         queryClient.refetchQueries({ queryKey: ["dashboard-summary"] });
       } catch (error) {
-        console.error("[useTauriEvents] Failed to setup listeners:", error);
+        devLog.error("[useTauriEvents] Failed to setup listeners:", error);
       }
     };
 
@@ -145,7 +146,7 @@ export function useTauriEvents() {
         try {
           u();
         } catch (e) {
-          console.warn("[useTauriEvents] Error during cleanup:", e);
+          devLog.warn("[useTauriEvents] Error during cleanup:", e);
         }
       });
     };

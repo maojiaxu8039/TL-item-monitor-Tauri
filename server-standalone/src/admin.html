@@ -578,15 +578,27 @@
         let apiPassword = '';
         let isAuthenticated = false;
 
+        function escapeHtml(text) {
+            if (text === null || text === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = String(text);
+            return div.innerHTML;
+        }
+
         function updateAuthStatus(success, message) {
             const status = document.getElementById('auth-status');
+            status.textContent = '';
+            const span = document.createElement('span');
             if (success) {
-                status.innerHTML = '<span style="color: green;">✓ 已认证</span>';
+                span.style.color = 'green';
+                span.textContent = '✓ 已认证';
                 isAuthenticated = true;
             } else {
-                status.innerHTML = '<span style="color: red;">✗ ' + message + '</span>';
+                span.style.color = 'red';
+                span.textContent = '✗ ' + message;
                 isAuthenticated = false;
             }
+            status.appendChild(span);
         }
 
         async function authenticate() {
@@ -669,8 +681,12 @@
 
         function showAlert(type, message) {
             const container = document.getElementById('alert-container');
-            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
-            setTimeout(() => container.innerHTML = '', 5000);
+            container.textContent = '';
+            const div = document.createElement('div');
+            div.className = 'alert alert-' + type;
+            div.textContent = message;
+            container.appendChild(div);
+            setTimeout(() => { container.textContent = ''; }, 5000);
         }
 
         function showTab(tabId) {
@@ -713,13 +729,19 @@
                     console.log('expert:', expert);
                     console.log('normal.success:', normal?.success);
 
-                    document.getElementById('stat-normal').innerHTML = normal && normal.is_success
-                        ? `<span class="badge badge-success">成功</span>`
-                        : `<span class="badge badge-error">失败</span>`;
+                    const statNormal = document.getElementById('stat-normal');
+                    statNormal.textContent = '';
+                    const badgeNormal = document.createElement('span');
+                    badgeNormal.className = normal && normal.is_success ? 'badge badge-success' : 'badge badge-error';
+                    badgeNormal.textContent = normal && normal.is_success ? '成功' : '失败';
+                    statNormal.appendChild(badgeNormal);
 
-                    document.getElementById('stat-expert').innerHTML = expert && expert.is_success
-                        ? `<span class="badge badge-success">成功</span>`
-                        : `<span class="badge badge-error">失败</span>`;
+                    const statExpert = document.getElementById('stat-expert');
+                    statExpert.textContent = '';
+                    const badgeExpert = document.createElement('span');
+                    badgeExpert.className = expert && expert.is_success ? 'badge badge-success' : 'badge badge-error';
+                    badgeExpert.textContent = expert && expert.is_success ? '成功' : '失败';
+                    statExpert.appendChild(badgeExpert);
 
                     const getDisplayError = (mode) => {
                         if (!mode || !mode.error) return '-';
@@ -730,26 +752,44 @@
                     };
 
                     const tbody = document.getElementById('collection-tbody');
-                    tbody.innerHTML = '';
+                    tbody.textContent = '';
 
                     [normal, expert].forEach((mode, idx) => {
                         const modeName = idx === 0 ? '普通服' : '专家服';
                         if (mode) {
-                            tbody.innerHTML += `
-                                <tr>
-                                    <td>${modeName}</td>
-                                    <td>${mode.fire_price?.toFixed(2) || '-'}</td>
-                                    <td>${mode.items_count || 0}</td>
-                                    <td>${formatTime(mode.timestamp)}</td>
-                                    <td><span class="badge ${mode.is_success ? 'badge-success' : 'badge-error'}">${mode.is_success ? '成功' : '失败'}</span></td>
-                                    <td>${getDisplayError(mode)}</td>
-                                </tr>
-                            `;
+                            const row = document.createElement('tr');
+                            const cells = [
+                                modeName,
+                                mode.fire_price?.toFixed(2) || '-',
+                                String(mode.items_count || 0),
+                                formatTime(mode.timestamp),
+                                null, // badge cell
+                                getDisplayError(mode),
+                            ];
+                            cells.forEach((text, i) => {
+                                const td = document.createElement('td');
+                                if (i === 4) {
+                                    const badge = document.createElement('span');
+                                    badge.className = mode.is_success ? 'badge badge-success' : 'badge badge-error';
+                                    badge.textContent = mode.is_success ? '成功' : '失败';
+                                    td.appendChild(badge);
+                                } else {
+                                    td.textContent = text;
+                                }
+                                row.appendChild(td);
+                            });
+                            tbody.appendChild(row);
                         }
                     });
 
                     if (!normal && !expert) {
-                        tbody.innerHTML = '<tr><td colspan="6" class="loading">暂无采集记录</td></tr>';
+                        const row = document.createElement('tr');
+                        const td = document.createElement('td');
+                        td.colSpan = 6;
+                        td.className = 'loading';
+                        td.textContent = '暂无采集记录';
+                        row.appendChild(td);
+                        tbody.appendChild(row);
                     }
 
                     document.getElementById('last-update').textContent = new Date().toLocaleString('zh-CN');

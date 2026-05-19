@@ -890,7 +890,7 @@ export interface ServerFullConfig {
 
 export interface ServerAdminResponse {
   success: boolean;
-  data?: any;
+  data?: unknown;
   error?: string;
 }
 

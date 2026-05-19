@@ -158,7 +158,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
       historyAvg = historyPrices.reduce((a, b) => a + b, 0) / historyPrices.length;
       historyMax = Math.max(...historyPrices);
       historyMin = Math.min(...historyPrices);
-      premiumRate = ((currentAvg - historyAvg) / historyAvg * 100);
+      premiumRate = historyAvg !== 0 ? ((currentAvg - historyAvg) / historyAvg * 100) : null;
     }
 
     return {
@@ -305,11 +305,11 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
                     color: "var(--color-text)",
                   }}
                   labelStyle={{ color: "var(--color-brand-gold)" }}
-                  formatter={(value: any, name: string) => {
+                  formatter={(value: number | string | null, name: string) => {
                     if (value === null) return ["—", name];
                     return [`${Number(value).toFixed(2)} 火`, name];
                   }}
-                  labelFormatter={(label: any) => viewMode === "day" ? `${label}:00` : `第 ${label} 天`}
+                  labelFormatter={(label: number | string) => viewMode === "day" ? `${label}:00` : `第 ${label} 天`}
                 />
                 <Legend 
                   verticalAlign="top" 

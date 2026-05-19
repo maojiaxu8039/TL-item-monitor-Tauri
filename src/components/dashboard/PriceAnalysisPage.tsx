@@ -165,7 +165,7 @@ function HoardCard({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <StatusBadge variant={config.badge as any}>{config.label}</StatusBadge>
+          <StatusBadge variant={config.badge as "success" | "danger" | "warning"}>{config.label}</StatusBadge>
           <SectionPicker
             sections={sections}
             onAdd={(sectionId) =>

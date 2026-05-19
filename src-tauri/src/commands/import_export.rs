@@ -123,6 +123,9 @@ pub async fn backup_database(
 ) -> Result<OkResponse, String> {
     let db_path = paths::db_path();
 
+    let dest_path = validate_path_within_app_dir(&dest_path)
+        .map_err(|e| format!("备份失败: {}", e))?;
+
     sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
         .execute(&state.db)
         .await
@@ -136,12 +139,35 @@ pub async fn backup_database(
     Ok(OkResponse::success("备份已创建"))
 }
 
+fn validate_path_within_app_dir(path: &str) -> Result<std::path::PathBuf, String> {
+    let path = std::path::Path::new(path);
+    let app_dir = paths::app_dir();
+
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        app_dir.join(path)
+    };
+
+    let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+    let app_dir_canonical = std::fs::canonicalize(&app_dir).unwrap_or_else(|_| app_dir.clone());
+
+    if !canonical.starts_with(&app_dir_canonical) {
+        return Err("路径必须在应用数据目录内".to_string());
+    }
+
+    Ok(canonical)
+}
+
 #[tauri::command]
 pub async fn restore_database(
     _state: State<'_, Arc<AppState>>,
     src_path: String,
 ) -> Result<OkResponse, String> {
     let db_path = paths::db_path();
+
+    let src_path = validate_path_within_app_dir(&src_path)
+        .map_err(|e| format!("恢复失败: {}", e))?;
 
     if !tokio::fs::try_exists(&src_path).await.unwrap_or(false) {
         return Err("恢复失败: 源文件不存在".to_string());
@@ -161,6 +187,10 @@ pub async fn restore_database(
 
     drop(file);
 
+    // Backup current database before restore
+    let backup_path = db_path.with_extension("db.backup");
+    let _ = tokio::fs::copy(&db_path, &backup_path).await;
+
     let wal_path = db_path.with_extension("db-wal");
     let shm_path = db_path.with_extension("db-shm");
     let _ = tokio::fs::remove_file(&wal_path).await;
@@ -172,6 +202,8 @@ pub async fn restore_database(
 
 #[tauri::command]
 pub async fn write_file(path: String, base64_content: String) -> Result<OkResponse, String> {
+    let path = validate_path_within_app_dir(&path)
+        .map_err(|e| format!("写入失败: {}", e))?;
     let bytes = base64::decode(&base64_content).map_err(|e| format!("Base64解码错误: {}", e))?;
     tokio::fs::write(&path, bytes).await.map_err(|e| format!("写入文件错误: {}", e))?;
     Ok(OkResponse::success("文件已写入"))
@@ -179,6 +211,8 @@ pub async fn write_file(path: String, base64_content: String) -> Result<OkRespon
 
 #[tauri::command]
 pub async fn read_file(path: String) -> Result<String, String> {
+    let path = validate_path_within_app_dir(&path)
+        .map_err(|e| format!("读取失败: {}", e))?;
     let bytes = tokio::fs::read(&path).await.map_err(|e| format!("读取文件错误: {}", e))?;
     Ok(base64::encode(&bytes))
 }

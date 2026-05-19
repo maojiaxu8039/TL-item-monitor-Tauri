@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { devLog } from "@/lib/devLog";
 import {
   Calculator,
   Plus,
@@ -123,7 +124,7 @@ export default function ArbitragePage() {
       const data = await cmd.getArbitrageRecipes();
       setRecipes(data);
     } catch (err) {
-      console.error("[Arbitrage] loadRecipes error:", err);
+      devLog.error("[Arbitrage] loadRecipes error:", err);
     } finally {
       setLoading(false);
     }
@@ -145,7 +146,7 @@ export default function ArbitragePage() {
         toast.warning("暂无套利数据");
       }
     } catch (err) {
-      console.error("[Arbitrage] calculateAll error:", err);
+      devLog.error("[Arbitrage] calculateAll error:", err);
     } finally {
       setCalculating(false);
     }
@@ -166,7 +167,7 @@ export default function ArbitragePage() {
           setLastCalculatedAt(result.calculated_at);
         })
         .catch(err => {
-          console.error("[Arbitrage] Switch mode error:", err);
+          // error handled by toast
         })
         .finally(() => {
           setCalculating(false);
@@ -342,34 +343,50 @@ export default function ArbitragePage() {
     }
   };
 
+  const ingredientTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const outputTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (ingredientTimeoutRef.current) clearTimeout(ingredientTimeoutRef.current);
+      if (outputTimeoutRef.current) clearTimeout(outputTimeoutRef.current);
+    };
+  }, []);
+
   const searchIngredients = async (keyword: string) => {
     setIngredientSearch(keyword);
+    if (ingredientTimeoutRef.current) clearTimeout(ingredientTimeoutRef.current);
     if (keyword.length < 1) {
       setIngredientResults([]);
       return;
     }
-    try {
-      const results = await cmd.searchItemsForArbitrage(keyword);
-      setIngredientResults(results);
-    } catch (err) {
-      console.error("[Arbitrage] Search ingredients error:", err);
-      setIngredientResults([]);
-    }
+    ingredientTimeoutRef.current = setTimeout(async () => {
+      try {
+        const results = await cmd.searchItemsForArbitrage(keyword);
+        setIngredientResults(results);
+      } catch (err) {
+        devLog.error("[Arbitrage] Search ingredients error:", err);
+        setIngredientResults([]);
+      }
+    }, 300);
   };
 
   const searchOutputs = async (keyword: string) => {
     setOutputSearch(keyword);
+    if (outputTimeoutRef.current) clearTimeout(outputTimeoutRef.current);
     if (keyword.length < 1) {
       setOutputResults([]);
       return;
     }
-    try {
-      const results = await cmd.searchItemsForArbitrage(keyword);
-      setOutputResults(results);
-    } catch (err) {
-      console.error("[Arbitrage] Search outputs error:", err);
-      setOutputResults([]);
-    }
+    outputTimeoutRef.current = setTimeout(async () => {
+      try {
+        const results = await cmd.searchItemsForArbitrage(keyword);
+        setOutputResults(results);
+      } catch (err) {
+        devLog.error("[Arbitrage] Search outputs error:", err);
+        setOutputResults([]);
+      }
+    }, 300);
   };
 
   const addIngredientFromDraft = () => {

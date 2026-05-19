@@ -526,10 +526,17 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
         {
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-            let voice_path = voice_path.replace('\'', "''");
+            // Validate voice_path contains only safe characters
+            if !voice_path.chars().all(|c| {
+                c.is_alphanumeric() || c.is_whitespace() || matches!(c, '\\' | '/' | ':' | '.' | '_' | '-' | ' ')
+            }) {
+                warn!("Voice path contains unsafe characters: {}", voice_path);
+                continue;
+            }
+
             let script = format!(
-                "$path = '{}'; $resolved = (Resolve-Path -LiteralPath $path).ProviderPath; $done = $false; Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; Register-ObjectEvent -InputObject $player -EventName MediaEnded -Action {{ $script:done = $true }} | Out-Null; $player.Open([System.Uri]::new($resolved)); $player.Play(); $deadline = (Get-Date).AddSeconds(30); while (-not $done -and (Get-Date) -lt $deadline) {{ Start-Sleep -Milliseconds 100 }}; $player.Close()",
-                voice_path
+                "$done = $false; Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; Register-ObjectEvent -InputObject $player -EventName MediaEnded -Action {{ $script:done = $true }} | Out-Null; $player.Open([System.Uri]::new('file:///{0}')); $player.Play(); $deadline = (Get-Date).AddSeconds(30); while (-not $done -and (Get-Date) -lt $deadline) {{ Start-Sleep -Milliseconds 100 }}; $player.Close()",
+                voice_path.replace('\\', "/")
             );
             let mut command = tokio::process::Command::new("powershell");
             command.creation_flags(CREATE_NO_WINDOW).args([
@@ -540,10 +547,14 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
                 &script,
             ]);
 
-            match command.status().await {
-                Ok(status) if status.success() => played += 1,
-                Ok(status) => warn!("Voice alert player exited with status: {}", status),
-                Err(e) => warn!("Failed to play voice on Windows: {}", e),
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(35),
+                command.status()
+            ).await {
+                Ok(Ok(status)) if status.success() => played += 1,
+                Ok(Ok(status)) => warn!("Voice alert player exited with status: {}", status),
+                Ok(Err(e)) => warn!("Failed to play voice on Windows: {}", e),
+                Err(_) => warn!("Voice alert player timed out"),
             }
         }
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;

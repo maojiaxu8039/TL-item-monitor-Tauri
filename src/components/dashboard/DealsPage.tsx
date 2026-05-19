@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingDown, TrendingUp, Loader2, Settings, RefreshCw, Package } from "lucide-react";
 import { PageShell } from "@/components/ui/PageShell";
@@ -192,10 +192,10 @@ export default function DealsPage() {
     staleTime: 30000,
   });
 
-  const handleSaveSettings = (newSettings: { rise_threshold: number; fall_threshold: number }) => {
+  const handleSaveSettings = useCallback((newSettings: { rise_threshold: number; fall_threshold: number }) => {
     setSettings(newSettings);
     localStorage.setItem("deals-settings", JSON.stringify(newSettings));
-  };
+  }, []);
 
   const riseItems = fireChanges.filter(item => {
     if (!item.trend.includes("rise")) return false;

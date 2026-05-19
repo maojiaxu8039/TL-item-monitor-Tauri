@@ -24,9 +24,9 @@ fn safe_truncate(s: &str, max_len: usize) -> String {
     }
 }
 
-static HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
+fn build_http_client(timeout_secs: u64) -> Result<Client, String> {
     let builder = Client::builder()
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(timeout_secs))
         .pool_max_idle_per_host(1)
         .tcp_keepalive(Some(Duration::from_secs(60)))
         .tcp_nodelay(true);
@@ -35,22 +35,19 @@ static HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
     } else {
         builder
     };
-    builder.build().expect("Failed to create HTTP client")
-});
+    builder.build().map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
+}
 
-static QIANDAO_CLIENT: Lazy<Client> = Lazy::new(|| {
-    let builder = Client::builder()
-        .timeout(Duration::from_secs(15))
-        .pool_max_idle_per_host(1)
-        .tcp_keepalive(Some(Duration::from_secs(60)))
-        .tcp_nodelay(true);
-    let builder = if cfg!(debug_assertions) {
-        builder.danger_accept_invalid_certs(true)
-    } else {
-        builder
-    };
-    builder.build().expect("Failed to create Qiandao HTTP client")
-});
+static HTTP_CLIENT: Lazy<Result<Client, String>> = Lazy::new(|| build_http_client(30));
+static QIANDAO_CLIENT: Lazy<Result<Client, String>> = Lazy::new(|| build_http_client(15));
+
+fn http_client() -> Result<&'static Client, String> {
+    HTTP_CLIENT.as_ref().map_err(|e| e.clone())
+}
+
+fn qiandao_client() -> Result<&'static Client, String> {
+    QIANDAO_CLIENT.as_ref().map_err(|e| e.clone())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FirePriceSnapshot {
@@ -107,7 +104,7 @@ impl Scraper {
         let url = format!("{}/get?season_id={}", endpoints.luosi, luosi_season_id);
         info!("抓取物品: {}", mask_url_for_log(&url));
 
-        let resp = HTTP_CLIENT
+        let resp = http_client()?
             .get(&url)
             .timeout(Duration::from_secs(30))
             .send()
@@ -212,7 +209,7 @@ async fn scrape_via_rust(
         "specIds": [spec_id]
     });
 
-    let resp = QIANDAO_CLIENT
+    let resp = qiandao_client()?
         .post(&qiandao_url)
         .header("content-type", "application/json")
         .header("authorization", "Bearer undefined")

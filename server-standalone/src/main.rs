@@ -14,6 +14,7 @@
 mod config;
 mod constants;
 mod db;
+mod password_hash;
 mod scraper;
 
 use chrono::{Timelike, Utc};
@@ -352,21 +353,7 @@ fn verify_admin(request_body: &str, password: &str) -> Result<(), String> {
     if request_body.is_empty() {
         return Err("缺少密码字段".to_string());
     }
-    if !constant_time_eq(request_body.as_bytes(), password.as_bytes()) {
-        return Err("密码错误".to_string());
-    }
-    Ok(())
-}
-
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    let len = a.len().max(b.len());
-    let mut result = 0u8;
-    for i in 0..len {
-        let x = a.get(i).unwrap_or(&0);
-        let y = b.get(i).unwrap_or(&0);
-        result |= x ^ y;
-    }
-    result == 0 && a.len() == b.len()
+    password_hash::verify_password(request_body, password)
 }
 
 async fn handle_request(

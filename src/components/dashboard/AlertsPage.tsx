@@ -100,7 +100,6 @@ export default function AlertsPage() {
       setEvents(eventsData);
       setSections(sectionsData);
     } catch (e) {
-      console.error("Failed to load alerts:", e);
       addToast("error", "加载预警规则失败");
     } finally {
       setLoading(false);
@@ -123,7 +122,6 @@ export default function AlertsPage() {
         setSections(sectionsData);
       } catch (e) {
         if (!mounted) return;
-        console.error("Failed to load alerts:", e);
         addToast("error", "加载预警规则失败");
       } finally {
         if (mounted) setLoading(false);
@@ -169,7 +167,6 @@ export default function AlertsPage() {
       setItemResults([]);
       loadData();
     } catch (e) {
-      console.error("Failed to create rule:", e);
       addToast("error", `创建规则失败: ${e}`);
     }
   };
@@ -212,7 +209,6 @@ export default function AlertsPage() {
         const results = await cmd.searchItemsForArbitrage(keyword);
         setItemResults(results);
       } catch (err) {
-        console.error("[Alerts] Search items error:", err);
         setItemResults([]);
       }
     }, 300);
@@ -245,7 +241,6 @@ export default function AlertsPage() {
       addToast("success", newEnabled ? "规则已启用" : "规则已禁用");
       loadData();
     } catch (e) {
-      console.error("Failed to toggle rule:", e);
       addToast("error", "操作失败");
     }
   };
@@ -257,7 +252,6 @@ export default function AlertsPage() {
       addToast("success", "规则已删除");
       loadData();
     } catch (e) {
-      console.error("Failed to delete rule:", e);
       addToast("error", "删除失败");
     }
   };

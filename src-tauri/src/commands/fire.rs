@@ -344,6 +344,9 @@ pub async fn get_fire_history_by_season(
     market_mode: String,
     _hours: i64,
 ) -> Result<Vec<serde_json::Value>, String> {
+    if let Err(e) = crate::db::table_resolver::TableResolver::validate(&season_id, &market_mode) {
+        return Err(e.to_string());
+    }
     // Always return all data for the season
     // Time filtering is done on the frontend based on user's selected range
     Ok(repo_fire::get_fire_history_all(&state.db, &season_id, &market_mode, 10000, 0).await?)

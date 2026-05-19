@@ -1,5 +1,6 @@
 import { Search, Plus, Upload, Download } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
+import { devLog } from "@/lib/devLog"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -48,7 +49,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
         const result = await cmd.searchItems(debouncedSearch, 1, 20);
         return result;
       } catch (e) {
-        console.error("SearchBar queryFn error:", e);
+        devLog.error("SearchBar queryFn error:", e);
         throw e;
       }
     },

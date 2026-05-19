@@ -1568,8 +1568,8 @@ async fn seed_test_data_for_all_seasons(pool: &SqlitePool) -> Result<(), String>
 
         // Generate snapshots for SS12 (current season, start: 2026-04-17)
         let ss12_start = chrono::DateTime::parse_from_rfc3339("2026-04-17T00:00:00Z")
-            .expect("固定日期格式应始终有效")
-            .timestamp();
+            .map(|dt| dt.timestamp())
+            .unwrap_or(1775337600);
         generate_season_snapshots(
             pool,
             "ss12",
@@ -1856,7 +1856,7 @@ mod migration_tests {
             .await
             .expect("legacy migrations should be repaired");
 
-        let backup_dir = db_path.parent().unwrap().join("backups");
+        let backup_dir = db_path.parent().unwrap_or_else(|| std::path::Path::new(".")).join("backups");
         let backup_count = std::fs::read_dir(&backup_dir)
             .expect("migration backup dir should exist")
             .filter_map(Result::ok)

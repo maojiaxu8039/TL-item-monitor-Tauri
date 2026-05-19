@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { devLog } from "@/lib/devLog";
 import {
   Shield,
   Plus,
@@ -144,7 +145,7 @@ export default function StrategiesPage() {
     return () => { mountedRef.current = false; };
   }, []);
 
-  const loadStrategies = async () => {
+  const loadStrategies = useCallback(async () => {
     try {
       const data = await cmd.getAllStrategiesWithCosts();
       if (!mountedRef.current) return;
@@ -152,18 +153,17 @@ export default function StrategiesPage() {
       setStrategies(sorted);
     } catch (e) {
       if (!mountedRef.current) return;
-      console.error("Failed to load strategies:", e);
       toast.error("加载策略失败");
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadStrategies();
   }, []);
 
-  const toggleExpand = (id: string) => {
+  const toggleExpand = useCallback((id: string) => {
     setExpandedIds(prev => {
       const newSet = new Set(prev);
       if (newSet.has(id)) {
@@ -173,23 +173,34 @@ export default function StrategiesPage() {
       }
       return newSet;
     });
-  };
+  }, []);
+
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, []);
 
   const searchItems = async (keyword: string) => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     if (!keyword.trim()) {
       setItemSearchResults([]);
       return;
     }
-    setSearchLoading(true);
-    try {
-      const result = await cmd.searchItems(keyword, 1, 20);
-      setItemSearchResults(result.items);
-    } catch (e) {
-      console.error("Search failed:", e);
-      setItemSearchResults([]);
-    } finally {
-      setSearchLoading(false);
-    }
+    searchTimeoutRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const result = await cmd.searchItems(keyword, 1, 20);
+        setItemSearchResults(result.items);
+      } catch (e) {
+        devLog.error("Search failed:", e);
+        setItemSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
   };
 
   const handleCreate = async () => {
@@ -212,12 +223,11 @@ export default function StrategiesPage() {
       resetForm();
       loadStrategies();
     } catch (e) {
-      console.error("Failed to create strategy:", e);
       toast.error(`创建策略失败: ${e}`);
     }
   };
 
-  const handleEdit = (strategy: StrategyWithCosts) => {
+  const handleEdit = useCallback((strategy: StrategyWithCosts) => {
     setEditForm({
       id: strategy.id,
       name: strategy.name,
@@ -229,7 +239,7 @@ export default function StrategiesPage() {
       image_url: strategy.image_url || "",
     });
     setShowEditDialog(true);
-  };
+  }, []);
 
   const handleUpdate = async () => {
     if (!editForm.id || !editForm.name.trim()) {
@@ -252,22 +262,20 @@ export default function StrategiesPage() {
       resetForm();
       loadStrategies();
     } catch (e) {
-      console.error("Failed to update strategy:", e);
       toast.error(`更新策略失败: ${e}`);
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     if (!confirm("确定要删除这个策略吗？")) return;
     try {
       await cmd.deleteStrategyDetail(id);
       toast.success("策略已删除");
       loadStrategies();
     } catch (e) {
-      console.error("Failed to delete strategy:", e);
       toast.error("删除策略失败");
     }
-  };
+  }, []);
 
   const handleAddCost = async () => {
     if (!costForm.item_id.trim() && !costForm.item_name.trim()) {
@@ -288,7 +296,6 @@ export default function StrategiesPage() {
       resetCostForm();
       loadStrategies();
     } catch (e) {
-      console.error("Failed to add cost:", e);
       toast.error("添加成本失败");
     }
   };
@@ -312,48 +319,44 @@ export default function StrategiesPage() {
       resetOutputForm();
       loadStrategies();
     } catch (e) {
-      console.error("Failed to add output:", e);
       toast.error("添加产出失败");
     }
   };
 
-  const handleDeleteCost = async (id: string) => {
+  const handleDeleteCost = useCallback(async (id: string) => {
     try {
       await cmd.deleteStrategyCost(id);
       toast.success("成本已删除");
       loadStrategies();
     } catch (e) {
-      console.error("Failed to delete cost:", e);
       toast.error("删除成本失败");
     }
-  };
+  }, []);
 
-  const handleDeleteOutput = async (id: string) => {
+  const handleDeleteOutput = useCallback(async (id: string) => {
     try {
       await cmd.deleteStrategyOutput(id);
       toast.success("产出已删除");
       loadStrategies();
     } catch (e) {
-      console.error("Failed to delete output:", e);
       toast.error("删除产出失败");
     }
-  };
+  }, []);
 
-  const handleRefreshPrices = async (strategyId: string) => {
+  const handleRefreshPrices = useCallback(async (strategyId: string) => {
     setRefreshing(strategyId);
     try {
       await cmd.refreshStrategyFirePrices(strategyId);
       toast.success("火价已刷新");
       loadStrategies();
     } catch (e) {
-      console.error("Failed to refresh prices:", e);
       toast.error("刷新火价失败");
     } finally {
       setRefreshing(null);
     }
-  };
+  }, []);
 
-  const openCostDialog = (strategyId: string) => {
+  const openCostDialog = useCallback((strategyId: string) => {
     setCostForm({
       strategy_id: strategyId,
       cost_type: "回响",
@@ -364,9 +367,9 @@ export default function StrategiesPage() {
     });
     setItemSearchResults([]);
     setShowCostDialog(strategyId);
-  };
+  }, []);
 
-  const openOutputDialog = (strategyId: string) => {
+  const openOutputDialog = useCallback((strategyId: string) => {
     setOutputForm({
       strategy_id: strategyId,
       item_name: "",
@@ -375,9 +378,9 @@ export default function StrategiesPage() {
     });
     setItemSearchResults([]);
     setShowOutputDialog(strategyId);
-  };
+  }, []);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setEditForm({
       name: "",
       label: "K8-1",
@@ -387,9 +390,9 @@ export default function StrategiesPage() {
       remark: "",
       image_url: "",
     });
-  };
+  }, []);
 
-  const resetCostForm = () => {
+  const resetCostForm = useCallback(() => {
     setCostForm({
       strategy_id: "",
       cost_type: "回响",
@@ -399,9 +402,9 @@ export default function StrategiesPage() {
       is_realtime: true,
     });
     setItemSearchResults([]);
-  };
+  }, []);
 
-  const resetOutputForm = () => {
+  const resetOutputForm = useCallback(() => {
     setOutputForm({
       strategy_id: "",
       item_name: "",
@@ -409,7 +412,7 @@ export default function StrategiesPage() {
       count: 1,
     });
     setItemSearchResults([]);
-  };
+  }, []);
 
   const guessCostType = (itemName: string, itemType: string): string => {
     const name = itemName.toLowerCase();
@@ -421,7 +424,7 @@ export default function StrategiesPage() {
     return "材料";
   };
 
-  const handleItemSelect = (item: ItemData) => {
+  const handleItemSelect = useCallback((item: ItemData) => {
     if (showCostDialog) {
       setCostForm({
         ...costForm,
@@ -438,7 +441,7 @@ export default function StrategiesPage() {
       });
       setItemSearchResults([]);
     }
-  };
+  }, []);
 
   const getLabelColor = (label: string) => {
     switch (label) {
@@ -705,7 +708,6 @@ export default function StrategiesPage() {
                       setActiveTab("strategies");
                       loadStrategies();
                     } catch (e) {
-                      console.error("Failed to create from template:", e);
                       toast.error(`从模板创建失败: ${e}`);
                     }
                   }}

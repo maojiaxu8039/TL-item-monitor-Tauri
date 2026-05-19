@@ -144,7 +144,7 @@ export function DashboardStats() {
     fireStats.min = Math.min(...prices)
     fireStats.max = Math.max(...prices)
     fireStats.avg = prices.reduce((a, b) => a + b, 0) / prices.length
-    fireStats.change = fireHistory.length >= 2
+    fireStats.change = fireHistory.length >= 2 && fireHistory[0].rmb_per_10k_fire !== 0
       ? ((fireHistory[fireHistory.length - 1].rmb_per_10k_fire - fireHistory[0].rmb_per_10k_fire) / fireHistory[0].rmb_per_10k_fire) * 100
       : 0
   }

@@ -57,7 +57,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
     }
     
     const startedAt = Math.floor(new Date(newSeasonStartedAt).getTime() / 1000);
-    if (startedAt <= 0) {
+    if (Number.isNaN(startedAt) || startedAt <= 0) {
       toast.error("开服日期格式不正确");
       return;
     }

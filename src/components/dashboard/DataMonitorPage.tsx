@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Database, Download, RefreshCw, Server, Wifi, WifiOff, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { cmd } from "@/lib/commands";
@@ -113,6 +113,16 @@ export default function DataMonitorPage() {
   });
   const { marketContext } = useSectionRefresh();
   const { syncJob, setSyncJob, restoreSyncJob } = useSyncContext();
+  const syncAbortRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (syncAbortRef.current) {
+        syncAbortRef.current();
+        syncAbortRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (syncJob?.status === "running") {
@@ -141,6 +151,7 @@ export default function DataMonitorPage() {
 
   useEffect(() => {
     setServerStatus(statusData || null);
+    setConnectionStatus(statusData ? "connected" : "disconnected");
   }, [statusData]);
 
   const getTimeRangeHours = (range: TimeRange): number => {
@@ -234,14 +245,22 @@ export default function DataMonitorPage() {
   };
 
   const syncPaginated = useCallback(async () => {
+    // Cancel any existing sync
+    if (syncAbortRef.current) {
+      syncAbortRef.current();
+      syncAbortRef.current = null;
+    }
+
+    let cancelled = false;
+    syncAbortRef.current = () => { cancelled = true; };
+
     const modeParam = syncMode === "expert" ? "expert" : "normal";
     const hours = getTimeRangeHours(timeRange);
     const marketMode = syncMode === "expert" ? "season_expert" : "season_normal";
 
-    const job = createEmptySyncJob(dataType, syncMode, timeRange);
-    job.status = "running";
-    job.startedAt = Date.now();
-    setSyncJob({ ...job });
+    let job = createEmptySyncJob(dataType, syncMode, timeRange);
+    job = { ...job, status: "running" as const, startedAt: Date.now() };
+    setSyncJob(job);
 
     let offset = 0;
     let totalSuccess = 0;
@@ -256,9 +275,10 @@ export default function DataMonitorPage() {
           ? `${serverUrl}/fire-history-all?mode=${modeParam}`
           : `${serverUrl}/fire-history?mode=${modeParam}`;
 
-        while (hasMore) {
+        while (hasMore && !cancelled) {
           const url = `${baseUrl}&limit=${PAGE_SIZE}&offset=${offset}`;
           const result = await cmd.fetchServerJson<{ success: boolean; data: FireHistoryRecord[]; error?: string }>(url);
+          if (cancelled) break;
           if (!result.success) throw new Error(result.error || "Unknown error");
 
           const records = result.data as FireHistoryRecord[];
@@ -269,16 +289,20 @@ export default function DataMonitorPage() {
           }
 
           const pageResult = await syncSinglePage(records, dataType, marketMode, marketContext);
+          if (cancelled) break;
           totalSuccess += pageResult.success;
           totalFailed += pageResult.failed;
           allFailures = [...allFailures, ...pageResult.failures];
 
           const processedCount = totalSuccess + totalFailed;
-          job.success = processedCount;
-          job.failed = totalFailed;
-          job.total = records.length < PAGE_SIZE ? processedCount : processedCount + (PAGE_SIZE - records.length);
-          job.failures = allFailures.slice(0, 10);
-          setSyncJob({ ...job });
+          job = {
+            ...job,
+            success: processedCount,
+            failed: totalFailed,
+            total: records.length < PAGE_SIZE ? processedCount : processedCount + (PAGE_SIZE - records.length),
+            failures: allFailures.slice(0, 10),
+          };
+          setSyncJob(job);
 
           if (records.length < PAGE_SIZE) {
             hasMore = false;
@@ -290,9 +314,10 @@ export default function DataMonitorPage() {
         const timestampParam = lastItemsSyncTimestamp ? `&since_timestamp=${lastItemsSyncTimestamp}` : "";
         const baseUrl = `${serverUrl}/items-history-all?mode=${modeParam}${timestampParam}`;
 
-        while (hasMore) {
+        while (hasMore && !cancelled) {
           const url = `${baseUrl}&limit=${PAGE_SIZE}&offset=${offset}`;
           const result = await cmd.fetchServerJson<{ success: boolean; data: ItemsHistoryRecord[]; error?: string }>(url);
+          if (cancelled) break;
           if (!result.success) throw new Error(result.error || "Unknown error");
 
           const records = result.data as ItemsHistoryRecord[];
@@ -305,16 +330,20 @@ export default function DataMonitorPage() {
           records.forEach(r => { if (r.scraped_at > maxScrapedAt) maxScrapedAt = r.scraped_at; });
 
           const pageResult = await syncSinglePage(records, dataType, marketMode, marketContext);
+          if (cancelled) break;
           totalSuccess += pageResult.success;
           totalFailed += pageResult.failed;
           allFailures = [...allFailures, ...pageResult.failures];
 
           const processedCount = totalSuccess + totalFailed;
-          job.success = processedCount;
-          job.failed = totalFailed;
-          job.total = records.length < PAGE_SIZE ? processedCount : processedCount + (PAGE_SIZE - records.length);
-          job.failures = allFailures.slice(0, 10);
-          setSyncJob({ ...job });
+          job = {
+            ...job,
+            success: processedCount,
+            failed: totalFailed,
+            total: records.length < PAGE_SIZE ? processedCount : processedCount + (PAGE_SIZE - records.length),
+            failures: allFailures.slice(0, 10),
+          };
+          setSyncJob(job);
 
           if (records.length < PAGE_SIZE) {
             hasMore = false;
@@ -324,10 +353,21 @@ export default function DataMonitorPage() {
         }
       }
 
-      job.status = totalFailed > 0 ? (totalSuccess > 0 ? "partial" : "failed") : "success";
-      job.finishedAt = Date.now();
-      job.firstError = allFailures[0]?.reason ?? null;
-      setSyncJob({ ...job });
+      if (cancelled) {
+        job = { ...job, status: "idle" as const };
+        setSyncJob(job);
+        syncAbortRef.current = null;
+        return;
+      }
+
+      job = {
+        ...job,
+        status: totalFailed > 0 ? (totalSuccess > 0 ? "partial" : "failed") : "success",
+        finishedAt: Date.now(),
+        firstError: allFailures[0]?.reason ?? null,
+      };
+      setSyncJob(job);
+      syncAbortRef.current = null;
 
       if (dataType === "items" && maxScrapedAt > 0) {
         localStorage.setItem("last_items_sync_timestamp", maxScrapedAt.toString());
