@@ -430,12 +430,11 @@ pub async fn insert_items_snapshots(
 
         let mut query = sqlx::query(&sql);
         for item in chunk {
-            let fire_price = item.price * fire_per_rmb;
             query = query
                 .bind(&item.item_id)
                 .bind(&item.name)
                 .bind(&item.item_type)
-                .bind(fire_price)
+                .bind(&item.price)
                 .bind(scraped_at)
                 .bind(season_day);
         }
@@ -447,7 +446,6 @@ pub async fn insert_items_snapshots(
             Err(e) => {
                 error!("批量插入物品快照失败: {}", e);
                 for item in chunk {
-                    let fire_price = item.price * fire_per_rmb;
                     if let Err(e) = sqlx::query(&format!(
                         r#"INSERT OR IGNORE INTO {} (item_id, name, item_type, fire_price, scraped_at, season_day) VALUES (?, ?, ?, ?, ?, ?)"#,
                         table
@@ -455,7 +453,7 @@ pub async fn insert_items_snapshots(
                     .bind(&item.item_id)
                     .bind(&item.name)
                     .bind(&item.item_type)
-                    .bind(fire_price)
+                    .bind(&item.price)
                     .bind(scraped_at)
                     .bind(season_day)
                     .execute(&mut *tx)
