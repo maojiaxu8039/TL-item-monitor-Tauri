@@ -8,6 +8,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
+use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
 use super::config::{ApiConfig, ApiEndpoints};
@@ -300,10 +301,14 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
         if mode == "专家" { "pro" } else { "normal" }
     );
 
-    let output = cmd
-        .output()
-        .await
-        .map_err(|e| format!("Node execution failed: {}", e))?;
+    const NODE_SCRIPT_TIMEOUT_SECS: u64 = 30;
+    let output = timeout(
+        Duration::from_secs(NODE_SCRIPT_TIMEOUT_SECS),
+        cmd.output()
+    )
+    .await
+    .map_err(|_| format!("Node.js script 执行超时 ({}秒)", NODE_SCRIPT_TIMEOUT_SECS))?
+    .map_err(|e| format!("Node execution failed: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);

@@ -3,6 +3,7 @@ use sqlx::{Row, SqlitePool};
 use tracing::{error, info, warn};
 use std::sync::{Mutex, OnceLock};
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 use crate::scraper::{FirePriceSnapshot, Item};
 
@@ -123,20 +124,36 @@ async fn add_column_if_missing(
     Ok(())
 }
 
-fn season_start_cache() -> &'static Mutex<HashMap<String, i64>> {
-    static CACHE: OnceLock<Mutex<HashMap<String, i64>>> = OnceLock::new();
+const CACHE_TTL_SECS: u64 = 300;
+
+struct CacheEntry {
+    started_at: i64,
+    cached_at: Instant,
+}
+
+fn season_start_cache() -> &'static Mutex<HashMap<String, CacheEntry>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, CacheEntry>>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn is_cache_valid(entry: &CacheEntry) -> bool {
+    entry.cached_at.elapsed() < Duration::from_secs(CACHE_TTL_SECS)
 }
 
 async fn get_cached_season_start(pool: &SqlitePool, season_id: &str) -> Result<i64, String> {
     if let Ok(cache) = season_start_cache().lock() {
-        if let Some(&start) = cache.get(season_id) {
-            return Ok(start);
+        if let Some(entry) = cache.get(season_id) {
+            if is_cache_valid(entry) {
+                return Ok(entry.started_at);
+            }
         }
     }
     let start = get_season_start(pool, season_id).await?;
     if let Ok(mut cache) = season_start_cache().lock() {
-        cache.insert(season_id.to_string(), start);
+        cache.insert(season_id.to_string(), CacheEntry {
+            started_at: start,
+            cached_at: Instant::now(),
+        });
     }
     Ok(start)
 }

@@ -545,11 +545,11 @@
                             </select>
                         </div>
                     </div>
-                    </form>
                     <div style="margin-top: 15px;">
                         <button type="button" class="btn btn-success" id="btn-export-json">导出 JSON</button>
                         <button type="button" class="btn btn-primary" id="btn-export-csv">导出 CSV</button>
                     </div>
+                </form>
                 </div>
 
                 <div class="card">
@@ -1049,8 +1049,12 @@
             if (!confirm(`⚠️ 危险操作确认\n\n即将重置以下表：\n${tableNames}\n\n此操作将清空所有数据，且无法恢复！\n\n输入"重置"确认：`)) return;
             
             const confirmText = prompt('请再次输入"重置"确认此危险操作：');
-            if (confirmText !== '重置') {
-                showAlert('error', '操作已取消');
+            if (confirmText === null || confirmText !== '重置') {
+                if (confirmText !== null) {
+                    showAlert('error', '输入不正确，操作已取消');
+                } else {
+                    showAlert('error', '操作已取消');
+                }
                 return;
             }
 
