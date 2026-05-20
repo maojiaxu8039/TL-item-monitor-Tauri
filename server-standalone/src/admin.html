@@ -920,7 +920,6 @@
                             showAlert('error', '没有数据可导出');
                             return;
                         }
-                        const headers = Object.keys(items[0]);
                         const escapeCSV = (val) => {
                             if (val === null || val === undefined) return '';
                             const str = String(val);
@@ -929,9 +928,30 @@
                             }
                             return str;
                         };
-                        const rows = items.map(item => headers.map(h => escapeCSV(item[h])).join(','));
                         const BOM = '\uFEFF';
-                        content = BOM + [headers.map(h => escapeCSV(h)).join(','), ...rows].join('\n');
+                        if (type === 'fire-history') {
+                            const headers = ['赛季天', '火价(RMB/万火)', '每RMB火数', '涨幅', '交易量', '数据时间'];
+                            const rows = items.map(item => [
+                                escapeCSV(item.season_day),
+                                escapeCSV(item.rmb_per_10k_fire),
+                                escapeCSV(item.fire_per_rmb),
+                                escapeCSV(item.increase_ratio),
+                                escapeCSV(item.trading_volume),
+                                escapeCSV(item.scraped_at ? new Date(item.scraped_at * 1000).toLocaleString('zh-CN') : ''),
+                            ].join(','));
+                            content = BOM + [headers.join(','), ...rows].join('\n');
+                        } else {
+                            const headers = ['物品名称', '物品ID', '物品类型', '火价', '赛季天', '抓取时间'];
+                            const rows = items.map(item => [
+                                escapeCSV(item.name),
+                                escapeCSV(item.item_id),
+                                escapeCSV(item.item_type),
+                                escapeCSV(item.fire_price),
+                                escapeCSV(item.season_day),
+                                escapeCSV(item.scraped_at ? new Date(item.scraped_at * 1000).toLocaleString('zh-CN') : ''),
+                            ].join(','));
+                            content = BOM + [headers.join(','), ...rows].join('\n');
+                        }
                         filename = `tl_${mode}_${type}_${new Date().toISOString().slice(0,10)}.csv`;
                         mimeType = 'text/csv;charset=utf-8';
                     } else {
