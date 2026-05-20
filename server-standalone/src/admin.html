@@ -428,7 +428,7 @@
             </div>
 
             <div class="card">
-                <h2>API 配置</h2>
+                <h2>火价 API 配置</h2>
                 <form id="qiandao-config-form">
                     <div class="grid">
                         <div class="form-group">
@@ -448,7 +448,7 @@
                             <input type="text" id="api-qiandao-spec-expert">
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-primary">保存 API 配置</button>
+                    <button type="submit" class="btn btn-primary">保存火价 API 配置</button>
                 </form>
             </div>
 
@@ -1216,7 +1216,7 @@
                 const data = await resp.json();
                 
                 if (data.success) {
-                    showAlert('success', 'API配置已保存，重启后生效');
+                    showAlert('success', '火价API配置已保存，重启后生效');
                 } else {
                     showAlert('error', data.error || '保存失败');
                 }
