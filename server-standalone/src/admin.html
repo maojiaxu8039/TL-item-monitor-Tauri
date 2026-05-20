@@ -670,19 +670,6 @@
             }
         }
 
-        async function loadConfig() {
-            if (!isAuthenticated) {
-                showAlert('error', '请先进行管理员认证');
-                return;
-            }
-            if (serverConfig) {
-                loadConfigFields();
-                showAlert('success', '配置已加载');
-            } else {
-                showAlert('error', '请先进行管理员认证');
-            }
-        }
-
         function getPassword() {
             if (!isAuthenticated || !apiPassword) {
                 showAlert('error', '请先进行管理员认证');
@@ -736,10 +723,6 @@
 
                     const normal = info.last_collection.normal;
                     const expert = info.last_collection.expert;
-
-                    console.log('normal:', normal);
-                    console.log('expert:', expert);
-                    console.log('normal.success:', normal?.success);
 
                     const statNormal = document.getElementById('stat-normal');
                     statNormal.textContent = '';
@@ -1032,23 +1015,28 @@
             if (!password) return;
 
             const season_id = document.getElementById('reset-season').value;
+            if (!season_id) {
+                showAlert('error', '请选择要重置的赛季');
+                return;
+            }
+
             const tables = [];
             const tableTypes = [];
 
             if (document.getElementById('reset-fire-normal').checked) {
-                tables.push('fire_price_snapshots_ss12_normal');
+                tables.push(`fire_price_snapshots_${season_id}_normal`);
                 tableTypes.push({ type: 'fire', mode: 'normal' });
             }
             if (document.getElementById('reset-fire-expert').checked) {
-                tables.push('fire_price_snapshots_ss12_expert');
+                tables.push(`fire_price_snapshots_${season_id}_expert`);
                 tableTypes.push({ type: 'fire', mode: 'expert' });
             }
             if (document.getElementById('reset-items-normal').checked) {
-                tables.push('item_snapshots_ss12_normal');
+                tables.push(`item_snapshots_${season_id}_normal`);
                 tableTypes.push({ type: 'items', mode: 'normal' });
             }
             if (document.getElementById('reset-items-expert').checked) {
-                tables.push('item_snapshots_ss12_expert');
+                tables.push(`item_snapshots_${season_id}_expert`);
                 tableTypes.push({ type: 'items', mode: 'expert' });
             }
 
