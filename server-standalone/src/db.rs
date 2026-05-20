@@ -62,12 +62,21 @@ impl MarketMode {
 }
 
 fn calculate_season_day(season_start: i64, recorded_at: i64) -> i32 {
-    let diff_seconds = recorded_at - season_start;
-    if diff_seconds < 86400 {
-        1_i32
-    } else {
-        (diff_seconds / 86400 + 1) as i32
+    const BEIJING_OFFSET_SECS: i64 = 8 * 3600;
+    const DAY_SECS: i64 = 86400;
+    
+    let recorded_in_beijing = recorded_at + BEIJING_OFFSET_SECS;
+    let start_in_beijing = season_start + BEIJING_OFFSET_SECS;
+    
+    let recorded_day_start = (recorded_in_beijing / DAY_SECS) * DAY_SECS;
+    let start_day_start = (start_in_beijing / DAY_SECS) * DAY_SECS;
+    
+    if recorded_day_start < start_day_start {
+        return 1;
     }
+    
+    let days_elapsed = (recorded_day_start - start_day_start) / DAY_SECS;
+    (days_elapsed + 1) as i32
 }
 
 async fn table_exists(pool: &SqlitePool, table: &str) -> Result<bool, String> {
