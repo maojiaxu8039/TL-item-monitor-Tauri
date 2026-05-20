@@ -383,21 +383,6 @@
             </div>
 
             <div class="card">
-                <h2>WebSocket 实时连接</h2>
-                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
-                    <span id="ws-status" class="ws-status disconnected">
-                        <span class="ws-dot"></span>
-                        <span id="ws-status-text">未连接</span>
-                    </span>
-                    <button id="ws-connect-btn" class="btn btn-primary" onclick="connectWebSocket()">连接</button>
-                    <button id="ws-disconnect-btn" class="btn btn-danger" onclick="disconnectWebSocket()" style="display: none;">断开</button>
-                </div>
-                <div id="ws-messages" style="background: #f8f9fa; padding: 10px; border-radius: 6px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px;">
-                    <div style="color: #999;">等待连接...</div>
-                </div>
-            </div>
-
-            <div class="card">
                 <h2>采集详情</h2>
                 <table class="table">
                     <thead>
