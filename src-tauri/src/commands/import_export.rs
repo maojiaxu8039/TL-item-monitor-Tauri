@@ -64,43 +64,31 @@ pub async fn import_watchlist_csv(
 #[tauri::command]
 pub async fn export_watchlist_csv(state: State<'_, Arc<AppState>>) -> Result<String, String> {
     let ctx = state.active_context.read().clone();
-    let sections = repo_sections::get_sections(&state.db).await?;
-    let mut wtr = csv::Writer::from_writer(vec![]);
-
-    wtr.write_record([
-        "section_id",
-        "season_id",
-        "market_mode",
-        "item_id",
-        "purchase_fire_price",
-        "count",
-        "more_value",
-        "last_time",
-    ])
+    
+    TableResolver::validate(&ctx.season_id, ctx.market_mode.as_str())?;
+    
+    let rows: Vec<(String, String, String, String, String, String, String, String)> = sqlx::query_as(
+        "SELECT section_id, season_id, market_mode, item_id, purchase_fire_price, count, more_value, COALESCE(last_time, '') FROM section_items WHERE season_id = ? AND market_mode = ? ORDER BY section_id, sort_order, created_at"
+    )
+    .bind(&ctx.season_id)
+    .bind(ctx.market_mode.as_str())
+    .fetch_all(&state.db)
+    .await
     .map_err(|e| e.to_string())?;
 
-    for section in sections {
-        let items = repo_sections::get_section_items(&state.db, &section.id, &ctx.season_id, ctx.market_mode.as_str()).await?;
-        for item in items {
-            wtr.write_record([
-                &item.section_id,
-                &item.season_id,
-                &item.market_mode,
-                &item.item_id,
-                &item.purchase_fire_price.to_string(),
-                &item.count.to_string(),
-                &item.more_value.to_string(),
-                item.last_time.as_deref().unwrap_or(""),
-            ])
-            .map_err(|e| e.to_string())?;
-        }
+    let mut wtr = csv::Writer::from_writer(vec![]);
+    wtr.write_record(["section_id", "season_id", "market_mode", "item_id", "purchase_fire_price", "count", "more_value", "last_time"])
+        .map_err(|e| e.to_string())?;
+
+    for row in rows {
+        wtr.write_record([
+            row.0.as_str(), row.1.as_str(), row.2.as_str(), row.3.as_str(),
+            row.4.as_str(), row.5.as_str(), row.6.as_str(), row.7.as_str(),
+        ]).map_err(|e| e.to_string())?;
     }
 
     let data = wtr.into_inner().map_err(|e| e.to_string())?;
-
-    let csv_content = String::from_utf8(data).map_err(|e| e.to_string())?;
-
-    Ok(csv_content)
+    String::from_utf8(data).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
