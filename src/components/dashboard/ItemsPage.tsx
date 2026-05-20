@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { devLog } from "@/lib/devLog";
 import { DEFAULT_HISTORY_SEASON } from "@/lib/constants";
 import { useQueryClient } from "@tanstack/react-query";
@@ -56,7 +56,7 @@ interface ItemPriceCompare {
   percentile: number | null;
 }
 
-function SectionPicker({
+const SectionPicker = memo(function SectionPicker({
   sections,
   onAdd,
 }: {
@@ -100,9 +100,9 @@ function SectionPicker({
       )}
     </div>
   );
-}
+});
 
-function DayRangeInput({
+const DayRangeInput = memo(function DayRangeInput({
   value,
   onChange,
 }: {
@@ -111,7 +111,7 @@ function DayRangeInput({
 }) {
   const [inputValue, setInputValue] = useState(value === "all" ? "" : value);
 
-  const handleBlur = () => {
+  const handleBlur = useCallback(() => {
     const num = parseInt(inputValue);
     if (!isNaN(num) && num >= 1 && num <= 90) {
       onChange(String(num));
@@ -119,13 +119,17 @@ function DayRangeInput({
       setInputValue("");
       onChange("all");
     }
-  };
+  }, [inputValue, onChange]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       handleBlur();
     }
-  };
+  }, [handleBlur]);
+
+  useEffect(() => {
+    setInputValue(value === "all" ? "" : value);
+  }, [value]);
 
   return (
     <div className="relative flex items-center">
@@ -143,7 +147,7 @@ function DayRangeInput({
       />
     </div>
   );
-}
+});
 
 export default function ItemsPage() {
   const [searchKeyword, setSearchKeyword] = useState("");

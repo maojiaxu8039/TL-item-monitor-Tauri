@@ -164,25 +164,26 @@ export default function ArbitragePage() {
   useEffect(() => {
     if (!marketContextReady || pendingRef.current) return;
     
-    if (marketContext.marketMode !== lastMode) {
+    const currentMode = marketContext.marketMode;
+    if (currentMode !== lastMode) {
       pendingRef.current = true;
-      setLastMode(marketContext.marketMode);
-      setContextKey(`${marketContext.seasonId}-${marketContext.marketMode}`);
+      setLastMode(currentMode);
+      setContextKey(`${marketContext.seasonId}-${currentMode}`);
       setCalculating(true);
-      cmd.calculateArbitrage(marketContext.seasonId, marketContext.marketMode, showAllRecipes)
+      cmd.calculateArbitrage(marketContext.seasonId, currentMode, showAllRecipes)
         .then(result => {
           setCalculationResult(result.recipes);
           setLastCalculatedAt(result.calculated_at);
         })
         .catch(err => {
-          // error handled by toast
+          devLog.error("[Arbitrage] Mode switch error:", err);
         })
         .finally(() => {
           setCalculating(false);
           pendingRef.current = false;
         });
     }
-  }, [marketContext.marketMode, marketContext.seasonId, marketContextReady, lastMode, showAllRecipes]);
+  }, [marketContext.marketMode, marketContext.seasonId, marketContextReady, showAllRecipes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refreshPrices = async () => {
     setRefreshingPrice(true);

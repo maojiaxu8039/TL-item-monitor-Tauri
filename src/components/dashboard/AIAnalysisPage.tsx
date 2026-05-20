@@ -277,7 +277,7 @@ export default function AIAnalysisPage() {
     }
   }, [input, aiEnabled, fireData, marketContext.seasonId, settings.gatewayUrl, settings.gatewayToken, addToast]);
 
-  const handleSaveSettings = async (newSettings: AISettings) => {
+  const handleSaveSettings = useCallback(async (newSettings: AISettings) => {
     try {
       localStorage.setItem("ai_settings_v9", JSON.stringify(newSettings));
       setSettings(newSettings);
@@ -285,7 +285,7 @@ export default function AIAnalysisPage() {
     } catch {
       addToast("error", "保存失败");
     }
-  };
+  }, [addToast]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -294,13 +294,13 @@ export default function AIAnalysisPage() {
     }
   };
 
-  const handleReconnect = () => {
+  const handleReconnect = useCallback(() => {
     if (!aiEnabled) {
       addToast("warning", "AI功能已关闭，请先开启");
       return;
     }
-    testConnection();
-  };
+    testConnection(settings);
+  }, [aiEnabled, settings, testConnection, addToast]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-120px)]">

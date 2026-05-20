@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useEffect, useState, type ReactNode } from "react"
+import { createContext, useContext, useCallback, useEffect, useState, useRef, type ReactNode } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { cmd } from "@/lib/commands"
 
@@ -35,6 +35,11 @@ export function SectionRefreshProvider({ children }: { children: ReactNode }) {
     marketMode: "season_normal",
   })
   const [marketContextReady, setMarketContextReady] = useState(false)
+  const marketContextRef = useRef(marketContext)
+
+  useEffect(() => {
+    marketContextRef.current = marketContext
+  }, [marketContext])
 
   useEffect(() => {
     let mounted = true
@@ -57,19 +62,21 @@ export function SectionRefreshProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshSections = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["sections", marketContext.seasonId, marketContext.marketMode] })
-    queryClient.invalidateQueries({ queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode] })
-  }, [queryClient, marketContext.seasonId, marketContext.marketMode])
+    const ctx = marketContextRef.current
+    queryClient.invalidateQueries({ queryKey: ["sections", ctx.seasonId, ctx.marketMode] })
+    queryClient.invalidateQueries({ queryKey: ["section-items", ctx.seasonId, ctx.marketMode] })
+  }, [queryClient])
 
   const refreshData = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode] })
-    queryClient.invalidateQueries({ queryKey: ["sections", marketContext.seasonId, marketContext.marketMode] })
-    queryClient.invalidateQueries({ queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode] })
-    queryClient.invalidateQueries({ queryKey: ["items-search", marketContext.seasonId, marketContext.marketMode] })
-    queryClient.invalidateQueries({ queryKey: ["fire-history", marketContext.seasonId, marketContext.marketMode] })
+    const ctx = marketContextRef.current
+    queryClient.invalidateQueries({ queryKey: ["dashboard-summary", ctx.seasonId, ctx.marketMode] })
+    queryClient.invalidateQueries({ queryKey: ["sections", ctx.seasonId, ctx.marketMode] })
+    queryClient.invalidateQueries({ queryKey: ["section-items", ctx.seasonId, ctx.marketMode] })
+    queryClient.invalidateQueries({ queryKey: ["items-search", ctx.seasonId, ctx.marketMode] })
+    queryClient.invalidateQueries({ queryKey: ["fire-history", ctx.seasonId, ctx.marketMode] })
     queryClient.invalidateQueries({ queryKey: ["arbitrage-recipes"] })
     queryClient.invalidateQueries({ queryKey: ["arbitrage-calculation"] })
-  }, [queryClient, marketContext.seasonId, marketContext.marketMode])
+  }, [queryClient])
 
   return (
     <SectionRefreshContext.Provider value={{ refreshSections, refreshTrigger: 0, refreshData, dataRefreshTrigger, marketContext, marketContextReady, setMarketContext }}>

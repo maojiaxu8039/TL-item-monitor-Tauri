@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Settings, ChevronDown, ChevronUp, Key, Plus, Save, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { serverAdmin, type ServerApiConfig } from "@/lib/commands";
@@ -30,14 +30,14 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
   const [editedConfig, setEditedConfig] = useState<ServerApiConfig | null>(null);
 
-  const getSignal = () => {
+  const getSignal = useCallback(() => {
     abortControllerRef.current?.abort();
     const controller = new AbortController();
     abortControllerRef.current = controller;
     return controller.signal;
-  };
+  }, []);
 
-  const loadApiConfig = async () => {
+  const loadApiConfig = useCallback(async () => {
     if (!password) {
       toast.error("请先输入管理员密码");
       return;
@@ -53,9 +53,9 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [password, serverUrl, getSignal]);
 
-  const handleInitSeason = async () => {
+  const handleInitSeason = useCallback(async () => {
     if (!password) {
       toast.error("请先输入管理员密码");
       return;
@@ -87,9 +87,9 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [password, newSeasonId, newSeasonStartedAt, serverUrl, getSignal]);
 
-  const handleSaveApiConfig = async () => {
+  const handleSaveApiConfig = useCallback(async () => {
     if (!password) {
       toast.error("请先输入管理员密码");
       return;
@@ -108,7 +108,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [password, editedConfig, serverUrl, getSignal]);
 
   if (connectionStatus === "disconnected") {
     return (

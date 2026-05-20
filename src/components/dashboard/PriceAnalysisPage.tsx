@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { cmd } from "@/lib/commands";
+import { cn } from "@/lib/utils";
 import {
   BarChart3,
   ShoppingCart,
@@ -217,10 +218,6 @@ function HoardCard({
       </div>
     </Surface>
   );
-}
-
-function cn(...classes: (string | boolean | undefined | null)[]) {
-  return classes.filter(Boolean).join(" ");
 }
 
 export default function PriceAnalysisPage() {

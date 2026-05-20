@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart2, ArrowDownCircle, ArrowUpCircle, CalendarDays } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
@@ -164,7 +164,7 @@ export default function FirePriceComparePage() {
   const historyHigh = filteredHistoryData.length > 0 ? Math.max(...filteredHistoryData.map((r) => r.rmb_per_10k_fire)) : 0;
   const historyLow = filteredHistoryData.length > 0 ? Math.min(...filteredHistoryData.map((r) => r.rmb_per_10k_fire)) : 0;
 
-  const handleCustomRangeChange = (field: 'start' | 'end', value: string) => {
+  const handleCustomRangeChange = useCallback((field: 'start' | 'end', value: string) => {
     const num = parseInt(value);
     if (value === "" || isNaN(num)) {
       return;
@@ -178,7 +178,7 @@ export default function FirePriceComparePage() {
     setCustomDayRange(newRange);
     setUseCustomRange(true);
     setTimeRange("all");
-  };
+  }, [customDayRange, currentMaxDay]);
 
   const bestTimeAnalysis = useMemo(() => {
     if (filteredCurrentData.length === 0) return null;

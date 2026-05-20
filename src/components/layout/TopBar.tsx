@@ -81,6 +81,11 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
   const [notificationEnabled, setNotificationEnabled] = useState(true)
   const prevModeRef = useRef(marketContext.marketMode)
   const summaryRef = useRef<string | undefined>(undefined)
+  const marketContextRef = useRef(marketContext)
+
+  useEffect(() => {
+    marketContextRef.current = marketContext
+  }, [marketContext])
 
   useEffect(() => {
     setMarketMode(marketContext.marketMode)
@@ -110,12 +115,14 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
 
   const switchModeMutation = useMutation({
     mutationFn: async (newMode: string) => {
-      const seasonId = summaryRef.current || "ss12"
+      const currentCtx = marketContextRef.current
+      const seasonId = summaryRef.current || currentCtx.seasonId || "ss12"
       await cmd.setActiveMarketContext(seasonId, newMode)
       return newMode
     },
     onSuccess: (newMode) => {
-      setMarketContext({ seasonId: marketContext.seasonId, marketMode: newMode })
+      const currentCtx = marketContextRef.current
+      setMarketContext({ seasonId: currentCtx.seasonId, marketMode: newMode })
       toast.success("已切换到" + (newMode === "season_normal" ? "赛季普通" : "赛季专家"))
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] })
       queryClient.invalidateQueries({ queryKey: ["fire-history"] })

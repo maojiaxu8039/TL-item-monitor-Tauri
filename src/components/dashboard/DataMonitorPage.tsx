@@ -493,21 +493,21 @@ export default function DataMonitorPage() {
     toast.success("服务器地址已保存");
   };
 
-  const formatUptime = (seconds: number) => {
+  const formatUptime = useCallback((seconds: number) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${hours}小时${minutes}分钟`;
-  };
+  }, []);
 
-  const formatTimestamp = (ts: number) => {
+  const formatTimestamp = useCallback((ts: number) => {
     return new Date(ts * 1000).toLocaleString("zh-CN");
-  };
+  }, []);
 
-  const formatDuration = (ms: number) => {
+  const formatDuration = useCallback((ms: number) => {
     if (ms < 1000) return `${ms}ms`;
     if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
     return `${(ms / 60000).toFixed(1)}分钟`;
-  };
+  }, []);
 
   const getSyncStatusBadge = () => {
     if (!syncJob) return null;
@@ -554,13 +554,13 @@ export default function DataMonitorPage() {
   const normalStatus = serverStatus?.last_collection?.normal;
   const expertStatus = serverStatus?.last_collection?.expert;
 
-  const handleSync = () => {
+  const handleSync = useCallback(() => {
     if (isPaginatedSync) {
       syncPaginated();
     } else {
       syncMutation.mutate();
     }
-  };
+  }, [isPaginatedSync, syncPaginated, syncMutation]);
 
   const isSyncing = syncMutation.isPending || (syncJob?.status === "running");
 

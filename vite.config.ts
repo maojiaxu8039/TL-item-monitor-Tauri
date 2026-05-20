@@ -29,22 +29,5 @@ export default defineConfig({
     emptyOutDir: true,
     target: "esnext",
     minify: "esbuild",
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes("node_modules")) {
-            if (id.includes("@tanstack")) return "vendor-query";
-            if (id.includes("recharts") || id.includes("d3-")) return "vendor-charts";
-            if (id.includes("@radix-ui")) return "vendor-ui";
-            if (id.includes("@tauri-apps")) return "vendor-tauri";
-            if (id.includes("framer-motion")) return "vendor-motion";
-            if (id.includes("dnd-kit")) return "vendor-dnd";
-            if (id.includes("react") || id.includes("react-dom") || id.includes("scheduler")) return "vendor-react";
-            if (id.includes("lucide-react")) return "vendor-icons";
-            return "vendor-others";
-          }
-        },
-      },
-    },
   },
 });

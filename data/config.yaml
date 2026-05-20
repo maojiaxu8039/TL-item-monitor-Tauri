@@ -1,6 +1,6 @@
 schema_version: 1
 scrape:
-  fire_price_mode: season_normal
+  fire_price_mode: season_expert
   fire_price_scrape_interval: 300
   fire_price_scrape_enabled: true
   fire_scrape_normal_enabled: true

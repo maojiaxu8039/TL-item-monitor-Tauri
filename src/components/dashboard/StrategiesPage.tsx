@@ -206,7 +206,41 @@ export default function StrategiesPage() {
     }, 300);
   };
 
-  const handleCreate = async () => {
+  const resetForm = useCallback(() => {
+    setEditForm({
+      name: "",
+      label: "K8-1",
+      difficulty: "普通",
+      output_value: 0,
+      defense_value: 0,
+      remark: "",
+      image_url: "",
+    });
+  }, []);
+
+  const resetCostForm = useCallback(() => {
+    setCostForm({
+      strategy_id: "",
+      cost_type: "回响",
+      item_id: "",
+      item_name: "",
+      count: 1,
+      is_realtime: true,
+    });
+    setItemSearchResults([]);
+  }, []);
+
+  const resetOutputForm = useCallback(() => {
+    setOutputForm({
+      strategy_id: "",
+      item_name: "",
+      item_type: "",
+      count: 1,
+    });
+    setItemSearchResults([]);
+  }, []);
+
+  const handleCreate = useCallback(async () => {
     if (!editForm.name.trim()) {
       toast.warning("请输入策略名称");
       return;
@@ -228,7 +262,7 @@ export default function StrategiesPage() {
     } catch (e) {
       toast.error(`创建策略失败: ${e}`);
     }
-  };
+  }, [editForm, resetForm, loadStrategies]);
 
   const handleEdit = useCallback((strategy: StrategyWithCosts) => {
     setEditForm({
@@ -244,7 +278,7 @@ export default function StrategiesPage() {
     setShowEditDialog(true);
   }, []);
 
-  const handleUpdate = async () => {
+  const handleUpdate = useCallback(async () => {
     if (!editForm.id || !editForm.name.trim()) {
       toast.warning("请输入策略名称");
       return;
@@ -267,7 +301,7 @@ export default function StrategiesPage() {
     } catch (e) {
       toast.error(`更新策略失败: ${e}`);
     }
-  };
+  }, [editForm, resetForm, loadStrategies]);
 
   const handleDelete = useCallback(async (id: string) => {
     if (!confirm("确定要删除这个策略吗？")) return;
@@ -280,7 +314,7 @@ export default function StrategiesPage() {
     }
   }, [loadStrategies]);
 
-  const handleAddCost = async () => {
+  const handleAddCost = useCallback(async () => {
     if (!costForm.item_id.trim() && !costForm.item_name.trim()) {
       toast.warning("请选择或输入物品");
       return;
@@ -301,9 +335,9 @@ export default function StrategiesPage() {
     } catch (e) {
       toast.error("添加成本失败");
     }
-  };
+  }, [costForm, resetCostForm, loadStrategies]);
 
-  const handleAddOutput = async () => {
+  const handleAddOutput = useCallback(async () => {
     if (!outputForm.item_name.trim()) {
       toast.warning("请选择物品");
       return;
@@ -324,7 +358,7 @@ export default function StrategiesPage() {
     } catch (e) {
       toast.error("添加产出失败");
     }
-  };
+  }, [outputForm, resetOutputForm, loadStrategies]);
 
   const handleDeleteCost = useCallback(async (id: string) => {
     try {
@@ -383,40 +417,6 @@ export default function StrategiesPage() {
     setShowOutputDialog(strategyId);
   }, []);
 
-  const resetForm = useCallback(() => {
-    setEditForm({
-      name: "",
-      label: "K8-1",
-      difficulty: "普通",
-      output_value: 0,
-      defense_value: 0,
-      remark: "",
-      image_url: "",
-    });
-  }, []);
-
-  const resetCostForm = useCallback(() => {
-    setCostForm({
-      strategy_id: "",
-      cost_type: "回响",
-      item_id: "",
-      item_name: "",
-      count: 1,
-      is_realtime: true,
-    });
-    setItemSearchResults([]);
-  }, []);
-
-  const resetOutputForm = useCallback(() => {
-    setOutputForm({
-      strategy_id: "",
-      item_name: "",
-      item_type: "",
-      count: 1,
-    });
-    setItemSearchResults([]);
-  }, []);
-
   const guessCostType = (itemName: string, itemType: string): string => {
     const name = itemName.toLowerCase();
     const type = itemType.toLowerCase();
@@ -426,6 +426,46 @@ export default function StrategiesPage() {
     if (name.includes("罗盘") || name.includes("指南针") || type.includes("罗盘")) return "罗盘";
     return "材料";
   };
+
+  const handleCreateFromTemplate = useCallback(async (template: StrategyTemplate) => {
+    try {
+      const result = await cmd.createStrategyDetail({
+        name: template.name,
+        label: template.label,
+        difficulty: template.difficulty,
+        output_value: template.output_value,
+        defense_value: template.defense_value,
+        remark: template.remark,
+        image_url: null,
+      });
+      const strategyId = result;
+      for (const cost of template.costs) {
+        await cmd.addStrategyCost({
+          strategy_id: strategyId,
+          cost_type: cost.cost_type,
+          item_id: cost.item_keyword,
+          item_name: null,
+          count: cost.default_count,
+          is_realtime: cost.is_realtime,
+        });
+      }
+      for (const output of template.outputs) {
+        await cmd.addStrategyOutput({
+          strategy_id: strategyId,
+          item_name: output.item_keyword,
+          item_type: output.item_type,
+          count: output.default_count,
+          estimated_value: 0,
+          remark: null,
+        });
+      }
+      toast.success(`已从模板 "${template.name}" 创建策略`);
+      setActiveTab("strategies");
+      loadStrategies();
+    } catch (e) {
+      toast.error(`从模板创建失败: ${e}`);
+    }
+  }, [loadStrategies]);
 
   const handleItemSelect = useCallback((item: ItemData) => {
     if (showCostDialog) {
@@ -446,7 +486,7 @@ export default function StrategiesPage() {
     }
   }, [showCostDialog, showOutputDialog]);
 
-  const getLabelColor = (label: string) => {
+  const getLabelColor = useCallback((label: string) => {
     switch (label) {
       case "K7": return "bg-[rgba(34,197,94,0.15)] text-[var(--color-success)]";
       case "K8-1": return "bg-[rgba(255,184,0,0.15)] text-[var(--color-brand-gold)]";
@@ -456,39 +496,39 @@ export default function StrategiesPage() {
       case "九红深空": return "bg-[rgba(255,184,0,0.12)] text-[var(--color-brand-gold)]";
       default: return "bg-[var(--color-panel)] text-[var(--color-text-muted)]";
     }
-  };
+  }, []);
 
-  const getProfitColor = (ratio: number) => {
+  const getProfitColor = useCallback((ratio: number) => {
     if (ratio > 0) return "text-[var(--color-danger)]";
     if (ratio < 0) return "text-[var(--color-success)]";
     return "text-[var(--color-text-muted)]";
-  };
+  }, []);
 
-  const getRecommendationLevelColor = (level: StrategyRecommendation["level"]) => {
+  const getRecommendationLevelColor = useCallback((level: StrategyRecommendation["level"]) => {
     switch (level) {
       case "strong": return "bg-[rgba(34,197,94,0.12)] text-[var(--color-success)] border-[rgba(34,197,94,0.25)]";
       case "good": return "bg-[var(--color-brand)]/15 text-[var(--color-brand)] border-[var(--color-brand)]/30";
       case "watch": return "bg-[rgba(255,184,0,0.12)] text-[var(--color-brand-gold)] border-[rgba(255,184,0,0.25)]";
       case "avoid": return "bg-[rgba(239,68,68,0.12)] text-[var(--color-danger)] border-[rgba(239,68,68,0.25)]";
     }
-  };
+  }, []);
 
-  const getRecommendationLevelText = (level: StrategyRecommendation["level"]) => {
+  const getRecommendationLevelText = useCallback((level: StrategyRecommendation["level"]) => {
     switch (level) {
       case "strong": return "强烈推荐";
       case "good": return "可跑";
       case "watch": return "观望";
       case "avoid": return "不建议";
     }
-  };
+  }, []);
 
-  const getRiskColor = (risk: StrategyRecommendation["risk_level"]) => {
+  const getRiskColor = useCallback((risk: StrategyRecommendation["risk_level"]) => {
     switch (risk) {
       case "low": return "text-[var(--color-success)] bg-[rgba(34,197,94,0.1)]";
       case "medium": return "text-[var(--color-brand-gold)] bg-[rgba(255,184,0,0.1)]";
       case "high": return "text-[var(--color-danger)] bg-[rgba(239,68,68,0.1)]";
     }
-  };
+  }, []);
 
   const strategyMap = useMemo(() => new Map(strategies.map(s => [s.id, s])), [strategies]);
 
@@ -677,45 +717,7 @@ export default function StrategiesPage() {
                   )}
                 </div>
                 <button
-                  onClick={async () => {
-                    try {
-                      const result = await cmd.createStrategyDetail({
-                        name: template.name,
-                        label: template.label,
-                        difficulty: template.difficulty,
-                        output_value: template.output_value,
-                        defense_value: template.defense_value,
-                        remark: template.remark,
-                        image_url: null,
-                      });
-                      const strategyId = result;
-                      for (const cost of template.costs) {
-                        await cmd.addStrategyCost({
-                          strategy_id: strategyId,
-                          cost_type: cost.cost_type,
-                          item_id: cost.item_keyword,
-                          item_name: null,
-                          count: cost.default_count,
-                          is_realtime: cost.is_realtime,
-                        });
-                      }
-                      for (const output of template.outputs) {
-                        await cmd.addStrategyOutput({
-                          strategy_id: strategyId,
-                          item_name: output.item_keyword,
-                          item_type: output.item_type,
-                          count: output.default_count,
-                          estimated_value: 0,
-                          remark: null,
-                        });
-                      }
-                      toast.success(`已从模板 "${template.name}" 创建策略`);
-                      setActiveTab("strategies");
-                      loadStrategies();
-                    } catch (e) {
-                      toast.error(`从模板创建失败: ${e}`);
-                    }
-                  }}
+                  onClick={() => handleCreateFromTemplate(template)}
                   className="w-full px-3 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90 transition-opacity"
                 >
                   一键创建

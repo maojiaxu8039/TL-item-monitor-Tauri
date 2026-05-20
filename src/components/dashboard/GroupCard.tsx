@@ -193,6 +193,11 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
     )
   }, [updateItemMutation])
 
+  const handleRefresh = useCallback(async () => {
+    await refetch()
+    toast.success(`${section.name} 已刷新`, { position: 'bottom-right' })
+  }, [refetch, section.name])
+
   return (
     <>
       <motion.div
@@ -268,10 +273,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
           </div>
           <div className="flex items-center gap-1">
             <button
-              onClick={async () => {
-                await refetch()
-                toast.success(`${section.name} 已刷新`, { position: 'bottom-right' })
-              }}
+              onClick={handleRefresh}
               className="rounded-lg p-1.5 text-[var(--color-text-subtle)] transition-colors hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-brand-gold)]"
               title="刷新分组"
             >

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { useState, useEffect, useMemo, memo } from "react"
+import { useState, useEffect, useMemo, useCallback, memo } from "react"
 import { Package, Flame, TrendingUp, TrendingDown, Minus, History, ArrowUp, ArrowDown, Award, ChevronLeft, ChevronRight } from "lucide-react"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { MetricCard } from "@/components/ui/MetricCard"
@@ -236,7 +236,7 @@ export function DashboardStats() {
     return () => clearInterval(interval);
   }, [top3.length]);
 
-  const getLevelText = (level: string) => {
+  const getLevelText = useCallback((level: string) => {
     switch (level) {
       case "strong": return "强烈推荐";
       case "good": return "推荐";
@@ -244,7 +244,15 @@ export function DashboardStats() {
       case "avoid": return "回避";
       default: return "未知";
     }
-  };
+  }, []);
+
+  const handlePrevSlide = useCallback(() => {
+    setCurrentIndex(prev => (prev - 1 + top3.length) % top3.length);
+  }, [top3.length]);
+
+  const handleNextSlide = useCallback(() => {
+    setCurrentIndex(prev => (prev + 1) % top3.length);
+  }, [top3.length]);
 
   if (isLoading) {
     return (
@@ -333,7 +341,7 @@ export function DashboardStats() {
             </div>
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setCurrentIndex(prev => (prev - 1 + top3.length) % top3.length)}
+                onClick={handlePrevSlide}
                 className="rounded-lg p-1 text-[var(--color-text-subtle)] transition-colors hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-brand-gold)]"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -342,7 +350,7 @@ export function DashboardStats() {
                 {currentIndex + 1}/{top3.length}
               </span>
               <button
-                onClick={() => setCurrentIndex(prev => (prev + 1) % top3.length)}
+                onClick={handleNextSlide}
                 className="rounded-lg p-1 text-[var(--color-text-subtle)] transition-colors hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-brand-gold)]"
               >
                 <ChevronRight className="w-4 h-4" />

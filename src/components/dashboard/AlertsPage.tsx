@@ -113,28 +113,9 @@ export default function AlertsPage() {
 
   useEffect(() => {
     if (!marketContextReady) return;
-    let mounted = true;
-    const doLoad = async () => {
-      try {
-        const [rulesData, eventsData, sectionsData] = await Promise.all([
-          cmd.getAlertRules(),
-          cmd.getAlertEvents(50),
-          cmd.getSections(),
-        ]);
-        if (!mounted) return;
-        setRules(rulesData);
-        setEvents(eventsData);
-        setSections(sectionsData);
-      } catch (e) {
-        if (!mounted) return;
-        addToast("error", "加载预警规则失败");
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-    doLoad();
-    return () => { mounted = false; };
-  }, [marketContextReady, marketContext.seasonId, marketContext.marketMode, addToast]);
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketContextReady, marketContext.seasonId, marketContext.marketMode]);
 
   const handleCreate = async () => {
     if (!createForm.section_id.trim() && !createForm.item_id.trim()) {
