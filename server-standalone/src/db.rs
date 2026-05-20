@@ -570,6 +570,53 @@ pub async fn get_fire_history(
     Ok(records)
 }
 
+pub async fn get_items_history_count(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    min_day: Option<i32>,
+    max_day: Option<i32>,
+    since_timestamp: Option<i64>,
+) -> Result<i64, String> {
+    let mode = MarketMode::parse(market_mode);
+    let table = mode.items_table(season_id);
+
+    let mut conditions: Vec<String> = Vec::new();
+
+    if let (Some(min), Some(max)) = (min_day, max_day) {
+        if min > 0 && max > 0 {
+            conditions.push(format!(" season_day >= {} AND season_day <= {} ", min, max));
+        }
+    } else if let Some(min) = min_day {
+        if min > 0 {
+            conditions.push(format!(" season_day >= {} ", min));
+        }
+    } else if let Some(max) = max_day {
+        if max > 0 {
+            conditions.push(format!(" season_day <= {} ", max));
+        }
+    }
+
+    if let Some(ts) = since_timestamp {
+        conditions.push(format!(" scraped_at > {} ", ts));
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", conditions.join(" AND "))
+    };
+
+    let query = format!("SELECT COUNT(*) as count FROM {} {}", table, where_clause);
+    let row = sqlx::query(&query)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("查询物品快照数量失败: {}", e))?;
+
+    let count: i64 = row.get("count");
+    Ok(count)
+}
+
 pub async fn archive_season(pool: &SqlitePool, season_id: &str) -> Result<(), String> {
     if season_id.is_empty() {
         return Err("赛季 ID 不能为空".to_string());
