@@ -568,6 +568,18 @@
                     </div>
                     <div style="margin-top: 15px;">
                         <button type="button" class="btn btn-primary" id="btn-init-season">初始化赛季</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>归档赛季</h2>
+                    <div class="form-group">
+                        <label>选择赛季</label>
+                        <select id="archive-season-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="">-- 选择赛季 --</option>
+                        </select>
+                    </div>
+                    <div style="margin-top: 15px;">
                         <button type="button" class="btn btn-danger" id="btn-archive-season">归档赛季</button>
                     </div>
                 </div>
@@ -858,8 +870,8 @@
                 if (data.success && data.data) {
                     const exportSelect = document.getElementById('export-season');
                     const resetSelect = document.getElementById('reset-season');
+                    const archiveSelect = document.getElementById('archive-season-select');
                     
-                    // 清空现有选项（保留第一个"当前赛季"）
                     while (exportSelect.options.length > 1) {
                         exportSelect.remove(1);
                     }
@@ -877,6 +889,11 @@
                         opt2.value = season;
                         opt2.textContent = season;
                         resetSelect.appendChild(opt2);
+                        
+                        const opt3 = document.createElement('option');
+                        opt3.value = season;
+                        opt3.textContent = season;
+                        archiveSelect.appendChild(opt3);
                     });
                 }
             } catch (e) {
@@ -1131,9 +1148,9 @@
         }
 
         async function archiveSeason() {
-            const season_id = document.getElementById('season-input').value.trim();
+            const season_id = document.getElementById('archive-season-select').value;
             if (!season_id) {
-                showAlert('error', '请输入 season_id');
+                showAlert('error', '请选择要归档的赛季');
                 return;
             }
             const password = getPassword();
