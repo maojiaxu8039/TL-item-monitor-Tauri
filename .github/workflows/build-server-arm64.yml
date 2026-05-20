@@ -23,6 +23,9 @@ jobs:
         with:
           targets: aarch64-unknown-linux-gnu
 
+      - name: Install ARM64 target
+        run: rustup target add aarch64-unknown-linux-gnu
+
       - name: Install cross compilation toolchain
         run: |
           sudo apt-get update
