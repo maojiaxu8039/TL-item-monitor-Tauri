@@ -1789,15 +1789,12 @@ async fn collect_single_mode(
         collection_success: None,
     };
 
-    let mut fire_per_rmb = 0.0;
-
     let fire_result = scrape_fire_with_retry(state, market_mode).await;
 
     match fire_result {
         Ok(fire) => {
             mode_status.fire_success = Some(true);
             mode_status.fire_price = Some(fire.rmb_per_10k_fire);
-            fire_per_rmb = fire.fire_per_rmb;
 
             if let Err(e) = db::insert_fire_snapshot(&state.db, season, market_mode, &fire, timestamp).await {
                 mode_status.error = Some(format!("DB error: {}", e));
@@ -1815,9 +1812,7 @@ async fn collect_single_mode(
             mode_status.items_success = Some(true);
             mode_status.items_count = Some(items.len());
 
-            let price_for_calc = if fire_per_rmb > 0.0 { fire_per_rmb } else { 1.0 };
-
-            if let Err(e) = db::insert_items_snapshots(&state.db, season, market_mode, price_for_calc, &items, timestamp).await {
+            if let Err(e) = db::insert_items_snapshots(&state.db, season, market_mode, &items, timestamp).await {
                 if mode_status.error.is_none() {
                     mode_status.error = Some(format!("Items DB error: {}", e));
                 }

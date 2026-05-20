@@ -416,7 +416,6 @@ pub async fn insert_items_snapshots(
     pool: &SqlitePool,
     season_id: &str,
     market_mode: &str,
-    fire_per_rmb: f64,
     items: &[Item],
     scraped_at: i64,
 ) -> Result<usize, String> {
