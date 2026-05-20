@@ -21,48 +21,41 @@ jobs:
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          targets: aarch64-unknown-linux-musl
+          targets: aarch64-unknown-linux-gnu
 
-      - name: Install musl target
-        run: rustup target add aarch64-unknown-linux-musl
-
-      - name: Install musl-gcc and cross compilation toolchain
+      - name: Install cross compilation toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools pkg-config libssl-dev gcc-aarch64-linux-gnu
+          sudo apt-get install -y gcc-aarch64-linux-gnu
 
-      - name: Build server binary (static linking with musl)
+      - name: Build server binary (ARM64)
         env:
           CARGO_INCREMENTAL: 0
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
-          CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
-          OPENSSL_INCLUDE_DIR: /usr/include/openssl
-          OPENSSL_LIB_DIR: /usr/lib/aarch64-linux-gnu
         run: |
           cd server-standalone
-          cargo build --release --target aarch64-unknown-linux-musl --no-default-features
+          cargo build --release --target aarch64-unknown-linux-gnu --no-default-features
 
       - name: Verify build output
         run: |
           cd server-standalone
-          file target/aarch64-unknown-linux-musl/release/tl-monitor-server
-          ldd target/aarch64-unknown-linux-musl/release/tl-monitor-server 2>&1 || echo "静态链接检查完成（静态链接无动态依赖）"
-          ls -lh target/aarch64-unknown-linux-musl/release/tl-monitor-server
+          file target/aarch64-unknown-linux-gnu/release/tl-monitor-server
+          ldd target/aarch64-unknown-linux-gnu/release/tl-monitor-server
+          ls -lh target/aarch64-unknown-linux-gnu/release/tl-monitor-server
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-arm64-server
-          path: server-standalone/target/aarch64-unknown-linux-musl/release/tl-monitor-server
+          path: server-standalone/target/aarch64-unknown-linux-gnu/release/tl-monitor-server
           retention-days: 30
 
       - name: Deployment summary
         if: github.ref == 'refs/heads/main'
         run: |
-          echo "## ARM64 Server Build Complete (Musl Static)" >> $GITHUB_STEP_SUMMARY
+          echo "## ARM64 Server Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Artifact:** linux-arm64-server" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**兼容性:** 静态链接，可在 Debian 11+ / Ubuntu 20.04+ / 极空间 NAS 运行" >> $GITHUB_STEP_SUMMARY
+          echo "**兼容性:** 需要 GLIBC (通过 ldd 检查依赖)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build ID: ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
