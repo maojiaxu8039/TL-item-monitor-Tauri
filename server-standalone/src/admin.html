@@ -613,6 +613,22 @@
             status.appendChild(span);
         }
 
+        async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const resp = await fetch(url, { ...options, signal: controller.signal });
+                clearTimeout(timeout);
+                return resp;
+            } catch (e) {
+                clearTimeout(timeout);
+                if (e.name === 'AbortError') {
+                    throw new Error('请求超时 (' + timeoutMs + 'ms)');
+                }
+                throw e;
+            }
+        }
+
         async function authenticate() {
             const password = document.getElementById('cfg-password').value;
             if (!password) {
@@ -1065,7 +1081,7 @@
             
             for (const tt of tableTypes) {
                 try {
-                    const resp = await fetch('/admin/reset-table', {
+                    const resp = await fetchWithTimeout('/admin/reset-table', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({

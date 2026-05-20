@@ -54,7 +54,63 @@ struct ServerState {
     season_cache: Arc<RwLock<Option<SeasonCache>>>,
     dynamic_config: Arc<RwLock<DynamicConfig>>,
     ws_broadcaster: Arc<RwLock<WsBroadcaster>>,
-    response_cache: Arc<RwLock<std::collections::HashMap<String, (String, std::time::Instant)>>>,
+    response_cache: Arc<RwLock<LruCache>>,
+}
+
+const RESPONSE_CACHE_MAX_SIZE: usize = 100;
+const RESPONSE_CACHE_TTL_SECS: u64 = 60;
+
+struct LruCache {
+    cache: std::collections::HashMap<String, (String, Instant)>,
+    order: Vec<String>,
+}
+
+impl LruCache {
+    fn new() -> Self {
+        Self {
+            cache: std::collections::HashMap::new(),
+            order: Vec::new(),
+        }
+    }
+
+    fn get(&mut self, key: &str) -> Option<String> {
+        if let Some((value, ts)) = self.cache.get(key) {
+            if ts.elapsed() < Duration::from_secs(RESPONSE_CACHE_TTL_SECS) {
+                return Some(value.clone());
+            }
+            self.cache.remove(key);
+            self.order.retain(|k| k != key);
+        }
+        None
+    }
+
+    fn insert(&mut self, key: String, value: String) {
+        if self.cache.contains_key(&key) {
+            self.order.retain(|k| k != &key);
+        } else {
+            while self.cache.len() >= RESPONSE_CACHE_MAX_SIZE {
+                if let Some(oldest) = self.order.first().cloned() {
+                    self.cache.remove(&oldest);
+                    self.order.remove(0);
+                }
+            }
+        }
+        self.cache.insert(key.clone(), (value, Instant::now()));
+        self.order.push(key);
+    }
+
+    #[allow(dead_code)]
+    fn clean_expired(&mut self) {
+        let now = Instant::now();
+        let keys_to_remove: Vec<String> = self.cache.iter()
+            .filter(|(_, (_, ts))| now.duration_since(*ts) >= Duration::from_secs(RESPONSE_CACHE_TTL_SECS))
+            .map(|(k, _)| k.clone())
+            .collect();
+        for key in keys_to_remove {
+            self.cache.remove(&key);
+            self.order.retain(|k| k != &key);
+        }
+    }
 }
 
 struct WsBroadcaster {
@@ -126,11 +182,15 @@ impl RateLimiter {
 
         requests.retain(|t| now.duration_since(*t) < window);
 
-        if requests.len() >= self.config.requests_per_minute as usize {
+        if requests.is_empty() {
+            self.requests.remove(client_ip);
+        }
+
+        if self.requests.get(client_ip).map(|r| r.len()).unwrap_or(0) >= self.config.requests_per_minute as usize {
             return false;
         }
 
-        requests.push(now);
+        self.requests.entry(client_ip.to_string()).or_default().push(now);
         true
     }
 }
@@ -282,7 +342,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         season_cache: Arc::new(RwLock::new(None)),
         dynamic_config: Arc::new(RwLock::new(dynamic_config)),
         ws_broadcaster: Arc::new(RwLock::new(WsBroadcaster::new())),
-        response_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
+        response_cache: Arc::new(RwLock::new(LruCache::new())),
     });
 
     let http_state = state.clone();
@@ -841,10 +901,8 @@ async fn handle_request(
             } else {
                 let cache_key = format!("/fire-history?{}", query_string);
                 let cached = {
-                    let cache = state.response_cache.read().await;
-                    cache.get(&cache_key).and_then(|(body, ts)| {
-                        if ts.elapsed() < Duration::from_secs(10) { Some(body.clone()) } else { None }
-                    })
+                    let mut cache = state.response_cache.write().await;
+                    cache.get(&cache_key)
                 };
                 if let Some(body) = cached {
                     (200, body)
@@ -857,7 +915,7 @@ async fn handle_request(
                                 error: None,
                             })
                             .unwrap_or_default();
-                            state.response_cache.write().await.insert(cache_key, (body.clone(), Instant::now()));
+                            state.response_cache.write().await.insert(cache_key, body.clone());
                             (200, body)
                         }
                         Err(e) => {
@@ -972,10 +1030,8 @@ async fn handle_request(
             } else {
                 let cache_key = format!("/items-history-all?{}", query_string);
                 let cached = {
-                    let cache = state.response_cache.read().await;
-                    cache.get(&cache_key).and_then(|(body, ts)| {
-                        if ts.elapsed() < Duration::from_secs(10) { Some(body.clone()) } else { None }
-                    })
+                    let mut cache = state.response_cache.write().await;
+                    cache.get(&cache_key)
                 };
                 if let Some(body) = cached {
                     (200, body)
@@ -989,7 +1045,7 @@ async fn handle_request(
                                 error: None,
                             })
                             .unwrap_or_default();
-                            state.response_cache.write().await.insert(cache_key, (body.clone(), Instant::now()));
+                            state.response_cache.write().await.insert(cache_key, body.clone());
                             (200, body)
                         }
                         Err(e) => {
@@ -1109,10 +1165,8 @@ async fn handle_request(
                 .unwrap_or_else(|| state.config.season_id.clone());
             let cache_key = format!("/stats?{}", query_string);
             let cached = {
-                let cache = state.response_cache.read().await;
-                cache.get(&cache_key).and_then(|(body, ts)| {
-                    if ts.elapsed() < Duration::from_secs(60) { Some(body.clone()) } else { None }
-                })
+                let mut cache = state.response_cache.write().await;
+                cache.get(&cache_key)
             };
             if let Some(body) = cached {
                 (200, body)
@@ -1125,7 +1179,7 @@ async fn handle_request(
                             error: None,
                         })
                         .unwrap_or_default();
-                        state.response_cache.write().await.insert(cache_key, (body.clone(), Instant::now()));
+                        state.response_cache.write().await.insert(cache_key, body.clone());
                         (200, body)
                     }
                     Err(e) => {

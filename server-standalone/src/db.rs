@@ -110,6 +110,10 @@ async fn add_column_if_missing(
     column: &str,
     definition: &str,
 ) -> Result<(), String> {
+    if !is_valid_identifier(table) || !is_valid_identifier(column) {
+        return Err(format!("无效的表名或列名: {}, {}", table, column));
+    }
+
     if !table_exists(pool, table).await? || column_exists(pool, table, column).await? {
         return Ok(());
     }
@@ -122,6 +126,10 @@ async fn add_column_if_missing(
     .await
     .map_err(|e| format!("补充字段 {}.{} 失败: {}", table, column, e))?;
     Ok(())
+}
+
+fn is_valid_identifier(s: &str) -> bool {
+    !s.is_empty() && s.len() <= 64 && s.chars().all(|c| c.is_alphanumeric() || c == '_')
 }
 
 const CACHE_TTL_SECS: u64 = 300;
