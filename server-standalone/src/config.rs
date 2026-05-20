@@ -152,7 +152,8 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig, String> {
     }
 
     // Auto-hash plaintext password on load
-    if !config.admin_password.is_empty() && !crate::password_hash::is_hashed(&config.admin_password) {
+    if !config.admin_password.is_empty() && !crate::password_hash::is_hashed(&config.admin_password)
+    {
         tracing::info!("检测到明文密码，自动进行哈希处理...");
         match crate::password_hash::hash_password(&config.admin_password) {
             Ok(hashed) => {

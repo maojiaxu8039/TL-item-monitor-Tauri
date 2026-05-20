@@ -13,6 +13,15 @@ use tracing::{debug, info, warn};
 
 use super::config::{ApiConfig, ApiEndpoints};
 
+const QIANDAO_PACKAGE_ID: &str = "1044";
+const QIANDAO_SIGN_VERSION: &str = "v1";
+const QIANDAO_SIGN_TYPE: &str = "HMAC_SHA256";
+const QIANDAO_ORIGIN: &str = "https://qiandao.com";
+const QIANDAO_REFERER: &str = "https://qiandao.com/";
+const QIANDAO_USER_AGENT: &str = "Mozilla/5.0";
+const QIANDAO_ECHO_REGION: &str = "CN";
+const QIANDAO_DEFAULT_TOKEN: &str = "Bearer undefined";
+
 fn safe_truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
@@ -31,12 +40,20 @@ fn build_http_client(timeout_secs: u64) -> Result<Client, String> {
         .pool_max_idle_per_host(10)
         .tcp_keepalive(Some(Duration::from_secs(60)))
         .tcp_nodelay(true);
-    let builder = if cfg!(debug_assertions) {
+
+    let skip_cert_verify = std::env::var("TL_SKIP_CERT_VERIFY")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .unwrap_or(false);
+
+    let builder = if skip_cert_verify {
+        warn!("跳过 HTTPS 证书验证 (TL_SKIP_CERT_VERIFY=1)");
         builder.danger_accept_invalid_certs(true)
     } else {
         builder
     };
-    builder.build().map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
+    builder
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
 }
 
 static HTTP_CLIENT: Lazy<Result<Client, String>> = Lazy::new(|| build_http_client(30));
@@ -161,7 +178,10 @@ impl Scraper {
                 }
                 Err(rust_e) => {
                     last_error = rust_e;
-                    warn!("Rust 火价抓取失败 (尝试 {}/{}): {}，尝试 Node 脚本", attempt, SCRAPE_MAX_RETRIES, last_error);
+                    warn!(
+                        "Rust 火价抓取失败 (尝试 {}/{}): {}，尝试 Node 脚本",
+                        attempt, SCRAPE_MAX_RETRIES, last_error
+                    );
 
                     match scrape_via_node_script(mode).await {
                         Ok(snapshot) => {
@@ -172,7 +192,8 @@ impl Scraper {
                             warn!("Node 脚本火价抓取失败: {}", node_e);
                             if attempt < SCRAPE_MAX_RETRIES {
                                 info!("{}ms 后重试...", SCRAPE_RETRY_DELAY_MS);
-                                tokio::time::sleep(Duration::from_millis(SCRAPE_RETRY_DELAY_MS)).await;
+                                tokio::time::sleep(Duration::from_millis(SCRAPE_RETRY_DELAY_MS))
+                                    .await;
                             }
                         }
                     }
@@ -180,7 +201,10 @@ impl Scraper {
             }
         }
 
-        Err(format!("火价抓取在 {} 次尝试后仍失败 (最后 Rust 错误: {})", SCRAPE_MAX_RETRIES, last_error))
+        Err(format!(
+            "火价抓取在 {} 次尝试后仍失败 (最后 Rust 错误: {})",
+            SCRAPE_MAX_RETRIES, last_error
+        ))
     }
 }
 
@@ -213,15 +237,15 @@ async fn scrape_via_rust(
     let resp = qiandao_client()?
         .post(&qiandao_url)
         .header("content-type", "application/json")
-        .header("authorization", "Bearer undefined")
+        .header("authorization", QIANDAO_DEFAULT_TOKEN)
         .header("x-request-timestamp", &timestamp)
-        .header("x-request-sign-type", "HMAC_SHA256")
-        .header("x-request-sign-version", "v1")
-        .header("x-request-package-id", "1044")
-        .header("origin", "https://qiandao.com")
-        .header("referer", "https://qiandao.com/")
-        .header("user-agent", "Mozilla/5.0")
-        .header("x-echo-region", "CN")
+        .header("x-request-sign-type", QIANDAO_SIGN_TYPE)
+        .header("x-request-sign-version", QIANDAO_SIGN_VERSION)
+        .header("x-request-package-id", QIANDAO_PACKAGE_ID)
+        .header("origin", QIANDAO_ORIGIN)
+        .header("referer", QIANDAO_REFERER)
+        .header("user-agent", QIANDAO_USER_AGENT)
+        .header("x-echo-region", QIANDAO_ECHO_REGION)
         .json(&body)
         .send()
         .await
@@ -302,13 +326,10 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
     );
 
     const NODE_SCRIPT_TIMEOUT_SECS: u64 = 30;
-    let output = timeout(
-        Duration::from_secs(NODE_SCRIPT_TIMEOUT_SECS),
-        cmd.output()
-    )
-    .await
-    .map_err(|_| format!("Node.js script 执行超时 ({}秒)", NODE_SCRIPT_TIMEOUT_SECS))?
-    .map_err(|e| format!("Node execution failed: {}", e))?;
+    let output = timeout(Duration::from_secs(NODE_SCRIPT_TIMEOUT_SECS), cmd.output())
+        .await
+        .map_err(|_| format!("Node.js script 执行超时 ({}秒)", NODE_SCRIPT_TIMEOUT_SECS))?
+        .map_err(|e| format!("Node execution failed: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);

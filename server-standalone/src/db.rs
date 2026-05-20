@@ -1,17 +1,27 @@
 use serde::Serialize;
 use sqlx::{Row, SqlitePool};
-use tracing::{error, info, warn};
-use std::sync::{Mutex, OnceLock};
 use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
+use tracing::{error, info, warn};
 
 use crate::scraper::{FirePriceSnapshot, Item};
 
+#[derive(Debug, Clone, Serialize)]
+pub struct AuditLogEntry {
+    pub id: i64,
+    pub timestamp: i64,
+    pub action: String,
+    pub details: String,
+    pub ip_address: String,
+    pub success: bool,
+}
+
 pub fn validate_season_id(season_id: &str) -> Result<(), String> {
-    if season_id.len() < 3
-        || &season_id[..2] != "ss"
-        || !season_id[2..].chars().all(|c| c.is_ascii_digit())
-    {
+    let suffix = season_id.strip_prefix("ss");
+    if suffix.map_or(true, |s| {
+        s.is_empty() || !s.chars().all(|c| c.is_ascii_digit())
+    }) {
         return Err(format!(
             "无效的 season_id: {}，只允许 ss + 数字格式（如 ss12, ss13）",
             season_id
@@ -65,17 +75,17 @@ impl MarketMode {
 fn calculate_season_day(season_start: i64, recorded_at: i64) -> i32 {
     const BEIJING_OFFSET_SECS: i64 = 8 * 3600;
     const DAY_SECS: i64 = 86400;
-    
+
     let recorded_in_beijing = recorded_at + BEIJING_OFFSET_SECS;
     let start_in_beijing = season_start + BEIJING_OFFSET_SECS;
-    
+
     let recorded_day_start = (recorded_in_beijing / DAY_SECS) * DAY_SECS;
     let start_day_start = (start_in_beijing / DAY_SECS) * DAY_SECS;
-    
+
     if recorded_day_start < start_day_start {
         return 1;
     }
-    
+
     let days_elapsed = (recorded_day_start - start_day_start) / DAY_SECS;
     (days_elapsed + 1) as i32
 }
@@ -158,10 +168,13 @@ async fn get_cached_season_start(pool: &SqlitePool, season_id: &str) -> Result<i
     }
     let start = get_season_start(pool, season_id).await?;
     if let Ok(mut cache) = season_start_cache().lock() {
-        cache.insert(season_id.to_string(), CacheEntry {
-            started_at: start,
-            cached_at: Instant::now(),
-        });
+        cache.insert(
+            season_id.to_string(),
+            CacheEntry {
+                started_at: start,
+                cached_at: Instant::now(),
+            },
+        );
     }
     Ok(start)
 }
@@ -304,8 +317,13 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", table, e))?;
-        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)", table, table))
-            .execute(pool).await.ok();
+        sqlx::query(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
+            table, table
+        ))
+        .execute(pool)
+        .await
+        .ok();
 
         let items_table = format!("item_snapshots_{}_normal", season);
         sqlx::query(&format!(
@@ -326,13 +344,29 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", items_table, e))?;
-        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_item_scraped ON {}(item_id, scraped_at DESC)", items_table, items_table))
-            .execute(pool).await.ok();
-        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)", items_table, items_table))
-            .execute(pool).await.ok();
+        sqlx::query(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_item_scraped ON {}(item_id, scraped_at DESC)",
+            items_table, items_table
+        ))
+        .execute(pool)
+        .await
+        .ok();
+        sqlx::query(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
+            items_table, items_table
+        ))
+        .execute(pool)
+        .await
+        .ok();
         add_column_if_missing(pool, &items_table, "name", "TEXT NOT NULL DEFAULT ''").await?;
         add_column_if_missing(pool, &items_table, "item_type", "TEXT NOT NULL DEFAULT ''").await?;
-        add_column_if_missing(pool, &items_table, "season_day", "INTEGER NOT NULL DEFAULT 1").await?;
+        add_column_if_missing(
+            pool,
+            &items_table,
+            "season_day",
+            "INTEGER NOT NULL DEFAULT 1",
+        )
+        .await?;
 
         let expert_table = format!("fire_price_snapshots_{}_expert", season);
         sqlx::query(&format!(
@@ -355,8 +389,13 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", expert_table, e))?;
-        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)", expert_table, expert_table))
-            .execute(pool).await.ok();
+        sqlx::query(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
+            expert_table, expert_table
+        ))
+        .execute(pool)
+        .await
+        .ok();
 
         let expert_items_table = format!("item_snapshots_{}_expert", season);
         sqlx::query(&format!(
@@ -377,19 +416,135 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", expert_items_table, e))?;
-        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_item_scraped ON {}(item_id, scraped_at DESC)", expert_items_table, expert_items_table))
-            .execute(pool).await.ok();
-        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)", expert_items_table, expert_items_table))
-            .execute(pool).await.ok();
-        add_column_if_missing(pool, &expert_items_table, "name", "TEXT NOT NULL DEFAULT ''").await?;
-        add_column_if_missing(pool, &expert_items_table, "item_type", "TEXT NOT NULL DEFAULT ''").await?;
-        add_column_if_missing(pool, &expert_items_table, "season_day", "INTEGER NOT NULL DEFAULT 1").await?;
+        sqlx::query(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_item_scraped ON {}(item_id, scraped_at DESC)",
+            expert_items_table, expert_items_table
+        ))
+        .execute(pool)
+        .await
+        .ok();
+        sqlx::query(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
+            expert_items_table, expert_items_table
+        ))
+        .execute(pool)
+        .await
+        .ok();
+        add_column_if_missing(
+            pool,
+            &expert_items_table,
+            "name",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+        .await?;
+        add_column_if_missing(
+            pool,
+            &expert_items_table,
+            "item_type",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+        .await?;
+        add_column_if_missing(
+            pool,
+            &expert_items_table,
+            "season_day",
+            "INTEGER NOT NULL DEFAULT 1",
+        )
+        .await?;
 
         info!("已创建/验证赛季 {} 的表结构", season);
     }
 
     info!("数据库迁移完成");
     Ok(())
+}
+
+pub async fn init_audit_log(pool: &SqlitePool) -> Result<(), String> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS admin_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            details TEXT NOT NULL DEFAULT '',
+            ip_address TEXT NOT NULL DEFAULT '',
+            success INTEGER NOT NULL DEFAULT 1
+        )
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| format!("创建审计日志表失败: {}", e))?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON admin_audit_log(timestamp DESC)",
+    )
+    .execute(pool)
+    .await
+    .ok();
+
+    Ok(())
+}
+
+pub async fn insert_audit_log(
+    pool: &SqlitePool,
+    action: &str,
+    details: &str,
+    ip_address: &str,
+    success: bool,
+) {
+    let timestamp = chrono::Utc::now().timestamp();
+    let result = sqlx::query(
+        "INSERT INTO admin_audit_log (timestamp, action, details, ip_address, success) VALUES (?, ?, ?, ?, ?)"
+    )
+    .bind(timestamp)
+    .bind(action)
+    .bind(details)
+    .bind(ip_address)
+    .bind(success)
+    .execute(pool)
+    .await;
+
+    if result.is_err() {
+        warn!("插入审计日志失败: {:?}", result.err());
+    }
+}
+
+pub async fn get_audit_log(
+    pool: &SqlitePool,
+    limit: i32,
+    offset: i32,
+) -> Result<Vec<AuditLogEntry>, String> {
+    let query = r#"
+        SELECT id, timestamp, action, details, ip_address, success
+        FROM admin_audit_log
+        ORDER BY timestamp DESC
+        LIMIT ?
+        OFFSET ?
+    "#;
+
+    let rows = sqlx::query(query)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("查询审计日志失败: {}", e))?;
+
+    let entries: Vec<AuditLogEntry> = rows
+        .into_iter()
+        .map(|row| AuditLogEntry {
+            id: row.get("id"),
+            timestamp: row.get("timestamp"),
+            action: row.get("action"),
+            details: row.get::<Option<String>, _>("details").unwrap_or_default(),
+            ip_address: row
+                .get::<Option<String>, _>("ip_address")
+                .unwrap_or_default(),
+            success: row.get::<i32, _>("success") != 0,
+        })
+        .collect();
+
+    Ok(entries)
 }
 
 pub async fn insert_fire_snapshot(
@@ -404,7 +559,10 @@ pub async fn insert_fire_snapshot(
     let season_start = get_cached_season_start(pool, season_id).await?;
     let season_day = calculate_season_day(season_start, scraped_at);
 
-    let mut tx = pool.begin().await.map_err(|e| format!("开始事务失败: {}", e))?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("开始事务失败: {}", e))?;
 
     let result = sqlx::query(&format!(
         r#"
@@ -426,11 +584,16 @@ pub async fn insert_fire_snapshot(
     .await
     .map_err(|e| format!("插入火价快照失败: {}", e))?;
 
-    tx.commit().await.map_err(|e| format!("提交事务失败: {}", e))?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("提交事务失败: {}", e))?;
 
     info!(
         "火价快照已保存: {} (scraped_at: {}, season_day: {}, rows: {})",
-        fire.rmb_per_10k_fire, scraped_at, season_day, result.rows_affected()
+        fire.rmb_per_10k_fire,
+        scraped_at,
+        season_day,
+        result.rows_affected()
     );
     Ok(())
 }
@@ -470,7 +633,7 @@ pub async fn insert_items_snapshots(
                 .bind(&item.item_id)
                 .bind(&item.name)
                 .bind(&item.item_type)
-                .bind(&item.price)
+                .bind(item.price)
                 .bind(scraped_at)
                 .bind(season_day);
         }
@@ -489,7 +652,7 @@ pub async fn insert_items_snapshots(
                     .bind(&item.item_id)
                     .bind(&item.name)
                     .bind(&item.item_type)
-                    .bind(&item.price)
+                    .bind(item.price)
                     .bind(scraped_at)
                     .bind(season_day)
                     .execute(&mut *tx)
@@ -551,15 +714,12 @@ pub async fn get_fire_history(
     let table = mode.fire_table(season_id);
 
     let (where_clause, binds) = match (min_day, max_day) {
-        (Some(min), Some(max)) if min > 0 && max > 0 => {
-            (" WHERE season_day >= ? AND season_day <= ? ", vec![min as i64, max as i64])
-        }
-        (Some(min), _) if min > 0 => {
-            (" WHERE season_day >= ? ", vec![min as i64])
-        }
-        (_, Some(max)) if max > 0 => {
-            (" WHERE season_day <= ? ", vec![max as i64])
-        }
+        (Some(min), Some(max)) if min > 0 && max > 0 => (
+            " WHERE season_day >= ? AND season_day <= ? ",
+            vec![min as i64, max as i64],
+        ),
+        (Some(min), _) if min > 0 => (" WHERE season_day >= ? ", vec![min as i64]),
+        (_, Some(max)) if max > 0 => (" WHERE season_day <= ? ", vec![max as i64]),
         _ => ("", vec![]),
     };
 
@@ -571,15 +731,16 @@ pub async fn get_fire_history(
         ORDER BY scraped_at DESC
         LIMIT ?
         "#,
-        table,
-        where_clause
+        table, where_clause
     );
 
-    let mut q = sqlx::query(&query).bind(limit);
+    let mut q = sqlx::query(&query);
     for b in binds {
         q = q.bind(b);
     }
-    let rows = q.fetch_all(pool)
+    q = q.bind(limit);
+    let rows = q
+        .fetch_all(pool)
         .await
         .map_err(|e| format!("查询火价快照失败: {}", e))?;
 
@@ -693,7 +854,7 @@ pub async fn reset_table(
     market_mode: &str,
 ) -> Result<(String, i64), String> {
     validate_season_id(season_id)?;
-    
+
     let table = match (table_type, market_mode) {
         ("fire", "normal") => format!("fire_price_snapshots_{}_normal", season_id),
         ("fire", "expert") => format!("fire_price_snapshots_{}_expert", season_id),
@@ -701,24 +862,23 @@ pub async fn reset_table(
         ("items", "expert") => format!("item_snapshots_{}_expert", season_id),
         _ => return Err("无效的表类型".to_string()),
     };
-    
-    let exists: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?"
-    )
-    .bind(&table)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| format!("检查表 {} 失败: {}", table, e))?;
-    
+
+    let exists: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?")
+            .bind(&table)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| format!("检查表 {} 失败: {}", table, e))?;
+
     if exists == 0 {
         return Err(format!("表 {} 不存在", table));
     }
-    
+
     sqlx::query(&format!("DELETE FROM {}", table))
         .execute(pool)
         .await
         .map_err(|e| format!("清空表 {} 失败: {}", table, e))?;
-    
+
     info!("已重置表: {}", table);
     Ok((table, 0))
 }
@@ -729,25 +889,37 @@ pub async fn reset_season_tables(
     tables: &[String],
 ) -> Result<Vec<String>, String> {
     validate_season_id(season_id)?;
-    
+
     let mut results = Vec::new();
-    
+
     for table_name in tables {
-        match reset_table(pool, season_id, 
-            if table_name.contains("fire") { "fire" } else { "items" },
-            if table_name.contains("expert") { "expert" } else { "normal" }
-        ).await {
+        match reset_table(
+            pool,
+            season_id,
+            if table_name.contains("fire") {
+                "fire"
+            } else {
+                "items"
+            },
+            if table_name.contains("expert") {
+                "expert"
+            } else {
+                "normal"
+            },
+        )
+        .await
+        {
             Ok(_) => results.push(format!("✓ {}", table_name)),
             Err(e) => results.push(format!("✗ {}: {}", table_name, e)),
         }
     }
-    
+
     Ok(results)
 }
 
 pub async fn wal_checkpoint(pool: &SqlitePool) -> Result<WalCheckpointResult, String> {
     info!("执行 WAL checkpoint...");
-    
+
     let page_count: i64 = sqlx::query_scalar("PRAGMA page_count")
         .fetch_one(pool)
         .await
@@ -770,7 +942,8 @@ pub async fn wal_checkpoint(pool: &SqlitePool) -> Result<WalCheckpointResult, St
     let wal_path = wal_path.0;
 
     let wal_file = format!("{}-wal", wal_path);
-    let wal_bytes: i64 = tokio::fs::metadata(&wal_file).await
+    let wal_bytes: i64 = tokio::fs::metadata(&wal_file)
+        .await
         .map(|m| m.len() as i64)
         .unwrap_or(0);
 
@@ -867,7 +1040,7 @@ pub async fn init_new_season(
         .execute(pool)
         .await
         .map_err(|e| format!("设置当前赛季失败: {}", e))?;
-    
+
     info!("已设置 {} 为当前赛季", season_id);
 
     let mut created_tables = Vec::new();
@@ -919,7 +1092,11 @@ pub async fn init_new_season(
         created_tables.push(items_table);
     }
 
-    info!("新赛季 {} 已初始化，创建了 {} 张表", season_id, created_tables.len());
+    info!(
+        "新赛季 {} 已初始化，创建了 {} 张表",
+        season_id,
+        created_tables.len()
+    );
     Ok(created_tables)
 }
 
@@ -1052,7 +1229,7 @@ pub async fn get_items_history_all(
 
     let mut conditions: Vec<&str> = Vec::new();
     let mut binds: Vec<i64> = Vec::new();
-    
+
     if let (Some(min), Some(max)) = (min_day, max_day) {
         if min > 0 && max > 0 {
             conditions.push(" season_day >= ? AND season_day <= ? ");
@@ -1070,12 +1247,12 @@ pub async fn get_items_history_all(
             binds.push(max as i64);
         }
     }
-    
+
     if let Some(ts) = since_timestamp {
         conditions.push(" scraped_at > ? ");
         binds.push(ts);
     }
-    
+
     let where_clause = if conditions.is_empty() {
         String::new()
     } else {
@@ -1091,15 +1268,16 @@ pub async fn get_items_history_all(
         LIMIT ?
         OFFSET ?
         "#,
-        table,
-        where_clause
+        table, where_clause
     );
 
-    let mut q = sqlx::query(&query).bind(limit).bind(offset);
+    let mut q = sqlx::query(&query);
     for b in binds {
         q = q.bind(b);
     }
-    let rows = q.fetch_all(pool)
+    q = q.bind(limit).bind(offset);
+    let rows = q
+        .fetch_all(pool)
         .await
         .map_err(|e| format!("查询所有物品快照失败: {}", e))?;
 

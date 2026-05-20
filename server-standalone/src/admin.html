@@ -297,6 +297,33 @@
             font-size: 13px;
             color: #333;
         }
+        .ws-status {
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .ws-status.connected { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+        .ws-status.connecting { background: #fffbe6; color: #faad14; border: 1px solid #ffe58f; }
+        .ws-status.disconnected { background: #fff2f0; color: #ff4d4f; border: 1px solid #ffccc7; }
+        .ws-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .ws-status.connected .ws-dot { background: #52c41a; }
+        .ws-status.connecting .ws-dot { background: #faad14; animation: pulse 1s infinite; }
+        .ws-status.disconnected .ws-dot { background: #ff4d4f; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .audit-table { margin-top: 10px; }
+        .audit-action { font-weight: 600; }
+        .audit-success { color: #52c41a; }
+        .audit-failed { color: #ff4d4f; }
     </style>
 </head>
 <body>
@@ -313,6 +340,7 @@
             <button class="tab active" onclick="showTab('status')">状态</button>
             <button class="tab" onclick="showTab('config')">配置</button>
             <button class="tab" onclick="showTab('export')">导出</button>
+            <button class="tab" onclick="showTab('audit')">审计日志</button>
         </div>
 
         <div id="tab-status" class="tab-content active">
@@ -351,6 +379,21 @@
                         <div class="stat-label">专家服物品记录</div>
                         <div class="stat-value" id="stat-expert-items">-</div>
                     </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>WebSocket 实时连接</h2>
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+                    <span id="ws-status" class="ws-status disconnected">
+                        <span class="ws-dot"></span>
+                        <span id="ws-status-text">未连接</span>
+                    </span>
+                    <button id="ws-connect-btn" class="btn btn-primary" onclick="connectWebSocket()">连接</button>
+                    <button id="ws-disconnect-btn" class="btn btn-danger" onclick="disconnectWebSocket()" style="display: none;">断开</button>
+                </div>
+                <div id="ws-messages" style="background: #f8f9fa; padding: 10px; border-radius: 6px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px;">
+                    <div style="color: #999;">等待连接...</div>
                 </div>
             </div>
 
@@ -550,7 +593,6 @@
                         <button type="button" class="btn btn-primary" id="btn-export-csv">导出 CSV</button>
                     </div>
                 </form>
-                </div>
 
                 <div class="card">
                     <h2>赛季管理</h2>
@@ -582,6 +624,29 @@
                     <div style="margin-top: 15px;">
                         <button type="button" class="btn btn-danger" id="btn-archive-season">归档赛季</button>
                     </div>
+                </div>
+            </div>
+
+            <div id="tab-audit" class="tab-content">
+                <div class="card">
+                    <h2>管理员操作审计日志</h2>
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <button class="btn btn-primary" onclick="loadAuditLog()">刷新</button>
+                    </div>
+                    <table class="table audit-table">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>操作</th>
+                                <th>详情</th>
+                                <th>IP 地址</th>
+                                <th>状态</th>
+                            </tr>
+                        </thead>
+                        <tbody id="audit-tbody">
+                            <tr><td colspan="5" class="loading">加载中...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -821,6 +886,176 @@
                 }
             } catch (e) {
                 console.error('Load stats error:', e);
+            }
+        }
+
+        let ws = null;
+        let wsReconnectTimer = null;
+
+        function updateWsStatus(status, text) {
+            const statusEl = document.getElementById('ws-status');
+            const statusText = document.getElementById('ws-status-text');
+            const connectBtn = document.getElementById('ws-connect-btn');
+            const disconnectBtn = document.getElementById('ws-disconnect-btn');
+
+            statusEl.className = 'ws-status ' + status;
+            statusText.textContent = text;
+
+            if (status === 'connected') {
+                connectBtn.style.display = 'none';
+                disconnectBtn.style.display = 'inline-block';
+            } else {
+                connectBtn.style.display = 'inline-block';
+                disconnectBtn.style.display = 'none';
+            }
+        }
+
+        function addWsMessage(msg, type = 'info') {
+            const container = document.getElementById('ws-messages');
+            const div = document.createElement('div');
+            const time = new Date().toLocaleTimeString('zh-CN');
+            const colors = {
+                'info': '#666',
+                'success': '#52c41a',
+                'error': '#ff4d4f',
+                'received': '#667eea'
+            };
+            div.style.color = colors[type] || colors.info;
+            div.style.marginBottom = '4px';
+            div.textContent = `[${time}] ${msg}`;
+            if (container.querySelector('div[style*="color: #999"]')) {
+                container.innerHTML = '';
+            }
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function connectWebSocket() {
+            const password = document.getElementById('cfg-password').value;
+            if (!password) {
+                showAlert('error', '请先输入管理员密码进行认证');
+                return;
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsPort = parseInt(serverConfig?.http_port || 8080) + 1;
+            const wsUrl = `${protocol}//${window.location.hostname}:${wsPort}`;
+
+            updateWsStatus('connecting', '连接中...');
+            addWsMessage(`正在连接到 ${wsUrl}...`);
+
+            try {
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = () => {
+                    addWsMessage('连接已建立，发送认证请求...');
+                    ws.send(JSON.stringify({ type: 'auth', password: password }));
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'auth_success') {
+                            updateWsStatus('connected', '已连接');
+                            addWsMessage('认证成功！', 'success');
+                        } else if (data.type === 'auth_failed') {
+                            updateWsStatus('disconnected', '认证失败');
+                            addWsMessage(`认证失败: ${data.error}`, 'error');
+                            ws.close();
+                        } else if (data.type === 'collection_complete') {
+                            updateWsStatus('connected', '已连接 (收到新数据)');
+                            addWsMessage(`收到采集数据: ${JSON.stringify(data.data).substring(0, 50)}...`, 'received');
+                            setTimeout(() => updateWsStatus('connected', '已连接'), 2000);
+                        } else {
+                            addWsMessage(`收到: ${JSON.stringify(data).substring(0, 100)}`, 'received');
+                        }
+                    } catch (e) {
+                        addWsMessage(`收到原始消息: ${event.data.substring(0, 100)}`, 'received');
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    addWsMessage('WebSocket 错误', 'error');
+                    console.error('WebSocket error:', error);
+                };
+
+                ws.onclose = (event) => {
+                    updateWsStatus('disconnected', '已断开');
+                    addWsMessage(`连接已关闭 (code: ${event.code})`);
+                    ws = null;
+                };
+            } catch (e) {
+                updateWsStatus('disconnected', '连接失败');
+                addWsMessage(`连接失败: ${e.message}`, 'error');
+            }
+        }
+
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            updateWsStatus('disconnected', '已断开');
+            addWsMessage('已主动断开连接');
+        }
+
+        async function loadAuditLog() {
+            const password = document.getElementById('cfg-password').value;
+            if (!password) {
+                showAlert('error', '请先输入管理员密码');
+                return;
+            }
+
+            try {
+                const resp = await fetch('/admin/audit-log', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password, limit: 100 })
+                });
+                const data = await resp.json();
+
+                if (data.success) {
+                    const tbody = document.getElementById('audit-tbody');
+                    tbody.innerHTML = '';
+
+                    if (!data.data || data.data.length === 0) {
+                        const row = document.createElement('tr');
+                        const td = document.createElement('td');
+                        td.colSpan = 5;
+                        td.className = 'loading';
+                        td.textContent = '暂无审计日志';
+                        row.appendChild(td);
+                        tbody.appendChild(row);
+                        return;
+                    }
+
+                    data.data.forEach(log => {
+                        const row = document.createElement('tr');
+
+                        const actionNames = {
+                            'init-season': '初始化赛季',
+                            'archive-season': '归档赛季',
+                            'update-config': '更新配置',
+                            'update-api-config': '更新API配置',
+                            'reset-table': '重置表',
+                            'reset-season': '重置赛季',
+                            'ws-connect': 'WebSocket连接'
+                        };
+
+                        row.innerHTML = `
+                            <td>${log.timestamp ? new Date(log.timestamp * 1000).toLocaleString('zh-CN') : '-'}</td>
+                            <td class="audit-action">${actionNames[log.action] || log.action || '-'}</td>
+                            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(log.details)}">${escapeHtml(log.details)}</td>
+                            <td>${escapeHtml(log.ip_address)}</td>
+                            <td><span class="${log.success ? 'audit-success' : 'audit-failed'}">${log.success ? '✓ 成功' : '✗ 失败'}</span></td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    showAlert('error', data.error || '加载审计日志失败');
+                }
+            } catch (e) {
+                showAlert('error', '加载审计日志失败: ' + e.message);
             }
         }
 
