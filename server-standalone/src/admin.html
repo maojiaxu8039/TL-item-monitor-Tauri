@@ -1156,7 +1156,7 @@
                     dayParams = `&min_day=${min_day}&max_day=${max_day}`;
                 }
 
-                const endpoint = type === 'fire-history' ? '/fire-history' : '/items-history-all';
+                const endpoint = type === 'fire-history' ? '/fire-history-all' : '/items-history-all';
                 const BATCH_SIZE = 10000;
 
                 showAlert('info', '正在开始导出...');
@@ -1170,13 +1170,29 @@
                     return str;
                 };
 
-                let allItems = [];
                 let offset = 0;
                 let exportedCount = 0;
                 let hasMore = true;
+                let beforeTimestamp = null;
+                let beforeId = null;
+                const contentParts = [];
+                let jsonFirstItem = true;
+
+                if (format === 'csv') {
+                    if (type === 'fire-history') {
+                        contentParts.push('\uFEFF' + ['赛季天', '火价(RMB/万火)', '每RMB火数', '涨幅', '交易量', '数据时间'].join(',') + '\n');
+                    } else {
+                        contentParts.push('\uFEFF' + ['物品名称', '物品ID', '物品类型', '火价', '赛季天', '抓取时间'].join(',') + '\n');
+                    }
+                } else {
+                    contentParts.push('[\n');
+                }
 
                 while (hasMore) {
-                    const batchUrl = `${endpoint}?mode=${mode}&limit=${BATCH_SIZE}&offset=${offset}${seasonParam}${dayParams}`;
+                    const cursorParams = beforeTimestamp !== null && beforeId !== null
+                        ? `&before_timestamp=${beforeTimestamp}&before_id=${beforeId}`
+                        : `&offset=${offset}`;
+                    const batchUrl = `${endpoint}?mode=${mode}&limit=${BATCH_SIZE}${cursorParams}${seasonParam}${dayParams}`;
                     const resp = await fetch(batchUrl);
                     const data = await resp.json();
 
@@ -1190,9 +1206,42 @@
                         break;
                     }
 
-                    allItems = allItems.concat(batchItems);
                     exportedCount += batchItems.length;
                     showAlert('info', `已获取 ${exportedCount} 条数据...`);
+                    const lastItem = batchItems[batchItems.length - 1];
+                    beforeTimestamp = lastItem.scraped_at ?? null;
+                    beforeId = lastItem.cursor_id ?? null;
+                    offset = 0;
+
+                    if (format === 'csv') {
+                        if (type === 'fire-history') {
+                            const rows = batchItems.map(item => [
+                                escapeCSV(item.season_day),
+                                escapeCSV(item.rmb_per_10k_fire),
+                                escapeCSV(item.fire_per_rmb),
+                                escapeCSV(item.increase_ratio),
+                                escapeCSV(item.trading_volume),
+                                escapeCSV(item.scraped_at ? new Date(item.scraped_at * 1000).toLocaleString('zh-CN') : ''),
+                            ].join(','));
+                            contentParts.push(rows.join('\n') + '\n');
+                        } else {
+                            const rows = batchItems.map(item => [
+                                escapeCSV(item.name),
+                                escapeCSV(item.item_id),
+                                escapeCSV(item.item_type),
+                                escapeCSV(item.fire_price),
+                                escapeCSV(item.season_day),
+                                escapeCSV(item.scraped_at ? new Date(item.scraped_at * 1000).toLocaleString('zh-CN') : ''),
+                            ].join(','));
+                            contentParts.push(rows.join('\n') + '\n');
+                        }
+                    } else {
+                        const jsonRows = batchItems.map(item => JSON.stringify(item, null, 2));
+                        if (jsonRows.length > 0) {
+                            contentParts.push((jsonFirstItem ? '' : ',\n') + jsonRows.join(',\n'));
+                            jsonFirstItem = false;
+                        }
+                    }
 
                     if (batchItems.length < BATCH_SIZE) {
                         hasMore = false;
@@ -1201,7 +1250,7 @@
                     }
                 }
 
-                if (allItems.length === 0) {
+                if (exportedCount === 0) {
                     showAlert('error', '没有数据可导出');
                     return;
                 }
@@ -1209,36 +1258,13 @@
                 showAlert('info', `开始生成文件...`);
 
                 let content, filename, mimeType;
-                const BOM = '\uFEFF';
-
                 if (format === 'csv') {
-                    if (type === 'fire-history') {
-                        const headers = ['赛季天', '火价(RMB/万火)', '每RMB火数', '涨幅', '交易量', '数据时间'];
-                        const rows = allItems.map(item => [
-                            escapeCSV(item.season_day),
-                            escapeCSV(item.rmb_per_10k_fire),
-                            escapeCSV(item.fire_per_rmb),
-                            escapeCSV(item.increase_ratio),
-                            escapeCSV(item.trading_volume),
-                            escapeCSV(item.scraped_at ? new Date(item.scraped_at * 1000).toLocaleString('zh-CN') : ''),
-                        ].join(','));
-                        content = BOM + [headers.join(','), ...rows].join('\n');
-                    } else {
-                        const headers = ['物品名称', '物品ID', '物品类型', '火价', '赛季天', '抓取时间'];
-                        const rows = allItems.map(item => [
-                            escapeCSV(item.name),
-                            escapeCSV(item.item_id),
-                            escapeCSV(item.item_type),
-                            escapeCSV(item.fire_price),
-                            escapeCSV(item.season_day),
-                            escapeCSV(item.scraped_at ? new Date(item.scraped_at * 1000).toLocaleString('zh-CN') : ''),
-                        ].join(','));
-                        content = BOM + [headers.join(','), ...rows].join('\n');
-                    }
+                    content = contentParts.join('');
                     filename = `tl_${mode}_${type}_${new Date().toISOString().slice(0,10)}.csv`;
                     mimeType = 'text/csv;charset=utf-8';
                 } else {
-                    content = JSON.stringify(allItems, null, 2);
+                    contentParts.push('\n]');
+                    content = contentParts.join('');
                     filename = `tl_${mode}_${type}_${new Date().toISOString().slice(0,10)}.json`;
                     mimeType = 'application/json';
                 }
@@ -1251,7 +1277,7 @@
                 a.click();
                 URL.revokeObjectURL(url);
 
-                showAlert('success', `已导出 ${allItems.length} 条数据`);
+                showAlert('success', `已导出 ${exportedCount} 条数据`);
             } catch (e) {
                 showAlert('error', '导出失败: ' + e.message);
             }

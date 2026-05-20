@@ -59,6 +59,8 @@ struct ServerState {
 
 const RESPONSE_CACHE_MAX_SIZE: usize = 100;
 const RESPONSE_CACHE_TTL_SECS: u64 = 60;
+const RESPONSE_CACHE_MAX_ENTRY_BYTES: usize = 1_048_576;
+const MAX_REQUEST_BYTES: usize = 65_536;
 
 struct LruCache {
     cache: std::collections::HashMap<String, (String, Instant)>,
@@ -85,6 +87,10 @@ impl LruCache {
     }
 
     fn insert(&mut self, key: String, value: String) {
+        if value.len() > RESPONSE_CACHE_MAX_ENTRY_BYTES {
+            return;
+        }
+
         if self.cache.contains_key(&key) {
             self.order.retain(|k| k != &key);
         } else {
@@ -97,6 +103,11 @@ impl LruCache {
         }
         self.cache.insert(key.clone(), (value, Instant::now()));
         self.order.push(key);
+    }
+
+    fn clear(&mut self) {
+        self.cache.clear();
+        self.order.clear();
     }
 
     #[allow(dead_code)]
@@ -115,6 +126,10 @@ impl LruCache {
             self.order.retain(|k| k != &key);
         }
     }
+}
+
+async fn clear_response_cache(state: &ServerState) {
+    state.response_cache.write().await.clear();
 }
 
 struct WsBroadcaster {
@@ -190,9 +205,12 @@ impl RateLimiter {
             self.requests.remove(client_ip);
         }
 
-        if self.requests.get(client_ip).map(|r| r.len()).unwrap_or(0)
-            >= self.config.requests_per_minute as usize
-        {
+        let max_requests = self
+            .config
+            .requests_per_minute
+            .saturating_add(self.config.burst_size) as usize;
+
+        if self.requests.get(client_ip).map(|r| r.len()).unwrap_or(0) >= max_requests {
             return false;
         }
 
@@ -311,8 +329,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             cfg
         }
         Err(e) => {
-            warn!("配置加载失败: {}, 使用默认配置", e);
-            ServerConfig::default()
+            error!("配置加载失败: {}", e);
+            return Err(std::io::Error::other(e).into());
         }
     };
 
@@ -320,7 +338,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("数据库路径: {}", db_path);
 
     if let Some(parent) = std::path::Path::new(&db_path).parent() {
-        std::fs::create_dir_all(parent).ok();
+        std::fs::create_dir_all(parent)?;
     }
 
     let pool = SqlitePoolOptions::new()
@@ -337,7 +355,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .ok();
 
-    db::run_migrations(&pool).await?;
+    db::run_migrations(&pool, &config.season_id).await?;
     db::init_audit_log(&pool).await?;
 
     let dynamic_config = DynamicConfig {
@@ -364,11 +382,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         start_http_server(http_state, http_port, start_time).await;
     });
 
-    let ws_state = state.clone();
-    let ws_port = config.http_port + 1;
-    tokio::spawn(async move {
-        start_websocket_server(ws_state, ws_port).await;
-    });
+    if let Some(ws_port) = config.http_port.checked_add(1) {
+        let ws_state = state.clone();
+        tokio::spawn(async move {
+            start_websocket_server(ws_state, ws_port).await;
+        });
+    } else {
+        warn!(
+            "http_port={} 无法推导 WebSocket 端口，跳过 WebSocket 服务启动",
+            config.http_port
+        );
+    }
 
     let (abort_tx, abort_rx) = broadcast::channel::<()>(1);
 
@@ -453,7 +477,7 @@ async fn handle_request(
     loop {
         if read_start.elapsed() > read_timeout {
             warn!("客户端 {} 读取超时", client_addr.ip());
-            let response = "HTTP/1.1 408 Request Timeout\r\nContent-Type: text/plain\r\nContent-Length: 15\r\n\r\nRequest timeout";
+            let response = plain_http_response(408, "Request Timeout", "Request timeout");
             let _ = tokio::io::AsyncWriteExt::write_all(
                 &mut tokio::io::BufWriter::new(&mut stream),
                 response.as_bytes(),
@@ -490,19 +514,46 @@ async fn handle_request(
                                     .unwrap_or(0);
                             }
                         }
+
+                        if content_length > MAX_REQUEST_BYTES {
+                            warn!("请求体超过 {} 字节限制", MAX_REQUEST_BYTES);
+                            let response =
+                                plain_http_response(413, "Payload Too Large", "Payload too large");
+                            let _ = tokio::io::AsyncWriteExt::write_all(
+                                &mut tokio::io::BufWriter::new(&mut stream),
+                                response.as_bytes(),
+                            )
+                            .await;
+                            return;
+                        }
                     }
                 }
 
                 if header_complete {
-                    let total_expected = header_end_pos + content_length;
-                    if buffer.len() >= total_expected {
-                        break;
+                    match header_end_pos.checked_add(content_length) {
+                        Some(total_expected) => {
+                            if buffer.len() >= total_expected {
+                                break;
+                            }
+                        }
+                        None => {
+                            warn!("请求 Content-Length 溢出");
+                            let response =
+                                plain_http_response(413, "Payload Too Large", "Payload too large");
+                            let _ = tokio::io::AsyncWriteExt::write_all(
+                                &mut tokio::io::BufWriter::new(&mut stream),
+                                response.as_bytes(),
+                            )
+                            .await;
+                            return;
+                        }
                     }
                 }
 
-                if buffer.len() >= 65536 {
-                    warn!("请求体超过 64KB 限制");
-                    let response = "HTTP/1.1 413 Payload Too Large\r\nContent-Type: text/plain\r\nContent-Length: 18\r\n\r\nPayload too large";
+                if buffer.len() >= MAX_REQUEST_BYTES {
+                    warn!("请求超过 {} 字节限制", MAX_REQUEST_BYTES);
+                    let response =
+                        plain_http_response(413, "Payload Too Large", "Payload too large");
                     let _ = tokio::io::AsyncWriteExt::write_all(
                         &mut tokio::io::BufWriter::new(&mut stream),
                         response.as_bytes(),
@@ -517,7 +568,7 @@ async fn handle_request(
             }
             Err(_) => {
                 warn!("客户端 {} 读取超时", client_addr.ip());
-                let response = "HTTP/1.1 408 Request Timeout\r\nContent-Type: text/plain\r\nContent-Length: 15\r\n\r\nRequest timeout";
+                let response = plain_http_response(408, "Request Timeout", "Request timeout");
                 let _ = tokio::io::AsyncWriteExt::write_all(
                     &mut tokio::io::BufWriter::new(&mut stream),
                     response.as_bytes(),
@@ -529,7 +580,7 @@ async fn handle_request(
     }
 
     let request = String::from_utf8_lossy(&buffer);
-    let client_ip = get_client_ip(&request, client_addr);
+    let client_ip = get_client_ip(&request, client_addr, state.config.trust_proxy_headers);
 
     {
         let dynamic = state.dynamic_config.read().await;
@@ -538,7 +589,8 @@ async fn handle_request(
             let mut limiter = state.rate_limiter.write().await;
             if !limiter.is_allowed(&client_ip) {
                 warn!("客户端 {} 请求过于频繁，已限流", client_ip);
-                let response = "HTTP/1.1 429 Too Many Requests\r\nContent-Type: text/plain\r\nContent-Length: 29\r\n\r\nRate limit exceeded, try again";
+                let response =
+                    plain_http_response(429, "Too Many Requests", "Rate limit exceeded, try again");
                 let _ = tokio::io::AsyncWriteExt::write_all(
                     &mut tokio::io::BufWriter::new(stream),
                     response.as_bytes(),
@@ -550,20 +602,34 @@ async fn handle_request(
     }
 
     if header_complete && content_length > 0 {
-        let expected_body_len = header_end_pos + content_length;
-        if buffer.len() < expected_body_len {
-            warn!(
-                "请求 body 不完整: 期望 {} 字节，实际收到 {} 字节",
-                content_length,
-                buffer.len() - header_end_pos
-            );
-            let response = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 26\r\n\r\nIncomplete request body";
-            let _ = tokio::io::AsyncWriteExt::write_all(
-                &mut tokio::io::BufWriter::new(stream),
-                response.as_bytes(),
-            )
-            .await;
-            return;
+        match header_end_pos.checked_add(content_length) {
+            Some(expected_body_len) => {
+                if buffer.len() < expected_body_len {
+                    warn!(
+                        "请求 body 不完整: 期望 {} 字节，实际收到 {} 字节",
+                        content_length,
+                        buffer.len().saturating_sub(header_end_pos)
+                    );
+                    let response =
+                        plain_http_response(400, "Bad Request", "Incomplete request body");
+                    let _ = tokio::io::AsyncWriteExt::write_all(
+                        &mut tokio::io::BufWriter::new(stream),
+                        response.as_bytes(),
+                    )
+                    .await;
+                    return;
+                }
+            }
+            None => {
+                warn!("请求 Content-Length 溢出");
+                let response = plain_http_response(413, "Payload Too Large", "Payload too large");
+                let _ = tokio::io::AsyncWriteExt::write_all(
+                    &mut tokio::io::BufWriter::new(stream),
+                    response.as_bytes(),
+                )
+                .await;
+                return;
+            }
         }
     }
 
@@ -684,6 +750,7 @@ async fn handle_request(
                         .unwrap_or_default();
                         (401, body)
                     } else {
+                        let dynamic = state.dynamic_config.read().await;
                         let body = serde_json::to_string_pretty(&ApiResponse {
                             success: true,
                             data: Some(serde_json::json!({
@@ -695,9 +762,14 @@ async fn handle_request(
                                 "config": {
                                     "season_id": state.config.season_id,
                                     "http_port": state.config.http_port,
-                                    "cors_allowed_origins": state.config.cors_allowed_origins,
-                                    "rate_limit": state.config.rate_limit,
+                                    "cors_allowed_origins": dynamic.cors_allowed_origins,
+                                    "rate_limit": {
+                                        "enabled": dynamic.rate_limit_enabled,
+                                        "requests_per_minute": state.config.rate_limit.requests_per_minute,
+                                        "burst_size": state.config.rate_limit.burst_size,
+                                    },
                                     "api_config": state.config.api_config,
+                                    "scrape_modes": dynamic.scrape_modes,
                                 }
                             })),
                             error: None,
@@ -742,15 +814,20 @@ async fn handle_request(
                         .unwrap_or_default();
                         (401, body)
                     } else {
+                        let dynamic = state.dynamic_config.read().await;
                         let body = serde_json::to_string_pretty(&ApiResponse {
                             success: true,
                             data: Some(serde_json::json!({
                                 "season_id": state.config.season_id,
                                 "http_port": state.config.http_port,
-                                "cors_allowed_origins": state.config.cors_allowed_origins,
-                                "rate_limit": state.config.rate_limit,
+                                "cors_allowed_origins": dynamic.cors_allowed_origins,
+                                "rate_limit": {
+                                    "enabled": dynamic.rate_limit_enabled,
+                                    "requests_per_minute": state.config.rate_limit.requests_per_minute,
+                                    "burst_size": state.config.rate_limit.burst_size,
+                                },
                                 "api_config": state.config.api_config,
-                                "scrape_modes": state.config.scrape_modes,
+                                "scrape_modes": dynamic.scrape_modes,
                             })),
                             error: None,
                         })
@@ -827,31 +904,10 @@ async fn handle_request(
                                         enabled: m.enabled,
                                     })
                                     .collect();
+                                let scrape_modes = config::normalize_scrape_modes(scrape_modes);
                                 new_config.scrape_modes = scrape_modes.clone();
                                 dynamic_updated = true;
                                 config_changes.push(format!("采集模式: {:?}", modes));
-                            }
-
-                            if dynamic_updated {
-                                {
-                                    let mut dynamic = state.dynamic_config.write().await;
-                                    if let Some(cors) = req.cors_allowed_origins {
-                                        dynamic.cors_allowed_origins = cors;
-                                    }
-                                    if let Some(enabled) = req.rate_limit_enabled {
-                                        dynamic.rate_limit_enabled = enabled;
-                                    }
-                                    if let Some(ref modes) = req.scrape_modes {
-                                        dynamic.scrape_modes = modes
-                                            .iter()
-                                            .map(|m| config::ScrapeMode {
-                                                mode: m.mode.clone(),
-                                                enabled: m.enabled,
-                                            })
-                                            .collect();
-                                    }
-                                    dynamic.last_update = Instant::now();
-                                }
                             }
 
                             if let Err(e) = config::save_config(&*get_config_path(), &new_config) {
@@ -871,6 +927,28 @@ async fn handle_request(
                                 .unwrap_or_default();
                                 (500, body)
                             } else {
+                                if dynamic_updated {
+                                    let mut dynamic = state.dynamic_config.write().await;
+                                    if let Some(cors) = req.cors_allowed_origins {
+                                        dynamic.cors_allowed_origins = cors;
+                                    }
+                                    if let Some(enabled) = req.rate_limit_enabled {
+                                        dynamic.rate_limit_enabled = enabled;
+                                    }
+                                    if let Some(ref modes) = req.scrape_modes {
+                                        dynamic.scrape_modes = config::normalize_scrape_modes(
+                                            modes
+                                                .iter()
+                                                .map(|m| config::ScrapeMode {
+                                                    mode: m.mode.clone(),
+                                                    enabled: m.enabled,
+                                                })
+                                                .collect(),
+                                        );
+                                    }
+                                    dynamic.last_update = Instant::now();
+                                }
+                                clear_response_cache(&state).await;
                                 db::insert_audit_log(
                                     &state.db,
                                     "update-config",
@@ -1079,6 +1157,10 @@ async fn handle_request(
                 get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
             let since_timestamp: Option<i64> =
                 get_query_param(query_string, "since_timestamp").and_then(|s| s.parse().ok());
+            let before_timestamp: Option<i64> =
+                get_query_param(query_string, "before_timestamp").and_then(|s| s.parse().ok());
+            let before_id: Option<i64> =
+                get_query_param(query_string, "before_id").and_then(|s| s.parse().ok());
 
             let market_mode = if mode == "expert" {
                 "season_expert"
@@ -1115,6 +1197,8 @@ async fn handle_request(
                         min_day,
                         max_day,
                         since_timestamp,
+                        before_timestamp,
+                        before_id,
                     )
                     .await
                     {
@@ -1155,6 +1239,14 @@ async fn handle_request(
             let offset: i32 = get_query_param(query_string, "offset")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0);
+            let min_day: Option<i32> =
+                get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
+            let max_day: Option<i32> =
+                get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
+            let before_timestamp: Option<i64> =
+                get_query_param(query_string, "before_timestamp").and_then(|s| s.parse().ok());
+            let before_id: Option<i64> =
+                get_query_param(query_string, "before_id").and_then(|s| s.parse().ok());
 
             let market_mode = if mode == "expert" {
                 "season_expert"
@@ -1174,8 +1266,18 @@ async fn handle_request(
                 .unwrap_or_default();
                 (400, body)
             } else {
-                match db::get_fire_history_all(&state.db, &season_id, market_mode, limit, offset)
-                    .await
+                match db::get_fire_history_all(
+                    &state.db,
+                    &season_id,
+                    market_mode,
+                    limit,
+                    offset,
+                    min_day,
+                    max_day,
+                    before_timestamp,
+                    before_id,
+                )
+                .await
                 {
                     Ok(records) => {
                         let body = serde_json::to_string_pretty(&ApiResponse {
@@ -1229,17 +1331,27 @@ async fn handle_request(
         ("GET", "/season-start") => {
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
-            let season_start = db::get_season_start_time(&state.db, &season_id).await;
-            let body = serde_json::to_string_pretty(&ApiResponse {
-                success: true,
-                data: Some(serde_json::json!({
-                    "season_id": season_id,
-                    "started_at": season_start
-                })),
-                error: None,
-            })
-            .unwrap_or_default();
-            (200, body)
+            if let Err(e) = db::validate_season_id(&season_id) {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+                .unwrap_or_default();
+                (400, body)
+            } else {
+                let season_start = db::get_season_start_time(&state.db, &season_id).await;
+                let body = serde_json::to_string_pretty(&ApiResponse {
+                    success: true,
+                    data: Some(serde_json::json!({
+                        "season_id": season_id,
+                        "started_at": season_start
+                    })),
+                    error: None,
+                })
+                .unwrap_or_default();
+                (200, body)
+            }
         }
         ("GET", "/stats") => {
             let season_id = get_query_param(query_string, "season")
@@ -1405,6 +1517,7 @@ async fn handle_request(
                                     let mut cache = state.season_cache.write().await;
                                     *cache = None;
                                 }
+                                clear_response_cache(&state).await;
                                 let state_clone = state.clone();
                                 tokio::spawn(async move {
                                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -1505,6 +1618,7 @@ async fn handle_request(
                                     let mut cache = state.season_cache.write().await;
                                     *cache = None;
                                 }
+                                clear_response_cache(&state).await;
                                 db::insert_audit_log(
                                     &state.db,
                                     "archive-season",
@@ -1600,6 +1714,7 @@ async fn handle_request(
                             .unwrap_or_default();
                             (500, body)
                         } else {
+                            clear_response_cache(&state).await;
                             db::insert_audit_log(
                                 &state.db,
                                 "update-api-config",
@@ -1675,6 +1790,7 @@ async fn handle_request(
                         .await
                         {
                             Ok((table, count)) => {
+                                clear_response_cache(&state).await;
                                 db::insert_audit_log(
                                     &state.db,
                                     "reset-table",
@@ -1765,6 +1881,7 @@ async fn handle_request(
                         match db::reset_season_tables(&state.db, &req.season_id, &req.tables).await
                         {
                             Ok(results) => {
+                                clear_response_cache(&state).await;
                                 db::insert_audit_log(
                                     &state.db,
                                     "reset-season",
@@ -1857,19 +1974,52 @@ fn get_origin_header(request: &str) -> Option<String> {
     None
 }
 
-fn get_client_ip(request: &str, fallback: std::net::SocketAddr) -> String {
-    for line in request.lines() {
-        if line.len() > 15 && line[..15].eq_ignore_ascii_case("x-forwarded-for:") {
-            let value = line[15..].trim();
-            if let Some(first_ip) = value.split(',').next() {
-                let trimmed = first_ip.trim();
-                if !trimmed.is_empty() {
-                    return trimmed.to_string();
+fn plain_http_response(status: u16, reason: &str, body: &str) -> String {
+    format!(
+        "HTTP/1.1 {} {}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+        status,
+        reason,
+        body.len(),
+        body
+    )
+}
+
+fn reason_phrase(status: u16) -> &'static str {
+    match status {
+        200 => "OK",
+        204 => "No Content",
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        404 => "Not Found",
+        408 => "Request Timeout",
+        413 => "Payload Too Large",
+        429 => "Too Many Requests",
+        500 => "Internal Server Error",
+        503 => "Service Unavailable",
+        _ => "Error",
+    }
+}
+
+fn get_client_ip(
+    request: &str,
+    fallback: std::net::SocketAddr,
+    trust_proxy_headers: bool,
+) -> String {
+    if trust_proxy_headers {
+        for line in request.lines() {
+            if line.len() > 15 && line[..15].eq_ignore_ascii_case("x-forwarded-for:") {
+                let value = line[15..].trim();
+                if let Some(first_ip) = value.split(',').next() {
+                    let trimmed = first_ip.trim();
+                    if !trimmed.is_empty() {
+                        return trimmed.to_string();
+                    }
                 }
             }
-        }
-        if line.len() > 10 && line[..10].eq_ignore_ascii_case("x-real-ip:") {
-            return line[10..].trim().to_string();
+            if line.len() > 10 && line[..10].eq_ignore_ascii_case("x-real-ip:") {
+                return line[10..].trim().to_string();
+            }
         }
     }
     fallback.ip().to_string()
@@ -1887,7 +2037,7 @@ async fn send_response(
             orig.clone()
         } else {
             warn!("CORS origin rejected: {}", orig);
-            return send_error_response(stream, status, "CORS origin not allowed").await;
+            return send_error_response(stream, 403, "CORS origin not allowed").await;
         }
     } else {
         allowed_origins
@@ -1897,16 +2047,9 @@ async fn send_response(
     };
 
     let response = format!(
-        "HTTP/1.1 {} {}\r\n\
-        Content-Type: application/json\r\n\
-        Content-Length: {}\r\n\
-        Access-Control-Allow-Origin: {}\r\n\
-        Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
-        Access-Control-Allow-Headers: Content-Type, Authorization\r\n\
-        \r\n\
-        {}",
+        "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n\r\n{}",
         status,
-        if status == 200 { "OK" } else { "Error" },
+        reason_phrase(status),
         body.len(),
         cors_header,
         body
@@ -1939,13 +2082,9 @@ async fn send_response(
 
 async fn send_error_response(stream: tokio::net::TcpStream, status: u16, message: &str) {
     let response = format!(
-        "HTTP/1.1 {} {}\r\n\
-        Content-Type: text/plain\r\n\
-        Content-Length: {}\r\n\
-        \r\n\
-        {}",
+        "HTTP/1.1 {} {}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
         status,
-        if status == 200 { "OK" } else { "Error" },
+        reason_phrase(status),
         message.len(),
         message
     );
@@ -1977,11 +2116,7 @@ async fn send_error_response(stream: tokio::net::TcpStream, status: u16, message
 
 async fn send_options_response(stream: tokio::net::TcpStream, message: &str) {
     let response = format!(
-        "HTTP/1.1 403 Forbidden\r\n\
-        Content-Type: text/plain\r\n\
-        Content-Length: {}\r\n\
-        \r\n\
-        {}",
+        "HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
         message.len(),
         message
     );
@@ -1992,13 +2127,7 @@ async fn send_options_response(stream: tokio::net::TcpStream, message: &str) {
 
 async fn send_options_response_with_cors(stream: tokio::net::TcpStream, cors_header: &str) {
     let response = format!(
-        "HTTP/1.1 204 No Content\r\n\
-        Access-Control-Allow-Origin: {}\r\n\
-        Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
-        Access-Control-Allow-Headers: Content-Type, Authorization\r\n\
-        Access-Control-Max-Age: 86400\r\n\
-        \r\n\
-        ",
+        "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nAccess-Control-Max-Age: 86400\r\n\r\n",
         cors_header
     );
     let mut buf_writer = tokio::io::BufWriter::new(stream);
@@ -2283,8 +2412,6 @@ async fn run_test_collection(state: &Arc<ServerState>) {
         Some(season) => {
             info!("测试采集当前赛季: {}", season);
 
-            let mut last_collection = state.last_collection.write().await;
-
             for mode_config in state.config.scrape_modes.iter() {
                 if !mode_config.enabled {
                     info!("[{}] 已禁用，跳过测试采集", mode_config.mode);
@@ -2332,10 +2459,13 @@ async fn run_test_collection(state: &Arc<ServerState>) {
                     test_status.collection_success == Some(true)
                 );
 
-                if mode_config.mode == "normal" {
-                    last_collection.normal = Some(test_status);
-                } else {
-                    last_collection.expert = Some(test_status);
+                {
+                    let mut last_collection = state.last_collection.write().await;
+                    if mode_config.mode == "normal" {
+                        last_collection.normal = Some(test_status);
+                    } else {
+                        last_collection.expert = Some(test_status);
+                    }
                 }
             }
         }
@@ -2412,8 +2542,15 @@ async fn run_collection_for_season(state: &Arc<ServerState>, season: &str, times
     let mut normal_status = None;
     let mut expert_status = None;
 
-    let dynamic = state.dynamic_config.read().await;
-    let enabled_modes: Vec<_> = dynamic.scrape_modes.iter().filter(|m| m.enabled).collect();
+    let enabled_modes: Vec<config::ScrapeMode> = {
+        let dynamic = state.dynamic_config.read().await;
+        dynamic
+            .scrape_modes
+            .iter()
+            .filter(|m| m.enabled)
+            .cloned()
+            .collect()
+    };
 
     if enabled_modes.len() == 2 {
         info!("并行采集普通服和专家服...");
@@ -2455,6 +2592,8 @@ async fn run_collection_for_season(state: &Arc<ServerState>, season: &str, times
         let mut last = state.last_collection.write().await;
         *last = new_status;
     }
+
+    clear_response_cache(state).await;
 
     db::wal_checkpoint(&state.db).await.ok();
 

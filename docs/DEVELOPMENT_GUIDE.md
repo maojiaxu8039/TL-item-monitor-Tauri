@@ -470,21 +470,18 @@ loop {
 
 ```bash
 # 编译
-cargo build --bin server --release
+cargo build --release
 
 # 运行（使用默认配置）
-./target/release/server
+./target/release/tl-monitor-server
 
 # 自定义配置
-TL_DB_PATH=/custom/path.db ./target/release/server
-
-# Docker 运行
-docker run -v /data:/data -v /config:/config tl-monitor-server
+TL_DB_PATH=/custom/path.db ./target/release/tl-monitor-server
 ```
 
 ### 10.3 配置文件
 
-配置文件路径：`/config/server_config.yaml`
+默认配置文件路径：`/config/server_config.yaml`。也可以通过 `TL_CONFIG_PATH` 指定。
 
 ```yaml
 season_id: "ss12"           # 当前赛季 ID
@@ -687,9 +684,10 @@ async fn collect_all_modes(state) {
 
 ```json
 {
-  "password": "admin123",
+  "password": "你的管理员密码",
   "season_id": "ss13",
-  "season_name": "SS13 赛季"
+  "season_name": "SS13 赛季",
+  "started_at": 1776384000
 }
 ```
 
@@ -715,7 +713,7 @@ async fn collect_all_modes(state) {
 
 ```json
 {
-  "password": "admin123",
+  "password": "你的管理员密码",
   "api_config": {
     "qiandao_tag_id_normal": "1560053",
     "qiandao_spec_id_normal": "267416",

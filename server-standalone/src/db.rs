@@ -138,6 +138,70 @@ async fn add_column_if_missing(
     Ok(())
 }
 
+async fn create_fire_indexes(pool: &SqlitePool, table: &str) -> Result<(), String> {
+    sqlx::query(&format!(
+        "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
+        table, table
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| format!("创建 {} season_day 索引失败: {}", table, e))?;
+
+    sqlx::query(&format!(
+        "CREATE INDEX IF NOT EXISTS idx_{}_scraped_id ON {}(scraped_at DESC, id DESC)",
+        table, table
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| format!("创建 {} scraped_at 索引失败: {}", table, e))?;
+
+    sqlx::query(&format!(
+        "CREATE INDEX IF NOT EXISTS idx_{}_day_scraped_id ON {}(season_day, scraped_at DESC, id DESC)",
+        table, table
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| format!("创建 {} season_day/scraped_at 索引失败: {}", table, e))?;
+
+    Ok(())
+}
+
+async fn create_items_indexes(pool: &SqlitePool, table: &str) -> Result<(), String> {
+    sqlx::query(&format!(
+        "CREATE INDEX IF NOT EXISTS idx_{}_item_scraped ON {}(item_id, scraped_at DESC)",
+        table, table
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| format!("创建 {} item_id/scraped_at 索引失败: {}", table, e))?;
+
+    sqlx::query(&format!(
+        "CREATE INDEX IF NOT EXISTS idx_{}_scraped_id ON {}(scraped_at DESC, id DESC)",
+        table, table
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| format!("创建 {} scraped_at 索引失败: {}", table, e))?;
+
+    sqlx::query(&format!(
+        "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
+        table, table
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| format!("创建 {} season_day 索引失败: {}", table, e))?;
+
+    sqlx::query(&format!(
+        "CREATE INDEX IF NOT EXISTS idx_{}_day_scraped_id ON {}(season_day, scraped_at DESC, id DESC)",
+        table, table
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| format!("创建 {} season_day/scraped_at 索引失败: {}", table, e))?;
+
+    Ok(())
+}
+
 fn is_valid_identifier(s: &str) -> bool {
     !s.is_empty() && s.len() <= 64 && s.chars().all(|c| c.is_alphanumeric() || c == '_')
 }
@@ -251,7 +315,8 @@ fn get_migration_started_at(season_id: &str) -> i64 {
 
 async fn migrate_season_record(pool: &SqlitePool, season: &str) -> Result<(), String> {
     let started_at = get_migration_started_at(season);
-    sqlx::query("INSERT OR IGNORE INTO seasons (id, started_at) VALUES (?, ?)")
+    sqlx::query("INSERT OR IGNORE INTO seasons (id, name, started_at) VALUES (?, ?, ?)")
+        .bind(season)
         .bind(season)
         .bind(started_at)
         .execute(pool)
@@ -260,8 +325,9 @@ async fn migrate_season_record(pool: &SqlitePool, season: &str) -> Result<(), St
     Ok(())
 }
 
-pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
+pub async fn run_migrations(pool: &SqlitePool, default_season: &str) -> Result<(), String> {
     info!("执行数据库迁移...");
+    validate_season_id(default_season)?;
 
     sqlx::query(
         r#"
@@ -284,15 +350,43 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
 
     let seasons = get_all_seasons_list(pool).await;
 
-    let seasons_to_migrate = if seasons.is_empty() {
-        info!("seasons 表为空，使用默认赛季列表: ss12");
-        vec!["ss12".to_string()]
+    let mut seasons_to_migrate = if seasons.is_empty() {
+        info!("seasons 表为空，使用配置默认赛季: {}", default_season);
+        vec![default_season.to_string()]
     } else {
         seasons
     };
 
+    seasons_to_migrate.retain(|season| {
+        let valid = validate_season_id(season).is_ok();
+        if !valid {
+            warn!("跳过无效赛季 ID 的迁移: {}", season);
+        }
+        valid
+    });
+
+    if !seasons_to_migrate.iter().any(|s| s == default_season) {
+        seasons_to_migrate.push(default_season.to_string());
+    }
+
     for season in &seasons_to_migrate {
         migrate_season_record(pool, season).await?;
+    }
+
+    let active_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM seasons WHERE is_current = 1 AND ended_at IS NULL",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    if active_count == 0 {
+        sqlx::query("UPDATE seasons SET is_current = 1, ended_at = NULL WHERE id = ?")
+            .bind(default_season)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("设置默认当前赛季失败: {}", e))?;
+        info!("未发现当前赛季，已设置 {} 为当前赛季", default_season);
     }
 
     for season in &seasons_to_migrate {
@@ -324,6 +418,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .ok();
+        create_fire_indexes(pool, &table).await?;
 
         let items_table = format!("item_snapshots_{}_normal", season);
         sqlx::query(&format!(
@@ -358,6 +453,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .ok();
+        create_items_indexes(pool, &items_table).await?;
         add_column_if_missing(pool, &items_table, "name", "TEXT NOT NULL DEFAULT ''").await?;
         add_column_if_missing(pool, &items_table, "item_type", "TEXT NOT NULL DEFAULT ''").await?;
         add_column_if_missing(
@@ -396,6 +492,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .ok();
+        create_fire_indexes(pool, &expert_table).await?;
 
         let expert_items_table = format!("item_snapshots_{}_expert", season);
         sqlx::query(&format!(
@@ -430,6 +527,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), String> {
         .execute(pool)
         .await
         .ok();
+        create_items_indexes(pool, &expert_items_table).await?;
         add_column_if_missing(
             pool,
             &expert_items_table,
@@ -554,6 +652,8 @@ pub async fn insert_fire_snapshot(
     fire: &FirePriceSnapshot,
     scraped_at: i64,
 ) -> Result<(), String> {
+    validate_season_id(season_id)?;
+
     let mode = MarketMode::parse(market_mode);
     let table = mode.fire_table(season_id);
     let season_start = get_cached_season_start(pool, season_id).await?;
@@ -598,7 +698,7 @@ pub async fn insert_fire_snapshot(
     Ok(())
 }
 
-const BATCH_SIZE: usize = 150;
+const BATCH_SIZE: usize = 500;
 
 pub async fn insert_items_snapshots(
     pool: &SqlitePool,
@@ -607,6 +707,8 @@ pub async fn insert_items_snapshots(
     items: &[Item],
     scraped_at: i64,
 ) -> Result<usize, String> {
+    validate_season_id(season_id)?;
+
     let mode = MarketMode::parse(market_mode);
     let table = mode.items_table(season_id);
     let season_start = get_cached_season_start(pool, season_id).await?;
@@ -678,6 +780,7 @@ pub async fn insert_items_snapshots(
 
 #[derive(Debug, Clone, Serialize)]
 pub struct FireSnapshotRecord {
+    pub cursor_id: i64,
     pub season_id: String,
     pub market_mode: String,
     pub rmb_per_10k_fire: f64,
@@ -692,6 +795,7 @@ pub struct FireSnapshotRecord {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ItemSnapshotRecord {
+    pub cursor_id: i64,
     pub item_id: String,
     pub season_id: String,
     pub market_mode: String,
@@ -710,6 +814,8 @@ pub async fn get_fire_history(
     min_day: Option<i32>,
     max_day: Option<i32>,
 ) -> Result<Vec<FireSnapshotRecord>, String> {
+    validate_season_id(season_id)?;
+
     let mode = MarketMode::parse(market_mode);
     let table = mode.fire_table(season_id);
 
@@ -725,10 +831,10 @@ pub async fn get_fire_history(
 
     let query = format!(
         r#"
-        SELECT rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day
+        SELECT id, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day
         FROM {}
         {}
-        ORDER BY scraped_at DESC
+        ORDER BY scraped_at DESC, id DESC
         LIMIT ?
         "#,
         table, where_clause
@@ -747,6 +853,7 @@ pub async fn get_fire_history(
     let records: Vec<FireSnapshotRecord> = rows
         .into_iter()
         .map(|row| FireSnapshotRecord {
+            cursor_id: row.get("id"),
             season_id: season_id.to_string(),
             market_mode: market_mode.to_string(),
             rmb_per_10k_fire: row.get("rmb_per_10k_fire"),
@@ -776,27 +883,35 @@ pub async fn get_items_history_count(
     max_day: Option<i32>,
     since_timestamp: Option<i64>,
 ) -> Result<i64, String> {
+    validate_season_id(season_id)?;
+
     let mode = MarketMode::parse(market_mode);
     let table = mode.items_table(season_id);
 
-    let mut conditions: Vec<String> = Vec::new();
+    let mut conditions: Vec<&str> = Vec::new();
+    let mut binds: Vec<i64> = Vec::new();
 
     if let (Some(min), Some(max)) = (min_day, max_day) {
         if min > 0 && max > 0 {
-            conditions.push(format!(" season_day >= {} AND season_day <= {} ", min, max));
+            conditions.push(" season_day >= ? AND season_day <= ? ");
+            binds.push(min as i64);
+            binds.push(max as i64);
         }
     } else if let Some(min) = min_day {
         if min > 0 {
-            conditions.push(format!(" season_day >= {} ", min));
+            conditions.push(" season_day >= ? ");
+            binds.push(min as i64);
         }
     } else if let Some(max) = max_day {
         if max > 0 {
-            conditions.push(format!(" season_day <= {} ", max));
+            conditions.push(" season_day <= ? ");
+            binds.push(max as i64);
         }
     }
 
     if let Some(ts) = since_timestamp {
-        conditions.push(format!(" scraped_at > {} ", ts));
+        conditions.push(" scraped_at > ? ");
+        binds.push(ts);
     }
 
     let where_clause = if conditions.is_empty() {
@@ -806,7 +921,11 @@ pub async fn get_items_history_count(
     };
 
     let query = format!("SELECT COUNT(*) as count FROM {} {}", table, where_clause);
-    let row = sqlx::query(&query)
+    let mut q = sqlx::query(&query);
+    for bind in binds {
+        q = q.bind(bind);
+    }
+    let row = q
         .fetch_one(pool)
         .await
         .map_err(|e| format!("查询物品快照数量失败: {}", e))?;
@@ -874,13 +993,14 @@ pub async fn reset_table(
         return Err(format!("表 {} 不存在", table));
     }
 
-    sqlx::query(&format!("DELETE FROM {}", table))
+    let result = sqlx::query(&format!("DELETE FROM {}", table))
         .execute(pool)
         .await
         .map_err(|e| format!("清空表 {} 失败: {}", table, e))?;
+    let deleted_rows = result.rows_affected() as i64;
 
-    info!("已重置表: {}", table);
-    Ok((table, 0))
+    info!("已重置表: {}，删除 {} 行", table, deleted_rows);
+    Ok((table, deleted_rows))
 }
 
 pub async fn reset_season_tables(
@@ -893,22 +1013,28 @@ pub async fn reset_season_tables(
     let mut results = Vec::new();
 
     for table_name in tables {
-        match reset_table(
-            pool,
-            season_id,
-            if table_name.contains("fire") {
-                "fire"
-            } else {
-                "items"
-            },
-            if table_name.contains("expert") {
-                "expert"
-            } else {
-                "normal"
-            },
-        )
-        .await
-        {
+        let reset_target = match table_name.as_str() {
+            name if name == format!("fire_price_snapshots_{}_normal", season_id) => {
+                Some(("fire", "normal"))
+            }
+            name if name == format!("fire_price_snapshots_{}_expert", season_id) => {
+                Some(("fire", "expert"))
+            }
+            name if name == format!("item_snapshots_{}_normal", season_id) => {
+                Some(("items", "normal"))
+            }
+            name if name == format!("item_snapshots_{}_expert", season_id) => {
+                Some(("items", "expert"))
+            }
+            _ => None,
+        };
+
+        let Some((table_type, market_mode)) = reset_target else {
+            results.push(format!("✗ {}: 表名不属于赛季 {}", table_name, season_id));
+            continue;
+        };
+
+        match reset_table(pool, season_id, table_type, market_mode).await {
             Ok(_) => results.push(format!("✓ {}", table_name)),
             Err(e) => results.push(format!("✗ {}: {}", table_name, e)),
         }
@@ -1023,13 +1149,22 @@ pub async fn init_new_season(
         ));
     }
 
-    sqlx::query("INSERT OR IGNORE INTO seasons (id, name, started_at) VALUES (?, ?, ?)")
-        .bind(season_id)
-        .bind(season_name)
-        .bind(started_at)
-        .execute(pool)
-        .await
-        .map_err(|e| format!("插入赛季记录失败: {}", e))?;
+    sqlx::query(
+        r#"
+        INSERT INTO seasons (id, name, started_at, ended_at, is_current)
+        VALUES (?, ?, ?, NULL, 0)
+        ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            started_at = excluded.started_at,
+            ended_at = NULL
+        "#,
+    )
+    .bind(season_id)
+    .bind(season_name)
+    .bind(started_at)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("插入赛季记录失败: {}", e))?;
 
     sqlx::query("UPDATE seasons SET is_current = 0")
         .execute(pool)
@@ -1069,6 +1204,14 @@ pub async fn init_new_season(
         .execute(pool)
         .await
         .map_err(|e| format!("创建火价表失败: {}", e))?;
+        sqlx::query(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
+            fire_table, fire_table
+        ))
+        .execute(pool)
+        .await
+        .ok();
+        create_fire_indexes(pool, &fire_table).await?;
         created_tables.push(fire_table);
 
         sqlx::query(&format!(
@@ -1089,6 +1232,21 @@ pub async fn init_new_season(
         .execute(pool)
         .await
         .map_err(|e| format!("创建物品表失败: {}", e))?;
+        sqlx::query(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_item_scraped ON {}(item_id, scraped_at DESC)",
+            items_table, items_table
+        ))
+        .execute(pool)
+        .await
+        .ok();
+        sqlx::query(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
+            items_table, items_table
+        ))
+        .execute(pool)
+        .await
+        .ok();
+        create_items_indexes(pool, &items_table).await?;
         created_tables.push(items_table);
     }
 
@@ -1100,28 +1258,74 @@ pub async fn init_new_season(
     Ok(created_tables)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn get_fire_history_all(
     pool: &SqlitePool,
     season_id: &str,
     market_mode: &str,
     limit: i32,
     offset: i32,
+    min_day: Option<i32>,
+    max_day: Option<i32>,
+    before_timestamp: Option<i64>,
+    before_id: Option<i64>,
 ) -> Result<Vec<FireSnapshotRecord>, String> {
+    validate_season_id(season_id)?;
+
     let mode = MarketMode::parse(market_mode);
     let table = mode.fire_table(season_id);
 
+    let mut conditions: Vec<&str> = Vec::new();
+    let mut binds: Vec<i64> = Vec::new();
+
+    if let (Some(min), Some(max)) = (min_day, max_day) {
+        if min > 0 && max > 0 {
+            conditions.push(" season_day >= ? AND season_day <= ? ");
+            binds.push(min as i64);
+            binds.push(max as i64);
+        }
+    } else if let Some(min) = min_day {
+        if min > 0 {
+            conditions.push(" season_day >= ? ");
+            binds.push(min as i64);
+        }
+    } else if let Some(max) = max_day {
+        if max > 0 {
+            conditions.push(" season_day <= ? ");
+            binds.push(max as i64);
+        }
+    }
+
+    if let (Some(ts), Some(id)) = (before_timestamp, before_id) {
+        conditions.push(" (scraped_at < ? OR (scraped_at = ? AND id < ?)) ");
+        binds.push(ts);
+        binds.push(ts);
+        binds.push(id);
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", conditions.join(" AND "))
+    };
+
     let query = format!(
         r#"
-        SELECT rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day
+        SELECT id, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day
         FROM {}
-        ORDER BY scraped_at DESC
+        {}
+        ORDER BY scraped_at DESC, id DESC
         LIMIT ?
         OFFSET ?
         "#,
-        table
+        table, where_clause
     );
 
-    let rows = sqlx::query(&query)
+    let mut q = sqlx::query(&query);
+    for bind in binds {
+        q = q.bind(bind);
+    }
+    let rows = q
         .bind(limit)
         .bind(offset)
         .fetch_all(pool)
@@ -1131,6 +1335,7 @@ pub async fn get_fire_history_all(
     let records: Vec<FireSnapshotRecord> = rows
         .into_iter()
         .map(|row| FireSnapshotRecord {
+            cursor_id: row.get("id"),
             season_id: season_id.to_string(),
             market_mode: market_mode.to_string(),
             rmb_per_10k_fire: row.get("rmb_per_10k_fire"),
@@ -1158,15 +1363,17 @@ pub async fn get_items_history(
     market_mode: &str,
     limit: i32,
 ) -> Result<Vec<ItemSnapshotRecord>, String> {
+    validate_season_id(season_id)?;
+
     let mode = MarketMode::parse(market_mode);
     let table = mode.items_table(season_id);
 
     let query = format!(
         r#"
-        SELECT item_id, name, item_type, fire_price, scraped_at, season_day
+        SELECT id, item_id, name, item_type, fire_price, scraped_at, season_day
         FROM {}
         WHERE item_id = ?
-        ORDER BY scraped_at DESC
+        ORDER BY scraped_at DESC, id DESC
         LIMIT ?
         "#,
         table
@@ -1182,6 +1389,7 @@ pub async fn get_items_history(
     let records: Vec<ItemSnapshotRecord> = rows
         .into_iter()
         .map(|row| ItemSnapshotRecord {
+            cursor_id: row.get("id"),
             item_id: row.get("item_id"),
             season_id: season_id.to_string(),
             market_mode: market_mode.to_string(),
@@ -1203,6 +1411,7 @@ pub async fn get_items_history(
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ItemSnapshotWithInfo {
+    pub cursor_id: i64,
     pub item_id: String,
     pub season_id: String,
     pub market_mode: String,
@@ -1223,7 +1432,11 @@ pub async fn get_items_history_all(
     min_day: Option<i32>,
     max_day: Option<i32>,
     since_timestamp: Option<i64>,
+    before_timestamp: Option<i64>,
+    before_id: Option<i64>,
 ) -> Result<Vec<ItemSnapshotWithInfo>, String> {
+    validate_season_id(season_id)?;
+
     let mode = MarketMode::parse(market_mode);
     let table = mode.items_table(season_id);
 
@@ -1253,6 +1466,13 @@ pub async fn get_items_history_all(
         binds.push(ts);
     }
 
+    if let (Some(ts), Some(id)) = (before_timestamp, before_id) {
+        conditions.push(" (scraped_at < ? OR (scraped_at = ? AND id < ?)) ");
+        binds.push(ts);
+        binds.push(ts);
+        binds.push(id);
+    }
+
     let where_clause = if conditions.is_empty() {
         String::new()
     } else {
@@ -1261,10 +1481,10 @@ pub async fn get_items_history_all(
 
     let query = format!(
         r#"
-        SELECT item_id, name, item_type, fire_price, scraped_at, season_day
+        SELECT id, item_id, name, item_type, fire_price, scraped_at, season_day
         FROM {}
         {}
-        ORDER BY scraped_at DESC
+        ORDER BY scraped_at DESC, id DESC
         LIMIT ?
         OFFSET ?
         "#,
@@ -1284,6 +1504,7 @@ pub async fn get_items_history_all(
     let records: Vec<ItemSnapshotWithInfo> = rows
         .into_iter()
         .map(|row| ItemSnapshotWithInfo {
+            cursor_id: row.get("id"),
             item_id: row.get("item_id"),
             season_id: season_id.to_string(),
             market_mode: market_mode.to_string(),

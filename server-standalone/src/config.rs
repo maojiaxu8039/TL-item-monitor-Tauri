@@ -16,6 +16,8 @@ pub struct ServerConfig {
     pub rate_limit: RateLimitConfig,
     #[serde(default)]
     pub api_endpoints: ApiEndpoints,
+    #[serde(default)]
+    pub trust_proxy_headers: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,6 +123,7 @@ impl Default for ServerConfig {
             environment: "development".to_string(),
             rate_limit: RateLimitConfig::default(),
             api_endpoints: ApiEndpoints::default(),
+            trust_proxy_headers: false,
         }
     }
 }
@@ -128,7 +131,7 @@ impl Default for ServerConfig {
 pub fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig, String> {
     let path = path.as_ref();
 
-    if !path.exists() {
+    let mut config = if !path.exists() {
         let default_config = ServerConfig::default();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| format!("创建配置目录失败: {}", e))?;
@@ -136,18 +139,20 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig, String> {
         let yaml =
             serde_yaml::to_string(&default_config).map_err(|e| format!("序列化配置失败: {}", e))?;
         std::fs::write(path, yaml).map_err(|e| format!("写入配置文件失败: {}", e))?;
-        return Ok(default_config);
-    }
+        default_config
+    } else {
+        let content =
+            std::fs::read_to_string(path).map_err(|e| format!("读取配置文件失败: {}", e))?;
 
-    let content = std::fs::read_to_string(path).map_err(|e| format!("读取配置文件失败: {}", e))?;
-
-    let mut config: ServerConfig =
-        serde_yaml::from_str(&content).map_err(|e| format!("解析配置文件失败: {}", e))?;
+        serde_yaml::from_str(&content).map_err(|e| format!("解析配置文件失败: {}", e))?
+    };
 
     // Override admin_password from environment variable if set
+    let mut password_from_env = false;
     if let Ok(env_password) = std::env::var("TL_ADMIN_PASSWORD") {
         if !env_password.is_empty() {
             config.admin_password = env_password;
+            password_from_env = true;
         }
     }
 
@@ -158,7 +163,9 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig, String> {
         match crate::password_hash::hash_password(&config.admin_password) {
             Ok(hashed) => {
                 config.admin_password = hashed;
-                if let Err(e) = save_config(path, &config) {
+                if password_from_env {
+                    tracing::info!("环境变量管理员密码已在内存中哈希，不写回配置文件");
+                } else if let Err(e) = save_config(path, &config) {
                     tracing::warn!("密码哈希保存失败: {}", e);
                 } else {
                     tracing::info!("密码已成功哈希并保存");
@@ -177,6 +184,7 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig, String> {
     if config.api_endpoints.qiandao_fire_endpoint.is_empty() {
         config.api_endpoints.qiandao_fire_endpoint = default_qiandao_fire_endpoint();
     }
+    config.scrape_modes = normalize_scrape_modes(config.scrape_modes);
 
     Ok(config)
 }
@@ -184,4 +192,28 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig, String> {
 pub fn save_config<P: AsRef<Path>>(path: P, config: &ServerConfig) -> Result<(), String> {
     let yaml = serde_yaml::to_string(config).map_err(|e| format!("序列化配置失败: {}", e))?;
     std::fs::write(path, yaml).map_err(|e| format!("写入配置文件失败: {}", e))
+}
+
+pub fn normalize_scrape_modes(modes: Vec<ScrapeMode>) -> Vec<ScrapeMode> {
+    let mut normal = None;
+    let mut expert = None;
+
+    for mode in modes {
+        match mode.mode.as_str() {
+            "normal" => normal = Some(mode.enabled),
+            "expert" => expert = Some(mode.enabled),
+            other => tracing::warn!("忽略未知采集模式: {}", other),
+        }
+    }
+
+    vec![
+        ScrapeMode {
+            mode: "normal".to_string(),
+            enabled: normal.unwrap_or(true),
+        },
+        ScrapeMode {
+            mode: "expert".to_string(),
+            enabled: expert.unwrap_or(true),
+        },
+    ]
 }

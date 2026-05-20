@@ -69,7 +69,7 @@ cargo run
 cargo build --release
 
 # 运行
-./target/release/tl-server-standalone
+./target/release/tl-monitor-server
 ```
 
 ## 项目结构
@@ -122,10 +122,10 @@ TL-item-monitor-Tauri/
 │   └── resources/                # 资源文件
 │
 ├── server-standalone/            # 独立服务器 (可选)
+│   ├── README.md                 # 构建与极空间部署说明
+│   ├── server_config.example.yaml # 服务器配置模板
 │   └── src/
 │       └── main.rs               # HTTP 服务器入口
-│
-├── server-docker/                # Docker 配置 (已弃用)
 │
 └── docs/                         # 项目文档
     ├── TORCHSCAN_UI_DESIGN_RULES.md  # UI 设计规范
@@ -175,7 +175,7 @@ TorchScan 采用"深色熔岩金属风"设计，具体规范请参考 [UI 设计
 ### 配置管理
 
 - **管理员密码**：部署前必须通过环境变量 `TL_ADMIN_PASSWORD` 设置，不要使用默认密码
-- **配置文件**：生产环境使用 `server_config.example.yaml` 作为模板
+- **配置文件**：生产环境使用 `server-standalone/server_config.example.yaml` 作为模板
 
 ### 权限控制
 
@@ -206,7 +206,7 @@ TorchScan 采用"深色熔岩金属风"设计，具体规范请参考 [UI 设计
 4. ✅ 数据库迁移在空库上测试通过
 5. ✅ 管理员密码已修改
 6. ✅ 备份恢复功能测试通过
-7. ✅ Docker 构建测试通过（如使用）
+7. ✅ `server-standalone` ARM64 构建产物已验证（如发布服务器版本）
 
 ## 版本信息
 
