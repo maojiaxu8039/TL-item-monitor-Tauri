@@ -1166,6 +1166,36 @@
             }
         }
 
+        async function saveApiConfig() {
+            const password = getPassword();
+            if (!password) return;
+            const api_config = {
+                qiandao_tag_id_normal: document.getElementById('api-qiandao-tag-normal').value,
+                qiandao_spec_id_normal: document.getElementById('api-qiandao-spec-normal').value,
+                qiandao_tag_id_expert: document.getElementById('api-qiandao-tag-expert').value,
+                qiandao_spec_id_expert: document.getElementById('api-qiandao-spec-expert').value,
+                luosi_season_id_normal: parseInt(document.getElementById('api-luosi-season-normal').value) || 0,
+                luosi_season_id_expert: parseInt(document.getElementById('api-luosi-season-expert').value) || 0
+            };
+
+            try {
+                const resp = await fetch('/admin/update-api-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password, api_config })
+                });
+                const data = await resp.json();
+
+                if (data.success) {
+                    showAlert('success', '火价API配置已保存，重启后生效');
+                } else {
+                    showAlert('error', data.error || '保存失败');
+                }
+            } catch (e) {
+                showAlert('error', '保存失败: ' + e.message);
+            }
+        }
+
         function addListeners() {
             document.getElementById('btn-export-json').addEventListener('click', () => exportData('json'));
             document.getElementById('btn-export-csv').addEventListener('click', () => exportData('csv'));
@@ -1203,36 +1233,6 @@
                     showAlert('error', '保存失败: ' + e.message);
                 }
             });
-
-            async function saveApiConfig() {
-            const password = getPassword();
-            if (!password) return;
-            const api_config = {
-                qiandao_tag_id_normal: document.getElementById('api-qiandao-tag-normal').value,
-                qiandao_spec_id_normal: document.getElementById('api-qiandao-spec-normal').value,
-                qiandao_tag_id_expert: document.getElementById('api-qiandao-tag-expert').value,
-                qiandao_spec_id_expert: document.getElementById('api-qiandao-spec-expert').value,
-                luosi_season_id_normal: parseInt(document.getElementById('api-luosi-season-normal').value) || 0,
-                luosi_season_id_expert: parseInt(document.getElementById('api-luosi-season-expert').value) || 0
-            };
-
-            try {
-                const resp = await fetch('/admin/update-api-config', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password, api_config })
-                });
-                const data = await resp.json();
-                
-                if (data.success) {
-                    showAlert('success', '火价API配置已保存，重启后生效');
-                } else {
-                    showAlert('error', data.error || '保存失败');
-                }
-            } catch (e) {
-                showAlert('error', '保存失败: ' + e.message);
-            }
-        }
 
         document.getElementById('qiandao-config-form').addEventListener('submit', async (e) => {
             e.preventDefault();

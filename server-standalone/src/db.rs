@@ -598,6 +598,7 @@ pub async fn get_fire_history(
     Ok(records)
 }
 
+#[allow(dead_code)]
 pub async fn get_items_history_count(
     pool: &SqlitePool,
     season_id: &str,
