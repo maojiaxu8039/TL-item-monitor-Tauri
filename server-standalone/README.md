@@ -2,6 +2,14 @@
 
 独立服务器用于采集火炬之光火价和物品数据，并通过 HTTP API 提供给 TorchScan 客户端读取。
 
+## 功能特性
+
+- 游戏物品价格数据采集
+- 管理员 Web 界面（需密码登录）
+- WebSocket 实时推送
+- 管理员操作审计日志
+- Docker 容器化部署
+
 ## 本地构建
 
 ```bash
@@ -46,31 +54,47 @@ export TL_ADMIN_PASSWORD='你的强密码'
 
 ## GitHub Actions ARM64 构建
 
-仓库已有 `.github/workflows/build-server-arm64.yml`，会在 `server-standalone/**` 或 workflow 自身变更时构建 Linux ARM64 二进制。
+仓库已有 `.github/workflows/build-server-arm64.yml`，会在 `server-standalone/**` 或 workflow 自身变更时自动构建 Linux ARM64 二进制。
 
 手动触发：
 
 ```bash
 gh workflow run build-server-arm64.yml
 gh run list --workflow=build-server-arm64.yml --limit 1
+```
+
+下载构建产物：
+
+```bash
 gh run download <run-id> --name linux-arm64-server --dir /tmp/tl-build
 ```
 
-产物文件名：
-
-```text
-tl-monitor-server
-```
+产物文件名：`tl-monitor-server`（ARM64 架构，GLIBC 兼容）
 
 ## 极空间部署
 
-推荐流程是直接替换极空间环境中的 `tl-monitor-server` 二进制文件。
+### Docker 容器部署（推荐）
 
-示例目录结构：
+当前生产环境使用 Docker 部署：
+
+```bash
+# 容器状态
+docker ps | grep tl-monitor
+
+# 重启容器
+docker restart <container-id>
+
+# 查看日志
+docker logs -f <container-id>
+```
+
+### 目录结构
 
 ```text
-/path/to/tl-monitor/
-├── tl-monitor-server
+/data_s001/data/udata/real/15510607744/Docker/tl-monitor/
+├── tl-monitor-server     # 主程序（二进制）
+├── tl-monitor-server.bak # 备份
+├── tl-monitor-server.new # 待替换版本
 ├── config/
 │   └── server_config.yaml
 ├── data/
@@ -79,64 +103,48 @@ tl-monitor-server
     └── qiandao_fire.cjs
 ```
 
-首次准备：
+### 更新二进制（Docker 部署）
+
+由于容器内服务正在运行，无法直接覆盖二进制文件，需要通过备份替换：
 
 ```bash
-mkdir -p /path/to/tl-monitor/config
-mkdir -p /path/to/tl-monitor/data
-mkdir -p /path/to/tl-monitor/resources
+# 1. 上传新版本到临时目录
+rsync -avz tl-monitor-server user@nas:/tmp/tl-monitor-server.new
+
+# 2. SSH 到 NAS（通过极空间控制台或 22 端口）
+ssh user@nas
+
+# 3. 备份并替换（需要 sudo）
+sudo mv /path/to/tl-monitor/tl-monitor-server /path/to/tl-monitor/tl-monitor-server.bak
+sudo cp /tmp/tl-monitor-server.new /path/to/tl-monitor/tl-monitor-server
+sudo chmod +x /path/to/tl-monitor/tl-monitor-server
+
+# 4. 重启 Docker 容器
+sudo docker restart $(sudo docker ps | grep tl-monitor | awk '{print $1}')
 ```
-
-上传内容：
-
-- GitHub Actions 产物 `tl-monitor-server`
-- 配置文件 `server_config.yaml`
-- 资源脚本 `src-tauri/resources/qiandao_fire.cjs`
-
-运行时需要确保：
-
-```bash
-export TL_CONFIG_PATH=/path/to/tl-monitor/config/server_config.yaml
-export TL_DB_PATH=/path/to/tl-monitor/data/tl_monitor.db
-export TL_RESOURCES_DIR=/path/to/tl-monitor/resources
-export TL_ADMIN_PASSWORD='你的强密码'
-```
-
-启动：
-
-```bash
-chmod +x /path/to/tl-monitor/tl-monitor-server
-/path/to/tl-monitor/tl-monitor-server
-```
-
-## 更新二进制
-
-下载新的 Actions 产物后：
-
-```bash
-# 停止当前服务
-# 替换二进制
-cp /tmp/tl-build/tl-monitor-server /path/to/tl-monitor/tl-monitor-server
-chmod +x /path/to/tl-monitor/tl-monitor-server
-
-# 重新启动服务
-/path/to/tl-monitor/tl-monitor-server
-```
-
-服务端部署以 `server-standalone` 的二进制为准。
 
 ## 端口
 
-默认 HTTP 端口是 `8080`。WebSocket 实时推送端口是 `http_port + 1`，默认 `8081`。
+当前生产环境服务端口映射：`38457 -> 8080`
 
-如果管理页需要使用实时 WebSocket，请确保极空间环境同时允许访问这两个端口。
+| 端口类型 | 容器内端口 | 主机映射端口 |
+| --- | --- | --- |
+| HTTP API | 8080 | 38457 |
+| WebSocket | 8081 | 38458 |
 
 ## 验证
 
 ```bash
-curl http://SERVER_IP:8080/health
+# 健康检查（使用实际映射端口）
+curl http://100.124.122.65:38457/health
 
-curl -s http://SERVER_IP:8080/api/admin/status \
+# 管理员状态查询
+curl -s http://100.124.122.65:38457/api/admin/status \
+  -H 'Content-Type: application/json' \
+  -d '{"password":"你的管理员密码"}'
+
+# 审计日志查询
+curl -s http://100.124.122.65:38457/api/admin/audit-log \
   -H 'Content-Type: application/json' \
   -d '{"password":"你的管理员密码"}'
 ```
@@ -153,8 +161,16 @@ curl -s http://SERVER_IP:8080/api/admin/status \
 
 ### WebSocket 连接失败
 
-确认 `http_port + 1` 端口可访问。例如 HTTP 是 `8080`，WebSocket 就是 `8081`。
+确认 WebSocket 端口可访问。当前 WebSocket 端口为 HTTP 端口 + 1。
 
 ### CORS 错误
 
 在 `server_config.yaml` 的 `cors_allowed_origins` 中加入客户端访问地址，然后重启服务。
+
+### Docker 容器内服务无法重启
+
+如果容器内服务无法通过 API 重启，可以重启整个容器：
+
+```bash
+docker restart $(docker ps | grep tl-monitor | awk '{print $1}')
+```
