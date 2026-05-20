@@ -63,8 +63,11 @@ impl MarketMode {
 
 fn calculate_season_day(season_start: i64, recorded_at: i64) -> i32 {
     let diff_seconds = recorded_at - season_start;
-    let days = diff_seconds / 86400;
-    (days + 1) as i32
+    if diff_seconds < 86400 {
+        1_i32
+    } else {
+        (diff_seconds / 86400 + 1) as i32
+    }
 }
 
 async fn table_exists(pool: &SqlitePool, table: &str) -> Result<bool, String> {
