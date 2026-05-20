@@ -40,7 +40,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "dist-react"
+      "dist-react",
+      "resources/*"
     ],
     "windows": {
       "webviewInstallMode": {
