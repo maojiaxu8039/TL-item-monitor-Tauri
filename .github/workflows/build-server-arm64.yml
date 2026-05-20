@@ -44,7 +44,6 @@ jobs:
         run: |
           cd server-standalone
           file target/aarch64-unknown-linux-gnu/release/tl-monitor-server
-          ldd target/aarch64-unknown-linux-gnu/release/tl-monitor-server
           ls -lh target/aarch64-unknown-linux-gnu/release/tl-monitor-server
 
       - name: Upload artifact
