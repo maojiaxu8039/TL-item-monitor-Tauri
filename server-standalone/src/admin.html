@@ -938,8 +938,10 @@
             }
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsPort = parseInt(serverConfig?.http_port || 8080) + 1;
-            const wsUrl = `${protocol}//${window.location.hostname}:${wsPort}`;
+            const hostname = window.location.hostname;
+            const port = window.location.port;
+            const wsPort = port ? parseInt(port) + 1 : 8081;
+            const wsUrl = `${protocol}//${hostname}:${wsPort}`;
 
             updateWsStatus('connecting', '连接中...');
             addWsMessage(`正在连接到 ${wsUrl}...`);
