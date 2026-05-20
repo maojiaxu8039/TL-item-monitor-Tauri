@@ -1294,7 +1294,7 @@ async fn handle_request(
                         } else {
                             let body = serde_json::to_string_pretty(&ApiResponse {
                                 success: true,
-                                data: Some("API配置已更新，重启服务器后生效".to_string()),
+                                data: Some("API配置已保存到文件，请重启服务器使配置生效".to_string()),
                                 error: None,
                             })
                             .unwrap_or_default();
