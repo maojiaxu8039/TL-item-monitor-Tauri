@@ -29,26 +29,20 @@ fn get_fire_price_display(app: &AppHandle) -> String {
         .unwrap_or_else(|| "无".to_string())
 }
 
-/// Refresh fire price from web and update tray tooltip.
-async fn graceful_shutdown(app: &tauri::AppHandle) {
+fn graceful_shutdown(app: &tauri::AppHandle) {
     info!("Initiating graceful shutdown...");
 
     if let Some(state) = app.try_state::<Arc<crate::core::state::AppState>>() {
         if let Some(handle) = state.scheduler_handle.read().as_ref() {
             handle.shutdown();
         }
-        let db_pool = state.db.clone();
-        drop(state);
-        let rt = tokio::runtime::Handle::current();
-        rt.block_on(async {
-            db_pool.close().await;
-        });
     }
 
     info!("Graceful shutdown complete, exiting");
     app.exit(0);
 }
 
+/// Refresh fire price from web and update tray tooltip.
 async fn refresh_and_sync_fire_price(app: AppHandle) {
     let snapshot = match scraper::scrape_fire_price().await {
         Ok(s) => s,
@@ -176,10 +170,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 });
             }
             "quit" => {
-                let app = app.clone();
-                tauri::async_runtime::spawn(async move {
-                    graceful_shutdown(&app).await;
-                });
+                graceful_shutdown(app);
             }
             _ => {}
         })
