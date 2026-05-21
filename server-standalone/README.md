@@ -106,12 +106,12 @@ gh run download <run-id> --name linux-arm64-server --dir /tmp/tl-build
 cd /tmp/tl-build
 tar -xzf linux-arm64-server.tar.gz
 
-# 2. 上传新版本到临时目录
-rsync -avz linux-arm64-server/tl-monitor-server user@nas:/tmp/tl-monitor-server.new
-rsync -avz linux-arm64-server/resources/ user@nas:/tmp/tl-monitor-resources/
+# 2. 上传新版本到临时目录（SSH 端口 10039）
+rsync -avz -e "ssh -p 10039" linux-arm64-server/tl-monitor-server user@nas:/tmp/tl-monitor-server.new
+rsync -avz -e "ssh -p 10039" linux-arm64-server/resources/ user@nas:/tmp/tl-monitor-resources/
 
-# 3. SSH 到 NAS（通过极空间控制台或 22 端口）
-ssh user@nas
+# 3. SSH 到 NAS（端口 10039）
+ssh -p 10039 user@nas
 
 # 4. 停止当前服务（按实际启动方式执行，例如 systemd/supervisor/极空间任务）
 sudo systemctl stop tl-monitor-server
