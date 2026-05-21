@@ -250,7 +250,7 @@ export default function DealsPage() {
         ) : fireChanges.length === 0 ? (
           <EmptyState
             title="暂无数据"
-            description="请先在数据监控页面同步物品数据"
+            description="请等待物品自动刷新积累价格样本，或点击顶部刷新获取当前物品价格"
             icon={Package}
           />
         ) : (

@@ -86,7 +86,12 @@ pub async fn run_fire_scrape_task(
     }
 }
 
-async fn scrape_modes(app: &tauri::AppHandle, state: &Arc<AppState>, scrape_normal: bool, scrape_expert: bool) -> Result<(), String> {
+async fn scrape_modes(
+    app: &tauri::AppHandle,
+    state: &Arc<AppState>,
+    scrape_normal: bool,
+    scrape_expert: bool,
+) -> Result<(), String> {
     let ctx = state.active_context.read().clone();
     let season_id = ctx.season_id.clone();
     let current_mode = ctx.market_mode;
@@ -118,7 +123,8 @@ async fn scrape_modes(app: &tauri::AppHandle, state: &Arc<AppState>, scrape_norm
                     &season_id,
                     mode_key.as_str(),
                     &snapshot,
-                ).await;
+                )
+                .await;
 
                 let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
                     &state.db,
@@ -131,23 +137,30 @@ async fn scrape_modes(app: &tauri::AppHandle, state: &Arc<AppState>, scrape_norm
                     duration_ms,
                     None,
                     None,
-                ).await;
+                )
+                .await;
 
                 let mut fire_prices = state.fire_prices.write();
                 fire_prices.insert(mode_key, snapshot.clone());
 
-                info!("Fire price scraped [{}]: {} RMB/10K", mode_str, snapshot.rmb_per_10k_fire);
+                info!(
+                    "Fire price scraped [{}]: {} RMB/10K",
+                    mode_str, snapshot.rmb_per_10k_fire
+                );
 
                 if mode_key == current_mode {
-                    emit_fire_price_updated(app, FirePricePayload {
-                        rmb_per_10k_fire: snapshot.rmb_per_10k_fire,
-                        fire_per_rmb: snapshot.fire_per_rmb,
-                        increase_ratio: snapshot.increase_ratio,
-                        trading_volume: snapshot.trading_volume.clone(),
-                        source: snapshot.source.clone(),
-                        source_time: snapshot.source_time.clone(),
-                        scraped_at: snapshot.scraped_at,
-                    });
+                    emit_fire_price_updated(
+                        app,
+                        FirePricePayload {
+                            rmb_per_10k_fire: snapshot.rmb_per_10k_fire,
+                            fire_per_rmb: snapshot.fire_per_rmb,
+                            increase_ratio: snapshot.increase_ratio,
+                            trading_volume: snapshot.trading_volume.clone(),
+                            source: snapshot.source.clone(),
+                            source_time: snapshot.source_time.clone(),
+                            scraped_at: snapshot.scraped_at,
+                        },
+                    );
                 }
             }
             Err(e) => {
@@ -163,7 +176,8 @@ async fn scrape_modes(app: &tauri::AppHandle, state: &Arc<AppState>, scrape_norm
                     duration_ms,
                     None,
                     Some(&e.to_string()),
-                ).await;
+                )
+                .await;
                 error!("Fire scrape failed [{}]: {}", mode_str, e);
             }
         }

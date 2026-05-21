@@ -115,7 +115,10 @@ pub async fn calculate_arbitrage(
         .clone()
         .unwrap_or_else(|| ctx.market_mode.as_str().to_string());
 
-    if let Err(e) = crate::db::table_resolver::TableResolver::validate(&effective_season_id, &effective_market_mode) {
+    if let Err(e) = crate::db::table_resolver::TableResolver::validate(
+        &effective_season_id,
+        &effective_market_mode,
+    ) {
         return Err(e.to_string());
     }
 

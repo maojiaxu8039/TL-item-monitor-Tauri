@@ -68,9 +68,9 @@ pub async fn import_watchlist_csv(
 #[tauri::command]
 pub async fn export_watchlist_csv(state: State<'_, Arc<AppState>>) -> Result<String, String> {
     let ctx = state.active_context.read().clone();
-    
+
     TableResolver::validate(&ctx.season_id, ctx.market_mode.as_str())?;
-    
+
     let rows: Vec<(String, String, String, String, String, String, String, String)> = sqlx::query_as(
         "SELECT section_id, season_id, market_mode, item_id, purchase_fire_price, count, more_value, COALESCE(last_time, '') FROM section_items WHERE season_id = ? AND market_mode = ? ORDER BY section_id, sort_order, created_at"
     )
@@ -81,14 +81,30 @@ pub async fn export_watchlist_csv(state: State<'_, Arc<AppState>>) -> Result<Str
     .map_err(|e| e.to_string())?;
 
     let mut wtr = csv::Writer::from_writer(vec![]);
-    wtr.write_record(["section_id", "season_id", "market_mode", "item_id", "purchase_fire_price", "count", "more_value", "last_time"])
-        .map_err(|e| e.to_string())?;
+    wtr.write_record([
+        "section_id",
+        "season_id",
+        "market_mode",
+        "item_id",
+        "purchase_fire_price",
+        "count",
+        "more_value",
+        "last_time",
+    ])
+    .map_err(|e| e.to_string())?;
 
     for row in rows {
         wtr.write_record([
-            row.0.as_str(), row.1.as_str(), row.2.as_str(), row.3.as_str(),
-            row.4.as_str(), row.5.as_str(), row.6.as_str(), row.7.as_str(),
-        ]).map_err(|e| e.to_string())?;
+            row.0.as_str(),
+            row.1.as_str(),
+            row.2.as_str(),
+            row.3.as_str(),
+            row.4.as_str(),
+            row.5.as_str(),
+            row.6.as_str(),
+            row.7.as_str(),
+        ])
+        .map_err(|e| e.to_string())?;
     }
 
     let data = wtr.into_inner().map_err(|e| e.to_string())?;
@@ -128,7 +144,9 @@ pub async fn backup_database(
         .await
         .map_err(|e| format!("WAL checkpoint 失败: {}", e))?;
 
-    tokio::fs::copy(&db_path, &dest_path).await.map_err(|e| format!("备份失败: {}", e))?;
+    tokio::fs::copy(&db_path, &dest_path)
+        .await
+        .map_err(|e| format!("备份失败: {}", e))?;
 
     let now = chrono::Utc::now().timestamp().to_string();
     let _ = repo_config::save_config(&state.db, "last_backup_at", &now).await;
@@ -177,14 +195,20 @@ pub async fn restore_database(
         return Err("恢复失败: 源文件不存在".to_string());
     }
 
-    let metadata = tokio::fs::metadata(&src_path).await.map_err(|e| format!("无法读取源文件: {}", e))?;
+    let metadata = tokio::fs::metadata(&src_path)
+        .await
+        .map_err(|e| format!("无法读取源文件: {}", e))?;
     if metadata.len() < 512 {
         return Err("恢复失败: 源文件太小，可能不是有效的数据库".to_string());
     }
 
     let mut header = [0u8; 16];
-    let mut file = tokio::fs::File::open(&src_path).await.map_err(|e| format!("无法打开源文件: {}", e))?;
-    tokio::io::AsyncReadExt::read_exact(&mut file, &mut header).await.map_err(|e| format!("无法读取文件头: {}", e))?;
+    let mut file = tokio::fs::File::open(&src_path)
+        .await
+        .map_err(|e| format!("无法打开源文件: {}", e))?;
+    tokio::io::AsyncReadExt::read_exact(&mut file, &mut header)
+        .await
+        .map_err(|e| format!("无法读取文件头: {}", e))?;
     if &header[0..6] != b"SQLite" {
         return Err("恢复失败: 源文件不是有效的 SQLite 数据库".to_string());
     }
@@ -200,23 +224,27 @@ pub async fn restore_database(
     let _ = tokio::fs::remove_file(&wal_path).await;
     let _ = tokio::fs::remove_file(&shm_path).await;
 
-    tokio::fs::copy(&src_path, &db_path).await.map_err(|e| format!("恢复失败: {}", e))?;
+    tokio::fs::copy(&src_path, &db_path)
+        .await
+        .map_err(|e| format!("恢复失败: {}", e))?;
     Ok(OkResponse::success("数据库已恢复 — 请重启应用"))
 }
 
 #[tauri::command]
 pub async fn write_file(path: String, base64_content: String) -> Result<OkResponse, String> {
-    let path = validate_path_within_app_dir(&path)
-        .map_err(|e| format!("写入失败: {}", e))?;
+    let path = validate_path_within_app_dir(&path).map_err(|e| format!("写入失败: {}", e))?;
     let bytes = base64::decode(&base64_content).map_err(|e| format!("Base64解码错误: {}", e))?;
-    tokio::fs::write(&path, bytes).await.map_err(|e| format!("写入文件错误: {}", e))?;
+    tokio::fs::write(&path, bytes)
+        .await
+        .map_err(|e| format!("写入文件错误: {}", e))?;
     Ok(OkResponse::success("文件已写入"))
 }
 
 #[tauri::command]
 pub async fn read_file(path: String) -> Result<String, String> {
-    let path = validate_path_within_app_dir(&path)
-        .map_err(|e| format!("读取失败: {}", e))?;
-    let bytes = tokio::fs::read(&path).await.map_err(|e| format!("读取文件错误: {}", e))?;
+    let path = validate_path_within_app_dir(&path).map_err(|e| format!("读取失败: {}", e))?;
+    let bytes = tokio::fs::read(&path)
+        .await
+        .map_err(|e| format!("读取文件错误: {}", e))?;
     Ok(base64::encode(&bytes))
 }

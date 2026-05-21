@@ -9,7 +9,7 @@ use crate::db::repo_item_realtime_prices;
 use crate::db::repo_items;
 use crate::scraper;
 
-const INITIAL_ITEMS_RELOAD_DELAY_SECS: u64 = 8;
+const INITIAL_ITEMS_RELOAD_DELAY_SECS: u64 = 0;
 
 pub async fn run_items_reload_task(
     app: tauri::AppHandle,
@@ -85,8 +85,8 @@ pub async fn run_items_reload_task(
         let current_interval = fresh_config.scrape.items_reload_interval.max(30);
         let items_source = fresh_config.scrape.items_source.clone();
         let json_path = fresh_config.scrape.items_json_path.clone();
-        let scrape_normal = fresh_config.scrape.items_scrape_normal_enabled;
-        let scrape_expert = fresh_config.scrape.items_scrape_expert_enabled;
+        let configured_scrape_normal = fresh_config.scrape.items_scrape_normal_enabled;
+        let configured_scrape_expert = fresh_config.scrape.items_scrape_expert_enabled;
 
         if !first_run {
             let wait_start = std::time::Instant::now();
@@ -139,6 +139,10 @@ pub async fn run_items_reload_task(
         }
 
         let ctx = state.active_context.read().clone();
+        let scrape_normal =
+            configured_scrape_normal || ctx.market_mode.as_str() == "season_normal";
+        let scrape_expert =
+            configured_scrape_expert || ctx.market_mode.as_str() == "season_expert";
         let season_id = ctx.season_id.clone();
         let market_mode = ctx.market_mode.as_str();
 
@@ -345,18 +349,9 @@ async fn process_scrape_result(
                 Ok(_) => {
                     info!("[PROCESS] {} bulk insert SUCCESS", mode_name);
 
-                    // Also insert realtime prices
-                    let now = chrono::Utc::now().timestamp();
-                    let realtime_records: Vec<(String, String, f64, i64)> = items
-                        .iter()
-                        .map(|item| (item.item_id.clone(), item.name.clone(), item.price, now))
-                        .collect();
-
-                    if let Err(e) = repo_item_realtime_prices::batch_insert_realtime_prices(
-                        &state.db,
-                        &realtime_records,
-                        season_id,
-                        mode,
+                    // Also insert realtime prices.
+                    if let Err(e) = repo_item_realtime_prices::record_item_prices(
+                        &state.db, items, season_id, mode,
                     )
                     .await
                     {
@@ -368,7 +363,7 @@ async fn process_scrape_result(
                         info!(
                             "[PROCESS] {} realtime prices insert SUCCESS: {} records",
                             mode_name,
-                            realtime_records.len()
+                            items.len()
                         );
                     }
 

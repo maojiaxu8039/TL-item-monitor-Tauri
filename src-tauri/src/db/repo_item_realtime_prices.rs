@@ -1,5 +1,6 @@
 use crate::core::constants::SECONDS_PER_HOUR;
 use crate::core::errors::AppError;
+use crate::db::models::Item;
 use serde::Serialize;
 use sqlx::SqlitePool;
 
@@ -83,6 +84,28 @@ pub async fn batch_insert_realtime_prices(
 
     tx.commit().await?;
     Ok(inserted)
+}
+
+pub async fn record_item_prices(
+    pool: &SqlitePool,
+    items: &[Item],
+    season_id: &str,
+    market_mode: &str,
+) -> Result<usize, AppError> {
+    let scraped_at = chrono::Utc::now().timestamp();
+    let records: Vec<(String, String, f64, i64)> = items
+        .iter()
+        .map(|item| {
+            (
+                item.item_id.clone(),
+                item.name.clone(),
+                item.price,
+                scraped_at,
+            )
+        })
+        .collect();
+
+    batch_insert_realtime_prices(pool, &records, season_id, market_mode).await
 }
 
 pub async fn cleanup_old_records(pool: &SqlitePool) -> Result<usize, AppError> {

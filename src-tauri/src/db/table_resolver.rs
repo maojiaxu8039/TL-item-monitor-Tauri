@@ -18,19 +18,34 @@ impl TableResolver {
 
     /// Get items table name for given market_mode (real-time, no season suffix)
     pub fn items_table(season_id: &str, market_mode: &str) -> String {
-        debug_assert!(Self::is_supported(season_id, market_mode), "Invalid season_id '{}' or market_mode '{}'", season_id, market_mode);
+        debug_assert!(
+            Self::is_supported(season_id, market_mode),
+            "Invalid season_id '{}' or market_mode '{}'",
+            season_id,
+            market_mode
+        );
         format!("items_{}", Self::mode_suffix(market_mode))
     }
 
     /// Get fire price table name for given market_mode (real-time, no season suffix)
     pub fn fire_price_table(season_id: &str, market_mode: &str) -> String {
-        debug_assert!(Self::is_supported(season_id, market_mode), "Invalid season_id '{}' or market_mode '{}'", season_id, market_mode);
+        debug_assert!(
+            Self::is_supported(season_id, market_mode),
+            "Invalid season_id '{}' or market_mode '{}'",
+            season_id,
+            market_mode
+        );
         format!("fire_price_{}", Self::mode_suffix(market_mode))
     }
 
     /// Get item snapshots table name for given season and mode (historical, with season suffix)
     pub fn item_snapshots_table(season_id: &str, market_mode: &str) -> String {
-        debug_assert!(Self::is_supported(season_id, market_mode), "Invalid season_id '{}' or market_mode '{}'", season_id, market_mode);
+        debug_assert!(
+            Self::is_supported(season_id, market_mode),
+            "Invalid season_id '{}' or market_mode '{}'",
+            season_id,
+            market_mode
+        );
         format!(
             "item_snapshots_{}_{}",
             season_id,
@@ -40,7 +55,12 @@ impl TableResolver {
 
     /// Get fire price snapshots table name for given season and mode (historical, with season suffix)
     pub fn fire_price_snapshots_table(season_id: &str, market_mode: &str) -> String {
-        debug_assert!(Self::is_supported(season_id, market_mode), "Invalid season_id '{}' or market_mode '{}'", season_id, market_mode);
+        debug_assert!(
+            Self::is_supported(season_id, market_mode),
+            "Invalid season_id '{}' or market_mode '{}'",
+            season_id,
+            market_mode
+        );
         format!(
             "fire_price_snapshots_{}_{}",
             season_id,

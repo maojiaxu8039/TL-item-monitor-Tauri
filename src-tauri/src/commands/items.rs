@@ -179,6 +179,9 @@ pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats,
     repo_items::bulk_insert_items(&state.db, &season_id, "season_normal", &items)
         .await
         .map_err(|e| format!("Failed to bulk-insert items: {}", e))?;
+    repo_item_realtime_prices::record_item_prices(&state.db, &items, &season_id, "season_normal")
+        .await
+        .map_err(|e| format!("Failed to insert realtime prices: {}", e))?;
 
     tracing::info!("reload_items: inserted {} items into database", count);
 
@@ -391,7 +394,9 @@ pub async fn sync_items_record(
     state: State<'_, Arc<AppState>>,
     params: SyncItemsRecordParams,
 ) -> Result<OkResponse, String> {
-    if let Err(e) = crate::db::table_resolver::TableResolver::validate(&params.season_id, &params.market_mode) {
+    if let Err(e) =
+        crate::db::table_resolver::TableResolver::validate(&params.season_id, &params.market_mode)
+    {
         return Err(e.to_string());
     }
     match repo_history::insert_item_snapshot(
@@ -523,7 +528,11 @@ pub async fn get_realtime_fire_changes(
     season_id: String,
     market_mode: String,
 ) -> Result<Vec<repo_item_realtime_prices::ItemPriceChange>, String> {
-    tracing::info!("get_realtime_fire_changes called for {}/{}", season_id, market_mode);
+    tracing::info!(
+        "get_realtime_fire_changes called for {}/{}",
+        season_id,
+        market_mode
+    );
     let result = repo_item_realtime_prices::get_price_changes(&state.db, &season_id, &market_mode)
         .await
         .map_err(|e| e.to_string())?;

@@ -27,7 +27,10 @@ pub async fn scrape_by_mode_with_api_config(
     match scrape_via_node_script(mode, api_config).await {
         Ok(snapshot) => Ok(snapshot),
         Err(e) => {
-            tracing::warn!("Node.js Qiandao scrape failed: {}; falling back to Rust reqwest", e);
+            tracing::warn!(
+                "Node.js Qiandao scrape failed: {}; falling back to Rust reqwest",
+                e
+            );
             scrape_via_rust(mode, api_config).await
         }
     }
@@ -155,12 +158,14 @@ async fn run_node_fallback(
 ) -> Result<FirePriceSnapshot, AppError> {
     let (tag_id, spec_id) = resolve_qiandao_params(mode, api_config);
     let (runner, script) = match candidate {
-        NodeFallbackCandidate::Script { runner, path } => {
-            (runner.clone(), path.clone())
-        }
+        NodeFallbackCandidate::Script { runner, path } => (runner.clone(), path.clone()),
     };
 
-    let mode_arg = if mode == "专家" { "pro".to_string() } else { "normal".to_string() };
+    let mode_arg = if mode == "专家" {
+        "pro".to_string()
+    } else {
+        "normal".to_string()
+    };
     let tag_id = tag_id.to_string();
     let spec_id = spec_id.to_string();
 
@@ -205,7 +210,8 @@ async fn run_node_fallback(
         let _ = tx.send(result);
     });
 
-    let output = rx.recv_timeout(Duration::from_secs(15))
+    let output = rx
+        .recv_timeout(Duration::from_secs(15))
         .map_err(|_| AppError::Scrape("Node.js script execution timed out after 15s".to_string()))?
         .map_err(|e| AppError::Scrape(format!("Script execution failed: {}", e)))?;
 
@@ -379,13 +385,21 @@ fn node_fallback_candidates() -> Vec<NodeFallbackCandidate> {
 #[cfg(target_os = "windows")]
 fn embedded_node_in_dir(dir: &Path) -> Option<PathBuf> {
     let path = dir.join("node.exe");
-    if path.exists() { Some(path) } else { None }
+    if path.exists() {
+        Some(path)
+    } else {
+        None
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
 fn embedded_node_in_dir(dir: &Path) -> Option<PathBuf> {
     let path = dir.join("node");
-    if path.exists() { Some(path) } else { None }
+    if path.exists() {
+        Some(path)
+    } else {
+        None
+    }
 }
 
 fn push_embedded_node_candidate(
@@ -587,12 +601,18 @@ where
 {
     let value = serde_json::Value::deserialize(deserializer)?;
     match value {
-        serde_json::Value::Number(n) => n.as_f64().ok_or_else(|| serde::de::Error::custom("invalid number")),
+        serde_json::Value::Number(n) => n
+            .as_f64()
+            .ok_or_else(|| serde::de::Error::custom("invalid number")),
         serde_json::Value::String(s) => {
             let normalized = s.trim().trim_end_matches('%').replace(',', "");
-            normalized.parse::<f64>().map_err(|e| serde::de::Error::custom(format!("invalid f64 string: {}", e)))
+            normalized
+                .parse::<f64>()
+                .map_err(|e| serde::de::Error::custom(format!("invalid f64 string: {}", e)))
         }
-        _ => Err(serde::de::Error::custom("expected string or number for f64")),
+        _ => Err(serde::de::Error::custom(
+            "expected string or number for f64",
+        )),
     }
 }
 

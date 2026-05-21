@@ -175,9 +175,15 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
         market_mode.as_str()
     );
 
-    let mut fire_prices: std::collections::HashMap<MarketMode, crate::core::state::FirePriceSnapshot> = std::collections::HashMap::new();
+    let mut fire_prices: std::collections::HashMap<
+        MarketMode,
+        crate::core::state::FirePriceSnapshot,
+    > = std::collections::HashMap::new();
 
-    for (mode_str, mode_key) in [("season_normal", MarketMode::SeasonNormal), ("season_expert", MarketMode::SeasonExpert)] {
+    for (mode_str, mode_key) in [
+        ("season_normal", MarketMode::SeasonNormal),
+        ("season_expert", MarketMode::SeasonExpert),
+    ] {
         match repo_fire::get_latest_fire(&pool, &default_season, mode_str).await {
             Ok(Some(record)) => {
                 let snapshot = fire_record_to_snapshot(record);
@@ -192,7 +198,11 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
                 tracing::info!("[STARTUP] No cached {} fire price found", mode_str);
             }
             Err(e) => {
-                tracing::warn!("[STARTUP] Failed to load cached {} fire price: {}", mode_str, e);
+                tracing::warn!(
+                    "[STARTUP] Failed to load cached {} fire price: {}",
+                    mode_str,
+                    e
+                );
             }
         }
     }
@@ -636,11 +646,16 @@ async fn create_migration_backup(
         .await
         .map_err(|e| format!("Failed to checkpoint database before backup: {}", e))?;
 
-    let canonical_path = backup_path.canonicalize()
+    let canonical_path = backup_path
+        .canonicalize()
         .unwrap_or_else(|_| backup_path.clone());
     let path_str = canonical_path.to_string_lossy();
     // 防御路径注入：VACUUM INTO 不支持参数化，必须手动验证路径安全
-    if path_str.contains('\0') || path_str.contains('\n') || path_str.contains('\r') || path_str.contains('\'') {
+    if path_str.contains('\0')
+        || path_str.contains('\n')
+        || path_str.contains('\r')
+        || path_str.contains('\'')
+    {
         return Err("Invalid backup path: contains unsafe characters".to_string());
     }
     let backup_sql = format!("VACUUM INTO '{}'", path_str);
@@ -1001,7 +1016,15 @@ async fn ensure_item_realtime_prices_schema(pool: &SqlitePool) -> Result<(), Str
 
     if table_exists(pool, "item_realtime_prices").await? {
         let columns = table_columns(pool, "item_realtime_prices").await?;
-        let required = ["item_id", "name", "fire_price", "scraped_at", "created_at", "season_id", "market_mode"];
+        let required = [
+            "item_id",
+            "name",
+            "fire_price",
+            "scraped_at",
+            "created_at",
+            "season_id",
+            "market_mode",
+        ];
         if !has_columns(&columns, &required) {
             if let Some(backup_name) = backup_table(pool, "item_realtime_prices").await? {
                 backup = Some((backup_name, columns));
@@ -1480,9 +1503,7 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
 async fn seed_seasons(pool: &SqlitePool) -> Result<(), String> {
     let now = chrono::Utc::now().timestamp();
 
-    let seasons = vec![
-        ("ss12", "SS12 当前赛季", "ss12", 1, 1776384000),
-    ];
+    let seasons = vec![("ss12", "SS12 当前赛季", "ss12", 1, 1776384000)];
 
     for (id, name, code, is_current, started_at) in seasons {
         sqlx::query(
@@ -1859,7 +1880,10 @@ mod migration_tests {
             .await
             .expect("legacy migrations should be repaired");
 
-        let backup_dir = db_path.parent().unwrap_or_else(|| std::path::Path::new(".")).join("backups");
+        let backup_dir = db_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("backups");
         let backup_count = std::fs::read_dir(&backup_dir)
             .expect("migration backup dir should exist")
             .filter_map(Result::ok)

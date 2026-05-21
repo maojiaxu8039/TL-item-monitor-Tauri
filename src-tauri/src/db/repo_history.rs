@@ -511,9 +511,11 @@ pub async fn get_fire_price_compare(
 ) -> Result<FirePriceCompareResult, AppError> {
     let now = Utc::now().timestamp();
     TableResolver::validate(current_season, market_mode)?;
-    let current_snapshots_table = TableResolver::fire_price_snapshots_table(current_season, market_mode);
+    let current_snapshots_table =
+        TableResolver::fire_price_snapshots_table(current_season, market_mode);
     TableResolver::validate(history_season, market_mode)?;
-    let history_snapshots_table = TableResolver::fire_price_snapshots_table(history_season, market_mode);
+    let history_snapshots_table =
+        TableResolver::fire_price_snapshots_table(history_season, market_mode);
 
     let current_record: Option<(f64, i64, i64)> = sqlx::query_as(&format!(
         "SELECT rmb_per_10k_fire, scraped_at, season_day FROM {} \

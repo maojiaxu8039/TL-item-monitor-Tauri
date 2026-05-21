@@ -413,10 +413,7 @@ pub async fn get_strategy_with_costs(
 
     let mut total_cost_fire = 0.0;
     for cost in &mut costs {
-        let current_price = prices
-            .get(&cost.item_id)
-            .copied()
-            .unwrap_or(0.0);
+        let current_price = prices.get(&cost.item_id).copied().unwrap_or(0.0);
         if cost.is_realtime {
             cost.fire_price = current_price;
             cost.total_fire = cost.count * current_price;
@@ -426,10 +423,7 @@ pub async fn get_strategy_with_costs(
 
     let mut total_output_value = 0.0;
     for output in &mut outputs {
-        let current_price = name_prices
-            .get(&output.item_name)
-            .copied()
-            .unwrap_or(0.0);
+        let current_price = name_prices.get(&output.item_name).copied().unwrap_or(0.0);
         output.realtime_value = current_price;
         total_output_value += current_price * output.count;
     }
@@ -479,10 +473,7 @@ pub async fn get_all_strategies_with_costs(
 
         let mut total_cost_fire = 0.0;
         for cost in &mut costs {
-            let current_price = prices
-                .get(&cost.item_id)
-                .copied()
-                .unwrap_or(0.0);
+            let current_price = prices.get(&cost.item_id).copied().unwrap_or(0.0);
             if cost.is_realtime {
                 cost.fire_price = current_price;
                 cost.total_fire = cost.count * current_price;
@@ -492,10 +483,7 @@ pub async fn get_all_strategies_with_costs(
 
         let mut total_output_value = 0.0;
         for output in &mut outputs {
-            let current_price = name_prices
-                .get(&output.item_name)
-                .copied()
-                .unwrap_or(0.0);
+            let current_price = name_prices.get(&output.item_name).copied().unwrap_or(0.0);
             output.realtime_value = current_price;
             total_output_value += current_price * output.count;
         }

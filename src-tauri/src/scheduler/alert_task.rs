@@ -528,7 +528,9 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
 
             // Validate voice_path contains only safe characters
             if !voice_path.chars().all(|c| {
-                c.is_alphanumeric() || c.is_whitespace() || matches!(c, '\\' | '/' | ':' | '.' | '_' | '-' | ' ')
+                c.is_alphanumeric()
+                    || c.is_whitespace()
+                    || matches!(c, '\\' | '/' | ':' | '.' | '_' | '-' | ' ')
             }) {
                 warn!("Voice path contains unsafe characters: {}", voice_path);
                 continue;
@@ -547,10 +549,7 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
                 &script,
             ]);
 
-            match tokio::time::timeout(
-                std::time::Duration::from_secs(35),
-                command.status()
-            ).await {
+            match tokio::time::timeout(std::time::Duration::from_secs(35), command.status()).await {
                 Ok(Ok(status)) if status.success() => played += 1,
                 Ok(Ok(status)) => warn!("Voice alert player exited with status: {}", status),
                 Ok(Err(e)) => warn!("Failed to play voice on Windows: {}", e),
