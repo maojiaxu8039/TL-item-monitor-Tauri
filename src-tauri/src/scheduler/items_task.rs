@@ -108,12 +108,13 @@ pub async fn run_items_reload_task(
                 wait_start.elapsed().as_secs()
             );
         } else {
-            if wait_or_abort(
-                &mut abort,
-                Duration::from_secs(INITIAL_ITEMS_RELOAD_DELAY_SECS),
-                "initial items refresh delay",
-            )
-            .await
+            if INITIAL_ITEMS_RELOAD_DELAY_SECS > 0
+                && wait_or_abort(
+                    &mut abort,
+                    Duration::from_secs(INITIAL_ITEMS_RELOAD_DELAY_SECS),
+                    "initial items refresh delay",
+                )
+                .await
             {
                 break;
             }
@@ -139,10 +140,8 @@ pub async fn run_items_reload_task(
         }
 
         let ctx = state.active_context.read().clone();
-        let scrape_normal =
-            configured_scrape_normal || ctx.market_mode.as_str() == "season_normal";
-        let scrape_expert =
-            configured_scrape_expert || ctx.market_mode.as_str() == "season_expert";
+        let scrape_normal = configured_scrape_normal || ctx.market_mode.as_str() == "season_normal";
+        let scrape_expert = configured_scrape_expert || ctx.market_mode.as_str() == "season_expert";
         let season_id = ctx.season_id.clone();
         let market_mode = ctx.market_mode.as_str();
 

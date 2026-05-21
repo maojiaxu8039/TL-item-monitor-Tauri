@@ -199,7 +199,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             app.manage(state.clone());
 
             let app_handle = handle.clone();
-            let rt_handle_clone = rt.handle().clone();
+            let rt_handle_clone = rt_handle.clone();
             let state_for_tasks = state.clone();
             std::thread::spawn(move || {
                 let handle = start_background_tasks(rt_handle_clone, app_handle, state_for_tasks);
@@ -220,6 +220,9 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
         })
         .run(tauri::generate_context!())
         .map_err(|e| format!("Tauri application error: {}", e))?;
+
+    // Keep the background task runtime alive until the Tauri event loop exits.
+    drop(rt);
 
     Ok(())
 }

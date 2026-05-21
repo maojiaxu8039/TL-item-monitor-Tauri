@@ -168,6 +168,13 @@ pub async fn get_price_changes(
             .entry(item_id.clone())
             .or_insert_with(|| (name.clone(), *fire_price, *scraped_at));
 
+        if latest_by_item
+            .get(item_id)
+            .is_some_and(|(_, _, latest_scraped_at)| scraped_at >= latest_scraped_at)
+        {
+            continue;
+        }
+
         let age = now - scraped_at;
 
         // Find closest price for each time period
@@ -250,6 +257,18 @@ pub async fn get_price_changes(
         let change_rate_30m = calculate_change_rate(current_price, price_30m_ago);
         let change_rate_5m = calculate_change_rate(current_price, price_5m_ago);
 
+        if [
+            change_rate_3h,
+            change_rate_1h,
+            change_rate_30m,
+            change_rate_5m,
+        ]
+        .into_iter()
+        .all(|change| change.is_none())
+        {
+            continue;
+        }
+
         let trend = determine_trend(
             change_rate_3h,
             change_rate_1h,
@@ -295,7 +314,8 @@ pub async fn get_price_changes(
 }
 
 fn calculate_change_rate(current: f64, past: Option<f64>) -> Option<f64> {
-    past.map(|p| ((current - p) / p) * 100.0)
+    past.filter(|p| *p > 0.0)
+        .map(|p| ((current - p) / p) * 100.0)
 }
 
 fn determine_trend(
@@ -396,5 +416,31 @@ mod tests {
         assert_eq!(changes[0].price_5m_ago, Some(100.0));
         assert_eq!(changes[0].change_rate_5m, Some(100.0));
         assert_eq!(changes[0].trend, "sharp_rise");
+    }
+
+    #[tokio::test]
+    async fn skips_items_without_a_past_sample() {
+        let pool = test_pool().await;
+        let now = chrono::Utc::now().timestamp();
+
+        batch_insert_realtime_prices(
+            &pool,
+            &[("item-1".to_string(), "测试物品".to_string(), 200.0, now)],
+            "ss12",
+            "season_normal",
+        )
+        .await
+        .expect("single realtime price should insert");
+
+        let changes = get_price_changes(&pool, "ss12", "season_normal")
+            .await
+            .expect("price changes should calculate");
+
+        assert!(changes.is_empty());
+    }
+
+    #[test]
+    fn skips_zero_price_baselines() {
+        assert_eq!(calculate_change_rate(100.0, Some(0.0)), None);
     }
 }
