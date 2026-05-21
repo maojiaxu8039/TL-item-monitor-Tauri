@@ -120,20 +120,28 @@ pub async fn run_items_reload_task(
             }
 
             let ctx = state.active_context.read().clone();
-            match repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str())
-                .await
-            {
-                Ok(count) if count > 0 => {
+            let cached_item_count = tokio::time::timeout(
+                Duration::from_secs(5),
+                repo_items::get_items_count(&state.db, &ctx.season_id, ctx.market_mode.as_str()),
+            )
+            .await;
+            match cached_item_count {
+                Ok(Ok(count)) if count > 0 => {
                     info!(
                         "[ITEMS-TASK] Database has {} cached items, proceeding with first background refresh",
                         count
                     );
                 }
-                Ok(count) => {
+                Ok(Ok(count)) => {
                     info!("[ITEMS-TASK] Database is empty ({} items), proceeding with first scrape immediately", count);
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     info!("[ITEMS-TASK] Error checking database: {}, proceeding with first scrape immediately", e);
+                }
+                Err(_) => {
+                    warn!(
+                        "[ITEMS-TASK] Cached item count check timed out, proceeding with first scrape"
+                    );
                 }
             }
             first_run = false;

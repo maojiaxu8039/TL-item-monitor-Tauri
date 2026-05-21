@@ -81,6 +81,9 @@ pub async fn run_fire_scrape_task(
                 }
 
                 ticker = interval(Duration::from_secs(interval_secs));
+                // Tokio intervals tick immediately after creation; consume that tick
+                // so the configured interval elapses before the next scrape.
+                ticker.tick().await;
             }
         }
     }
