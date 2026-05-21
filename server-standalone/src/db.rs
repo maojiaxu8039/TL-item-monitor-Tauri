@@ -813,20 +813,42 @@ pub async fn get_fire_history(
     limit: i32,
     min_day: Option<i32>,
     max_day: Option<i32>,
+    since_timestamp: Option<i64>,
 ) -> Result<Vec<FireSnapshotRecord>, String> {
     validate_season_id(season_id)?;
 
     let mode = MarketMode::parse(market_mode);
     let table = mode.fire_table(season_id);
 
-    let (where_clause, binds) = match (min_day, max_day) {
-        (Some(min), Some(max)) if min > 0 && max > 0 => (
-            " WHERE season_day >= ? AND season_day <= ? ",
-            vec![min as i64, max as i64],
-        ),
-        (Some(min), _) if min > 0 => (" WHERE season_day >= ? ", vec![min as i64]),
-        (_, Some(max)) if max > 0 => (" WHERE season_day <= ? ", vec![max as i64]),
-        _ => ("", vec![]),
+    let mut conditions: Vec<&str> = Vec::new();
+    let mut binds: Vec<i64> = Vec::new();
+
+    match (min_day, max_day) {
+        (Some(min), Some(max)) if min > 0 && max > 0 => {
+            conditions.push(" season_day >= ? AND season_day <= ? ");
+            binds.push(min as i64);
+            binds.push(max as i64);
+        }
+        (Some(min), _) if min > 0 => {
+            conditions.push(" season_day >= ? ");
+            binds.push(min as i64);
+        }
+        (_, Some(max)) if max > 0 => {
+            conditions.push(" season_day <= ? ");
+            binds.push(max as i64);
+        }
+        _ => {}
+    }
+
+    if let Some(ts) = since_timestamp {
+        conditions.push(" scraped_at > ? ");
+        binds.push(ts);
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", conditions.join(" AND "))
     };
 
     let query = format!(
@@ -1267,6 +1289,7 @@ pub async fn get_fire_history_all(
     offset: i32,
     min_day: Option<i32>,
     max_day: Option<i32>,
+    since_timestamp: Option<i64>,
     before_timestamp: Option<i64>,
     before_id: Option<i64>,
 ) -> Result<Vec<FireSnapshotRecord>, String> {
@@ -1294,6 +1317,11 @@ pub async fn get_fire_history_all(
             conditions.push(" season_day <= ? ");
             binds.push(max as i64);
         }
+    }
+
+    if let Some(ts) = since_timestamp {
+        conditions.push(" scraped_at > ? ");
+        binds.push(ts);
     }
 
     if let (Some(ts), Some(id)) = (before_timestamp, before_id) {

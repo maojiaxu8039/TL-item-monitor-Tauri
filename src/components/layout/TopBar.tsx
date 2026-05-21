@@ -8,6 +8,7 @@ import { AssetIcon } from "@/components/brand/AssetIcon"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import { cmd, type PageId } from "@/lib/commands"
+import { publicAssetPath } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 
@@ -170,7 +171,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
     >
       <div className="torch-topbar-drag-region" data-tauri-drag-region />
       <button className="torch-brand" onClick={() => onPageChange("dashboard")} title="TorchScan">
-        <img src="/torchscan/logo-mark.png" alt="TorchScan" className="torch-brand-logo" draggable={false} />
+        <img src={publicAssetPath("torchscan/logo-mark.png")} alt="TorchScan" className="torch-brand-logo" draggable={false} />
       </button>
 
       <div className="torch-topbar-context">

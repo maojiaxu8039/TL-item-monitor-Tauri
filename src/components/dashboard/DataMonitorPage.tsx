@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Database, Download, RefreshCw, Server, Wifi, WifiOff, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { cmd } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
@@ -77,6 +77,33 @@ type SyncMode = "normal" | "expert";
 type TimeRange = "24h" | "3d" | "7d" | "30d" | "season";
 
 const PAGE_SIZE = 500;
+const ITEMS_SYNC_CURSOR_PREFIX = "items_sync_cursor_v2";
+
+function getTimeRangeHours(range: TimeRange): number | null {
+  switch (range) {
+    case "24h": return 24;
+    case "3d": return 72;
+    case "7d": return 168;
+    case "30d": return 720;
+    case "season": return null;
+  }
+}
+
+function getTimeRangeSinceTimestamp(range: TimeRange): number | null {
+  const hours = getTimeRangeHours(range);
+  return hours ? Math.floor(Date.now() / 1000) - hours * 3600 : null;
+}
+
+function getItemsSyncCursorKey(serverUrl: string, seasonId: string, mode: SyncMode) {
+  return `${ITEMS_SYNC_CURSOR_PREFIX}:${serverUrl.trim()}:${seasonId}:${mode}`;
+}
+
+function readItemsSyncCursor(serverUrl: string, seasonId: string, mode: SyncMode): number | null {
+  const stored = localStorage.getItem(getItemsSyncCursorKey(serverUrl, seasonId, mode));
+  if (!stored) return null;
+  const timestamp = Number.parseInt(stored, 10);
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
+}
 
 function createEmptySyncJob(dataType: DataType, mode: SyncMode, range: TimeRange): SyncJobState {
   return {
@@ -106,14 +133,20 @@ export default function DataMonitorPage() {
   const [syncMode, setSyncMode] = useState<SyncMode>("normal");
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
   const [showFailures, setShowFailures] = useState(false);
-  const [isPaginatedSync, setIsPaginatedSync] = useState(false);
-  const [lastItemsSyncTimestamp, setLastItemsSyncTimestamp] = useState<number | null>(() => {
-    const stored = localStorage.getItem("last_items_sync_timestamp");
-    return stored ? parseInt(stored) : null;
-  });
   const { marketContext } = useSectionRefresh();
+  const [lastItemsSyncTimestamp, setLastItemsSyncTimestamp] = useState<number | null>(() =>
+    readItemsSyncCursor(serverUrl, marketContext.seasonId, syncMode)
+  );
   const { syncJob, setSyncJob, restoreSyncJob } = useSyncContext();
   const syncAbortRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    restoreSyncJob();
+  }, [restoreSyncJob]);
+
+  useEffect(() => {
+    setLastItemsSyncTimestamp(readItemsSyncCursor(serverUrl, marketContext.seasonId, syncMode));
+  }, [serverUrl, marketContext.seasonId, syncMode]);
 
   useEffect(() => {
     return () => {
@@ -123,12 +156,6 @@ export default function DataMonitorPage() {
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (syncJob?.status === "running") {
-      toast.info("检测到之前的同步任务，继续执行中...");
-    }
-  }, [syncJob?.status]);
 
   const checkServerStatus = async (): Promise<ServerStatus | null> => {
     try {
@@ -153,16 +180,6 @@ export default function DataMonitorPage() {
     setServerStatus(statusData || null);
     setConnectionStatus(statusData ? "connected" : "disconnected");
   }, [statusData]);
-
-  const getTimeRangeHours = (range: TimeRange): number => {
-    switch (range) {
-      case "24h": return 24;
-      case "3d": return 72;
-      case "7d": return 168;
-      case "30d": return 720;
-      case "season": return 99999;
-    }
-  };
 
   const syncSinglePage = async (
     records: FireHistoryRecord[] | ItemsHistoryRecord[],
@@ -255,7 +272,7 @@ export default function DataMonitorPage() {
     syncAbortRef.current = () => { cancelled = true; };
 
     const modeParam = syncMode === "expert" ? "expert" : "normal";
-    const hours = getTimeRangeHours(timeRange);
+    const rangeSinceTimestamp = getTimeRangeSinceTimestamp(timeRange);
     const marketMode = syncMode === "expert" ? "season_expert" : "season_normal";
 
     let job = createEmptySyncJob(dataType, syncMode, timeRange);
@@ -273,9 +290,8 @@ export default function DataMonitorPage() {
 
     try {
       if (dataType === "fire") {
-        const baseUrl = hours === 99999
-          ? `${serverUrl}/fire-history-all?mode=${modeParam}`
-          : `${serverUrl}/fire-history?mode=${modeParam}`;
+        const timestampParam = rangeSinceTimestamp ? `&since_timestamp=${rangeSinceTimestamp}` : "";
+        const baseUrl = `${serverUrl}/fire-history-all?mode=${modeParam}${timestampParam}`;
 
         while (hasMore && !cancelled) {
           const url = `${baseUrl}&limit=${PAGE_SIZE}&offset=${offset}`;
@@ -318,7 +334,8 @@ export default function DataMonitorPage() {
           }
         }
       } else {
-        const timestampParam = lastItemsSyncTimestamp ? `&since_timestamp=${lastItemsSyncTimestamp}` : "";
+        const syncSinceTimestamp = Math.max(rangeSinceTimestamp ?? 0, lastItemsSyncTimestamp ?? 0);
+        const timestampParam = syncSinceTimestamp ? `&since_timestamp=${syncSinceTimestamp}` : "";
         const baseUrl = `${serverUrl}/items-history-all?mode=${modeParam}${timestampParam}`;
 
         while (hasMore && !cancelled) {
@@ -334,10 +351,11 @@ export default function DataMonitorPage() {
             break;
           }
 
-          records.forEach(r => { if (r.scraped_at > maxScrapedAt) maxScrapedAt = r.scraped_at; });
-
           const pageResult = await syncSinglePage(records, dataType, marketMode, marketContext);
           if (cancelled) break;
+          if (pageResult.success > 0) {
+            records.forEach(r => { if (r.scraped_at > maxScrapedAt) maxScrapedAt = r.scraped_at; });
+          }
           totalSuccess += pageResult.success;
           totalFailed += pageResult.failed;
           allFailures = [...allFailures, ...pageResult.failures];
@@ -381,8 +399,11 @@ export default function DataMonitorPage() {
       setSyncJob(job);
       syncAbortRef.current = null;
 
-      if (dataType === "items" && maxScrapedAt > 0) {
-        localStorage.setItem("last_items_sync_timestamp", maxScrapedAt.toString());
+      if (dataType === "items" && totalFailed === 0 && maxScrapedAt > 0) {
+        localStorage.setItem(
+          getItemsSyncCursorKey(serverUrl, marketContext.seasonId, syncMode),
+          maxScrapedAt.toString()
+        );
         setLastItemsSyncTimestamp(maxScrapedAt);
       }
 
@@ -405,87 +426,6 @@ export default function DataMonitorPage() {
 
     refetchStatus();
   }, [dataType, syncMode, timeRange, serverUrl, marketContext, refetchStatus, lastItemsSyncTimestamp, setSyncJob]);
-
-  const syncMutation = useMutation({
-    mutationFn: async () => {
-      const modeParam = syncMode === "expert" ? "expert" : "normal";
-      const hours = getTimeRangeHours(timeRange);
-      const marketMode = syncMode === "expert" ? "season_expert" : "season_normal";
-
-      if (dataType === "fire") {
-        const url = hours === 99999
-          ? `${serverUrl}/fire-history-all?mode=${modeParam}&limit=99999`
-          : `${serverUrl}/fire-history?mode=${modeParam}&limit=${hours}`;
-
-        const data = await cmd.fetchServerJson<{ success: boolean; data: FireHistoryRecord[]; error?: string }>(url);
-        if (!data.success) throw new Error(data.error || "Unknown error");
-
-        const records = data.data as FireHistoryRecord[];
-        if (records.length === 0) {
-          return { synced: 0, type: "fire" as const, message: "没有可同步的火价数据" };
-        }
-
-        const result = await syncSinglePage(records, dataType, marketMode, marketContext);
-        return {
-          synced: result.success,
-          type: "fire" as const,
-          total: records.length,
-          failed: result.failed,
-          skipped: result.skipped,
-          firstError: result.failures[0]?.reason,
-          failures: result.failures,
-        };
-      } else {
-        const timestampParam = lastItemsSyncTimestamp ? `&since_timestamp=${lastItemsSyncTimestamp}` : "";
-        const url = `${serverUrl}/items-history-all?mode=${modeParam}${timestampParam}&limit=${hours === 99999 ? 99999 : hours * 10}`;
-
-        const data = await cmd.fetchServerJson<{ success: boolean; data: ItemsHistoryRecord[]; error?: string }>(url);
-        if (!data.success) throw new Error(data.error || "Unknown error");
-
-        const records = data.data as ItemsHistoryRecord[];
-        if (records.length === 0) {
-          return { synced: 0, type: "items" as const, message: "没有可同步的物品数据" };
-        }
-
-        const result = await syncSinglePage(records, dataType, marketMode, marketContext);
-        return {
-          synced: result.success,
-          type: "items" as const,
-          total: records.length,
-          failed: result.failed,
-          skipped: result.skipped,
-          firstError: result.failures[0]?.reason,
-          failures: result.failures,
-        };
-      }
-    },
-    onSuccess: (result) => {
-      if (result.type === "items" && result.synced > 0) {
-        const stored = localStorage.getItem("last_items_sync_timestamp");
-        if (stored) {
-          const ts = parseInt(stored);
-          if (ts > 0) {
-            setLastItemsSyncTimestamp(ts);
-          }
-        }
-      }
-
-      if (result.message) {
-        toast.info(result.message);
-      } else {
-        const typeName = result.type === "fire" ? "火价" : "物品价格";
-        if (result.failed && result.failed > 0) {
-          toast.error(`部分同步成功: ${typeName} 成功 ${result.synced}，失败 ${result.failed}`);
-        } else {
-          toast.success(`已同步 ${result.synced} 条${typeName}`);
-        }
-      }
-      refetchStatus();
-    },
-    onError: (err: Error) => {
-      toast.error(`同步失败: ${err.message}`);
-    },
-  });
 
   const handleSaveUrl = () => {
     localStorage.setItem("server_url", serverUrl);
@@ -555,14 +495,10 @@ export default function DataMonitorPage() {
   const expertStatus = serverStatus?.last_collection?.expert;
 
   const handleSync = useCallback(() => {
-    if (isPaginatedSync) {
-      syncPaginated();
-    } else {
-      syncMutation.mutate();
-    }
-  }, [isPaginatedSync, syncPaginated, syncMutation]);
+    syncPaginated();
+  }, [syncPaginated]);
 
-  const isSyncing = syncMutation.isPending || (syncJob?.status === "running");
+  const isSyncing = syncJob?.status === "running";
 
   return (
     <PageShell size="xl" className="space-y-5">
@@ -826,16 +762,15 @@ export default function DataMonitorPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <label className={`flex items-center gap-2 text-xs cursor-pointer ${timeRange !== "season" ? "text-[var(--color-text-subtle)]" : "text-[var(--color-text-subtle)]"}`}>
+            <label className="flex items-center gap-2 text-xs text-[var(--color-text-subtle)]">
               <input
                 type="checkbox"
-                checked={isPaginatedSync}
-                onChange={(e) => setIsPaginatedSync(e.target.checked)}
-                disabled={isSyncing || timeRange !== "season"}
+                checked={timeRange === "season"}
+                readOnly
+                disabled
                 className="rounded border-[var(--color-border)] text-[var(--color-brand)] focus:ring-[var(--color-brand)] disabled:opacity-50"
               />
-              分页同步（大数据量推荐，每页 {PAGE_SIZE} 条）
-              {timeRange !== "season" && <span className="text-[var(--color-brand-gold)]">（仅整赛季）</span>}
+              自动分页同步（每页 {PAGE_SIZE} 条）
             </label>
           </div>
 

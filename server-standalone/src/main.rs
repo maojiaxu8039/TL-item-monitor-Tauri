@@ -1015,6 +1015,8 @@ async fn handle_request(
                 get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
             let max_day: Option<i32> =
                 get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
+            let since_timestamp: Option<i64> =
+                get_query_param(query_string, "since_timestamp").and_then(|s| s.parse().ok());
 
             let market_mode = if mode == "expert" {
                 "season_expert"
@@ -1049,6 +1051,7 @@ async fn handle_request(
                         limit,
                         min_day,
                         max_day,
+                        since_timestamp,
                     )
                     .await
                     {
@@ -1243,6 +1246,8 @@ async fn handle_request(
                 get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
             let max_day: Option<i32> =
                 get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
+            let since_timestamp: Option<i64> =
+                get_query_param(query_string, "since_timestamp").and_then(|s| s.parse().ok());
             let before_timestamp: Option<i64> =
                 get_query_param(query_string, "before_timestamp").and_then(|s| s.parse().ok());
             let before_id: Option<i64> =
@@ -1274,6 +1279,7 @@ async fn handle_request(
                     offset,
                     min_day,
                     max_day,
+                    since_timestamp,
                     before_timestamp,
                     before_id,
                 )

@@ -9,6 +9,7 @@ import { TopBar } from "@/components/layout/TopBar"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 import type { PageId } from "@/lib/commands"
+import { publicAssetPath } from "@/lib/icons"
 
 const DashboardContent = lazy(() => import("@/components/dashboard/DashboardContent"))
 const StrategiesPage = lazy(() => import("@/components/dashboard/StrategiesPage"))
@@ -28,7 +29,7 @@ function PageLoading() {
   return (
     <div className="flex h-64 items-center justify-center">
       <div className="flex min-w-64 flex-col items-center gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] px-8 py-7 shadow-[var(--shadow-glow)]">
-        <img src="/torchscan/logo-mark.png" alt="TorchScan" className="h-12 w-auto" />
+        <img src={publicAssetPath("torchscan/logo-mark.png")} alt="TorchScan" className="h-12 w-auto" />
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-panel-soft)]">
           <div className="h-full w-2/3 animate-pulse rounded-full bg-[linear-gradient(90deg,var(--color-brand),var(--color-brand-gold))]" />
         </div>

@@ -173,7 +173,7 @@ export default function ImportExportPage() {
                   <span className="text-sm font-medium text-[var(--color-text)]">导入关注列表 CSV</span>
                 </div>
                 <p className="text-xs text-[var(--color-text-subtle)] ml-6">
-                  CSV 格式：section_id, item_id, purchase_fire_price, count, more_value
+                  CSV 格式：section_id, season_id, market_mode, item_id, purchase_fire_price, count, more_value
                 </p>
               </div>
               <div className="ml-6">

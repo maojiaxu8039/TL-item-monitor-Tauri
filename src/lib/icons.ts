@@ -1,22 +1,26 @@
+export function publicAssetPath(path: string) {
+  return `${import.meta.env.BASE_URL}${path.replace(/^\/+/, "")}`
+}
+
 export const iconAssetMap = {
-  "market-monitor": "/torchscan/icons/original/market-monitor.png",
-  "item-tracking": "/torchscan/icons/original/item-tracking.png",
-  "price-analysis": "/torchscan/icons/original/price-analysis.png",
-  favorites: "/torchscan/icons/original/favorites.png",
-  alerts: "/torchscan/icons/original/alerts.png",
-  "more-tools": "/torchscan/icons/original/more-tools.png",
-  settings: "/torchscan/icons/original/settings.png",
-  "window-minimize": "/torchscan/icons/original/window-minimize.png",
-  "window-maximize": "/torchscan/icons/original/window-maximize.png",
-  "window-close": "/torchscan/icons/original/window-close.png",
-  deals: "/torchscan/icons/original/deals.png",
-  arbitrage: "/torchscan/icons/original/arbitrage.png",
-  "ai-analysis": "/torchscan/icons/original/ai-analysis.png",
-  "data-monitor": "/torchscan/icons/original/data-monitor.png",
-  "import-export": "/torchscan/icons/original/import-export.png",
-  help: "/torchscan/icons/original/help.png",
-  strategies: "/torchscan/icons/original/strategies.png",
-  "fire-price": "/torchscan/icons/original/fire-price.png",
+  "market-monitor": publicAssetPath("torchscan/icons/original/market-monitor.png"),
+  "item-tracking": publicAssetPath("torchscan/icons/original/item-tracking.png"),
+  "price-analysis": publicAssetPath("torchscan/icons/original/price-analysis.png"),
+  favorites: publicAssetPath("torchscan/icons/original/favorites.png"),
+  alerts: publicAssetPath("torchscan/icons/original/alerts.png"),
+  "more-tools": publicAssetPath("torchscan/icons/original/more-tools.png"),
+  settings: publicAssetPath("torchscan/icons/original/settings.png"),
+  "window-minimize": publicAssetPath("torchscan/icons/original/window-minimize.png"),
+  "window-maximize": publicAssetPath("torchscan/icons/original/window-maximize.png"),
+  "window-close": publicAssetPath("torchscan/icons/original/window-close.png"),
+  deals: publicAssetPath("torchscan/icons/original/deals.png"),
+  arbitrage: publicAssetPath("torchscan/icons/original/arbitrage.png"),
+  "ai-analysis": publicAssetPath("torchscan/icons/original/ai-analysis.png"),
+  "data-monitor": publicAssetPath("torchscan/icons/original/data-monitor.png"),
+  "import-export": publicAssetPath("torchscan/icons/original/import-export.png"),
+  help: publicAssetPath("torchscan/icons/original/help.png"),
+  strategies: publicAssetPath("torchscan/icons/original/strategies.png"),
+  "fire-price": publicAssetPath("torchscan/icons/original/fire-price.png"),
 } as const
 
 export type IconAssetName = keyof typeof iconAssetMap

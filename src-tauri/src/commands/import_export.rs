@@ -21,7 +21,7 @@ pub async fn import_watchlist_csv(
 
     for (idx, result) in reader.records().enumerate() {
         if let Ok(record) = result {
-            if record.len() >= 3 {
+            if record.len() >= 7 {
                 let section_id = record.get(0).unwrap_or("");
                 let season_id = record.get(1).unwrap_or("ss12");
                 let market_mode = record.get(2).unwrap_or("season_normal");
@@ -51,7 +51,11 @@ pub async fn import_watchlist_csv(
                     Ok(_) => imported_count += 1,
                     Err(e) => error_list.push(format!("行 {}: {}", idx + 2, e)),
                 }
+            } else {
+                error_list.push(format!("行 {}: 列数不足", idx + 2));
             }
+        } else {
+            error_list.push(format!("行 {}: CSV 记录格式错误", idx + 2));
         }
     }
 
@@ -117,8 +121,7 @@ pub async fn backup_database(
 ) -> Result<OkResponse, String> {
     let db_path = paths::db_path();
 
-    let dest_path = validate_path_within_app_dir(&dest_path)
-        .map_err(|e| format!("备份失败: {}", e))?;
+    let dest_path = resolve_user_file_path(&dest_path).map_err(|e| format!("备份失败: {}", e))?;
 
     sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
         .execute(&state.db)
@@ -153,6 +156,14 @@ fn validate_path_within_app_dir(path: &str) -> Result<std::path::PathBuf, String
     Ok(canonical)
 }
 
+fn resolve_user_file_path(path: &str) -> Result<std::path::PathBuf, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("文件路径不能为空".to_string());
+    }
+    Ok(std::path::PathBuf::from(path))
+}
+
 #[tauri::command]
 pub async fn restore_database(
     _state: State<'_, Arc<AppState>>,
@@ -160,8 +171,7 @@ pub async fn restore_database(
 ) -> Result<OkResponse, String> {
     let db_path = paths::db_path();
 
-    let src_path = validate_path_within_app_dir(&src_path)
-        .map_err(|e| format!("恢复失败: {}", e))?;
+    let src_path = resolve_user_file_path(&src_path).map_err(|e| format!("恢复失败: {}", e))?;
 
     if !tokio::fs::try_exists(&src_path).await.unwrap_or(false) {
         return Err("恢复失败: 源文件不存在".to_string());

@@ -151,6 +151,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             get_season_api_config_cmd,
             set_season_api_config_cmd,
             fetch_server_json_cmd,
+            post_server_json_cmd,
             get_installed_skills,
             openclaw_chat,
             get_strategy_details,

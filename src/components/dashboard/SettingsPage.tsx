@@ -857,12 +857,12 @@ export default function SettingsPage() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-medium text-[var(--color-text)]">当前版本</div>
-            <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">v2.0.0 · Tauri 2.0</div>
+            <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">v1.0.0 · Tauri 2</div>
           </div>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.open("https://github.com/your-repo/releases", "_blank", "noopener,noreferrer")}
+            onClick={() => window.open("https://github.com/maojiaxu8039/TL-item-monitor-Tauri/releases", "_blank", "noopener,noreferrer")}
           >
             检查更新
           </Button>

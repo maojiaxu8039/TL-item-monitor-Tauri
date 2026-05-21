@@ -1,6 +1,6 @@
 import { motion } from "framer-motion"
 import { AssetIcon } from "@/components/brand/AssetIcon"
-import { type IconAssetName } from "@/lib/icons"
+import { publicAssetPath, type IconAssetName } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import type { PageId } from "@/lib/commands"
 
@@ -69,8 +69,8 @@ export function Sidebar({ page, onPageChange }: { page: PageId; onPageChange: (p
       </nav>
 
       <div className="torch-sidebar-footer">
-        <img src="/torchscan/logo-mark.png" alt="TorchScan" className="torch-sidebar-footer-logo" draggable={false} />
-        <img src="/torchscan/app-icon-64.png" alt="TorchScan" className="torch-sidebar-footer-emblem" draggable={false} />
+        <img src={publicAssetPath("torchscan/logo-mark.png")} alt="TorchScan" className="torch-sidebar-footer-logo" draggable={false} />
+        <img src={publicAssetPath("torchscan/app-icon-64.png")} alt="TorchScan" className="torch-sidebar-footer-emblem" draggable={false} />
       </div>
     </motion.aside>
   )

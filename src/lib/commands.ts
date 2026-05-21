@@ -382,6 +382,8 @@ export const cmd = {
   getDashboardSummary: () => invoke<DashboardSummary>("get_dashboard_summary"),
   fetchServerJson: <T = unknown>(url: string) =>
     invoke<T>("fetch_server_json_cmd", { url }),
+  postServerJson: <T = unknown>(url: string, body: unknown) =>
+    invoke<T>("post_server_json_cmd", { url, body }),
   setActiveMarketContext: (seasonId: string, marketMode: string) =>
     invoke("set_active_market_context", { seasonId, marketMode }),
 
@@ -896,57 +898,40 @@ export interface ServerAdminResponse {
 }
 
 export const serverAdmin = {
-  getApiConfig: (serverUrl: string, password: string, signal?: AbortSignal) =>
-    fetch(`${serverUrl}/api/admin/config`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-      signal,
-    })
-      .then(res => res.json())
-      .then((data: ServerAdminResponse) => {
-        if (!data.success) throw new Error(data.error || "获取配置失败");
-        return data.data as ServerFullConfig;
-      }),
+  getApiConfig: async (serverUrl: string, password: string, _signal?: AbortSignal) => {
+    const data = await cmd.postServerJson<ServerAdminResponse>(`${serverUrl}/api/admin/config`, { password });
+    if (!data.success) throw new Error(data.error || "获取配置失败");
+    return data.data as ServerFullConfig;
+  },
 
-  initSeason: (serverUrl: string, password: string, seasonId: string, startedAt: number, seasonName?: string, signal?: AbortSignal) =>
-    fetch(`${serverUrl}/admin/init-season`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password, season_id: seasonId, started_at: startedAt, season_name: seasonName }),
-      signal,
-    })
-      .then(res => res.json())
-      .then((data: ServerAdminResponse) => {
-        if (!data.success) throw new Error(data.error || "初始化失败");
-        return data.data;
-      }),
+  initSeason: async (serverUrl: string, password: string, seasonId: string, startedAt: number, seasonName?: string, _signal?: AbortSignal) => {
+    const data = await cmd.postServerJson<ServerAdminResponse>(`${serverUrl}/admin/init-season`, {
+      password,
+      season_id: seasonId,
+      started_at: startedAt,
+      season_name: seasonName,
+    });
+    if (!data.success) throw new Error(data.error || "初始化失败");
+    return data.data;
+  },
 
-  updateApiConfig: (serverUrl: string, password: string, apiConfig: ServerApiConfig, signal?: AbortSignal) =>
-    fetch(`${serverUrl}/admin/update-api-config`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password, api_config: apiConfig }),
-      signal,
-    })
-      .then(res => res.json())
-      .then((data: ServerAdminResponse) => {
-        if (!data.success) throw new Error(data.error || "更新配置失败");
-        return data.data;
-      }),
+  updateApiConfig: async (serverUrl: string, password: string, apiConfig: ServerApiConfig, _signal?: AbortSignal) => {
+    const data = await cmd.postServerJson<ServerAdminResponse>(`${serverUrl}/admin/update-api-config`, {
+      password,
+      api_config: apiConfig,
+    });
+    if (!data.success) throw new Error(data.error || "更新配置失败");
+    return data.data;
+  },
 
-  updateScrapeModes: (serverUrl: string, password: string, scrapeModes: ScrapeMode[], signal?: AbortSignal) =>
-    fetch(`${serverUrl}/api/admin/update-config`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password, scrape_modes: scrapeModes }),
-      signal,
-    })
-      .then(res => res.json())
-      .then((data: ServerAdminResponse) => {
-        if (!data.success) throw new Error(data.error || "更新采集模式失败");
-        return data.data;
-      }),
+  updateScrapeModes: async (serverUrl: string, password: string, scrapeModes: ScrapeMode[], _signal?: AbortSignal) => {
+    const data = await cmd.postServerJson<ServerAdminResponse>(`${serverUrl}/api/admin/update-config`, {
+      password,
+      scrape_modes: scrapeModes,
+    });
+    if (!data.success) throw new Error(data.error || "更新采集模式失败");
+    return data.data;
+  },
 };
 
 // ============================================================================

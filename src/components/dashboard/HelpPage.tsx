@@ -1,4 +1,4 @@
-import { ExternalLink, MessageSquare, Info } from "lucide-react";
+import { ExternalLink, Info } from "lucide-react";
 import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
@@ -54,7 +54,7 @@ export default function HelpPage() {
           <div>
             <h3 className="font-semibold text-[var(--color-text)]">版本信息</h3>
             <p className="text-[var(--color-ai)] text-sm mt-1">
-              TorchScan v2.0.0 · 基于 Tauri 2 + React 构建
+              TorchScan v1.0.0 · 基于 Tauri 2 + React 构建
             </p>
           </div>
         </div>
@@ -72,39 +72,14 @@ export default function HelpPage() {
         </div>
       </Surface>
 
-      <Surface padding="md">
-        <h2 className="text-sm font-semibold text-[var(--color-text)] mb-4">快捷键</h2>
-        <div className="space-y-2">
-          <div className="flex justify-between py-2 border-b border-[var(--color-border-soft)]">
-            <span className="text-sm text-[var(--color-text-muted)]">刷新火价</span>
-            <kbd className="px-2 py-1 bg-[var(--color-panel)] rounded text-xs">Ctrl + R</kbd>
-          </div>
-          <div className="flex justify-between py-2 border-b border-[var(--color-border-soft)]">
-            <span className="text-sm text-[var(--color-text-muted)]">打开搜索</span>
-            <kbd className="px-2 py-1 bg-[var(--color-panel)] rounded text-xs">Ctrl + K</kbd>
-          </div>
-          <div className="flex justify-between py-2">
-            <span className="text-sm text-[var(--color-text-muted)]">最小化到托盘</span>
-            <kbd className="px-2 py-1 bg-[var(--color-panel)] rounded text-xs">Ctrl + W</kbd>
-          </div>
-        </div>
-      </Surface>
-
       <div className="flex gap-4">
         <Button
           variant="outline"
           size="sm"
-          onClick={() => window.open("https://github.com", "_blank", "noopener,noreferrer")}
+          onClick={() => window.open("https://github.com/maojiaxu8039/TL-item-monitor-Tauri", "_blank", "noopener,noreferrer")}
         >
           <ExternalLink className="h-4 w-4 mr-1.5" />
           GitHub
-        </Button>
-        <Button
-          size="sm"
-          onClick={() => window.open("https://discord.com", "_blank", "noopener,noreferrer")}
-        >
-          <MessageSquare className="h-4 w-4 mr-1.5" />
-          加入讨论
         </Button>
       </div>
     </PageShell>
