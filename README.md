@@ -62,14 +62,11 @@ npm run build
 ```bash
 cd server-standalone
 
-# 开发模式
-cargo run
+# 本地只做代码检查
+cargo check
 
-# 生产构建
-cargo build --release
-
-# 运行
-./target/release/tl-monitor-server
+# NAS / 极空间部署请使用 GitHub Actions 的 linux-arm64-server 产物
+gh workflow run build-server-arm64.yml
 ```
 
 ## 项目结构

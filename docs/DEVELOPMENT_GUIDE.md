@@ -469,14 +469,12 @@ loop {
 ### 10.2 运行方式
 
 ```bash
-# 编译
-cargo build --release
+# 本地只做代码检查
+cargo check
 
-# 运行（使用默认配置）
-./target/release/tl-monitor-server
-
-# 自定义配置
-TL_DB_PATH=/custom/path.db ./target/release/tl-monitor-server
+# NAS / 极空间部署请使用 GitHub Actions 的 Linux ARM64 产物
+gh workflow run build-server-arm64.yml
+gh run download <run-id> --name linux-arm64-server --dir /tmp/tl-build
 ```
 
 ### 10.3 配置文件

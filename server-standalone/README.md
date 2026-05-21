@@ -8,23 +8,17 @@
 - 管理员 Web 界面（需密码登录）
 - WebSocket 实时推送
 - 管理员操作审计日志
-- Docker 容器化部署
+- 直接二进制部署到极空间等 Linux 环境
 
-## 本地构建
+## 本地检查
 
 ```bash
 cd server-standalone
 
-# 检查
 cargo check
-cargo test
-
-# 生产构建
-cargo build --release
-
-# 运行
-./target/release/tl-monitor-server
 ```
+
+本地构建出的二进制只适合本机系统，例如 macOS 构建产物不能放到 NAS/Linux 上运行。极空间部署必须使用 GitHub Actions 生成的 Linux ARM64 产物。
 
 常用环境变量：
 
@@ -54,7 +48,7 @@ export TL_ADMIN_PASSWORD='你的强密码'
 
 ## GitHub Actions ARM64 构建
 
-仓库已有 `.github/workflows/build-server-arm64.yml`，会在 `server-standalone/**` 或 workflow 自身变更时自动构建 Linux ARM64 二进制。
+仓库已有 `.github/workflows/build-server-arm64.yml`，会在 `server-standalone/**` 或 workflow 自身变更时自动构建 Linux ARM64 部署包。
 
 手动触发：
 
@@ -69,29 +63,29 @@ gh run list --workflow=build-server-arm64.yml --limit 1
 gh run download <run-id> --name linux-arm64-server --dir /tmp/tl-build
 ```
 
-产物文件名：`tl-monitor-server`（ARM64 架构，GLIBC 兼容）
+下载后会得到：
+
+```text
+/tmp/tl-build/
+├── linux-arm64-server.tar.gz
+└── linux-arm64-server/
+    ├── tl-monitor-server
+    ├── server_config.example.yaml
+    └── resources/
+        ├── qiandao_fire.cjs
+        └── qiandao_fire.mjs
+```
+
+其中 `tl-monitor-server` 是 Linux ARM64 架构，面向极空间/NAS 环境，不能用本机 macOS/Windows 构建产物替代。
 
 ## 极空间部署
 
-### Docker 容器部署（推荐）
-
-当前生产环境使用 Docker 部署：
-
-```bash
-# 容器状态
-docker ps | grep tl-monitor
-
-# 重启容器
-docker restart <container-id>
-
-# 查看日志
-docker logs -f <container-id>
-```
+当前部署逻辑是下载 GitHub Actions 的 `linux-arm64-server` 产物，然后上传里面的 `tl-monitor-server` 到极空间环境运行，不依赖额外的镜像项目。
 
 ### 目录结构
 
 ```text
-/data_s001/data/udata/real/15510607744/Docker/tl-monitor/
+/path/to/tl-monitor/
 ├── tl-monitor-server     # 主程序（二进制）
 ├── tl-monitor-server.bak # 备份
 ├── tl-monitor-server.new # 待替换版本
@@ -103,31 +97,41 @@ docker logs -f <container-id>
     └── qiandao_fire.cjs
 ```
 
-### 更新二进制（Docker 部署）
+### 更新二进制
 
-由于容器内服务正在运行，无法直接覆盖二进制文件，需要通过备份替换：
+由于服务正在运行，建议先上传新版本到临时文件，再停止服务并替换：
 
 ```bash
-# 1. 上传新版本到临时目录
-rsync -avz tl-monitor-server user@nas:/tmp/tl-monitor-server.new
+# 1. 下载并解压 GitHub Actions 产物
+cd /tmp/tl-build
+tar -xzf linux-arm64-server.tar.gz
 
-# 2. SSH 到 NAS（通过极空间控制台或 22 端口）
+# 2. 上传新版本到临时目录
+rsync -avz linux-arm64-server/tl-monitor-server user@nas:/tmp/tl-monitor-server.new
+rsync -avz linux-arm64-server/resources/ user@nas:/tmp/tl-monitor-resources/
+
+# 3. SSH 到 NAS（通过极空间控制台或 22 端口）
 ssh user@nas
 
-# 3. 备份并替换（需要 sudo）
+# 4. 停止当前服务（按实际启动方式执行，例如 systemd/supervisor/极空间任务）
+sudo systemctl stop tl-monitor-server
+
+# 5. 备份并替换
 sudo mv /path/to/tl-monitor/tl-monitor-server /path/to/tl-monitor/tl-monitor-server.bak
 sudo cp /tmp/tl-monitor-server.new /path/to/tl-monitor/tl-monitor-server
 sudo chmod +x /path/to/tl-monitor/tl-monitor-server
+sudo mkdir -p /path/to/tl-monitor/resources
+sudo cp /tmp/tl-monitor-resources/qiandao_fire.* /path/to/tl-monitor/resources/
 
-# 4. 重启 Docker 容器
-sudo docker restart $(sudo docker ps | grep tl-monitor | awk '{print $1}')
+# 6. 启动服务
+sudo systemctl start tl-monitor-server
 ```
 
 ## 端口
 
-当前生产环境服务端口映射：`38457 -> 8080`
+如果直接在宿主环境运行，服务监听配置里的 `http_port`。如果通过极空间端口映射访问，请以实际映射端口为准。
 
-| 端口类型 | 容器内端口 | 主机映射端口 |
+| 端口类型 | 默认监听端口 | 示例映射端口 |
 | --- | --- | --- |
 | HTTP API | 8080 | 38457 |
 | WebSocket | 8081 | 38458 |
@@ -167,10 +171,6 @@ curl -s http://100.124.122.65:38457/api/admin/audit-log \
 
 在 `server_config.yaml` 的 `cors_allowed_origins` 中加入客户端访问地址，然后重启服务。
 
-### Docker 容器内服务无法重启
+### 服务无法重启
 
-如果容器内服务无法通过 API 重启，可以重启整个容器：
-
-```bash
-docker restart $(docker ps | grep tl-monitor | awk '{print $1}')
-```
+检查实际托管方式的日志，例如 `systemctl status tl-monitor-server`、极空间任务日志，或直接查看程序标准输出。

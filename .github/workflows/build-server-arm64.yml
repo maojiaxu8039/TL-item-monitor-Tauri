@@ -45,12 +45,26 @@ jobs:
           cd server-standalone
           file target/aarch64-unknown-linux-gnu/release/tl-monitor-server
           ls -lh target/aarch64-unknown-linux-gnu/release/tl-monitor-server
+          aarch64-linux-gnu-readelf -h target/aarch64-unknown-linux-gnu/release/tl-monitor-server
+
+      - name: Package deploy files
+        run: |
+          rm -rf server-standalone/dist
+          mkdir -p server-standalone/dist/linux-arm64-server/resources
+          cp server-standalone/target/aarch64-unknown-linux-gnu/release/tl-monitor-server server-standalone/dist/linux-arm64-server/
+          cp server-standalone/server_config.example.yaml server-standalone/dist/linux-arm64-server/server_config.example.yaml
+          cp src-tauri/resources/qiandao_fire.cjs server-standalone/dist/linux-arm64-server/resources/
+          cp src-tauri/resources/qiandao_fire.mjs server-standalone/dist/linux-arm64-server/resources/
+          cd server-standalone/dist
+          tar -czf linux-arm64-server.tar.gz linux-arm64-server
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-arm64-server
-          path: server-standalone/target/aarch64-unknown-linux-gnu/release/tl-monitor-server
+          path: |
+            server-standalone/dist/linux-arm64-server.tar.gz
+            server-standalone/dist/linux-arm64-server/**
           retention-days: 30
 
       - name: Deployment summary
