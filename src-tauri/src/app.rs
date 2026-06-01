@@ -160,14 +160,17 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
 
     run_migrations(&pool, &db_path, db_existed).await?;
 
-    let config = crate::core::config::load_config().unwrap_or_else(|e| {
+    let mut config = crate::core::config::load_config().unwrap_or_else(|e| {
         tracing::warn!("Failed to load config.yaml: {}", e);
         AppConfig::default()
     });
 
+    // Startup fire scraping begins with normal mode, so keep the initial UI
+    // context aligned even if the previous session ended in expert mode.
+    config.scrape.fire_price_mode = MarketMode::SeasonNormal.as_str().to_string();
+
     let default_season = config.app.season_id.clone();
-    let default_mode = config.scrape.fire_price_mode.clone();
-    let market_mode = market_mode_from_config(&default_mode);
+    let market_mode = MarketMode::SeasonNormal;
 
     tracing::info!(
         "[STARTUP] Loading cached state for season={}, mode={}",
@@ -250,13 +253,6 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
     };
 
     Ok(state)
-}
-
-fn market_mode_from_config(mode: &str) -> MarketMode {
-    match mode {
-        "season_expert" => MarketMode::SeasonExpert,
-        _ => MarketMode::SeasonNormal,
-    }
 }
 
 fn fire_record_to_snapshot(record: crate::db::models::FirePriceRecord) -> FirePriceSnapshot {
