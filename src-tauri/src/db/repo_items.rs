@@ -105,8 +105,9 @@ pub async fn get_items_count(
     Ok(count)
 }
 
-/// Bulk upsert items into the real-time table (for client采集).
-/// This updates the real-time items_normal/expert tables.
+/// Replace items in the real-time table with the latest full scrape.
+/// The upstream item source returns a complete list, so rows missing from the
+/// new scrape must be removed to avoid showing stale prices as current data.
 pub async fn bulk_insert_items(
     pool: &SqlitePool,
     season_id: &str,
@@ -122,11 +123,16 @@ pub async fn bulk_insert_items(
     let table = TableResolver::items_table(season_id, market_mode);
     let mut tx = pool.begin().await?;
 
+    sqlx::query(&format!("DELETE FROM {}", table))
+        .execute(&mut *tx)
+        .await?;
+
     for chunk in items.chunks(BATCH_SIZE_LARGE) {
         let mut qb: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
-            sqlx::query_builder::QueryBuilder::new(
-                &format!("INSERT OR REPLACE INTO {} (item_id, name, item_type, source, price, last_time, updated_at) ", table)
-            );
+            sqlx::query_builder::QueryBuilder::new(&format!(
+                "INSERT INTO {} (item_id, name, item_type, source, price, last_time, updated_at) ",
+                table
+            ));
         qb.push_values(chunk, |mut b, item| {
             b.push_bind(&item.item_id)
                 .push_bind(&item.name)
@@ -309,4 +315,82 @@ pub async fn search_items_simple(
     .await?;
 
     Ok(items)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn test_pool() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("test sqlite pool should connect");
+
+        sqlx::query(
+            r#"
+            CREATE TABLE items_normal (
+                item_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                item_type TEXT NOT NULL DEFAULT '',
+                source TEXT NOT NULL DEFAULT '',
+                price REAL NOT NULL DEFAULT 0,
+                last_time INTEGER,
+                updated_at INTEGER NOT NULL
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .expect("items_normal table should be created");
+
+        pool
+    }
+
+    fn item(id: &str, price: f64) -> Item {
+        Item {
+            item_id: id.to_string(),
+            season_id: "ss12".to_string(),
+            market_mode: "season_normal".to_string(),
+            name: format!("Item {id}"),
+            item_type: "材料".to_string(),
+            source: "test".to_string(),
+            price,
+            last_time: Some(1000),
+            updated_at: 1000,
+        }
+    }
+
+    #[tokio::test]
+    async fn full_refresh_removes_items_missing_from_latest_scrape() {
+        let pool = test_pool().await;
+
+        bulk_insert_items(
+            &pool,
+            "ss12",
+            "season_normal",
+            &[item("a", 1.0), item("b", 2.0)],
+        )
+        .await
+        .expect("first full refresh should insert");
+        assert_eq!(
+            get_items_count(&pool, "ss12", "season_normal")
+                .await
+                .expect("count should load"),
+            2
+        );
+
+        bulk_insert_items(&pool, "ss12", "season_normal", &[item("a", 3.0)])
+            .await
+            .expect("second full refresh should replace");
+
+        let rows: Vec<(String, f64)> =
+            sqlx::query_as("SELECT item_id, price FROM items_normal ORDER BY item_id")
+                .fetch_all(&pool)
+                .await
+                .expect("items should load");
+        assert_eq!(rows, vec![("a".to_string(), 3.0)]);
+    }
 }

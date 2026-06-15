@@ -96,12 +96,16 @@ pub async fn add_section_item(
 pub async fn update_section_item(
     state: State<'_, Arc<AppState>>,
     sectionId: String,
+    seasonId: String,
+    marketMode: String,
     itemId: String,
     patch: SectionItemPatch,
 ) -> Result<OkResponse, String> {
     repo_sections::update_section_item(
         &state.db,
         &sectionId,
+        &seasonId,
+        &marketMode,
         &itemId,
         patch.count,
         patch.more_value,
@@ -117,8 +121,11 @@ pub async fn update_section_item(
 pub async fn remove_section_item(
     state: State<'_, Arc<AppState>>,
     sectionId: String,
+    seasonId: String,
+    marketMode: String,
     itemId: String,
 ) -> Result<OkResponse, String> {
-    repo_sections::remove_section_item(&state.db, &sectionId, &itemId).await?;
+    repo_sections::remove_section_item(&state.db, &sectionId, &seasonId, &marketMode, &itemId)
+        .await?;
     Ok(OkResponse::success("Item removed"))
 }

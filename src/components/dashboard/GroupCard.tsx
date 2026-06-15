@@ -87,7 +87,13 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
 
   const updateItemMutation = useMutation({
     mutationFn: ({ itemId, updates }: { itemId: string; updates: Record<string, number> }) => {
-      return cmd.updateSectionItem(section.id, itemId, updates)
+      return cmd.updateSectionItem(
+        section.id,
+        marketContext.seasonId,
+        marketContext.marketMode,
+        itemId,
+        updates
+      )
     },
     onSuccess: () => {
       refetch()
@@ -97,7 +103,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
 
   const removeItem = useMutation({
     mutationFn: ({ sectionId, itemId }: { sectionId: string; itemId: string }) =>
-      cmd.removeSectionItem(sectionId, itemId),
+      cmd.removeSectionItem(sectionId, marketContext.seasonId, marketContext.marketMode, itemId),
     onSuccess: () => {
       refetch()
       toast.success("物品已删除")

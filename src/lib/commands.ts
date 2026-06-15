@@ -427,11 +427,13 @@ export const cmd = {
     }),
   updateSectionItem: (
     sectionId: string,
+    seasonId: string,
+    marketMode: string,
     itemId: string,
     patch: { count?: number; moreValue?: number; purchaseFirePrice?: number; lastTime?: string }
-  ) => invoke<OkResponse>("update_section_item", { sectionId, itemId, patch }),
-  removeSectionItem: (sectionId: string, itemId: string) =>
-    invoke<OkResponse>("remove_section_item", { sectionId, itemId }),
+  ) => invoke<OkResponse>("update_section_item", { sectionId, seasonId, marketMode, itemId, patch }),
+  removeSectionItem: (sectionId: string, seasonId: string, marketMode: string, itemId: string) =>
+    invoke<OkResponse>("remove_section_item", { sectionId, seasonId, marketMode, itemId }),
 
   getFireHistory: (hours: number) =>
     invoke<FireHistoryItem[]>("get_fire_history", { hours }),

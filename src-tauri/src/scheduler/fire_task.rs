@@ -29,8 +29,22 @@ pub async fn run_fire_scrape_task(
         }
     }
 
-    if let Err(e) = scrape_modes(&app, &state, true, false).await {
-        error!("Initial fire price scrape failed: {}", e);
+    let config = crate::core::config::load_config().unwrap_or_default();
+    if config.scrape.fire_price_scrape_enabled && config.scrape.fire_scrape_normal_enabled {
+        match scrape_modes(&app, &state, true, false).await {
+            Ok(success_count) if success_count > 0 => {
+                let mut status = state.task_status.write();
+                status.last_fire_scrape = Some(chrono::Utc::now().timestamp());
+            }
+            Ok(_) => {
+                error!("Initial fire price scrape did not update any modes");
+            }
+            Err(e) => {
+                error!("Initial fire price scrape failed: {}", e);
+            }
+        }
+    } else {
+        info!("Initial fire price scrape skipped by config");
     }
 
     let mut ticker = interval(Duration::from_secs(10));
@@ -71,13 +85,17 @@ pub async fn run_fire_scrape_task(
                 let scrape_normal = config.scrape.fire_scrape_normal_enabled;
                 let scrape_expert = config.scrape.fire_scrape_expert_enabled;
 
-                if let Err(e) = scrape_modes(&app, &state, scrape_normal, scrape_expert).await {
-                    error!("Fire price scrape failed: {}", e);
-                }
-
-                {
-                    let mut status = state.task_status.write();
-                    status.last_fire_scrape = Some(chrono::Utc::now().timestamp());
+                match scrape_modes(&app, &state, scrape_normal, scrape_expert).await {
+                    Ok(success_count) if success_count > 0 => {
+                        let mut status = state.task_status.write();
+                        status.last_fire_scrape = Some(chrono::Utc::now().timestamp());
+                    }
+                    Ok(_) => {
+                        error!("Fire price scrape did not update any modes");
+                    }
+                    Err(e) => {
+                        error!("Fire price scrape failed: {}", e);
+                    }
                 }
 
                 ticker = interval(Duration::from_secs(interval_secs));
@@ -94,7 +112,7 @@ async fn scrape_modes(
     state: &Arc<AppState>,
     scrape_normal: bool,
     scrape_expert: bool,
-) -> Result<(), String> {
+) -> Result<usize, String> {
     let ctx = state.active_context.read().clone();
     let season_id = ctx.season_id.clone();
     let current_mode = ctx.market_mode;
@@ -112,9 +130,10 @@ async fn scrape_modes(
     }
 
     if modes.is_empty() {
-        return Ok(());
+        return Ok(0);
     }
 
+    let mut success_count = 0usize;
     for (mode_str, mode_key) in modes {
         let start = std::time::Instant::now();
         match scraper::qiandao::scrape_by_mode_with_api_config(mode_str, Some(&api_config)).await {
@@ -150,6 +169,7 @@ async fn scrape_modes(
                     "Fire price scraped [{}]: {} RMB/10K",
                     mode_str, snapshot.rmb_per_10k_fire
                 );
+                success_count += 1;
 
                 if mode_key == current_mode {
                     emit_fire_price_updated(
@@ -186,5 +206,5 @@ async fn scrape_modes(
         }
     }
 
-    Ok(())
+    Ok(success_count)
 }

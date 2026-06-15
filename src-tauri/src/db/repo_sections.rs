@@ -127,12 +127,14 @@ pub async fn get_section_items(
             si.created_at, si.updated_at
         FROM section_items si
         LEFT JOIN {} i ON si.item_id = i.item_id
-        WHERE si.section_id = ?
+        WHERE si.section_id = ? AND si.season_id = ? AND si.market_mode = ?
         ORDER BY si.sort_order, si.created_at
         "#,
         items_table
     ))
     .bind(section_id)
+    .bind(season_id)
+    .bind(market_mode)
     .fetch_all(pool)
     .await?;
 
@@ -259,33 +261,36 @@ pub async fn add_section_item(
 pub async fn update_section_item(
     pool: &SqlitePool,
     section_id: &str,
+    season_id: &str,
+    market_mode: &str,
     item_id: &str,
     count: Option<i32>,
     more_value: Option<f64>,
     purchase_fire_price: Option<f64>,
     last_time: Option<&str>,
 ) -> Result<(), crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
     let mut tx = pool.begin().await?;
     let now = Utc::now().timestamp();
 
     if let Some(c) = count {
-        sqlx::query("UPDATE section_items SET count = ?, updated_at = ? WHERE section_id = ? AND item_id = ?")
-            .bind(c).bind(now).bind(section_id).bind(item_id)
+        sqlx::query("UPDATE section_items SET count = ?, updated_at = ? WHERE section_id = ? AND season_id = ? AND market_mode = ? AND item_id = ?")
+            .bind(c).bind(now).bind(section_id).bind(season_id).bind(market_mode).bind(item_id)
             .execute(&mut *tx).await?;
     }
     if let Some(mv) = more_value {
-        sqlx::query("UPDATE section_items SET more_value = ?, updated_at = ? WHERE section_id = ? AND item_id = ?")
-            .bind(mv).bind(now).bind(section_id).bind(item_id)
+        sqlx::query("UPDATE section_items SET more_value = ?, updated_at = ? WHERE section_id = ? AND season_id = ? AND market_mode = ? AND item_id = ?")
+            .bind(mv).bind(now).bind(section_id).bind(season_id).bind(market_mode).bind(item_id)
             .execute(&mut *tx).await?;
     }
     if let Some(p) = purchase_fire_price {
-        sqlx::query("UPDATE section_items SET purchase_fire_price = ?, updated_at = ? WHERE section_id = ? AND item_id = ?")
-            .bind(p).bind(now).bind(section_id).bind(item_id)
+        sqlx::query("UPDATE section_items SET purchase_fire_price = ?, updated_at = ? WHERE section_id = ? AND season_id = ? AND market_mode = ? AND item_id = ?")
+            .bind(p).bind(now).bind(section_id).bind(season_id).bind(market_mode).bind(item_id)
             .execute(&mut *tx).await?;
     }
     if let Some(lt) = last_time {
-        sqlx::query("UPDATE section_items SET last_time = ?, updated_at = ? WHERE section_id = ? AND item_id = ?")
-            .bind(lt).bind(now).bind(section_id).bind(item_id)
+        sqlx::query("UPDATE section_items SET last_time = ?, updated_at = ? WHERE section_id = ? AND season_id = ? AND market_mode = ? AND item_id = ?")
+            .bind(lt).bind(now).bind(section_id).bind(season_id).bind(market_mode).bind(item_id)
             .execute(&mut *tx).await?;
     }
 
@@ -296,10 +301,17 @@ pub async fn update_section_item(
 pub async fn remove_section_item(
     pool: &SqlitePool,
     section_id: &str,
+    season_id: &str,
+    market_mode: &str,
     item_id: &str,
 ) -> Result<(), crate::core::errors::AppError> {
-    sqlx::query("DELETE FROM section_items WHERE section_id = ? AND item_id = ?")
+    TableResolver::validate(season_id, market_mode)?;
+    sqlx::query(
+        "DELETE FROM section_items WHERE section_id = ? AND season_id = ? AND market_mode = ? AND item_id = ?",
+    )
         .bind(section_id)
+        .bind(season_id)
+        .bind(market_mode)
         .bind(item_id)
         .execute(pool)
         .await?;
@@ -340,4 +352,163 @@ pub async fn get_totals(
     }
 
     Ok((total_fire, total_rmb))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn test_pool() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("test sqlite pool should connect");
+
+        for sql in [
+            r#"
+            CREATE TABLE sections (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                strategy_id TEXT,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                collapsed INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            "#,
+            r#"
+            CREATE TABLE section_items (
+                id TEXT PRIMARY KEY,
+                section_id TEXT NOT NULL,
+                season_id TEXT NOT NULL DEFAULT 'current',
+                market_mode TEXT NOT NULL DEFAULT 'season_normal',
+                item_id TEXT NOT NULL,
+                purchase_fire_price REAL NOT NULL DEFAULT 0,
+                count INTEGER NOT NULL DEFAULT 1,
+                more_value REAL NOT NULL DEFAULT 0,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                last_time TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            "#,
+            r#"
+            CREATE TABLE items_normal (
+                item_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                item_type TEXT,
+                price REAL,
+                last_time INTEGER
+            )
+            "#,
+            r#"
+            CREATE TABLE items_expert (
+                item_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                item_type TEXT,
+                price REAL,
+                last_time INTEGER
+            )
+            "#,
+        ] {
+            sqlx::query(sql)
+                .execute(&pool)
+                .await
+                .expect("test table should be created");
+        }
+
+        sqlx::query(
+            "INSERT INTO sections (id, name, sort_order, collapsed, created_at, updated_at) VALUES ('section-1', '分组', 0, 0, 1, 1)",
+        )
+        .execute(&pool)
+        .await
+        .expect("section should insert");
+
+        sqlx::query("INSERT INTO items_normal (item_id, name, item_type, price, last_time) VALUES ('item-1', '普通物品', '材料', 10, 100)")
+            .execute(&pool)
+            .await
+            .expect("normal item should insert");
+        sqlx::query("INSERT INTO items_expert (item_id, name, item_type, price, last_time) VALUES ('item-1', '专家物品', '材料', 20, 200)")
+            .execute(&pool)
+            .await
+            .expect("expert item should insert");
+
+        sqlx::query(
+            r#"
+            INSERT INTO section_items
+            (id, section_id, season_id, market_mode, item_id, purchase_fire_price, count, more_value, sort_order, created_at, updated_at)
+            VALUES
+            ('normal-row', 'section-1', 'ss12', 'season_normal', 'item-1', 10, 1, 0, 0, 1, 1),
+            ('expert-row', 'section-1', 'ss12', 'season_expert', 'item-1', 20, 2, 0, 0, 1, 1)
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .expect("section items should insert");
+
+        pool
+    }
+
+    #[tokio::test]
+    async fn get_section_items_filters_by_market_context() {
+        let pool = test_pool().await;
+
+        let normal = get_section_items(&pool, "section-1", "ss12", "season_normal")
+            .await
+            .expect("normal section items should load");
+        assert_eq!(normal.len(), 1);
+        assert_eq!(normal[0].id, "normal-row");
+        assert_eq!(normal[0].item_name.as_deref(), Some("普通物品"));
+
+        let expert = get_section_items(&pool, "section-1", "ss12", "season_expert")
+            .await
+            .expect("expert section items should load");
+        assert_eq!(expert.len(), 1);
+        assert_eq!(expert[0].id, "expert-row");
+        assert_eq!(expert[0].item_name.as_deref(), Some("专家物品"));
+    }
+
+    #[tokio::test]
+    async fn update_and_remove_section_item_only_touch_selected_context() {
+        let pool = test_pool().await;
+
+        update_section_item(
+            &pool,
+            "section-1",
+            "ss12",
+            "season_normal",
+            "item-1",
+            Some(9),
+            None,
+            Some(99.0),
+            None,
+        )
+        .await
+        .expect("normal row should update");
+
+        let rows: Vec<(String, f64, i32)> =
+            sqlx::query_as("SELECT id, purchase_fire_price, count FROM section_items ORDER BY id")
+                .fetch_all(&pool)
+                .await
+                .expect("rows should load");
+        assert_eq!(
+            rows,
+            vec![
+                ("expert-row".to_string(), 20.0, 2),
+                ("normal-row".to_string(), 99.0, 9),
+            ]
+        );
+
+        remove_section_item(&pool, "section-1", "ss12", "season_normal", "item-1")
+            .await
+            .expect("normal row should delete");
+
+        let remaining: Vec<String> = sqlx::query_scalar("SELECT id FROM section_items ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .expect("remaining ids should load");
+        assert_eq!(remaining, vec!["expert-row".to_string()]);
+    }
 }
