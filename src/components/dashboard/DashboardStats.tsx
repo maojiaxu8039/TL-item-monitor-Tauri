@@ -5,9 +5,11 @@ import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { MetricCard } from "@/components/ui/MetricCard"
 import { StatusBadge } from "@/components/ui/StatusBadge"
 import { cmd } from "@/lib/commands"
-import type { DashboardSummary, FireHistoryItem, StrategyWithCosts, FirePriceUI, SectionItem } from "@/lib/commands"
+import type { DashboardSummary, FireHistoryItem, StrategyWithCosts, FirePriceUI } from "@/lib/commands"
+import { calculateRecommendations } from "@/lib/strategyRecommend"
 
-const FirePriceHelper = memo(function FirePriceHelper({ fire }: { fire: FirePriceUI }) {
+const FirePriceHelper = memo(function FirePriceHelper({ fire }: { fire: FirePriceUI | null }) {
+  if (!fire) return null;
   const isStale = Date.now() / 1000 - fire.scraped_at > 3600;
   return (
     <div className="flex items-center gap-1">
@@ -25,18 +27,6 @@ const FirePriceHelper = memo(function FirePriceHelper({ fire }: { fire: FirePric
     </div>
   );
 });
-
-interface StrategyRecommendation {
-  strategy_id: string;
-  strategy_name: string;
-  score: number;
-  level: "strong" | "good" | "watch" | "avoid";
-  expected_profit_fire: number;
-  profit_ratio: number;
-  risk_level: "low" | "medium" | "high";
-  reasons: string[];
-  warnings: string[];
-}
 
 export function DashboardStats() {
   const { marketContext, marketContextReady } = useSectionRefresh()
@@ -59,26 +49,10 @@ export function DashboardStats() {
     retryDelay: 1000,
   })
 
-  const { data: sections = [], isLoading: sectionsLoading } = useQuery({
-    queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
-    queryFn: () => cmd.getSections(),
-    enabled: marketContextReady,
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
-    retryDelay: 1000,
-  })
-
   const { data: allSectionItems = [], isLoading: sectionItemsLoading } = useQuery({
-    queryKey: ["all-section-items", marketContext.seasonId, marketContext.marketMode, sections.map(s => s.id).join(",")],
-    queryFn: async () => {
-      const results = await Promise.all(
-        sections.map(s =>
-          cmd.getSectionItems(s.id, marketContext.seasonId, marketContext.marketMode).catch(() => [] as SectionItem[])
-        )
-      );
-      return results.flat();
-    },
-    enabled: marketContextReady && sections.length > 0,
+    queryKey: ["all-section-items", marketContext.seasonId, marketContext.marketMode],
+    queryFn: () => cmd.getSectionItemsForContext(marketContext.seasonId, marketContext.marketMode),
+    enabled: marketContextReady,
     retry: 1,
     retryDelay: 1000,
   })
@@ -91,7 +65,7 @@ export function DashboardStats() {
     retryDelay: 1000,
   })
 
-  const isLoading = summaryLoading || fireHistoryLoading || sectionsLoading || sectionItemsLoading || strategiesLoading
+  const isLoading = summaryLoading || fireHistoryLoading || sectionItemsLoading || strategiesLoading
 
   const rmbPer10kFire = summary?.fire?.rmb_per_10k_fire
   const hasFirePrice = rmbPer10kFire !== null && rmbPer10kFire !== undefined
@@ -133,108 +107,29 @@ export function DashboardStats() {
       fs.min = Math.min(...prices);
       fs.max = Math.max(...prices);
       fs.avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-      fs.change = fireHistory.length >= 2 && fireHistory[0].rmb_per_10k_fire !== 0
-        ? ((fireHistory[fireHistory.length - 1].rmb_per_10k_fire - fireHistory[0].rmb_per_10k_fire) / fireHistory[0].rmb_per_10k_fire) * 100
+      const sorted = [...fireHistory].sort((a, b) => a.scraped_at - b.scraped_at);
+      fs.change = sorted.length >= 2 && sorted[0].rmb_per_10k_fire !== 0
+        ? ((sorted[sorted.length - 1].rmb_per_10k_fire - sorted[0].rmb_per_10k_fire) / sorted[0].rmb_per_10k_fire) * 100
         : 0;
     }
     return fs;
   }, [fireHistory]);
 
-  const recommendations = useMemo((): StrategyRecommendation[] => {
-    if (strategies.length === 0) return [];
-
-    return strategies.map(strategy => {
-      const reasons: string[] = [];
-      const warnings: string[] = [];
-      let score = 50;
-
-      const profitRatio = strategy.profit_ratio;
-      const netProfit = strategy.total_output_value - strategy.total_cost_fire;
-      const hasCosts = strategy.costs.length > 0;
-      const hasOutputs = strategy.outputs.length > 0;
-
-      if (!hasCosts || !hasOutputs) {
-        warnings.push("成本或产出数据不完整");
-      }
-
-      if (profitRatio > 20) {
-        score += 30;
-        reasons.push(`收益率极高 (+${profitRatio.toFixed(1)}%)`);
-      } else if (profitRatio > 10) {
-        score += 20;
-        reasons.push(`收益率较高 (+${profitRatio.toFixed(1)}%)`);
-      } else if (profitRatio > 0) {
-        score += 10;
-        reasons.push(`收益率正向 (+${profitRatio.toFixed(1)}%)`);
-      } else if (profitRatio < -10) {
-        score -= 30;
-        warnings.push(`收益率过低 (${profitRatio.toFixed(1)}%)`);
-      } else if (profitRatio < 0) {
-        score -= 15;
-        warnings.push(`收益为负 (${profitRatio.toFixed(1)}%)`);
-      }
-
-      if (netProfit > 100) {
-        score += 15;
-        reasons.push(`净收益较高 (+${netProfit.toFixed(0)}火)`);
-      } else if (netProfit < -100) {
-        score -= 20;
-        warnings.push(`净收益为负 (${netProfit.toFixed(0)}火)`);
-      }
-
-      const hasRealtimeCosts = strategy.costs.some(c => c.is_realtime);
-      if (hasRealtimeCosts) {
-        score += 5;
-        reasons.push("使用实时火价计算");
-      }
-
-      const difficulty = strategy.difficulty;
-      if (difficulty === "专家" || difficulty === "困难") {
-        score -= 5;
-        warnings.push("高难度策略，风险较高");
-      }
-
-      score = Math.max(0, Math.min(100, score));
-
-      let level: StrategyRecommendation["level"];
-      if (score >= 80) level = "strong";
-      else if (score >= 60) level = "good";
-      else if (score >= 40) level = "watch";
-      else level = "avoid";
-
-      let risk: StrategyRecommendation["risk_level"];
-      if (difficulty === "专家" || profitRatio < -10) {
-        risk = "high";
-      } else if (difficulty === "困难" || profitRatio < 0) {
-        risk = "medium";
-      } else {
-        risk = "low";
-      }
-
-      return {
-        strategy_id: strategy.id,
-        strategy_name: strategy.name,
-        score,
-        level,
-        expected_profit_fire: netProfit,
-        profit_ratio: profitRatio,
-        risk_level: risk,
-        reasons,
-        warnings,
-      };
-    }).sort((a, b) => b.score - a.score);
-  }, [strategies]);
+  const recommendations = useMemo(() => calculateRecommendations(strategies), [strategies]);
 
   const top3 = recommendations.slice(0, 3);
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
+    if (currentIndex >= top3.length) {
+      setCurrentIndex(0);
+    }
     if (top3.length === 0) return;
     const interval = setInterval(() => {
       setCurrentIndex(prev => (prev + 1) % top3.length);
     }, 3000);
     return () => clearInterval(interval);
-  }, [top3.length]);
+  }, [top3.length, currentIndex]);
 
   const getLevelText = useCallback((level: string) => {
     switch (level) {
@@ -291,7 +186,7 @@ export function DashboardStats() {
           iconColor="text-[var(--color-danger)]"
           helper={
             hasFirePrice ? (
-              <FirePriceHelper fire={summary.fire} />
+              <FirePriceHelper fire={summary?.fire ?? null} />
             ) : null
           }
         />

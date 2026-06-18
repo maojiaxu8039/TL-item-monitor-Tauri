@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingDown, TrendingUp, Loader2, Settings, RefreshCw, Package } from "lucide-react";
 import { PageShell } from "@/components/ui/PageShell";
@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
+import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
 import { cmd, type FirePriceChangeItem } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
@@ -16,7 +16,7 @@ interface FireChangeCardProps {
   isRising: boolean;
 }
 
-function FireChangeCard({ item, isRising }: FireChangeCardProps) {
+const FireChangeCard = memo(function FireChangeCard({ item, isRising }: FireChangeCardProps) {
   const maxChange = useMemo(() => Math.max(
     Math.abs(item.change_rate_3h ?? 0),
     Math.abs(item.change_rate_1h ?? 0),
@@ -77,7 +77,7 @@ function FireChangeCard({ item, isRising }: FireChangeCardProps) {
       </div>
     </Surface>
   );
-}
+});
 
 interface SettingsModalProps {
   settings: { rise_threshold: number; fall_threshold: number };
@@ -122,7 +122,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
                 max={50}
                 step={1}
                 value={riseThreshold}
-                onChange={(e) => setRiseThreshold(Number(e.target.value))}
+                onChange={(e) => setRiseThreshold(Number(e.target.value) || 0)}
                 className="w-full h-1.5 bg-[var(--color-panel-soft)] rounded-lg appearance-none cursor-pointer accent-[var(--color-danger)]"
               />
               <div className="flex justify-between text-xs text-[var(--color-text-subtle)] mt-1">
@@ -148,7 +148,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
                 max={50}
                 step={1}
                 value={fallThreshold}
-                onChange={(e) => setFallThreshold(Number(e.target.value))}
+                onChange={(e) => setFallThreshold(Number(e.target.value) || 0)}
                 className="w-full h-1.5 bg-[var(--color-panel-soft)] rounded-lg appearance-none cursor-pointer accent-[var(--color-success)]"
               />
               <div className="flex justify-between text-xs text-[var(--color-text-subtle)] mt-1">
@@ -189,6 +189,7 @@ export default function DealsPage() {
     queryFn: () => cmd.getRealtimeFireChanges(marketContext.seasonId, marketContext.marketMode),
     enabled: marketContextReady,
     refetchInterval: 60000,
+    refetchIntervalInBackground: false,
     staleTime: 30000,
   });
 

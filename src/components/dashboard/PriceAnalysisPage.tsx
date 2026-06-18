@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { cmd } from "@/lib/commands";
-import { cn } from "@/lib/utils";
+import { cn, errorMessage } from "@/lib/utils";
 import {
   BarChart3,
   ShoppingCart,
@@ -221,6 +221,7 @@ function HoardCard({
 }
 
 export default function PriceAnalysisPage() {
+  const queryClient = useQueryClient();
   const { marketContext, marketContextReady } = useSectionRefresh();
   const { addToast } = useToast();
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -274,10 +275,14 @@ export default function PriceAnalysisPage() {
         .addSectionItem(sectionId, marketContext.seasonId, marketContext.marketMode, itemId, price, 1, 0)
         .then(() => {
           addToast("success", `${itemName} 已添加到分组`);
+          queryClient.invalidateQueries({ queryKey: ["section-items"] });
+          queryClient.invalidateQueries({ queryKey: ["all-section-items"] });
+          queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+          queryClient.invalidateQueries({ queryKey: ["sections"] });
         })
-        .catch(() => addToast("error", "添加失败"));
+        .catch((err: unknown) => addToast("error", `添加失败: ${errorMessage(err)}`));
     },
-    [marketContext.seasonId, marketContext.marketMode, addToast]
+    [marketContext.seasonId, marketContext.marketMode, addToast, queryClient]
   );
 
   const stats = useMemo(() => {

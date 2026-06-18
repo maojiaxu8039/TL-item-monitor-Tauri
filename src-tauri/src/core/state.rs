@@ -2,6 +2,7 @@
 use parking_lot::RwLock;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 pub struct AppState {
@@ -12,8 +13,11 @@ pub struct AppState {
     pub active_context: RwLock<MarketContext>,
     pub task_status: RwLock<TaskStatus>,
     pub scheduler_handle: RwLock<Option<crate::scheduler::SchedulerHandle>>,
-    pub snapshot_running: RwLock<bool>,
+    pub snapshot_running: AtomicBool,
+    pub is_quitting: AtomicBool,
 }
+
+use std::sync::atomic::Ordering;
 
 impl Clone for AppState {
     fn clone(&self) -> Self {
@@ -24,8 +28,9 @@ impl Clone for AppState {
             items_cache: RwLock::new(self.items_cache.read().clone()),
             active_context: RwLock::new(self.active_context.read().clone()),
             task_status: RwLock::new(self.task_status.read().clone()),
-            scheduler_handle: RwLock::new(None),
-            snapshot_running: RwLock::new(*self.snapshot_running.read()),
+            scheduler_handle: RwLock::new(self.scheduler_handle.read().clone()),
+            snapshot_running: AtomicBool::new(self.snapshot_running.load(Ordering::SeqCst)),
+            is_quitting: AtomicBool::new(self.is_quitting.load(Ordering::SeqCst)),
         }
     }
 }
@@ -41,8 +46,9 @@ impl AppState {
             items_cache: RwLock::new(self.items_cache.read().clone()),
             active_context: RwLock::new(self.active_context.read().clone()),
             task_status: RwLock::new(self.task_status.read().clone()),
-            scheduler_handle: RwLock::new(None),
-            snapshot_running: RwLock::new(*self.snapshot_running.read()),
+            scheduler_handle: RwLock::new(self.scheduler_handle.read().clone()),
+            snapshot_running: AtomicBool::new(self.snapshot_running.load(Ordering::SeqCst)),
+            is_quitting: AtomicBool::new(self.is_quitting.load(Ordering::SeqCst)),
         }
     }
 }

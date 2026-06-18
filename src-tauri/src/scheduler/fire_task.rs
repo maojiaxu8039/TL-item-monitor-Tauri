@@ -1,13 +1,11 @@
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio::time::{interval, Duration};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::core::events::{emit_fire_price_updated, FirePricePayload};
 use crate::core::state::{AppState, MarketMode};
 use crate::scraper;
-
-const INITIAL_FIRE_SCRAPE_DELAY_SECS: u64 = 0;
 
 pub async fn run_fire_scrape_task(
     app: tauri::AppHandle,
@@ -17,7 +15,7 @@ pub async fn run_fire_scrape_task(
     info!("Fire price scraper task started");
 
     tokio::select! {
-        _ = tokio::time::sleep(Duration::from_secs(INITIAL_FIRE_SCRAPE_DELAY_SECS)) => {}
+        _ = tokio::time::sleep(Duration::from_millis(1)) => {}
         result = abort.recv() => {
             match result {
                 Ok(_) | Err(broadcast::error::RecvError::Closed) => {
@@ -29,7 +27,7 @@ pub async fn run_fire_scrape_task(
         }
     }
 
-    let config = crate::core::config::load_config().unwrap_or_default();
+    let config = state.config.read().clone();
     if config.scrape.fire_price_scrape_enabled && config.scrape.fire_scrape_normal_enabled {
         match scrape_modes(&app, &state, true, false).await {
             Ok(success_count) if success_count > 0 => {
@@ -68,13 +66,7 @@ pub async fn run_fire_scrape_task(
                 }
             }
             _ = ticker.tick() => {
-                let config = match crate::core::config::load_config() {
-                    Ok(cfg) => cfg,
-                    Err(e) => {
-                        error!("Failed to load config: {}", e);
-                        continue;
-                    }
-                };
+                let config = state.config.read().clone();
 
                 if !config.scrape.fire_price_scrape_enabled {
                     continue;
@@ -140,15 +132,18 @@ async fn scrape_modes(
             Ok(snapshot) => {
                 let duration_ms = start.elapsed().as_millis() as i64;
 
-                let _ = crate::db::repo_fire::insert_fire_record(
+                if let Err(e) = crate::db::repo_fire::insert_fire_record(
                     &state.db,
                     &season_id,
                     mode_key.as_str(),
                     &snapshot,
                 )
-                .await;
+                .await
+                {
+                    warn!("Failed to insert fire record: {}", e);
+                }
 
-                let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
+                if let Err(e) = crate::db::repo_source_diagnostics::upsert_diagnostic(
                     &state.db,
                     "qiandao",
                     "api",
@@ -160,7 +155,10 @@ async fn scrape_modes(
                     None,
                     None,
                 )
-                .await;
+                .await
+                {
+                    warn!("Failed to upsert diagnostic: {}", e);
+                }
 
                 let mut fire_prices = state.fire_prices.write();
                 fire_prices.insert(mode_key, snapshot.clone());
@@ -188,7 +186,7 @@ async fn scrape_modes(
             }
             Err(e) => {
                 let duration_ms = start.elapsed().as_millis() as i64;
-                let _ = crate::db::repo_source_diagnostics::upsert_diagnostic(
+                if let Err(diag_err) = crate::db::repo_source_diagnostics::upsert_diagnostic(
                     &state.db,
                     "qiandao",
                     "api",
@@ -200,7 +198,10 @@ async fn scrape_modes(
                     None,
                     Some(&e.to_string()),
                 )
-                .await;
+                .await
+                {
+                    warn!("Failed to upsert diagnostic: {}", diag_err);
+                }
                 error!("Fire scrape failed [{}]: {}", mode_str, e);
             }
         }

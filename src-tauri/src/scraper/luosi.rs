@@ -1,15 +1,15 @@
 use crate::core::errors::AppError;
 use crate::db::models::Item;
-use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 // SECURITY NOTE: This third-party API endpoint only supports HTTP (not HTTPS).
 // The upstream service provider does not offer TLS, so all traffic to this
 // endpoint is unencrypted. No sensitive credentials are transmitted.
 const LUOSI_BASE_URL: &str = "http://115.231.176.101:8080/get";
 
-static LUOSI_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+static LUOSI_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(45))
         .connect_timeout(std::time::Duration::from_secs(15))

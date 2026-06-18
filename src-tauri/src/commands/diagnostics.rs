@@ -45,7 +45,7 @@ pub async fn test_source_connection(
     };
 
     let ctx = state.active_context.read().clone();
-    let _ = repo_source_diagnostics::upsert_diagnostic(
+    if let Err(e) = repo_source_diagnostics::upsert_diagnostic(
         &state.db,
         &source,
         source_type,
@@ -57,7 +57,10 @@ pub async fn test_source_connection(
         None,
         error.as_deref(),
     )
-    .await;
+    .await
+    {
+        tracing::warn!("Failed to upsert diagnostic: {}", e);
+    }
 
     if success {
         Ok(OkResponse::success("Connection test succeeded"))

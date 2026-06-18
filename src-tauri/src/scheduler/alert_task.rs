@@ -526,7 +526,7 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
         {
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-            // Validate voice_path contains only safe characters
+            // 校验语音路径仅包含安全字符，作为防御深度
             if !voice_path.chars().all(|c| {
                 c.is_alphanumeric()
                     || c.is_whitespace()
@@ -536,18 +536,13 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
                 continue;
             }
 
-            let script = format!(
-                "$done = $false; Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; Register-ObjectEvent -InputObject $player -EventName MediaEnded -Action {{ $script:done = $true }} | Out-Null; $player.Open([System.Uri]::new('file:///{0}')); $player.Play(); $deadline = (Get-Date).AddSeconds(30); while (-not $done -and (Get-Date) -lt $deadline) {{ Start-Sleep -Milliseconds 100 }}; $player.Close()",
-                voice_path.replace('\\', "/")
-            );
+            // 通过环境变量传递路径，避免字符串插值导致的命令注入风险
+            let script = "$p = $env:TORCH_VOICE_PATH; $done = $false; Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; Register-ObjectEvent -InputObject $player -EventName MediaEnded -Action { $script:done = $true } | Out-Null; $player.Open([System.Uri]::new(('file:///' + ($p -replace '\\','/')))); $player.Play(); $deadline = (Get-Date).AddSeconds(30); while (-not $done -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 100 }; $player.Close()";
             let mut command = tokio::process::Command::new("powershell");
-            command.creation_flags(CREATE_NO_WINDOW).args([
-                "-NoProfile",
-                "-WindowStyle",
-                "Hidden",
-                "-Command",
-                &script,
-            ]);
+            command
+                .creation_flags(CREATE_NO_WINDOW)
+                .env("TORCH_VOICE_PATH", &voice_path)
+                .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", script]);
 
             match tokio::time::timeout(std::time::Duration::from_secs(35), command.status()).await {
                 Ok(Ok(status)) if status.success() => played += 1,

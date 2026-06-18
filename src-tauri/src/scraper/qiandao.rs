@@ -52,7 +52,6 @@ async fn scrape_via_rust(
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
-        .danger_accept_invalid_certs(true)
         .build()
         .map_err(|e| AppError::Scrape(format!("reqwest build failed: {}", e)))?;
 
@@ -286,7 +285,14 @@ fn non_empty_or<'a>(value: &'a str, fallback: &'a str) -> &'a str {
 }
 
 fn safe_slice(s: &str, max_len: usize) -> &str {
-    &s[..s.len().min(max_len)]
+    if s.len() <= max_len {
+        return s;
+    }
+    let mut end = max_len;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
 }
 
 fn round_to_4(value: f64) -> f64 {
@@ -629,7 +635,6 @@ where
     }
 }
 
-#[allow(dead_code)]
 fn deserialize_string<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,

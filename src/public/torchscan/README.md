@@ -2,14 +2,9 @@
 
 Brand files produced for the redesigned UI.
 
-- `logo-mark.svg` - transparent vector mark for navigation and loading states
-- `logo-horizontal.svg` - horizontal logo lockup
-- `logo-horizontal.png` - cropped raster logo lockup used by the app shell
-- `app-icon.svg` - SVG wrapper for the raster desktop icon
 - `logo-mark.png` - cropped raster logo lockup used by navigation and loading states
-- `app-icon-256.png`, `app-icon-64.png`, `app-icon-48.png`, `app-icon-32.png`, `app-icon-16.png` - desktop icon sizes generated from the current 1024px app icon source
-- `icons/original/` - icon crops extracted from the provided UI design draft
-- `icons/` - vector fallback functional icon set
+- `app-icon-256.png`, `app-icon-64.png`, `app-icon-32.png` - app icon sizes used by the web shell
+- `icons/original/` - icon crops used by the app navigation and window controls
 
 Desktop package icons live in `src-tauri/icons/`:
 

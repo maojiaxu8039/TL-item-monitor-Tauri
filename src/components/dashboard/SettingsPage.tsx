@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus, type JsonFileValidationResult, type SeasonInfo } from "@/lib/commands";
+import { devLog } from "@/lib/devLog";
+import { errorMessage } from "@/lib/utils";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { RefreshCw, Save, Bell, Database, Globe, AlertTriangle, Trash2, Edit3, Key } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +12,7 @@ import { Surface } from "@/components/ui/Surface";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
+import { Toggle } from "@/components/ui/toggle";
 
 const INTERVAL_OPTIONS = [
   { label: "30 秒", value: 30 },
@@ -38,16 +41,6 @@ const DEFAULT_JSON_FILENAME = "full_table.json";
 
 function getDefaultJsonPath(appDataDir: string): string {
   return `${appDataDir}/${DEFAULT_JSON_FILENAME}`;
-}
-
-function errorMessage(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message;
-  if (typeof err === "string") return err;
-  try {
-    return JSON.stringify(err);
-  } catch {
-    return String(err);
-  }
 }
 
 export default function SettingsPage() {
@@ -159,7 +152,7 @@ export default function SettingsPage() {
       setItemCount(0);
     },
     onError: (err) => {
-      toast.error(`清空失败: ${err}`);
+      toast.error(`清空失败: ${errorMessage(err)}`);
     },
   });
 
@@ -212,7 +205,7 @@ export default function SettingsPage() {
       }
     },
     onError: (err) => {
-      toast.error(`请求权限失败: ${err}`);
+      toast.error(`请求权限失败: ${errorMessage(err)}`);
     },
   });
 
@@ -252,20 +245,20 @@ export default function SettingsPage() {
         if (cfg.scrape.items_source === 'local') {
           cmd.validateJsonFile(cfg.scrape.items_json_path || defaultPath).then((v) => {
             if (mounted) setJsonPathValidation(v);
-          }).catch(() => {});
+          }).catch((e) => devLog.warn("validateJsonFile failed", e));
         }
-      }).catch(() => {});
+      }).catch((e) => devLog.warn("getConfig failed", e));
     });
 
     cmd.getDashboardSummary().then((summary) => {
       if (!mounted) return;
       setItemCount(summary.item_count);
-    }).catch(() => {});
+    }).catch((e) => devLog.warn("getDashboardSummary failed", e));
 
     cmd.getNotificationPermissionStatus().then((status) => {
       if (!mounted) return;
       setNotificationPermission(status);
-    }).catch(() => {});
+    }).catch((e) => devLog.warn("getNotificationPermissionStatus failed", e));
     return () => { mounted = false; };
   }, []);
 
@@ -514,15 +507,7 @@ export default function SettingsPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={systemNotifications}
-                  onChange={(e) => setSystemNotifications(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-              </label>
+              <Toggle checked={systemNotifications} onChange={setSystemNotifications} />
               {!notificationPermission?.granted && (
                 <Button
                   size="sm"
@@ -541,15 +526,7 @@ export default function SettingsPage() {
               <div className="text-sm font-medium text-[var(--color-text)]">开启语音提醒</div>
               <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">预警触发时播放语音提示</div>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={voiceAlertEnabled}
-                onChange={(e) => setVoiceAlertEnabled(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-            </label>
+            <Toggle checked={voiceAlertEnabled} onChange={setVoiceAlertEnabled} />
           </div>
 
           {voiceAlertEnabled && (
@@ -573,15 +550,7 @@ export default function SettingsPage() {
               <div className="text-sm font-medium text-[var(--color-text)]">开启价格预警弹窗</div>
               <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">当监控物品变得"值的"时弹出通知提醒</div>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={priceAlertEnabled}
-                onChange={(e) => setPriceAlertEnabled(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-            </label>
+            <Toggle checked={priceAlertEnabled} onChange={setPriceAlertEnabled} />
           </div>
 
           {priceAlertEnabled && (
@@ -592,7 +561,7 @@ export default function SettingsPage() {
               </div>
               <select
                 value={priceAlertCooldown}
-                onChange={(e) => setPriceAlertCooldown(Number(e.target.value))}
+                onChange={(e) => setPriceAlertCooldown(Number(e.target.value) || 0)}
                 className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
               >
                 {COOLDOWN_OPTIONS.map((opt) => (
@@ -620,15 +589,7 @@ export default function SettingsPage() {
               <div className="text-sm font-medium text-[var(--color-text)]">自动采集火价</div>
               <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">定时从千岛获取当前赛季火价数据</div>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={fireEnabled}
-                onChange={(e) => setFireEnabled(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-            </label>
+            <Toggle checked={fireEnabled} onChange={setFireEnabled} />
           </div>
 
           <div className="flex items-center justify-between">
@@ -638,7 +599,7 @@ export default function SettingsPage() {
             </div>
             <select
               value={fireInterval}
-              onChange={(e) => setFireInterval(Number(e.target.value))}
+              onChange={(e) => setFireInterval(Number(e.target.value) || 0)}
               disabled={!fireEnabled}
               className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -660,15 +621,7 @@ export default function SettingsPage() {
                   <div className="w-2 h-2 rounded-full bg-[var(--color-success)]"></div>
                   <div className="text-sm text-[var(--color-text)]">普通服火价</div>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={fireScrapeNormal}
-                    onChange={(e) => setFireScrapeNormal(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-                </label>
+                <Toggle checked={fireScrapeNormal} onChange={setFireScrapeNormal} />
               </div>
 
               <div className="flex items-center justify-between pl-2">
@@ -676,15 +629,7 @@ export default function SettingsPage() {
                   <div className="w-2 h-2 rounded-full bg-[var(--color-ai)]"></div>
                   <div className="text-sm text-[var(--color-text)]">专家服火价</div>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={fireScrapeExpert}
-                    onChange={(e) => setFireScrapeExpert(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-                </label>
+                <Toggle checked={fireScrapeExpert} onChange={setFireScrapeExpert} />
               </div>
             </div>
           </div>
@@ -704,15 +649,7 @@ export default function SettingsPage() {
               <div className="text-sm font-medium text-[var(--color-text)]">自动同步物品价格</div>
               <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">定时从小助手获取当前赛季物品价格数据</div>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={itemsEnabled}
-                onChange={(e) => setItemsEnabled(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-            </label>
+            <Toggle checked={itemsEnabled} onChange={setItemsEnabled} />
           </div>
 
           <div className="flex items-center justify-between">
@@ -722,7 +659,7 @@ export default function SettingsPage() {
             </div>
             <select
               value={itemsInterval}
-              onChange={(e) => setItemsInterval(Number(e.target.value))}
+              onChange={(e) => setItemsInterval(Number(e.target.value) || 0)}
               disabled={!itemsEnabled}
               className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -762,15 +699,7 @@ export default function SettingsPage() {
                   <div className="w-2 h-2 rounded-full bg-[var(--color-success)]"></div>
                   <div className="text-sm text-[var(--color-text)]">普通服物品</div>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={itemsScrapeNormal}
-                    onChange={(e) => setItemsScrapeNormal(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-                </label>
+                <Toggle checked={itemsScrapeNormal} onChange={setItemsScrapeNormal} />
               </div>
 
               <div className="flex items-center justify-between pl-2">
@@ -778,15 +707,7 @@ export default function SettingsPage() {
                   <div className="w-2 h-2 rounded-full bg-[var(--color-ai)]"></div>
                   <div className="text-sm text-[var(--color-text)]">专家服物品</div>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={itemsScrapeExpert}
-                    onChange={(e) => setItemsScrapeExpert(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-[36px] h-[20px] bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-full transition-all duration-200 peer-checked:bg-gradient-to-r peer-checked:from-[var(--color-brand)] peer-checked:to-[var(--color-brand-gold)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--color-brand)]/30 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[var(--color-text-subtle)] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-                </label>
+                <Toggle checked={itemsScrapeExpert} onChange={setItemsScrapeExpert} />
               </div>
             </div>
           </div>

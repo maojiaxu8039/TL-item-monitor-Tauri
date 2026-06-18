@@ -1,6 +1,12 @@
 import { useEffect, useRef } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { queryClient } from "@/lib/query";
+import {
+  invalidateFireData,
+  invalidateItemsData,
+  invalidateMarketContextData,
+  queryKeys,
+} from "@/lib/queryKeys";
 import { toast } from "sonner";
 import { devLog } from "@/lib/devLog";
 
@@ -9,10 +15,9 @@ function isTauriRuntime(): boolean {
 }
 
 /**
- * Global Tauri event listener hook.
- * Listens to all backend events and performs appropriate cache invalidation
- * and UI notifications.
- * Skips registration in non-Tauri environments (e.g. Vite browser dev).
+ * 全局 Tauri 事件监听 hook。
+ * 监听所有后端事件，执行相应的缓存失效和 UI 通知。
+ * 在非 Tauri 环境（如 Vite 浏览器开发模式）下跳过注册。
  */
 export function useTauriEvents() {
   const mountedRef = useRef(true);
@@ -27,111 +32,72 @@ export function useTauriEvents() {
     const unlisteners: UnlistenFn[] = [];
     let cleanupCalled = false;
 
+    // 注册单个事件监听器，统一处理组件卸载竞态与 mounted 检查
+    const safeListen = async <T = void>(
+      event: string,
+      handler: (payload: T) => void
+    ): Promise<void> => {
+      const unlisten = await listen<T>(event, (e) => {
+        if (!mountedRef.current) return;
+        handler(e.payload);
+      });
+      if (cleanupCalled) {
+        unlisten();
+        return;
+      }
+      unlisteners.push(unlisten);
+    };
+
     const setupListeners = async () => {
       try {
-        // Fire price updated → invalidate fire history and dashboard summary, then refetch
-        const unlistenFire = await listen("fire-price-updated", () => {
-          if (!mountedRef.current) return;
-          queryClient.invalidateQueries({ queryKey: ["fire-history"] });
-          queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
-          queryClient.invalidateQueries({ queryKey: ["season-summary"] });
-          queryClient.invalidateQueries({ queryKey: ["season-trends"] });
-          queryClient.refetchQueries({ queryKey: ["dashboard-summary"], type: "active" });
+        // 火价更新 → 失效火价历史和仪表盘摘要，然后重新拉取
+        await safeListen("fire-price-updated", () => {
+          invalidateFireData(queryClient);
+          queryClient.refetchQueries({ queryKey: queryKeys.dashboardSummary, type: "active" });
         });
-        if (cleanupCalled) {
-          unlistenFire();
-          return;
-        }
-        unlisteners.push(unlistenFire);
 
-        // Items updated → invalidate items search and sections
-        const unlistenItems = await listen("items-updated", () => {
-          if (!mountedRef.current) return;
-          queryClient.invalidateQueries({ queryKey: ["items-search"] });
-          queryClient.invalidateQueries({ queryKey: ["sections"] });
-          queryClient.invalidateQueries({ queryKey: ["section-items"] });
-          queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+        // 物品更新 → 失效物品搜索和分组
+        await safeListen("items-updated", () => {
+          invalidateItemsData(queryClient);
         });
-        if (cleanupCalled) {
-          unlistenItems();
-          return;
-        }
-        unlisteners.push(unlistenItems);
 
-        // Market context changed → invalidate and refetch all context-dependent queries
-        const unlistenContext = await listen("market-context-changed", () => {
-          if (!mountedRef.current) return;
-          queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
-          queryClient.invalidateQueries({ queryKey: ["sections"] });
-          queryClient.invalidateQueries({ queryKey: ["section-items"] });
-          queryClient.invalidateQueries({ queryKey: ["items-search"] });
-          queryClient.invalidateQueries({ queryKey: ["fire-history"] });
-          queryClient.invalidateQueries({ queryKey: ["season-summary"] });
-          queryClient.invalidateQueries({ queryKey: ["season-trends"] });
-          queryClient.invalidateQueries({ queryKey: ["realtime-fire-changes"] });
-          queryClient.refetchQueries({ queryKey: ["dashboard-summary"], type: "active" });
+        // 市场上下文切换 → 失效并重新拉取所有依赖上下文的查询
+        await safeListen("market-context-changed", () => {
+          invalidateMarketContextData(queryClient);
+          queryClient.refetchQueries({ queryKey: queryKeys.dashboardSummary, type: "active" });
         });
-        if (cleanupCalled) {
-          unlistenContext();
-          return;
-        }
-        unlisteners.push(unlistenContext);
 
-        // Task status changed → invalidate dashboard summary
-        const unlistenTask = await listen("task-status-changed", () => {
-          if (!mountedRef.current) return;
-          queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+        // 任务状态变更 → 失效仪表盘摘要
+        await safeListen("task-status-changed", () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.dashboardSummary });
         });
-        if (cleanupCalled) {
-          unlistenTask();
-          return;
-        }
-        unlisteners.push(unlistenTask);
 
-        // Alert triggered → show toast and invalidate alert events
-        const unlistenAlert = await listen<{
+        // 预警触发 → 显示 toast 并失效预警事件
+        await safeListen<{
           id: string;
           rule_id: string;
           message: string;
           triggered_at: number;
-        }>("alert-triggered", (event) => {
-          if (!mountedRef.current) return;
+        }>("alert-triggered", (payload) => {
           toast.warning("价格预警", {
-            description: event.payload.message,
+            description: payload.message,
           });
-          queryClient.invalidateQueries({ queryKey: ["alert-events"] });
-          queryClient.invalidateQueries({ queryKey: ["alert-rules"] });
+          queryClient.invalidateQueries({ queryKey: queryKeys.alertEvents });
+          queryClient.invalidateQueries({ queryKey: queryKeys.alertRules });
         });
-        if (cleanupCalled) {
-          unlistenAlert();
-          return;
-        }
-        unlisteners.push(unlistenAlert);
 
-        // Config changed → invalidate config query
-        const unlistenConfig = await listen("config-changed", () => {
-          if (!mountedRef.current) return;
-          queryClient.invalidateQueries({ queryKey: ["config"] });
+        // 配置变更 → 失效配置查询
+        await safeListen("config-changed", () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.config });
         });
-        if (cleanupCalled) {
-          unlistenConfig();
-          return;
-        }
-        unlisteners.push(unlistenConfig);
 
-        // Database stats updated → invalidate db stats
-        const unlistenDb = await listen("database-stats-updated", () => {
-          if (!mountedRef.current) return;
-          queryClient.invalidateQueries({ queryKey: ["db-stats"] });
+        // 数据库统计更新 → 失效数据库统计
+        await safeListen("database-stats-updated", () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.dbStats });
         });
-        if (cleanupCalled) {
-          unlistenDb();
-          return;
-        }
-        unlisteners.push(unlistenDb);
 
         // 注册完成后主动刷新一次 dashboard-summary，捕获可能在监听器注册前已更新的数据
-        queryClient.refetchQueries({ queryKey: ["dashboard-summary"] });
+        queryClient.refetchQueries({ queryKey: queryKeys.dashboardSummary });
       } catch (error) {
         devLog.error("[useTauriEvents] Failed to setup listeners:", error);
       }

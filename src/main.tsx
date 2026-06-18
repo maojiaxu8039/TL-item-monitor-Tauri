@@ -2,36 +2,35 @@ import React from "react"
 import ReactDOM from "react-dom/client"
 import App from "./app/App"
 import "./index.css"
+import { devLog } from "@/lib/devLog"
 
 window.addEventListener("error", (event) => {
-  console.error("[TorchScan] Global error:", event.error, "at", event.filename, ":", event.lineno)
+  devLog.error("[TorchScan] Global error:", event.error, "at", event.filename, ":", event.lineno)
 })
 
 window.addEventListener("unhandledrejection", (event) => {
-  console.error("[TorchScan] Unhandled promise rejection:", event.reason)
+  devLog.error("[TorchScan] Unhandled promise rejection:", event.reason)
 })
 
-console.log("[TorchScan] Starting application...")
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("[TorchScan] DOMContentLoaded fired")
+  devLog.log("[TorchScan] DOMContentLoaded fired")
 })
 
 const rootElement = document.getElementById("root")
 if (!rootElement) {
   document.body.innerHTML = '<div style="color: white; padding: 20px; background: #000;">Error: Root element (#root) not found</div>'
-  console.error("[TorchScan] Root element not found!")
+  devLog.error("[TorchScan] Root element not found!")
 } else {
-  console.log("[TorchScan] Root element found, rendering...")
-  console.log("[TorchScan] Root element HTML:", rootElement.innerHTML)
+  devLog.log("[TorchScan] Root element found, rendering...")
   try {
     ReactDOM.createRoot(rootElement).render(
       <React.StrictMode>
         <App />
       </React.StrictMode>
     )
-    console.log("[TorchScan] React rendered successfully")
+    devLog.log("[TorchScan] React rendered successfully")
   } catch (err) {
-    console.error("[TorchScan] React render error:", err)
+    devLog.error("[TorchScan] React render error:", err)
     rootElement.innerHTML = `<div style="color: white; padding: 20px; background: #000;">Render Error: ${String(err)}</div>`
   }
 }

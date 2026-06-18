@@ -13,90 +13,32 @@ import {
   Target,
   Layers,
   Zap,
-  Search,
   ChevronDown,
   ChevronRight,
-  BookOpen,
-  Award,
-  Star,
-  ThumbsUp,
-  AlertTriangle,
-  Info,
   Image,
-  Upload,
-  ExternalLink,
 } from "lucide-react";
 import { cmd, StrategyWithCosts, ItemData } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { toast } from "sonner";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { strategyTemplates, type StrategyTemplate } from "@/lib/strategyTemplates";
+import { type StrategyTemplate } from "@/lib/strategyTemplates";
+import { calculateRecommendations as calculateRecommendationsImpl } from "@/lib/strategyRecommend";
 import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
-import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
+import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
-
-
-
-const LABELS = [
-  { value: "K7", label: "K7" },
-  { value: "K8-1", label: "K8-1" },
-  { value: "K8-2", label: "K8-2" },
-  { value: "U8", label: "U8" },
-  { value: "深空", label: "深空" },
-  { value: "九红深空", label: "九红深空" },
-];
-
-const DIFFICULTIES = [
-  { value: "简单", label: "简单" },
-  { value: "普通", label: "普通" },
-  { value: "困难", label: "困难" },
-  { value: "专家", label: "专家" },
-];
-
-interface EditStrategyForm {
-  id?: string;
-  name: string;
-  label: string;
-  difficulty: string;
-  output_value: number;
-  defense_value: number;
-  remark: string;
-  image_url: string;
-}
-
-interface CostForm {
-  strategy_id: string;
-  cost_type: string;
-  item_id: string;
-  item_name: string;
-  count: number;
-  is_realtime: boolean;
-}
-
-interface OutputForm {
-  strategy_id: string;
-  item_name: string;
-  item_type: string;
-  count: number;
-}
-
-type StrategyTab = "strategies" | "templates" | "recommendations";
-
-export interface StrategyRecommendation {
-  strategy_id: string;
-  strategy_name: string;
-  score: number;
-  level: "strong" | "good" | "watch" | "avoid";
-  expected_profit_fire: number;
-  profit_ratio: number;
-  risk_level: "low" | "medium" | "high";
-  reasons: string[];
-  warnings: string[];
-}
+import { StrategyFormDialog } from "./strategies/StrategyFormDialog";
+import { StrategyItemAddDialog } from "./strategies/StrategyItemAddDialog";
+import { ImagePreviewDialog } from "./strategies/ImagePreviewDialog";
+import { StrategyTemplateLibrary } from "./strategies/StrategyTemplateLibrary";
+import { StrategyRecommendations } from "./strategies/StrategyRecommendations";
+import type {
+  EditStrategyForm,
+  CostForm,
+  OutputForm,
+  StrategyTab,
+  StrategyRecommendation,
+} from "./strategies/types";
 
 export default function StrategiesPage() {
   const { marketContext, marketContextReady } = useSectionRefresh();
@@ -153,7 +95,7 @@ export default function StrategiesPage() {
       if (!mountedRef.current) return;
       const sorted = [...data].sort((a, b) => b.profit_ratio - a.profit_ratio);
       setStrategies(sorted);
-    } catch (e) {
+    } catch {
       if (!mountedRef.current) return;
       toast.error("加载策略失败");
     } finally {
@@ -309,7 +251,7 @@ export default function StrategiesPage() {
       await cmd.deleteStrategyDetail(id);
       toast.success("策略已删除");
       loadStrategies();
-    } catch (e) {
+    } catch {
       toast.error("删除策略失败");
     }
   }, [loadStrategies]);
@@ -332,7 +274,7 @@ export default function StrategiesPage() {
       setShowCostDialog(null);
       resetCostForm();
       loadStrategies();
-    } catch (e) {
+    } catch {
       toast.error("添加成本失败");
     }
   }, [costForm, resetCostForm, loadStrategies]);
@@ -355,7 +297,7 @@ export default function StrategiesPage() {
       setShowOutputDialog(null);
       resetOutputForm();
       loadStrategies();
-    } catch (e) {
+    } catch {
       toast.error("添加产出失败");
     }
   }, [outputForm, resetOutputForm, loadStrategies]);
@@ -365,7 +307,7 @@ export default function StrategiesPage() {
       await cmd.deleteStrategyCost(id);
       toast.success("成本已删除");
       loadStrategies();
-    } catch (e) {
+    } catch {
       toast.error("删除成本失败");
     }
   }, [loadStrategies]);
@@ -375,7 +317,7 @@ export default function StrategiesPage() {
       await cmd.deleteStrategyOutput(id);
       toast.success("产出已删除");
       loadStrategies();
-    } catch (e) {
+    } catch {
       toast.error("删除产出失败");
     }
   }, [loadStrategies]);
@@ -386,7 +328,7 @@ export default function StrategiesPage() {
       await cmd.refreshStrategyFirePrices(strategyId);
       toast.success("火价已刷新");
       loadStrategies();
-    } catch (e) {
+    } catch {
       toast.error("刷新火价失败");
     } finally {
       setRefreshing(null);
@@ -532,92 +474,7 @@ export default function StrategiesPage() {
 
   const strategyMap = useMemo(() => new Map(strategies.map(s => [s.id, s])), [strategies]);
 
-  const calculateRecommendations = useMemo((): StrategyRecommendation[] => {
-    if (strategies.length === 0) return [];
-
-    const now = Date.now();
-
-    return strategies.map(strategy => {
-      const reasons: string[] = [];
-      const warnings: string[] = [];
-      let score = 50;
-
-      const profitRatio = strategy.profit_ratio;
-      const netProfit = strategy.total_output_value - strategy.total_cost_fire;
-      const hasCosts = strategy.costs.length > 0;
-      const hasOutputs = strategy.outputs.length > 0;
-
-      if (!hasCosts || !hasOutputs) {
-        warnings.push("成本或产出数据不完整");
-      }
-
-      if (profitRatio > 20) {
-        score += 30;
-        reasons.push(`收益率极高 (+${profitRatio.toFixed(1)}%)`);
-      } else if (profitRatio > 10) {
-        score += 20;
-        reasons.push(`收益率较高 (+${profitRatio.toFixed(1)}%)`);
-      } else if (profitRatio > 0) {
-        score += 10;
-        reasons.push(`收益率正向 (+${profitRatio.toFixed(1)}%)`);
-      } else if (profitRatio < -10) {
-        score -= 30;
-        warnings.push(`收益率过低 (${profitRatio.toFixed(1)}%)`);
-      } else if (profitRatio < 0) {
-        score -= 15;
-        warnings.push(`收益为负 (${profitRatio.toFixed(1)}%)`);
-      }
-
-      if (netProfit > 100) {
-        score += 15;
-        reasons.push(`净收益较高 (+${netProfit.toFixed(0)}火)`);
-      } else if (netProfit < -100) {
-        score -= 20;
-        warnings.push(`净收益为负 (${netProfit.toFixed(0)}火)`);
-      }
-
-      const hasRealtimeCosts = strategy.costs.some(c => c.is_realtime);
-      if (hasRealtimeCosts) {
-        score += 5;
-        reasons.push("使用实时火价计算");
-      }
-
-      const difficulty = strategy.difficulty;
-      if (difficulty === "地狱" || difficulty === "噩梦") {
-        score -= 5;
-        warnings.push("高难度策略，风险较高");
-      }
-
-      score = Math.max(0, Math.min(100, score));
-
-      let level: StrategyRecommendation["level"];
-      if (score >= 80) level = "strong";
-      else if (score >= 60) level = "good";
-      else if (score >= 40) level = "watch";
-      else level = "avoid";
-
-      let risk: StrategyRecommendation["risk_level"];
-      if (difficulty === "地狱" || difficulty === "噩梦" || profitRatio < -10) {
-        risk = "high";
-      } else if (difficulty === "困难" || profitRatio < 0) {
-        risk = "medium";
-      } else {
-        risk = "low";
-      }
-
-      return {
-        strategy_id: strategy.id,
-        strategy_name: strategy.name,
-        score,
-        level,
-        expected_profit_fire: netProfit,
-        profit_ratio: profitRatio,
-        risk_level: risk,
-        reasons,
-        warnings,
-      };
-    }).sort((a, b) => b.score - a.score);
-  }, [strategies]);
+  const calculateRecommendations = useMemo(() => calculateRecommendationsImpl(strategies), [strategies]);
 
   if (loading) {
     return (
@@ -679,197 +536,22 @@ export default function StrategiesPage() {
       </Surface>
 
       {activeTab === "templates" && (
-        <div className="space-y-4">
-          <p className="text-xs text-[var(--color-text-subtle)]">选择模板快速创建策略，降低录入成本</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {strategyTemplates.map((template) => (
-              <div
-                key={template.id}
-                className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] p-4 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-medium text-[var(--color-text)]">{template.name}</h3>
-                    <p className="text-xs text-[var(--color-text-subtle)] mt-1">{template.description}</p>
-                  </div>
-                  <span className={`px-2 py-0.5 text-xs rounded ${getLabelColor(template.label)}`}>
-                    {template.label}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4 text-xs text-[var(--color-text-subtle)] mb-3">
-                  <span>难度: {template.difficulty}</span>
-                  <span>输出: {template.output_value}</span>
-                  <span>防御: {template.defense_value}</span>
-                </div>
-                <div className="text-xs text-[var(--color-text-subtle)] mb-3">
-                  {template.remark}
-                </div>
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {template.costs.slice(0, 3).map((cost, i) => (
-                    <span key={i} className="px-1.5 py-0.5 bg-[rgba(239,68,68,0.1)] text-[var(--color-danger)] text-xs rounded">
-                      {cost.cost_type}
-                    </span>
-                  ))}
-                  {template.costs.length > 3 && (
-                    <span className="px-1.5 py-0.5 bg-[var(--color-panel)] text-[var(--color-text-subtle)] text-xs rounded">
-                      +{template.costs.length - 3}
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => handleCreateFromTemplate(template)}
-                  className="w-full px-3 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90 transition-opacity"
-                >
-                  一键创建
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+        <StrategyTemplateLibrary
+          getLabelColor={getLabelColor}
+          onCreateFromTemplate={handleCreateFromTemplate}
+        />
       )}
 
       {activeTab === "recommendations" && (
-        <div className="space-y-4">
-          {strategies.length === 0 ? (
-            <div className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] py-12 text-center">
-              <Award className="w-12 h-12 text-[var(--color-text-subtle)] mx-auto mb-3" />
-              <div className="text-sm text-[var(--color-text-subtle)]">暂无策略</div>
-              <div className="text-xs text-[var(--color-text-subtle)] mt-1">请先创建策略后查看推荐</div>
-            </div>
-          ) : calculateRecommendations.length === 0 ? (
-            <div className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] py-12 text-center">
-              <Info className="w-12 h-12 text-[var(--color-text-subtle)] mx-auto mb-3" />
-              <div className="text-sm text-[var(--color-text-subtle)]">策略数据不足</div>
-              <div className="text-xs text-[var(--color-text-subtle)] mt-1">请添加成本和产出后查看推荐</div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {calculateRecommendations.map((rec, index) => {
-                const strategy = strategyMap.get(rec.strategy_id);
-                return (
-                  <div
-                    key={rec.strategy_id}
-                    className="bg-[var(--color-panel)] rounded-lg border border-[var(--color-border)] p-4"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
-                        index === 0 ? "bg-[rgba(255,184,0,0.15)] text-[var(--color-brand-gold)]" :
-                        index === 1 ? "bg-[var(--color-panel-soft)] text-[var(--color-text-subtle)]" :
-                        index === 2 ? "bg-[rgba(255,106,0,0.15)] text-[var(--color-brand)]" :
-                        "bg-[var(--color-panel-soft)] text-[var(--color-text-subtle)]"
-                      }`}>
-                        {index + 1}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-[var(--color-text)]">{rec.strategy_name}</span>
-                          <span className={`px-2 py-0.5 text-xs rounded border ${getRecommendationLevelColor(rec.level)}`}>
-                            {getRecommendationLevelText(rec.level)}
-                          </span>
-                          <span className={`px-2 py-0.5 text-xs rounded ${getRiskColor(rec.risk_level)}`}>
-                            {rec.risk_level === "low" ? "低风险" : rec.risk_level === "medium" ? "中风险" : "高风险"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-4 mt-1 text-xs text-[var(--color-text-subtle)]">
-                          <span>评分: <span className="font-medium">{rec.score}</span></span>
-                          <span>收益率: <span className={`font-medium ${rec.profit_ratio >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
-                            {rec.profit_ratio >= 0 ? "+" : ""}{rec.profit_ratio.toFixed(1)}%
-                          </span></span>
-                          <span>预计收益: <span className={`font-medium ${rec.expected_profit_fire >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
-                            {rec.expected_profit_fire >= 0 ? "+" : ""}{rec.expected_profit_fire.toFixed(0)}火
-                          </span></span>
-                        </div>
-                      </div>
-                      {strategy?.image_url && (
-                        <img
-                          src={strategy.image_url}
-                          alt="加点图"
-                          className="w-16 h-16 object-cover rounded-lg border border-[var(--color-border)] cursor-pointer hover:opacity-80"
-                          onClick={() => setPreviewImage(strategy.image_url)}
-                        />
-                      )}
-                      <div className="text-right">
-                        <div className={`text-2xl font-bold ${
-                          rec.score >= 80 ? "text-[var(--color-danger)]" :
-                          rec.score >= 60 ? "text-[var(--color-brand-gold)]" :
-                          rec.score >= 40 ? "text-[var(--color-brand)]" :
-                          "text-[var(--color-success)]"
-                        }`}>
-                          {rec.score}
-                        </div>
-                        <div className="text-xs text-[var(--color-text-subtle)]">分</div>
-                      </div>
-                    </div>
-                    {rec.reasons.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-1">
-                        {rec.reasons.map((reason, i) => (
-                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(34,197,94,0.1)] text-[var(--color-success)] text-xs rounded">
-                            <ThumbsUp className="w-3 h-3" />
-                            {reason}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {rec.warnings.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {rec.warnings.map((warning, i) => (
-                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(255,184,0,0.1)] text-[var(--color-brand-gold)] text-xs rounded">
-                            <AlertTriangle className="w-3 h-3" />
-                            {warning}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {strategy && (
-                      <div className="mt-3 pt-3 border-t border-[var(--color-border-soft)] space-y-3">
-                        <div className="flex items-center gap-4 text-xs text-[var(--color-text-subtle)]">
-                          <span>成本: <span className="text-[var(--color-danger)]">{strategy.total_cost_fire.toFixed(0)}火</span></span>
-                          <span>产出: <span className="text-[var(--color-success)]">{strategy.total_output_value.toFixed(0)}火</span></span>
-                          <span>难度: {strategy.difficulty}</span>
-                        </div>
-                        {strategy.costs.length > 0 && (
-                          <div>
-                            <div className="text-xs font-medium text-[var(--color-text)] mb-1.5 flex items-center gap-1">
-                              <Zap className="w-3 h-3 text-[var(--color-danger)]" />
-                              消耗材料
-                            </div>
-                            <div className="flex flex-wrap gap-1.5">
-                              {strategy.costs.map((cost) => (
-                                <span key={cost.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(239,68,68,0.1)] text-[var(--color-danger)] text-xs rounded">
-                                  <span className="font-medium">{cost.item_name || cost.item_id}</span>
-                                  <span className="text-[var(--color-danger)]">×{cost.count}</span>
-                                  <span className="text-[var(--color-danger)]">{cost.total_fire.toFixed(0)}火</span>
-                                  {cost.is_realtime && <span className="text-[10px] bg-[var(--color-success)]/20 text-[var(--color-success)] px-1 rounded">实时</span>}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {strategy.outputs.length > 0 && (
-                          <div>
-                            <div className="text-xs font-medium text-[var(--color-text)] mb-1.5 flex items-center gap-1">
-                              <TrendingUp className="w-3 h-3 text-[var(--color-success)]" />
-                              产出收益
-                            </div>
-                            <div className="flex flex-wrap gap-1.5">
-                              {strategy.outputs.map((output) => (
-                                <span key={output.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(34,197,94,0.1)] text-[var(--color-success)] text-xs rounded">
-                                  <span className="font-medium">{output.item_name}</span>
-                                  <span className="text-[var(--color-success)]">×{output.count}</span>
-                                  <span className="text-[var(--color-success)]">{(output.realtime_value * output.count).toFixed(0)}火</span>
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <StrategyRecommendations
+          strategies={strategies}
+          recommendations={calculateRecommendations}
+          strategyMap={strategyMap}
+          getRecommendationLevelColor={getRecommendationLevelColor}
+          getRecommendationLevelText={getRecommendationLevelText}
+          getRiskColor={getRiskColor}
+          onPreviewImage={(url) => setPreviewImage(url)}
+        />
       )}
 
       {activeTab === "strategies" && (
@@ -1097,349 +779,59 @@ export default function StrategiesPage() {
         </div>
       )}
 
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
-            <h3 className="text-sm font-semibold text-[var(--color-text)]">新建策略</h3>
-            <button onClick={() => setShowCreateDialog(false)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
-          </div>
-          <div className="p-5 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">策略名称</label>
-              <Input
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                placeholder="例如: K8回响流"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">标签</label>
-                <Select
-                  value={editForm.label}
-                  onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
-                >
-                  {LABELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
-                </Select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">难度</label>
-                <Select
-                  value={editForm.difficulty}
-                  onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}
-                >
-                  {DIFFICULTIES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">输出值</label>
-                <Input
-                  type="number"
-                  value={editForm.output_value}
-                  onChange={(e) => setEditForm({ ...editForm, output_value: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">防御值</label>
-                <Input
-                  type="number"
-                  value={editForm.defense_value}
-                  onChange={(e) => setEditForm({ ...editForm, defense_value: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">备注</label>
-              <Input
-                value={editForm.remark}
-                onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })}
-                placeholder="可选备注信息"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">加点图片</label>
-              <label className="flex items-center gap-2 px-4 py-3 bg-[var(--color-panel)] text-[var(--color-text-muted)] rounded-lg hover:bg-[var(--color-panel-soft)] cursor-pointer w-full">
-                <Upload className="w-4 h-4" />
-                <span className="text-sm">上传加点截图</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      const base64 = ev.target?.result as string;
-                      setEditForm(prev => ({ ...prev, image_url: base64 }));
-                    };
-                    reader.readAsDataURL(file);
-                  }}
-                />
-              </label>
-              {editForm.image_url && (
-                <div className="mt-2 p-2 border border-[var(--color-border)] rounded-lg bg-[var(--color-panel-soft)] flex items-center gap-3">
-                  <img src={editForm.image_url} alt="加点图预览" className="max-h-24 rounded" />
-                  <button
-                    onClick={() => setEditForm(prev => ({ ...prev, image_url: "" }))}
-                    className="text-[var(--color-danger)] hover:text-[var(--color-danger)] text-xs"
-                  >
-                    删除图片
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
-            <button onClick={() => setShowCreateDialog(false)} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg">取消</button>
-            <button onClick={handleCreate} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90">创建</button>
-          </div>
-        </div>
-      </Dialog>
+      <StrategyFormDialog
+        mode="create"
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        form={editForm}
+        onFormChange={setEditForm}
+        onSubmit={handleCreate}
+      />
 
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
-            <h3 className="text-sm font-semibold text-[var(--color-text)]">编辑策略</h3>
-            <button onClick={() => setShowEditDialog(false)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
-          </div>
-          <div className="p-5 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">策略名称</label>
-              <Input
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                placeholder="例如: K8回响流"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">标签</label>
-                <Select
-                  value={editForm.label}
-                  onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
-                >
-                  {LABELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
-                </Select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">难度</label>
-                <Select
-                  value={editForm.difficulty}
-                  onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}
-                >
-                  {DIFFICULTIES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">输出值</label>
-                <Input
-                  type="number"
-                  value={editForm.output_value}
-                  onChange={(e) => setEditForm({ ...editForm, output_value: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">防御值</label>
-                <Input
-                  type="number"
-                  value={editForm.defense_value}
-                  onChange={(e) => setEditForm({ ...editForm, defense_value: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">备注</label>
-              <Input
-                value={editForm.remark}
-                onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })}
-                placeholder="可选备注信息"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">加点图片</label>
-              <label className="flex items-center gap-2 px-4 py-3 bg-[var(--color-panel)] text-[var(--color-text-muted)] rounded-lg hover:bg-[var(--color-panel-soft)] cursor-pointer w-full">
-                <Upload className="w-4 h-4" />
-                <span className="text-sm">上传加点截图</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      const base64 = ev.target?.result as string;
-                      setEditForm(prev => ({ ...prev, image_url: base64 }));
-                    };
-                    reader.readAsDataURL(file);
-                  }}
-                />
-              </label>
-              {editForm.image_url && (
-                <div className="mt-2 p-2 border border-[var(--color-border)] rounded-lg bg-[var(--color-panel-soft)] flex items-center gap-3">
-                  <img src={editForm.image_url} alt="加点图预览" className="max-h-24 rounded" />
-                  <button
-                    onClick={() => setEditForm(prev => ({ ...prev, image_url: "" }))}
-                    className="text-[var(--color-danger)] hover:text-[var(--color-danger)] text-xs"
-                  >
-                    删除图片
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
-            <button onClick={() => setShowEditDialog(false)} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg">取消</button>
-            <button onClick={handleUpdate} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90">保存</button>
-          </div>
-        </div>
-      </Dialog>
+      <StrategyFormDialog
+        mode="edit"
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        form={editForm}
+        onFormChange={setEditForm}
+        onSubmit={handleUpdate}
+      />
 
-      <Dialog open={!!showCostDialog} onOpenChange={() => { setShowCostDialog(null); setItemSearchResults([]); }}>
-        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
-            <h3 className="text-sm font-semibold text-[var(--color-text)]">添加成本</h3>
-            <button onClick={() => setShowCostDialog(null)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
-          </div>
-          <div className="p-5 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">搜索物品</label>
-              <div className="relative">
-                <Input
-                  value={costForm.item_name}
-                  onChange={(e) => {
-                    setCostForm({ ...costForm, item_id: "", item_name: e.target.value });
-                    searchItems(e.target.value);
-                  }}
-                  placeholder="输入物品名称搜索"
-                />
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
-              </div>
-              {itemSearchResults.length > 0 && (
-                <div className="mt-2 max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-lg">
-                  {itemSearchResults.map((item) => (
-                    <div
-                      key={item.item_id}
-                      onClick={() => handleItemSelect(item)}
-                      className="px-3 py-2 text-sm hover:bg-[var(--color-brand)]/10 cursor-pointer border-b border-[var(--color-border-soft)] last:border-b-0"
-                    >
-                      <div className="text-[var(--color-text)]">{item.name}</div>
-                      <div className="text-xs text-[var(--color-text-subtle)]">{item.item_type} - {item.price.toFixed(0)} 火</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">数量</label>
-              <Input
-                type="number"
-                value={costForm.count}
-                onChange={(e) => setCostForm({ ...costForm, count: parseFloat(e.target.value) || 1 })}
-              />
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={costForm.is_realtime}
-                onChange={(e) => setCostForm({ ...costForm, is_realtime: e.target.checked })}
-                className="w-4 h-4"
-              />
-              <span>关联实时火价</span>
-            </label>
-          </div>
-          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
-            <button onClick={() => setShowCostDialog(null)} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg">取消</button>
-            <button onClick={handleAddCost} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90">添加</button>
-          </div>
-        </div>
-      </Dialog>
+      <StrategyItemAddDialog
+        mode="cost"
+        open={!!showCostDialog}
+        onClose={() => { setShowCostDialog(null); setItemSearchResults([]); }}
+        onSubmit={handleAddCost}
+        costForm={costForm}
+        setCostForm={setCostForm}
+        outputForm={outputForm}
+        setOutputForm={setOutputForm}
+        itemSearchResults={itemSearchResults}
+        onSearch={searchItems}
+        onItemSelect={handleItemSelect}
+      />
 
-      <Dialog open={!!showOutputDialog} onOpenChange={() => { setShowOutputDialog(null); setItemSearchResults([]); }}>
-        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
-            <h3 className="text-sm font-semibold text-[var(--color-text)]">添加产出</h3>
-            <button onClick={() => setShowOutputDialog(null)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
-          </div>
-          <div className="p-5 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">搜索物品</label>
-              <div className="relative">
-                <Input
-                  value={outputForm.item_name}
-                  onChange={(e) => {
-                    setOutputForm({ ...outputForm, item_name: e.target.value, item_type: "" });
-                    searchItems(e.target.value);
-                  }}
-                  placeholder="输入物品名称搜索"
-                />
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
-              </div>
-              {itemSearchResults.length > 0 && (
-                <div className="mt-2 max-h-40 overflow-y-auto border border-[var(--color-border)] rounded-lg">
-                  {itemSearchResults.map((item) => (
-                    <div
-                      key={item.item_id}
-                      onClick={() => handleItemSelect(item)}
-                      className="px-3 py-2 text-sm hover:bg-[var(--color-brand)]/10 cursor-pointer border-b border-[var(--color-border-soft)] last:border-b-0"
-                    >
-                      <div className="text-[var(--color-text)]">{item.name}</div>
-                      <div className="text-xs text-[var(--color-text-subtle)]">{item.item_type} - {item.price.toFixed(0)} 火</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">物品类型</label>
-              <Input
-                value={outputForm.item_type}
-                onChange={(e) => setOutputForm({ ...outputForm, item_type: e.target.value })}
-                placeholder="自动从搜索结果填充"
-                disabled
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">数量</label>
-              <Input
-                type="number"
-                value={outputForm.count}
-                onChange={(e) => setOutputForm({ ...outputForm, count: parseFloat(e.target.value) || 1 })}
-              />
-            </div>
-          </div>
-          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
-            <button onClick={() => setShowOutputDialog(null)} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg">取消</button>
-            <button onClick={handleAddOutput} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90">添加</button>
-          </div>
-        </div>
-      </Dialog>
+      <StrategyItemAddDialog
+        mode="output"
+        open={!!showOutputDialog}
+        onClose={() => { setShowOutputDialog(null); setItemSearchResults([]); }}
+        onSubmit={handleAddOutput}
+        costForm={costForm}
+        setCostForm={setCostForm}
+        outputForm={outputForm}
+        setOutputForm={setOutputForm}
+        itemSearchResults={itemSearchResults}
+        onSearch={searchItems}
+        onItemSelect={handleItemSelect}
+      />
 
         </>
       )}
 
-      <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
-        <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-3xl mx-4 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-[var(--color-text)]">加点图片预览</h3>
-            <button onClick={() => setPreviewImage(null)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text-muted)]">✕</button>
-          </div>
-          {previewImage && (
-            <img
-              src={previewImage}
-              alt="加点图"
-              className="w-full rounded-lg"
-              style={{ maxHeight: '70vh', objectFit: 'contain' }}
-            />
-          )}
-        </div>
-      </Dialog>
+      <ImagePreviewDialog
+        image={previewImage}
+        onClose={() => setPreviewImage(null)}
+      />
     </PageShell>
   );
 }

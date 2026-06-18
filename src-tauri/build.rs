@@ -22,7 +22,7 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
         if ty.is_dir() {
             copy_dir_recursive(&entry.path(), &dst_path)?;
         } else {
-            std::fs::copy(&entry.path(), &dst_path)?;
+            std::fs::copy(entry.path(), &dst_path)?;
         }
     }
     Ok(())

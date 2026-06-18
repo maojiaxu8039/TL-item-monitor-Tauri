@@ -5,7 +5,6 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager,
 };
-use tokio::sync::Mutex;
 use tracing::info;
 
 use crate::core::events::{emit_fire_price_updated, FirePricePayload};
@@ -14,10 +13,7 @@ use crate::scraper;
 
 /// Shared mutable state for tray tooltip updates.
 #[derive(Clone)]
-pub struct TrayState {
-    #[allow(dead_code)]
-    pub tooltip: Arc<Mutex<String>>,
-}
+pub struct TrayState {}
 
 fn get_fire_price_display(app: &AppHandle) -> String {
     let state = app.state::<Arc<crate::core::state::AppState>>();
@@ -33,13 +29,28 @@ fn graceful_shutdown(app: &tauri::AppHandle) {
     info!("Initiating graceful shutdown...");
 
     if let Some(state) = app.try_state::<Arc<crate::core::state::AppState>>() {
+        state
+            .is_quitting
+            .store(true, std::sync::atomic::Ordering::SeqCst);
         if let Some(handle) = state.scheduler_handle.read().as_ref() {
             handle.shutdown();
         }
     }
 
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.close();
+    }
+
     info!("Graceful shutdown complete, exiting");
     app.exit(0);
+
+    #[cfg(target_os = "windows")]
+    {
+        std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_millis(1200));
+            std::process::exit(0);
+        });
+    }
 }
 
 /// Refresh fire price from web and update tray tooltip.
@@ -120,9 +131,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .item(&quit_item)
         .build()?;
 
-    let tray_state = TrayState {
-        tooltip: Arc::new(Mutex::new(initial_tooltip.clone())),
-    };
+    let tray_state = TrayState {};
     app.manage(tray_state);
 
     // 1x1 transparent PNG as ultimate fallback

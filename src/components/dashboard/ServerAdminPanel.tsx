@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Settings, ChevronDown, ChevronUp, Key, Plus, Save, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { serverAdmin, type ServerApiConfig } from "@/lib/commands";
+import { errorMessage } from "@/lib/utils";
 
 interface ServerAdminPanelProps {
   serverUrl: string;
@@ -49,7 +50,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
       setIsConfigLoaded(true);
       toast.success("API配置已加载");
     } catch (err) {
-      toast.error(`加载配置失败: ${err}`);
+      toast.error(`加载配置失败: ${errorMessage(err)}`);
     } finally {
       setIsLoading(false);
     }
@@ -83,7 +84,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
       setNewSeasonId("");
       setNewSeasonStartedAt("");
     } catch (err) {
-      toast.error(`初始化失败: ${err}`);
+      toast.error(`初始化失败: ${errorMessage(err)}`);
     } finally {
       setIsLoading(false);
     }
@@ -104,7 +105,7 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
       await serverAdmin.updateApiConfig(serverUrl, password, editedConfig, getSignal());
       toast.success("API配置已更新（重启服务器后生效）");
     } catch (err) {
-      toast.error(`保存失败: ${err}`);
+      toast.error(`保存失败: ${errorMessage(err)}`);
     } finally {
       setIsLoading(false);
     }

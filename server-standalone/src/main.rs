@@ -2673,9 +2673,6 @@ async fn handle_ws_connection(
     let (write, mut read) = ws_stream.split();
     let write = Arc::new(TokioMutex::new(write));
 
-    #[allow(unused_assignments)]
-    let mut authenticated = false;
-    #[allow(unused_assignments)]
     let auth_timeout = std::time::Duration::from_secs(10);
     let auth_start = std::time::Instant::now();
 
@@ -2700,7 +2697,6 @@ async fn handle_ws_connection(
                             if json["type"].as_str() == Some("auth") {
                                 let password = json["password"].as_str().unwrap_or("");
                                 if password_hash::verify_password(password, &state.config.admin_password).is_ok() {
-                                    authenticated = true;
                                     info!("WebSocket {} 认证成功", client_addr);
                                     let mut w = write.lock().await;
                                     let _ = w.send(Message::Text(r#"{"type":"auth_success"}"#.into())).await;
@@ -2742,11 +2738,6 @@ async fn handle_ws_connection(
             }
             _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {}
         }
-    }
-
-    if !authenticated {
-        warn!("WebSocket {} 认证状态异常", client_addr);
-        return;
     }
 
     {

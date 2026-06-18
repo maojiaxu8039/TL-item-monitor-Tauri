@@ -1,5 +1,8 @@
 use crate::commands::types::{DashboardSummary, FirePriceUI, OkResponse};
-use crate::core::events::{emit_fire_price_updated, FirePricePayload};
+use crate::core::events::{
+    emit_fire_price_updated, emit_items_updated, emit_task_status_changed, FirePricePayload,
+    ItemsUpdatedPayload, TaskStatusPayload,
+};
 use crate::core::state::{AppState, FirePriceSnapshot, MarketMode};
 use crate::db::repo_fire;
 use crate::db::repo_history;
@@ -8,7 +11,7 @@ use crate::db::repo_items;
 use crate::db::repo_sections;
 use crate::scraper;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub async fn get_dashboard_summary(
@@ -115,7 +118,9 @@ pub async fn set_active_market_context(
     if let Ok(mut cfg) = crate::core::config::load_config() {
         cfg.app.season_id = seasonId.clone();
         cfg.scrape.fire_price_mode = mode.as_str().to_string();
-        let _ = crate::core::config::save_config(&cfg);
+        if let Err(e) = crate::core::config::save_config(&cfg) {
+            tracing::warn!("Failed to save config after context switch: {}", e);
+        }
     }
 
     // Immediately fetch fresh fire price for new context
@@ -129,13 +134,16 @@ pub async fn set_active_market_context(
                 .await
             {
                 Ok(snapshot) => {
-                    let _ = crate::db::repo_fire::insert_fire_record(
+                    if let Err(e) = crate::db::repo_fire::insert_fire_record(
                         &state.db,
                         &seasonId,
                         mode.as_str(),
                         &snapshot,
                     )
-                    .await;
+                    .await
+                    {
+                        tracing::warn!("Failed to insert fire record: {}", e);
+                    }
 
                     {
                         let mut fire_prices = state.fire_prices.write();
@@ -293,7 +301,10 @@ async fn load_fire_from_db(
 }
 
 #[tauri::command]
-pub async fn refresh_fire_price(state: State<'_, Arc<AppState>>) -> Result<FirePriceUI, String> {
+pub async fn refresh_fire_price(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<FirePriceUI, String> {
     let ctx = state.active_context.read().clone();
     let mode_str = match ctx.market_mode {
         MarketMode::SeasonExpert => "专家",
@@ -306,24 +317,57 @@ pub async fn refresh_fire_price(state: State<'_, Arc<AppState>>) -> Result<FireP
     let snapshot =
         scraper::qiandao::scrape_by_mode_with_api_config(mode_str, Some(&api_config)).await?;
 
-    let _ = repo_fire::insert_fire_record(
+    if let Err(e) = repo_fire::insert_fire_record(
         &state.db,
         &ctx.season_id,
         ctx.market_mode.as_str(),
         &snapshot,
     )
-    .await;
+    .await
+    {
+        tracing::warn!("Failed to insert fire record: {}", e);
+    }
 
     {
         let mut fire_prices = state.fire_prices.write();
         fire_prices.insert(ctx.market_mode, snapshot.clone());
     }
+    let last_fire_scrape = chrono::Utc::now().timestamp();
+    let last_items_reload = {
+        let mut status = state.task_status.write();
+        status.last_fire_scrape = Some(last_fire_scrape);
+        status.last_items_reload
+    };
+    emit_fire_price_updated(
+        &app,
+        FirePricePayload {
+            rmb_per_10k_fire: snapshot.rmb_per_10k_fire,
+            fire_per_rmb: snapshot.fire_per_rmb,
+            increase_ratio: snapshot.increase_ratio,
+            trading_volume: snapshot.trading_volume.clone(),
+            source: snapshot.source.clone(),
+            source_time: snapshot.source_time.clone(),
+            scraped_at: snapshot.scraped_at,
+        },
+    );
+    emit_task_status_changed(
+        &app,
+        TaskStatusPayload {
+            fire_scrape_running: false,
+            items_reload_running: false,
+            last_fire_scrape: Some(last_fire_scrape),
+            last_items_reload,
+        },
+    );
 
     Ok(FirePriceUI::from(snapshot))
 }
 
 #[tauri::command]
-pub async fn refresh_items(state: State<'_, Arc<AppState>>) -> Result<OkResponse, String> {
+pub async fn refresh_items(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<OkResponse, String> {
     let ctx = state.active_context.read().clone();
     let items = crate::scraper::scrape_items(&ctx.season_id, ctx.market_mode.as_str())
         .await
@@ -352,10 +396,31 @@ pub async fn refresh_items(state: State<'_, Arc<AppState>>) -> Result<OkResponse
         let mut cache = state.items_cache.write();
         *cache = Arc::new(items);
     }
+    let last_fire_scrape = {
+        let status = state.task_status.read();
+        status.last_fire_scrape
+    };
+    let last_items_reload = chrono::Utc::now().timestamp();
     {
         let mut status = state.task_status.write();
-        status.last_items_reload = Some(chrono::Utc::now().timestamp());
+        status.last_items_reload = Some(last_items_reload);
     }
+    emit_items_updated(
+        &app,
+        ItemsUpdatedPayload {
+            count,
+            updated_at: chrono::Utc::now(),
+        },
+    );
+    emit_task_status_changed(
+        &app,
+        TaskStatusPayload {
+            fire_scrape_running: false,
+            items_reload_running: false,
+            last_fire_scrape,
+            last_items_reload: Some(last_items_reload),
+        },
+    );
 
     Ok(OkResponse::success(&format!(
         "Items refreshed: {} items",

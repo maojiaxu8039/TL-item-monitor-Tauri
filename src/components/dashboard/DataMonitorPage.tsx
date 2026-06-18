@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Database, Download, RefreshCw, Server, Wifi, WifiOff, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { cmd } from "@/lib/commands";
+import { errorMessage } from "@/lib/utils";
+import { formatTimestamp } from "@/lib/format";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { useSyncContext } from "@/contexts/SyncContext";
 import { toast } from "sonner";
@@ -11,7 +13,7 @@ import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
+import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -173,6 +175,7 @@ export default function DataMonitorPage() {
     queryKey: ["server-status", serverUrl],
     queryFn: checkServerStatus,
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
     retry: 1,
   });
 
@@ -210,7 +213,7 @@ export default function DataMonitorPage() {
         });
         return { success: fireRecords.length, failed: 0, skipped: 0, failures: [] };
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
+        const msg = errorMessage(err);
         return {
           success: 0,
           failed: fireRecords.length,
@@ -219,7 +222,7 @@ export default function DataMonitorPage() {
             itemId: "batch",
             itemName: "批量同步",
             recordType: dataType,
-            reason: errorMessage,
+            reason: msg,
             timestamp: now,
           }],
         };
@@ -244,7 +247,7 @@ export default function DataMonitorPage() {
         });
         return { success: items.length, failed: 0, skipped: 0, failures: [] };
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
+        const msg = errorMessage(err);
         return {
           success: 0,
           failed: items.length,
@@ -253,7 +256,7 @@ export default function DataMonitorPage() {
             itemId: "batch",
             itemName: "批量同步",
             recordType: dataType,
-            reason: errorMessage,
+            reason: msg,
             timestamp: now,
           }],
         };
@@ -317,7 +320,7 @@ export default function DataMonitorPage() {
             ...job,
             success: processedCount,
             failed: totalFailed,
-            total: records.length < PAGE_SIZE ? processedCount : processedCount + (PAGE_SIZE - records.length),
+            total: records.length < PAGE_SIZE ? processedCount : processedCount + PAGE_SIZE,
             failures: allFailures.slice(0, 10),
           };
           pageCount++;
@@ -365,7 +368,7 @@ export default function DataMonitorPage() {
             ...job,
             success: processedCount,
             failed: totalFailed,
-            total: records.length < PAGE_SIZE ? processedCount : processedCount + (PAGE_SIZE - records.length),
+            total: records.length < PAGE_SIZE ? processedCount : processedCount + PAGE_SIZE,
             failures: allFailures.slice(0, 10),
           };
           pageCount++;
@@ -437,10 +440,6 @@ export default function DataMonitorPage() {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${hours}小时${minutes}分钟`;
-  }, []);
-
-  const formatTimestamp = useCallback((ts: number) => {
-    return new Date(ts * 1000).toLocaleString("zh-CN");
   }, []);
 
   const formatDuration = useCallback((ms: number) => {

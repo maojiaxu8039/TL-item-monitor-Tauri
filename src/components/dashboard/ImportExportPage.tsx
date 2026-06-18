@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { cmd } from "@/lib/commands";
-import { useMutation, useQuery, type UseMutationResult } from "@tanstack/react-query";
+import { formatTimestamp } from "@/lib/format";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
@@ -15,15 +16,6 @@ import { Button } from "@/components/ui/button";
 function formatBytes(kb: number): string {
   if (kb < 1024) return `${kb.toFixed(1)} KB`;
   return `${(kb / 1024).toFixed(2)} MB`;
-}
-
-function formatTimestamp(ts: number | null): string {
-  if (!ts) return "从未";
-  const d = new Date(ts * 1000);
-  return d.toLocaleString("zh-CN", {
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit",
-  });
 }
 
 export default function ImportExportPage() {
@@ -148,7 +140,7 @@ export default function ImportExportPage() {
           />
           <MetricCard
             label="上次备份"
-            value={formatTimestamp(backupInfo.last_backup_at)}
+            value={backupInfo.last_backup_at ? formatTimestamp(backupInfo.last_backup_at) : "从未"}
             icon={Clock}
             iconBg="bg-[rgba(255,184,0,0.08)]"
             iconColor="text-[var(--color-brand-gold)]"

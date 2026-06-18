@@ -1,11 +1,6 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from "react";
 import { devLog } from "@/lib/devLog";
-import type { SyncJobState, SyncFailure } from "@/lib/commands";
-
-type DataType = "fire" | "items";
-type SyncMode = "normal" | "expert";
-type TimeRange = "24h" | "48h" | "72h" | "7d" | "30d" | "all";
-type SyncJobStatus = "idle" | "running" | "success" | "partial" | "failed";
+import type { SyncJobState } from "@/lib/commands";
 
 interface SyncState {
   syncJob: SyncJobState | null;
@@ -80,13 +75,22 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(STORAGE_KEY);
   }, []);
 
+  const value = useMemo(() => ({
+    syncJob,
+    setSyncJob,
+    isSyncing,
+    restoreSyncJob,
+    clearSyncJob,
+  }), [syncJob, setSyncJob, isSyncing, restoreSyncJob, clearSyncJob]);
+
   return (
-    <SyncContext.Provider value={{ syncJob, setSyncJob, isSyncing, restoreSyncJob, clearSyncJob }}>
+    <SyncContext.Provider value={value}>
       {children}
     </SyncContext.Provider>
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useSyncContext() {
   const context = useContext(SyncContext);
   if (!context) {

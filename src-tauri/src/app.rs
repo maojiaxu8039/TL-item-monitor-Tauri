@@ -17,10 +17,11 @@ use parking_lot::RwLock;
 use serde::Deserialize;
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-const LATEST_SCHEMA_VERSION: i64 = 15;
+const LATEST_SCHEMA_VERSION: i64 = 16;
 
 pub fn full_table_json_path() -> std::path::PathBuf {
     paths::data_dir().join("full_table.json")
@@ -249,7 +250,8 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
             db_size_kb: 0.0,
         }),
         scheduler_handle: RwLock::new(None),
-        snapshot_running: RwLock::new(false),
+        snapshot_running: AtomicBool::new(false),
+        is_quitting: AtomicBool::new(false),
     };
 
     Ok(state)
@@ -457,6 +459,9 @@ async fn run_legacy_migrations(pool: &SqlitePool, current_version: i64) -> Resul
         apply_performance_indexes_migration(pool).await?;
         record_migration(pool, 15).await?;
     }
+    if current_version < 16 {
+        apply_fire_price_unique_migration(pool).await?;
+    }
 
     Ok(())
 }
@@ -529,6 +534,46 @@ async fn apply_sql_migration(pool: &SqlitePool, version: i64, sql: &str) -> Resu
     tx.commit()
         .await
         .map_err(|e| format!("Migration v{} failed to commit: {}", version, e))?;
+    Ok(())
+}
+
+/// 迁移 v16：为火价实时表补齐 scraped_at 唯一约束。
+///
+/// 修复 repo_fire::insert_fire_record 中 ON CONFLICT(scraped_at) 因缺少
+/// PRIMARY KEY/UNIQUE 约束而告警的问题。SQLite 无法 ALTER TABLE ADD
+/// CONSTRAINT，故改用唯一索引（ON CONFLICT 目标可为唯一索引）。
+///
+/// 表不存在时跳过：finalize_schema 的 ensure_split_tables 会用含
+/// UNIQUE(scraped_at) 的建表 SQL 兜底。
+async fn apply_fire_price_unique_migration(pool: &SqlitePool) -> Result<(), String> {
+    tracing::info!("Applying migration v16: add fire price scraped_at unique index");
+    for table in ["fire_price_normal", "fire_price_expert"] {
+        if !table_exists(pool, table).await? {
+            continue;
+        }
+        // 清理重复 scraped_at 记录（每组保留 id 最大的一条）
+        sqlx::query(&format!(
+            "DELETE FROM {table} WHERE id NOT IN (
+                SELECT MAX(id) FROM {table} GROUP BY scraped_at
+            )"
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Migration v16 cleanup {table} failed: {e}"))?;
+        // 删除旧普通索引，改为同名唯一索引
+        let idx = format!("idx_{table}_scraped");
+        sqlx::query(&format!("DROP INDEX IF EXISTS {idx}"))
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Migration v16 drop {idx} failed: {e}"))?;
+        sqlx::query(&format!(
+            "CREATE UNIQUE INDEX IF NOT EXISTS {idx} ON {table}(scraped_at)"
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Migration v16 create {idx} failed: {e}"))?;
+    }
+    record_migration(pool, 16).await?;
     Ok(())
 }
 
@@ -1518,10 +1563,12 @@ async fn seed_seasons(pool: &SqlitePool) -> Result<(), String> {
         .map_err(|e| format!("Failed to seed season {}: {}", id, e))?;
     }
 
-    sqlx::query("DELETE FROM seasons WHERE id NOT IN ('ss12')")
+    if let Err(e) = sqlx::query("DELETE FROM seasons WHERE id NOT IN ('ss12')")
         .execute(pool)
         .await
-        .ok();
+    {
+        tracing::warn!("Failed to clean up stale seasons: {}", e);
+    }
 
     tracing::info!("Seasons seed data ensured");
 
@@ -1649,12 +1696,18 @@ async fn generate_season_snapshots(
             );
             needs_regeneration = true;
             // Clear existing snapshot data
-            let _ = sqlx::query(&format!("DELETE FROM {}", item_snapshots))
+            if let Err(e) = sqlx::query(&format!("DELETE FROM {}", item_snapshots))
                 .execute(pool)
-                .await;
-            let _ = sqlx::query(&format!("DELETE FROM {}", fire_snapshots))
+                .await
+            {
+                tracing::warn!("Failed to clear item snapshots: {}", e);
+            }
+            if let Err(e) = sqlx::query(&format!("DELETE FROM {}", fire_snapshots))
                 .execute(pool)
-                .await;
+                .await
+            {
+                tracing::warn!("Failed to clear fire snapshots: {}", e);
+            }
         }
     }
 
@@ -1769,7 +1822,7 @@ mod migration_tests {
             .fetch_one(&pool)
             .await
             .expect("migration version should be readable");
-        assert_eq!(version, 15);
+        assert_eq!(version, 16);
     }
 
     #[tokio::test]

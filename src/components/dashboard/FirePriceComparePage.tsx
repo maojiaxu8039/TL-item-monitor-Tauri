@@ -20,13 +20,6 @@ interface FireDataPoint {
   season_day: number;
 }
 
-interface ChartPoint {
-  label: string;
-  sortKey: number;
-  current: number | null;
-  history: number | null;
-}
-
 import { DEFAULT_HISTORY_SEASON } from "@/lib/constants";
 
 const SS12_START = 1776355200;
@@ -53,6 +46,7 @@ export default function FirePriceComparePage() {
     queryKey: ["fire-trend-current", currentSeason, marketMode, timeRange],
     queryFn: () => cmd.getFireHistoryBySeason(currentSeason, marketMode, 99999),
     refetchInterval: 60000,
+    refetchIntervalInBackground: false,
     staleTime: 30 * 1000,
     enabled: !!currentSeason,
   });
@@ -61,6 +55,7 @@ export default function FirePriceComparePage() {
     queryKey: ["fire-trend-history", historySeason, marketMode, timeRange],
     queryFn: () => cmd.getFireHistoryBySeason(historySeason, marketMode, 99999),
     refetchInterval: 60000,
+    refetchIntervalInBackground: false,
     staleTime: 30 * 1000,
     enabled: !!historySeason,
   });
@@ -124,7 +119,7 @@ export default function FirePriceComparePage() {
     });
 
     return sortedKeys.map((key) => {
-      const [day, hour] = key.split("-").map(Number);
+      const [, hour] = key.split("-").map(Number);
       const date = new Date((currentTimestamps.get(key) || historyTimestamps.get(key) || 0) * 1000);
       const month = date.getMonth() + 1;
       const dayOfMonth = date.getDate();
@@ -182,7 +177,7 @@ export default function FirePriceComparePage() {
 
   const bestTimeAnalysis = useMemo(() => {
     if (filteredCurrentData.length === 0) return null;
-    if (filteredCurrentData.length < 2) return { insufficient: true };
+    if (filteredCurrentData.length < 2) return { insufficient: true as const };
 
     const sortedData = [...filteredCurrentData].sort((a, b) => a.scraped_at - b.scraped_at);
     const allPrices = sortedData.map(r => r.rmb_per_10k_fire);
@@ -217,8 +212,8 @@ export default function FirePriceComparePage() {
       const prices = points.map(p => p.price);
       const min = Math.min(...prices);
       const max = Math.max(...prices);
-      const minPoint = points.find(p => p.price === min)!;
-      const maxPoint = points.find(p => p.price === max)!;
+      const minPoint = points.find(p => p.price === min) ?? points[0];
+      const maxPoint = points.find(p => p.price === max) ?? points[0];
       const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
       return { day, min, max, avg, minHour: minPoint.hour, maxHour: maxPoint.hour };
     });
@@ -256,7 +251,7 @@ export default function FirePriceComparePage() {
           reason: `第${maxPoint.day}天 ${String(maxPoint.hour).padStart(2, '0')}:00 出现全赛季最高价 ${maxPoint.price.toFixed(0)}元`
         };
 
-    return { bestBuyTime, bestSellTime, avgPrice, minPrice, maxPrice, insufficient: false };
+    return { bestBuyTime, bestSellTime, avgPrice, minPrice, maxPrice, insufficient: false as const };
   }, [filteredCurrentData]);
 
   const renderBestTimeAnalysis = () => {
@@ -505,7 +500,7 @@ export default function FirePriceComparePage() {
                 axisLine={false}
               />
               <Tooltip
-                formatter={(value: number | string) => [`¥${Number(value).toFixed(2)}/万火`]}
+                formatter={(value: unknown) => [`¥${Number(value).toFixed(2)}/万火`]}
                 contentStyle={{ borderRadius: "8px", border: "1px solid var(--color-border)", fontSize: "12px" }}
               />
               <Line

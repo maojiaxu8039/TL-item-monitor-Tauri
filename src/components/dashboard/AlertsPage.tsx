@@ -11,6 +11,7 @@ import {
   Search,
 } from "lucide-react";
 import { cmd, AlertRule, AlertEvent, ItemSearchResult, Section, SectionItem } from "@/lib/commands";
+import { formatTimestamp } from "@/lib/format";
 import { useToast } from "@/hooks/useToast";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { Dialog } from "@/components/ui/dialog";
@@ -21,10 +22,10 @@ import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
+import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
 
-type RuleType = "price_below" | "price_above" | "profit_ratio_above" | "price_drop_percent";
+type RuleType = "price_below" | "price_above";
 
 const RULE_TYPES: { value: RuleType; label: string; description: string }[] = [
   { value: "price_below", label: "价格低于", description: "物品价格低于设定值时触发" },
@@ -38,10 +39,6 @@ interface CreateRuleForm {
   threshold: number;
   cooldown_seconds: number;
 }
-
-const formatTimestamp = (ts: number) => {
-  return new Date(ts * 1000).toLocaleString("zh-CN");
-};
 
 const formatCooldown = (seconds: number) => {
   if (seconds < 60) return `${seconds}秒`;
@@ -104,7 +101,7 @@ export default function AlertsPage() {
       setRules(rulesData);
       setEvents(eventsData);
       setSections(sectionsData);
-    } catch (e) {
+    } catch {
       addToast("error", "加载预警规则失败");
     } finally {
       setLoading(false);
@@ -194,7 +191,7 @@ export default function AlertsPage() {
         }
         const results = await cmd.searchItemsForArbitrage(keyword);
         setItemResults(results);
-      } catch (err) {
+      } catch {
         setItemResults([]);
       }
     }, 300);
@@ -226,7 +223,7 @@ export default function AlertsPage() {
       await cmd.toggleAlertRule(rule.id, newEnabled);
       addToast("success", newEnabled ? "规则已启用" : "规则已禁用");
       loadData();
-    } catch (e) {
+    } catch {
       addToast("error", "操作失败");
     }
   };
@@ -237,7 +234,7 @@ export default function AlertsPage() {
       await cmd.deleteAlertRule(id);
       addToast("success", "规则已删除");
       loadData();
-    } catch (e) {
+    } catch {
       addToast("error", "删除失败");
     }
   };
@@ -339,8 +336,7 @@ export default function AlertsPage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-[var(--color-text)]">
-                            {getRuleTypeLabel(rule.rule_type)} {rule.threshold}
-                            {rule.rule_type === "price_drop_percent" ? "%" : "火"}
+                            {getRuleTypeLabel(rule.rule_type)} {rule.threshold} 火
                           </span>
                           <StatusBadge variant={rule.enabled === 1 ? "success" : "default"} size="sm">
                             {rule.enabled === 1 ? "启用" : "停用"}
@@ -508,7 +504,7 @@ export default function AlertsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
-                阈值 {createForm.rule_type === "price_drop_percent" ? "(%)" : "(火)"}
+                阈值 (火)
               </label>
               <Input
                 type="number"
@@ -520,7 +516,7 @@ export default function AlertsPage() {
               <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">冷却时间</label>
               <Select
                 value={createForm.cooldown_seconds}
-                onChange={(e) => setCreateForm({ ...createForm, cooldown_seconds: parseInt(e.target.value) })}
+                onChange={(e) => setCreateForm({ ...createForm, cooldown_seconds: parseInt(e.target.value) || 0 })}
               >
                 <option value={60}>1分钟</option>
                 <option value={300}>5分钟</option>

@@ -60,6 +60,19 @@ export interface SectionItem {
   updated_at: number;
 }
 
+export interface SectionContextItem {
+  id: string;
+  section_id: string;
+  section_name: string;
+  item_id: string;
+  item_name: string;
+  item_type: string | null;
+  current_price: number | null;
+  purchase_fire_price: number;
+  count: number;
+  more_value: number;
+}
+
 export interface SearchResult {
   items: ItemData[];
   total: number;
@@ -407,6 +420,8 @@ export const cmd = {
 
   getSectionItems: (sectionId: string, seasonId: string, marketMode: string) =>
     invoke<SectionItem[]>("get_section_items", { sectionId, seasonId, marketMode }),
+  getSectionItemsForContext: (seasonId: string, marketMode: string) =>
+    invoke<SectionContextItem[]>("get_section_items_for_context", { seasonId, marketMode }),
   addSectionItem: (
     sectionId: string,
     seasonId: string,

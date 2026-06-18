@@ -23,11 +23,11 @@ export default defineConfig([
         { allowConstantExport: true },
       ],
       'react-hooks/rules-of-hooks': 'error',
-      'react-hooks/exhaustive-deps': 'warn',
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
+      'react-hooks/exhaustive-deps': 'error',
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-empty-object-type': 'off',
-      'prefer-const': 'warn',
+      'prefer-const': 'error',
     },
     languageOptions: {
       globals: {
@@ -37,6 +37,6 @@ export default defineConfig([
     },
   },
   {
-    ignores: ['src/contexts/**/*', 'src/hooks/**/*'],
+    ignores: ['dist', 'node_modules'],
   },
 ])

@@ -1,4 +1,5 @@
 use crate::commands::types::OkResponse;
+use crate::core::events::{emit_config_changed, emit_market_context_changed, MarketContextPayload};
 use crate::core::state::AppState;
 use crate::db::repo_sections;
 use crate::scheduler::alert_task::play_configured_voice_alert;
@@ -8,7 +9,7 @@ use crate::services::{
     send_notification, WorthAlertNotificationItem,
 };
 use std::sync::Arc;
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::core::state::MarketMode;
 
@@ -22,6 +23,7 @@ pub async fn get_config(
 
 #[tauri::command]
 pub async fn save_config(
+    app: AppHandle,
     state: State<'_, Arc<AppState>>,
     config: crate::core::state::AppConfig,
 ) -> Result<OkResponse, String> {
@@ -41,6 +43,14 @@ pub async fn save_config(
     }
     // Then persist to disk
     crate::core::config::save_config(&config)?;
+    emit_config_changed(&app, config.clone());
+    emit_market_context_changed(
+        &app,
+        MarketContextPayload {
+            season_id: config.app.season_id.clone(),
+            market_mode: config.scrape.fire_price_mode.clone(),
+        },
+    );
     Ok(OkResponse::success("Config saved"))
 }
 

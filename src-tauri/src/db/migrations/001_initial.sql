@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS items_expert (
 );
 
 -- Real-time fire price table for normal mode
+-- UNIQUE(scraped_at) 使 repo_fire::insert_fire_record 的 ON CONFLICT(scraped_at) UPSERT 生效
 CREATE TABLE IF NOT EXISTS fire_price_normal (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     rmb_per_10k_fire REAL NOT NULL,
@@ -67,7 +68,8 @@ CREATE TABLE IF NOT EXISTS fire_price_normal (
     source TEXT NOT NULL DEFAULT '',
     source_time TEXT,
     scraped_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    UNIQUE(scraped_at)
 );
 
 -- Real-time fire price table for expert mode
@@ -80,7 +82,8 @@ CREATE TABLE IF NOT EXISTS fire_price_expert (
     source TEXT NOT NULL DEFAULT '',
     source_time TEXT,
     scraped_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    UNIQUE(scraped_at)
 );
 
 CREATE TABLE IF NOT EXISTS sections (

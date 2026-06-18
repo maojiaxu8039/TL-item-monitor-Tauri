@@ -51,7 +51,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
     staleTime: 5 * 60 * 1000,
   })
 
-  const rmbPer10kFire = dashboardSummary?.fire?.rmb_per_10k_fire ?? 61.87
+  const rmbPer10kFire = dashboardSummary?.fire?.rmb_per_10k_fire ?? null
 
   // Track edited input values for controlled inputs
   const [editValues, setEditValues] = useState<Record<string, { purchaseFirePrice: string; moreValue: string }>>({})
@@ -177,7 +177,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
       const itemTotal = price * item.count
       return {
         totalFire: acc.totalFire + itemTotal,
-        totalRmb: acc.totalRmb + itemTotal * rmbPer10kFire / 10000,
+        totalRmb: acc.totalRmb + itemTotal * (rmbPer10kFire ?? 0) / 10000,
       }
     }, { totalFire: 0, totalRmb: 0 })
   }, [items, rmbPer10kFire])
@@ -326,7 +326,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                       <td className="py-3 px-4 font-medium text-[var(--color-text)]">{item.item_name || item.item_id}</td>
                       <td className="py-3 px-1 text-center text-[var(--color-text-subtle)]">{item.item_type || "—"}</td>
                       <td className="py-3 px-1 text-center font-bold text-[var(--color-danger)]">{item.current_price?.toFixed(1) || "—"}火</td>
-                      <td className="py-3 px-1 text-center font-semibold text-[var(--color-brand-gold)]">¥{((item.current_price ?? 0) * rmbPer10kFire / 10000).toFixed(2)}</td>
+                      <td className="py-3 px-1 text-center font-semibold text-[var(--color-brand-gold)]">{rmbPer10kFire !== null ? `¥${((item.current_price ?? 0) * rmbPer10kFire / 10000).toFixed(2)}` : "—"}</td>
                       <td className="py-3 px-1">
                         <EditableNumberCell
                           itemId={item.item_id}

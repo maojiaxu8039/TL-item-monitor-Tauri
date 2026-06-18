@@ -18,7 +18,7 @@ impl TableResolver {
 
     /// Get items table name for given market_mode (real-time, no season suffix)
     pub fn items_table(season_id: &str, market_mode: &str) -> String {
-        debug_assert!(
+        assert!(
             Self::is_supported(season_id, market_mode),
             "Invalid season_id '{}' or market_mode '{}'",
             season_id,
@@ -29,7 +29,7 @@ impl TableResolver {
 
     /// Get fire price table name for given market_mode (real-time, no season suffix)
     pub fn fire_price_table(season_id: &str, market_mode: &str) -> String {
-        debug_assert!(
+        assert!(
             Self::is_supported(season_id, market_mode),
             "Invalid season_id '{}' or market_mode '{}'",
             season_id,
@@ -40,7 +40,7 @@ impl TableResolver {
 
     /// Get item snapshots table name for given season and mode (historical, with season suffix)
     pub fn item_snapshots_table(season_id: &str, market_mode: &str) -> String {
-        debug_assert!(
+        assert!(
             Self::is_supported(season_id, market_mode),
             "Invalid season_id '{}' or market_mode '{}'",
             season_id,
@@ -55,7 +55,7 @@ impl TableResolver {
 
     /// Get fire price snapshots table name for given season and mode (historical, with season suffix)
     pub fn fire_price_snapshots_table(season_id: &str, market_mode: &str) -> String {
-        debug_assert!(
+        assert!(
             Self::is_supported(season_id, market_mode),
             "Invalid season_id '{}' or market_mode '{}'",
             season_id,

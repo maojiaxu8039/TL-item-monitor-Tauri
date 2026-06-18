@@ -10,6 +10,7 @@ import { AddSectionDialog } from "@/components/dashboard/AddSectionDialog"
 import { DashboardStats } from "@/components/dashboard/DashboardStats"
 import { Button } from "@/components/ui/button"
 import { cmd, type Section } from "@/lib/commands"
+import { errorMessage } from "@/lib/utils"
 import {
   DndContext,
   closestCenter,
@@ -61,7 +62,7 @@ export default function DashboardContent() {
           refetch()
           toast.success("分组顺序已保存")
         } catch (err) {
-          toast.error(`保存失败: ${err}`)
+          toast.error(`保存失败: ${errorMessage(err)}`)
         }
       }
     }
@@ -74,7 +75,7 @@ export default function DashboardContent() {
       toast.success("分组添加成功")
       refetch()
     } catch (err) {
-      toast.error(`添加失败: ${err}`)
+      toast.error(`添加失败: ${errorMessage(err)}`)
     }
   }, [refetch])
 
@@ -92,7 +93,7 @@ export default function DashboardContent() {
       toast.success("分组已删除")
       refetch()
     } catch (err) {
-      toast.error(`删除失败: ${err}`)
+      toast.error(`删除失败: ${errorMessage(err)}`)
     } finally {
       setIsDeleting(false)
       setDeleteDialogOpen(false)

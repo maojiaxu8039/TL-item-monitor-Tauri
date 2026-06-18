@@ -1,4 +1,3 @@
-import { useState, useCallback } from "react";
 import { X, Check, AlertCircle } from "lucide-react";
 
 export interface Toast {

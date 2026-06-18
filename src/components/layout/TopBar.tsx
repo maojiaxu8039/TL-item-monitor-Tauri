@@ -10,7 +10,9 @@ import { Select } from "@/components/ui/select"
 import { cmd, type PageId } from "@/lib/commands"
 import { publicAssetPath } from "@/lib/icons"
 import { cn } from "@/lib/utils"
-import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
+import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
+import { devLog } from "@/lib/devLog";
+import { errorMessage } from "@/lib/utils";
 
 const FireStaleTag = memo(function FireStaleTag({ scrapedAt }: { scrapedAt: number }) {
   const isStale = Date.now() / 1000 - scrapedAt > 3600;
@@ -99,7 +101,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
       if (!mounted) return
       setDataSource(cfg.scrape.items_source === "local" ? "local" : "api")
       setNotificationEnabled(cfg.notification.system_notifications)
-    }).catch(() => {})
+    }).catch((e) => devLog.warn("getConfig failed", e))
     return () => { mounted = false }
   }, [])
 
@@ -108,6 +110,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
     queryFn: () => cmd.getDashboardSummary(),
     enabled: marketContextReady,
     refetchInterval: 10000,
+    refetchIntervalInBackground: false,
   })
 
   useEffect(() => {
@@ -129,13 +132,14 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
       queryClient.invalidateQueries({ queryKey: ["fire-history"] })
       queryClient.invalidateQueries({ queryKey: ["sections"] })
       queryClient.invalidateQueries({ queryKey: ["section-items"] })
+      queryClient.invalidateQueries({ queryKey: ["all-section-items"] })
       queryClient.invalidateQueries({ queryKey: ["items-search"] })
       queryClient.invalidateQueries({ queryKey: ["arbitrage-recipes"] })
       queryClient.invalidateQueries({ queryKey: ["arbitrage-calculation"] })
     },
-    onError: (error, newMode) => {
+    onError: (error) => {
       setMarketMode(prevModeRef.current)
-      toast.error(`切换失败: ${error}`)
+      toast.error(`切换失败: ${errorMessage(error)}`)
     },
   })
 
@@ -149,7 +153,7 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
       toast.success("已获取最新数据！")
     },
     onError: (error) => {
-      toast.error(`获取失败: ${error}`)
+      toast.error(`获取失败: ${errorMessage(error)}`)
     },
   })
 

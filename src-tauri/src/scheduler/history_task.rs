@@ -1,4 +1,5 @@
 use chrono::{Timelike, Utc};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio::time::{interval, Duration};
@@ -16,70 +17,72 @@ fn next_hour_timestamp() -> Option<i64> {
     Some(next.timestamp())
 }
 
+/// RAII 守卫：确保即使 panic 也能重置 snapshot_running 标志位
+struct SnapshotRunningGuard<'a> {
+    running: &'a std::sync::atomic::AtomicBool,
+}
+
+impl Drop for SnapshotRunningGuard<'_> {
+    fn drop(&mut self) {
+        self.running.store(false, Ordering::SeqCst);
+    }
+}
+
 async fn record_hourly_snapshot(state: &Arc<AppState>, snapshot_at: i64) {
-    {
-        let mut running = state.snapshot_running.write();
-        if *running {
-            warn!(
-                "Hourly snapshot already running, skipping overlap at {}",
-                snapshot_at
-            );
-            return;
-        }
-        *running = true;
+    if state.snapshot_running.swap(true, Ordering::SeqCst) {
+        warn!(
+            "Hourly snapshot already running, skipping overlap at {}",
+            snapshot_at
+        );
+        return;
     }
 
-    let result = async {
-        let ctx = state.active_context.read().clone();
-        let fire_prices = state.fire_prices.read().clone();
-        let items = state.items_cache.read().clone();
+    // guard 确保函数退出时（含 panic）重置标志位
+    let _guard = SnapshotRunningGuard {
+        running: &state.snapshot_running,
+    };
 
-        if let Some(fire) = fire_prices.get(&ctx.market_mode) {
-            if let Err(e) = repo_history::insert_fire_snapshot(
-                &state.db,
-                &ctx.season_id,
-                ctx.market_mode.as_str(),
-                fire,
-                snapshot_at,
-            )
-            .await
-            {
-                warn!("Hourly fire snapshot failed: {}", e);
-            } else {
-                info!("Hourly fire snapshot recorded at {}", snapshot_at);
+    let ctx = state.active_context.read().clone();
+    let fire_prices = state.fire_prices.read().clone();
+    let items = state.items_cache.read().clone();
+
+    if let Some(fire) = fire_prices.get(&ctx.market_mode) {
+        if let Err(e) = repo_history::insert_fire_snapshot(
+            &state.db,
+            &ctx.season_id,
+            ctx.market_mode.as_str(),
+            fire,
+            snapshot_at,
+        )
+        .await
+        {
+            warn!("Hourly fire snapshot failed: {}", e);
+        } else {
+            info!("Hourly fire snapshot recorded at {}", snapshot_at);
+        }
+    }
+
+    if !items.is_empty() {
+        match repo_history::insert_item_price_snapshots(
+            &state.db,
+            &ctx.season_id,
+            ctx.market_mode.as_str(),
+            &items,
+            snapshot_at,
+        )
+        .await
+        {
+            Ok(count) => {
+                info!(
+                    "Hourly item snapshot recorded: {} items at {}",
+                    count, snapshot_at
+                );
+            }
+            Err(e) => {
+                error!("Hourly item snapshot failed: {}", e);
             }
         }
-
-        if !items.is_empty() {
-            match repo_history::insert_item_price_snapshots(
-                &state.db,
-                &ctx.season_id,
-                ctx.market_mode.as_str(),
-                &items,
-                snapshot_at,
-            )
-            .await
-            {
-                Ok(count) => {
-                    info!(
-                        "Hourly item snapshot recorded: {} items at {}",
-                        count, snapshot_at
-                    );
-                }
-                Err(e) => {
-                    error!("Hourly item snapshot failed: {}", e);
-                }
-            }
-        }
     }
-    .await;
-
-    {
-        let mut running = state.snapshot_running.write();
-        *running = false;
-    }
-
-    result
 }
 
 pub async fn run_hourly_snapshot_task(

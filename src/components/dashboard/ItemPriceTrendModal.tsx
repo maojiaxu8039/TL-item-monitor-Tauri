@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
@@ -239,7 +239,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
               </div>
               <div className="text-xs text-[var(--color-text-subtle)]">火</div>
             </div>
-            {stats.historyAvg && (
+            {stats.historyAvg !== null && (
               <>
                 <div className="rounded-lg border border-[rgba(255,184,0,0.14)] bg-[var(--color-panel-soft)] p-3">
                   <div className="mb-1 text-xs text-[var(--color-text-subtle)]">历史均价</div>
@@ -307,11 +307,11 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
                     color: "var(--color-text)",
                   }}
                   labelStyle={{ color: "var(--color-brand-gold)" }}
-                  formatter={(value: number | string | null, name: string) => {
-                    if (value === null) return ["—", name];
-                    return [`${Number(value).toFixed(2)} 火`, name];
+                  formatter={(value: unknown, name: unknown) => {
+                    if (value === null) return ["—", String(name)];
+                    return [`${Number(value).toFixed(2)} 火`, String(name)];
                   }}
-                  labelFormatter={(label: number | string) => viewMode === "day" ? `${label}:00` : `第 ${label} 天`}
+                  labelFormatter={(label: unknown) => viewMode === "day" ? `${String(label)}:00` : `第 ${String(label)} 天`}
                 />
                 <Legend 
                   verticalAlign="top" 

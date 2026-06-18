@@ -6,6 +6,7 @@ pub mod items_task;
 use tokio::sync::broadcast;
 use tracing::info;
 
+#[derive(Clone)]
 pub struct SchedulerHandle {
     pub fire_scrape_abort: broadcast::Sender<()>,
     pub items_reload_abort: broadcast::Sender<()>,

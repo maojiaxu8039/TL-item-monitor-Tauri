@@ -19,6 +19,7 @@ import {
 import { ToastContainer } from "@/components/ui/Toast";
 import { useToast } from "@/hooks/useToast";
 import { AssetIcon } from "@/components/brand/AssetIcon";
+import { errorMessage } from "@/lib/utils";
 
 interface AISettings {
   gatewayUrl: string;
@@ -193,7 +194,7 @@ export default function AIAnalysisPage() {
         setConnectionStatus('error');
         addToast("error", `连接失败: ${result.message}`);
       }
-    } catch (error) {
+    } catch {
       if (testId !== connectionTestIdRef.current) return;
 
       setConnectionStatus('error');
@@ -211,7 +212,7 @@ export default function AIAnalysisPage() {
   }, [aiEnabled, settings, testConnection]);
 
   const { data: fireData } = useQuery({
-    queryKey: ["fire-history", marketContext.seasonId, marketContext.marketMode],
+    queryKey: ["fire-history", marketContext.seasonId, marketContext.marketMode, 24],
     queryFn: () => cmd.getFireHistory(24),
     enabled: marketContextReady,
     staleTime: 60 * 1000,
@@ -268,7 +269,7 @@ export default function AIAnalysisPage() {
         {
           id: generateMessageId(),
           role: "assistant",
-          content: `抱歉，调用AI失败：${error}\n\n请检查：\n1. OpenClaw Gateway是否已启动\n2. 地址和Token是否正确\n3. 网络连接是否正常`,
+          content: `抱歉，调用AI失败：${errorMessage(error)}\n\n请检查：\n1. OpenClaw Gateway是否已启动\n2. 地址和Token是否正确\n3. 网络连接是否正常`,
           timestamp: Date.now(),
         },
       ]);

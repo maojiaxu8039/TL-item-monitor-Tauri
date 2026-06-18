@@ -3,7 +3,7 @@ use crate::db::table_resolver::TableResolver;
 use chrono::Utc;
 use sqlx::SqlitePool;
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
 pub struct SectionAlertItem {
     pub id: String,
     pub section_id: String,

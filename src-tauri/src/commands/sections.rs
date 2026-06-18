@@ -66,6 +66,18 @@ pub async fn get_section_items(
 
 #[tauri::command]
 #[allow(non_snake_case)]
+pub async fn get_section_items_for_context(
+    state: State<'_, Arc<AppState>>,
+    seasonId: String,
+    marketMode: String,
+) -> Result<Vec<crate::db::repo_sections::SectionAlertItem>, String> {
+    repo_sections::get_section_items_for_context(&state.db, &seasonId, &marketMode)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
 #[allow(clippy::too_many_arguments)]
 pub async fn add_section_item(
     state: State<'_, Arc<AppState>>,

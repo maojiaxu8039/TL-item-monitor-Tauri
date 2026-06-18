@@ -1,7 +1,5 @@
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
-import { type ReactNode } from "react";
-import { AssetIcon } from "@/components/brand/AssetIcon";
 
 interface LoadingStateProps {
   message?: string;

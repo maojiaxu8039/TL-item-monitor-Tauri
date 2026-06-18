@@ -4,8 +4,10 @@ use crate::core::state::AppState;
 use crate::db::repo_config;
 use crate::db::repo_sections;
 use crate::db::table_resolver::TableResolver;
+use base64::{engine::general_purpose, Engine};
 use std::sync::Arc;
 use tauri::State;
+use tracing::warn;
 
 #[tauri::command]
 pub async fn import_watchlist_csv(
@@ -18,26 +20,26 @@ pub async fn import_watchlist_csv(
 
     let mut imported_count = 0;
     let mut error_list = Vec::new();
+    let mut batch: Vec<(String, String, String, String, f64, i32, f64)> = Vec::new();
 
     for (idx, result) in reader.records().enumerate() {
         if let Ok(record) = result {
             if record.len() >= 7 {
-                let section_id = record.get(0).unwrap_or("");
-                let season_id = record.get(1).unwrap_or("ss12");
-                let market_mode = record.get(2).unwrap_or("season_normal");
-                let item_id = record.get(3).unwrap_or("");
+                let section_id = record.get(0).unwrap_or("").to_string();
+                let season_id = record.get(1).unwrap_or("ss12").to_string();
+                let market_mode = record.get(2).unwrap_or("season_normal").to_string();
+                let item_id = record.get(3).unwrap_or("").to_string();
                 let purchase_fire_price: f64 =
                     record.get(4).and_then(|s| s.parse().ok()).unwrap_or(0.0);
                 let count: i32 = record.get(5).and_then(|s| s.parse().ok()).unwrap_or(1);
                 let more_value: f64 = record.get(6).and_then(|s| s.parse().ok()).unwrap_or(0.0);
 
-                if let Err(e) = TableResolver::validate(season_id, market_mode) {
+                if let Err(e) = TableResolver::validate(&season_id, &market_mode) {
                     error_list.push(format!("行 {}: {}", idx + 2, e));
                     continue;
                 }
 
-                match repo_sections::add_section_item(
-                    &state.db,
+                batch.push((
                     section_id,
                     season_id,
                     market_mode,
@@ -45,17 +47,32 @@ pub async fn import_watchlist_csv(
                     purchase_fire_price,
                     count,
                     more_value,
-                )
-                .await
-                {
-                    Ok(_) => imported_count += 1,
-                    Err(e) => error_list.push(format!("行 {}: {}", idx + 2, e)),
-                }
+                ));
             } else {
                 error_list.push(format!("行 {}: 列数不足", idx + 2));
             }
         } else {
             error_list.push(format!("行 {}: CSV 记录格式错误", idx + 2));
+        }
+    }
+
+    for (section_id, season_id, market_mode, item_id, purchase_fire_price, count, more_value) in
+        batch
+    {
+        match repo_sections::add_section_item(
+            &state.db,
+            &section_id,
+            &season_id,
+            &market_mode,
+            &item_id,
+            purchase_fire_price,
+            count,
+            more_value,
+        )
+        .await
+        {
+            Ok(_) => imported_count += 1,
+            Err(e) => error_list.push(format!("导入错误: {}", e)),
         }
     }
 
@@ -149,7 +166,9 @@ pub async fn backup_database(
         .map_err(|e| format!("备份失败: {}", e))?;
 
     let now = chrono::Utc::now().timestamp().to_string();
-    let _ = repo_config::save_config(&state.db, "last_backup_at", &now).await;
+    if let Err(e) = repo_config::save_config(&state.db, "last_backup_at", &now).await {
+        warn!("Failed to save last_backup_at: {}", e);
+    }
 
     Ok(OkResponse::success("备份已创建"))
 }
@@ -215,9 +234,11 @@ pub async fn restore_database(
 
     drop(file);
 
-    // Backup current database before restore
+    // 恢复前备份当前数据库；备份失败则中止恢复，避免数据丢失
     let backup_path = db_path.with_extension("db.backup");
-    let _ = tokio::fs::copy(&db_path, &backup_path).await;
+    if let Err(e) = tokio::fs::copy(&db_path, &backup_path).await {
+        return Err(format!("恢复失败: 无法创建恢复前备份: {}", e));
+    }
 
     let wal_path = db_path.with_extension("db-wal");
     let shm_path = db_path.with_extension("db-shm");
@@ -233,7 +254,9 @@ pub async fn restore_database(
 #[tauri::command]
 pub async fn write_file(path: String, base64_content: String) -> Result<OkResponse, String> {
     let path = validate_path_within_app_dir(&path).map_err(|e| format!("写入失败: {}", e))?;
-    let bytes = base64::decode(&base64_content).map_err(|e| format!("Base64解码错误: {}", e))?;
+    let bytes = general_purpose::STANDARD
+        .decode(&base64_content)
+        .map_err(|e| format!("Base64解码错误: {}", e))?;
     tokio::fs::write(&path, bytes)
         .await
         .map_err(|e| format!("写入文件错误: {}", e))?;
@@ -246,5 +269,5 @@ pub async fn read_file(path: String) -> Result<String, String> {
     let bytes = tokio::fs::read(&path)
         .await
         .map_err(|e| format!("读取文件错误: {}", e))?;
-    Ok(base64::encode(&bytes))
+    Ok(general_purpose::STANDARD.encode(&bytes))
 }

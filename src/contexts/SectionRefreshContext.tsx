@@ -1,6 +1,7 @@
-import { createContext, useContext, useCallback, useEffect, useState, useRef, type ReactNode } from "react"
+import { createContext, useContext, useCallback, useEffect, useState, useRef, useMemo, type ReactNode } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { cmd } from "@/lib/commands"
+import { invalidateSectionData, queryKeys } from "@/lib/queryKeys"
 
 interface MarketContext {
   seasonId: string
@@ -11,7 +12,6 @@ interface SectionRefreshContextType {
   refreshSections: () => void
   refreshTrigger: number
   refreshData: () => void
-  dataRefreshTrigger: number
   marketContext: MarketContext
   marketContextReady: boolean
   setMarketContext: (ctx: MarketContext) => void
@@ -21,7 +21,6 @@ const SectionRefreshContext = createContext<SectionRefreshContextType>({
   refreshSections: () => {},
   refreshTrigger: 0,
   refreshData: () => {},
-  dataRefreshTrigger: 0,
   marketContext: { seasonId: "ss12", marketMode: "season_normal" },
   marketContextReady: false,
   setMarketContext: () => {},
@@ -29,7 +28,7 @@ const SectionRefreshContext = createContext<SectionRefreshContextType>({
 
 export function SectionRefreshProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
-  const [dataRefreshTrigger, setDataRefreshTrigger] = useState(0)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [marketContext, setMarketContextState] = useState<MarketContext>({
     seasonId: "ss12",
     marketMode: "season_normal",
@@ -63,28 +62,37 @@ export function SectionRefreshProvider({ children }: { children: ReactNode }) {
 
   const refreshSections = useCallback(() => {
     const ctx = marketContextRef.current
-    queryClient.invalidateQueries({ queryKey: ["sections", ctx.seasonId, ctx.marketMode] })
-    queryClient.invalidateQueries({ queryKey: ["section-items", ctx.seasonId, ctx.marketMode] })
+    invalidateSectionData(queryClient, ctx)
+    setRefreshTrigger(v => v + 1)
   }, [queryClient])
 
   const refreshData = useCallback(() => {
     const ctx = marketContextRef.current
-    queryClient.invalidateQueries({ queryKey: ["dashboard-summary", ctx.seasonId, ctx.marketMode] })
-    queryClient.invalidateQueries({ queryKey: ["sections", ctx.seasonId, ctx.marketMode] })
-    queryClient.invalidateQueries({ queryKey: ["section-items", ctx.seasonId, ctx.marketMode] })
-    queryClient.invalidateQueries({ queryKey: ["items-search", ctx.seasonId, ctx.marketMode] })
-    queryClient.invalidateQueries({ queryKey: ["fire-history", ctx.seasonId, ctx.marketMode] })
-    queryClient.invalidateQueries({ queryKey: ["arbitrage-recipes"] })
-    queryClient.invalidateQueries({ queryKey: ["arbitrage-calculation"] })
+    queryClient.invalidateQueries({ queryKey: [...queryKeys.dashboardSummary, ctx.seasonId, ctx.marketMode] })
+    invalidateSectionData(queryClient, ctx)
+    queryClient.invalidateQueries({ queryKey: [...queryKeys.itemsSearch, ctx.seasonId, ctx.marketMode] })
+    queryClient.invalidateQueries({ queryKey: [...queryKeys.fireHistory, ctx.seasonId, ctx.marketMode] })
+    queryClient.invalidateQueries({ queryKey: queryKeys.arbitrageRecipes })
+    queryClient.invalidateQueries({ queryKey: queryKeys.arbitrageCalculation })
   }, [queryClient])
 
+  const value = useMemo(() => ({
+    refreshSections,
+    refreshTrigger,
+    refreshData,
+    marketContext,
+    marketContextReady,
+    setMarketContext,
+  }), [refreshSections, refreshTrigger, refreshData, marketContext, marketContextReady, setMarketContext])
+
   return (
-    <SectionRefreshContext.Provider value={{ refreshSections, refreshTrigger: 0, refreshData, dataRefreshTrigger, marketContext, marketContextReady, setMarketContext }}>
+    <SectionRefreshContext.Provider value={value}>
       {children}
     </SectionRefreshContext.Provider>
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useSectionRefresh() {
   return useContext(SectionRefreshContext)
 }

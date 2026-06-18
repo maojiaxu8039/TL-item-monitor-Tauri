@@ -72,7 +72,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_log::Builder::new()
-                .level(log::LevelFilter::Info)
+                .level(tauri_plugin_log::log::LevelFilter::Info)
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
@@ -118,6 +118,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             delete_section,
             reorder_sections,
             get_section_items,
+            get_section_items_for_context,
             add_section_item,
             update_section_item,
             remove_section_item,
@@ -212,6 +213,16 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
+                let is_quitting = window
+                    .app_handle()
+                    .try_state::<Arc<torchscan::core::state::AppState>>()
+                    .map(|state| state.is_quitting.load(std::sync::atomic::Ordering::SeqCst))
+                    .unwrap_or(false);
+
+                if is_quitting {
+                    return;
+                }
+
                 if let Err(e) = window.hide() {
                     error!("Failed to hide window: {}", e);
                 }

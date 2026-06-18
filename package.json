@@ -15,8 +15,8 @@
     "vite:dev": "vite",
     "vite:build": "vite build",
     "typecheck": "tsc --noEmit",
-    "lint": "npx eslint src --ext ts,tsx",
-    "lint:fix": "npx eslint src --ext ts,tsx --fix"
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

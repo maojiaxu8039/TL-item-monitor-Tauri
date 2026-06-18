@@ -1,6 +1,7 @@
 import { Search, Plus, Upload, Download } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
 import { devLog } from "@/lib/devLog"
+import { errorMessage } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -22,6 +23,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
   const [showResults, setShowResults] = useState(false)
   const [selectedItem, setSelectedItem] = useState<ItemData | null>(null)
   const [showSectionMenu, setShowSectionMenu] = useState(false)
+  const [typeFilter, setTypeFilter] = useState("all")
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -43,10 +45,16 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
   }, [searchValue])
 
   const { data: searchResult, error } = useQuery({
-    queryKey: ["search", debouncedSearch, marketContext.seasonId, marketContext.marketMode],
+    queryKey: ["items-search", marketContext.seasonId, marketContext.marketMode, debouncedSearch, typeFilter],
     queryFn: async () => {
       try {
-        const result = await cmd.searchItems(debouncedSearch, 1, 20);
+        const result = await cmd.searchItems(
+          debouncedSearch,
+          1,
+          20,
+          undefined,
+          typeFilter === "all" ? undefined : typeFilter
+        );
         return result;
       } catch (e) {
         devLog.error("SearchBar queryFn error:", e);
@@ -57,8 +65,9 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
   })
 
   const { data: itemTypes } = useQuery({
-    queryKey: ["item-types"],
+    queryKey: ["item-types", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getItemTypes(),
+    enabled: marketContextReady,
   })
 
   const addItemMutation = useMutation({
@@ -72,11 +81,11 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       refreshSections()
     },
     onError: (error) => {
-      const errorMsg = String(error)
+      const errorMsg = errorMessage(error)
       if (errorMsg.includes("UNIQUE constraint failed")) {
         toast.error("该物品已在分组中，无需重复添加")
       } else {
-        toast.error(`添加失败: ${error}`)
+        toast.error(`添加失败: ${errorMessage(error)}`)
       }
     },
   })
@@ -137,7 +146,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
         toast.success(`已导出 ${allSections.length} 个分组`)
       }
     } catch (err) {
-      toast.error(`导出失败: ${err}`)
+      toast.error(`导出失败: ${errorMessage(err)}`)
     }
   }
 
@@ -212,7 +221,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
                 imported++
               }
             } catch (err: unknown) {
-              const errorMsg = err instanceof Error ? err.message : String(err)
+              const errorMsg = errorMessage(err)
               if (errorMsg.includes("UNIQUE constraint failed")) {
                 errors.push(`第${i + 1}行: 物品"${itemName}"已在分组"${sectionName}"中`)
               } else {
@@ -243,7 +252,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
         }
       }
     } catch (err) {
-      toast.error(`导入失败: ${err}`)
+      toast.error(`导入失败: ${errorMessage(err)}`)
     }
   }
 
@@ -256,8 +265,17 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       ref={containerRef}
     >
       <div className="flex items-center gap-3 rounded-lg border border-[rgba(255,184,0,0.16)] bg-[var(--color-panel)] p-3 shadow-[var(--shadow-sm)]">
-        <Select className="h-9 w-[112px] flex-shrink-0 border-[rgba(255,184,0,0.18)] bg-[rgba(13,15,18,0.82)] text-[13px]">
-          <option>全部类型</option>
+        <Select
+          value={typeFilter}
+          onChange={(e) => {
+            setTypeFilter(e.target.value)
+            if (searchValue.length >= 1) {
+              setShowResults(true)
+            }
+          }}
+          className="h-9 w-[112px] flex-shrink-0 border-[rgba(255,184,0,0.18)] bg-[rgba(13,15,18,0.82)] text-[13px]"
+        >
+          <option value="all">全部类型</option>
           {itemTypes?.map((type) => (
             <option key={type} value={type}>{type}</option>
           ))}

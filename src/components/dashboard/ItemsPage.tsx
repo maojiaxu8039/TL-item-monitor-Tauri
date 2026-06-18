@@ -12,7 +12,8 @@ import {
   useReactTable,
   type SortingState,
 } from "@tanstack/react-table";
-import { cmd, type ItemData } from "../../lib/commands";
+import { cmd, type ItemData, type ItemPriceCompare } from "../../lib/commands";
+import { errorMessage } from "../../lib/utils";
 import {
   Search,
   RefreshCw,
@@ -20,7 +21,6 @@ import {
   ChevronRight,
   ChevronDown,
   Plus,
-  Loader2,
   TrendingUp,
   TrendingDown,
   BarChart3,
@@ -46,15 +46,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 
 const COLUMN_HELPER = createColumnHelper<ItemData>();
 
-interface ItemPriceCompare {
-  item_id: string;
-  name: string;
-  current_price: number;
-  history_price: number | null;
-  premium_rate: number | null;
-  price_diff: number | null;
-  percentile: number | null;
-}
+const PAGE_SIZE = 50;
 
 const SectionPicker = memo(function SectionPicker({
   sections,
@@ -159,8 +151,6 @@ export default function ItemsPage() {
   const [trendItem, setTrendItem] = useState<{ itemId: string; name: string } | null>(null);
   const [dayFilter, setDayFilter] = useState("all");
 
-  const PAGE_SIZE = 50;
-
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedKeyword(searchKeyword);
@@ -195,7 +185,7 @@ export default function ItemsPage() {
   });
 
   const { data: itemTypes = [] } = useQuery({
-    queryKey: ["item-types"],
+    queryKey: ["item-types", marketContext.seasonId, marketContext.marketMode],
     queryFn: cmd.getItemTypes,
     staleTime: 5 * 60 * 1000,
   });
@@ -227,7 +217,7 @@ export default function ItemsPage() {
       addToast("success", "物品信息已刷新");
     },
     onError: (error: Error) => {
-      const errorMsg = error.message || String(error);
+      const errorMsg = errorMessage(error);
       addToast("error", `刷新失败: ${errorMsg}`);
     },
   });
@@ -271,9 +261,12 @@ export default function ItemsPage() {
         .then(() => {
           addToast("success", `已添加到分组`);
           queryClient.invalidateQueries({ queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode] });
+          queryClient.invalidateQueries({ queryKey: ["all-section-items"] });
+          queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+          queryClient.invalidateQueries({ queryKey: ["sections"] });
         })
         .catch((err: unknown) => {
-          const errorMsg = String(err);
+          const errorMsg = errorMessage(err);
           if (errorMsg.includes("物品已存在于该分组中")) {
             addToast("error", `"${item.name}" 已存在于该分组中`);
           } else {
@@ -525,7 +518,7 @@ export default function ItemsPage() {
               />
             </div>
             <div className="text-xs text-[var(--color-text-subtle)]">
-              {isCompareLoading ? "加载中..." : compareError ? `错误: ${typeof compareError === 'string' ? compareError : compareError?.message || String(compareError)}` : `对比数据: ${priceCompareData?.length ?? 0} 条`}
+              {isCompareLoading ? "加载中..." : compareError ? `错误: ${errorMessage(compareError)}` : `对比数据: ${priceCompareData?.length ?? 0} 条`}
             </div>
           </div>
         </Toolbar>

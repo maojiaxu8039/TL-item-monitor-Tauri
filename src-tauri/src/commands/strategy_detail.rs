@@ -162,32 +162,34 @@ pub async fn refresh_strategy_fire_prices(
         .await
         .map_err(|e| e.to_string())?;
 
+    let fire_price =
+        match repo_fire::get_latest_fire(&state.db, &ctx.season_id, ctx.market_mode.as_str()).await
+        {
+            Ok(Some(record)) => Some(record.fire_per_rmb),
+            _ => None,
+        };
+
+    let now = chrono::Utc::now().timestamp();
+    let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
+
     for cost in costs {
         if cost.is_realtime {
-            let fire_price = match repo_fire::get_latest_fire(
-                &state.db,
-                &ctx.season_id,
-                ctx.market_mode.as_str(),
-            )
-            .await
-            {
-                Ok(Some(record)) => record.fire_per_rmb,
-                _ => cost.fire_price,
-            };
-            let total_fire = cost.count * fire_price;
-
+            let fp = fire_price.unwrap_or(cost.fire_price);
+            let total_fire = cost.count * fp;
             sqlx::query(
                 "UPDATE strategy_detail_costs SET fire_price=?, total_fire=?, updated_at=? WHERE id=?",
             )
-            .bind(fire_price)
+            .bind(fp)
             .bind(total_fire)
-            .bind(chrono::Utc::now().timestamp())
+            .bind(now)
             .bind(&cost.id)
-            .execute(&state.db)
+            .execute(&mut *tx)
             .await
             .map_err(|e| e.to_string())?;
         }
     }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
 
     let ctx = state.active_context.read().clone();
     repo_strategy_detail::get_strategy_with_costs(&state.db, &strategy_id, ctx.market_mode.as_str())

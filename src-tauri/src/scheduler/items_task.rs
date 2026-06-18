@@ -9,8 +9,6 @@ use crate::db::repo_item_realtime_prices;
 use crate::db::repo_items;
 use crate::scraper;
 
-const INITIAL_ITEMS_RELOAD_DELAY_SECS: u64 = 0;
-
 pub async fn run_items_reload_task(
     app: tauri::AppHandle,
     state: Arc<AppState>,
@@ -34,6 +32,7 @@ pub async fn run_items_reload_task(
     let mut first_run = true;
     let mut consecutive_errors = 0u32;
     const MAX_CONSECUTIVE_ERRORS: u32 = 5;
+    const MAX_RETRY_DELAY_SECS: u64 = 300;
 
     loop {
         let loop_start = std::time::Instant::now();
@@ -44,14 +43,18 @@ pub async fn run_items_reload_task(
             Err(e) => {
                 error!("Failed to load config: {}", e);
                 consecutive_errors += 1;
-                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
-                    error!(
-                        "[ITEMS-TASK] Too many consecutive errors ({}), stopping task",
-                        consecutive_errors
-                    );
-                    break;
-                }
-                if wait_or_abort(&mut abort, Duration::from_secs(10), "config reload retry").await {
+                let retry_delay = retry_delay_secs(consecutive_errors, MAX_RETRY_DELAY_SECS);
+                warn!(
+                    "[ITEMS-TASK] Config reload failed {} time(s), retrying in {}s",
+                    consecutive_errors, retry_delay
+                );
+                if wait_or_abort(
+                    &mut abort,
+                    Duration::from_secs(retry_delay),
+                    "config reload retry",
+                )
+                .await
+                {
                     break;
                 }
                 continue;
@@ -108,17 +111,6 @@ pub async fn run_items_reload_task(
                 wait_start.elapsed().as_secs()
             );
         } else {
-            if INITIAL_ITEMS_RELOAD_DELAY_SECS > 0
-                && wait_or_abort(
-                    &mut abort,
-                    Duration::from_secs(INITIAL_ITEMS_RELOAD_DELAY_SECS),
-                    "initial items refresh delay",
-                )
-                .await
-            {
-                break;
-            }
-
             let ctx = state.active_context.read().clone();
             let cached_item_count = tokio::time::timeout(
                 Duration::from_secs(5),
@@ -181,15 +173,15 @@ pub async fn run_items_reload_task(
         let (normal_result, expert_result) = tokio::join!(normal_future, expert_future);
 
         // Process normal mode
+        let mut attempted_failure = false;
         let normal_count = if let Some(result) = normal_result {
             match &result {
                 Ok(items) => {
                     info!("[ITEMS-TASK] Normal items fetched: {} items", items.len());
-                    consecutive_errors = 0;
                 }
                 Err(e) => {
                     info!("[ITEMS-TASK] Normal items fetch FAILED: {}", e);
-                    consecutive_errors += 1;
+                    attempted_failure = true;
                 }
             }
             process_scrape_result(&state, &result, &season_id, "season_normal").await
@@ -210,6 +202,7 @@ pub async fn run_items_reload_task(
                 }
                 Err(e) => {
                     info!("[ITEMS-TASK] Expert items fetch FAILED: {}", e);
+                    attempted_failure = true;
                 }
             }
             process_scrape_result(&state, &result, &season_id, "season_expert").await
@@ -219,15 +212,10 @@ pub async fn run_items_reload_task(
         };
 
         let now = chrono::Utc::now().timestamp();
-
-        // Update status
-        {
-            let mut status = state.task_status.write();
-            status.last_items_reload = Some(now);
-        }
+        let any_success = normal_count > 0 || expert_count > 0;
 
         // Update cache with current mode items
-        if normal_count > 0 || expert_count > 0 {
+        if any_success {
             let current_mode = ctx.market_mode.as_str();
             match repo_items::get_items_from_realtime_table(&state.db, &season_id, current_mode)
                 .await
@@ -243,7 +231,13 @@ pub async fn run_items_reload_task(
         }
 
         // Emit event if at least one mode succeeded
-        if normal_count > 0 || expert_count > 0 {
+        if any_success {
+            {
+                let mut status = state.task_status.write();
+                status.last_items_reload = Some(now);
+            }
+            consecutive_errors = 0;
+
             if let Err(e) = app.emit(
                 "items-updated",
                 serde_json::json!({
@@ -258,15 +252,30 @@ pub async fn run_items_reload_task(
                 "Items reload complete: normal={}, expert={}, source={}",
                 normal_count, expert_count, items_source
             );
+        } else {
+            if attempted_failure {
+                consecutive_errors += 1;
+            }
+            warn!(
+                "[ITEMS-TASK] Items refresh finished without successful modes; preserving last successful reload timestamp"
+            );
         }
 
-        // Check if too many consecutive errors
         if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
-            error!(
-                "[ITEMS-TASK] Too many consecutive errors ({}), stopping task",
-                consecutive_errors
+            let retry_delay = retry_delay_secs(consecutive_errors, MAX_RETRY_DELAY_SECS);
+            warn!(
+                "[ITEMS-TASK] {} consecutive errors; backing off for {}s instead of stopping task",
+                consecutive_errors, retry_delay
             );
-            break;
+            if wait_or_abort(
+                &mut abort,
+                Duration::from_secs(retry_delay),
+                "items error backoff",
+            )
+            .await
+            {
+                break;
+            }
         }
 
         let total_loop_time = loop_start.elapsed().as_secs();
@@ -275,6 +284,11 @@ pub async fn run_items_reload_task(
             total_loop_time
         );
     }
+}
+
+fn retry_delay_secs(consecutive_errors: u32, max_delay_secs: u64) -> u64 {
+    let exponent = consecutive_errors.saturating_sub(1).min(4);
+    (30u64.saturating_mul(1u64 << exponent)).min(max_delay_secs)
 }
 
 async fn scrape_for_mode(

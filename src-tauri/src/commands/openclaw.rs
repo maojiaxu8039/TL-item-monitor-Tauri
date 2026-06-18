@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose, Engine};
 use futures_util::{SinkExt, StreamExt};
 use ring::signature::Ed25519KeyPair;
 use serde::{Deserialize, Serialize};
@@ -233,11 +234,14 @@ fn pem_to_der(pem: &str) -> Result<Vec<u8>, String> {
         .filter(|line| !line.starts_with("-----") && !line.is_empty())
         .collect();
 
-    base64::decode(&body).map_err(|e| format!("PEM解码失败: {}", e))
+    general_purpose::STANDARD
+        .decode(&body)
+        .map_err(|e| format!("PEM解码失败: {}", e))
 }
 
 fn base64_url_encode(bytes: &[u8]) -> String {
-    base64::encode(bytes)
+    general_purpose::URL_SAFE_NO_PAD
+        .encode(bytes)
         .replace('+', "-")
         .replace('/', "_")
         .trim_end_matches('=')
