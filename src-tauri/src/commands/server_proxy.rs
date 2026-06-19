@@ -1,3 +1,4 @@
+use std::sync::LazyLock;
 use std::time::Duration;
 
 fn parse_server_url(url: &str) -> Result<reqwest::Url, String> {
@@ -8,11 +9,16 @@ fn parse_server_url(url: &str) -> Result<reqwest::Url, String> {
     }
 }
 
-fn build_server_client() -> Result<reqwest::Client, String> {
+// 全局复用 HTTP 客户端，避免每次请求重建 TCP/TLS 连接（连接池复用）
+static SERVER_CLIENT: LazyLock<Result<reqwest::Client, String>> = LazyLock::new(|| {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))
+});
+
+fn server_client() -> Result<&'static reqwest::Client, String> {
+    SERVER_CLIENT.as_ref().map_err(|e| e.clone())
 }
 
 async fn parse_json_response(response: reqwest::Response) -> Result<serde_json::Value, String> {
@@ -30,7 +36,7 @@ async fn parse_json_response(response: reqwest::Response) -> Result<serde_json::
 #[tauri::command]
 pub async fn fetch_server_json_cmd(url: String) -> Result<serde_json::Value, String> {
     let parsed = parse_server_url(&url)?;
-    let client = build_server_client()?;
+    let client = server_client()?;
 
     let response = client
         .get(parsed)
@@ -47,7 +53,7 @@ pub async fn post_server_json_cmd(
     body: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     let parsed = parse_server_url(&url)?;
-    let client = build_server_client()?;
+    let client = server_client()?;
 
     let response = client
         .post(parsed)

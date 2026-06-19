@@ -37,7 +37,7 @@ export default function DashboardContent() {
 
   const { data: sections = [], refetch } = useQuery({
     queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
-    queryFn: () => cmd.getSections(),
+    queryFn: () => cmd.getSections(marketContext.marketMode),
   })
 
   const sensors = useSensors(
@@ -70,14 +70,14 @@ export default function DashboardContent() {
 
   const handleAddSection = useCallback(async (name: string) => {
     try {
-      await cmd.createSection(name)
+      await cmd.createSection(name, marketContext.marketMode)
       setDialogOpen(false)
       toast.success("分组添加成功")
       refetch()
     } catch (err) {
       toast.error(`添加失败: ${errorMessage(err)}`)
     }
-  }, [refetch])
+  }, [refetch, marketContext.marketMode])
 
   const handleDeleteSection = useCallback((id: string, name: string) => {
     setSectionToDelete({ id, name })
@@ -89,7 +89,7 @@ export default function DashboardContent() {
     
     setIsDeleting(true)
     try {
-      await cmd.deleteSection(sectionToDelete.id)
+      await cmd.deleteSection(sectionToDelete.id, marketContext.marketMode)
       toast.success("分组已删除")
       refetch()
     } catch (err) {
@@ -99,7 +99,7 @@ export default function DashboardContent() {
       setDeleteDialogOpen(false)
       setSectionToDelete(null)
     }
-  }, [sectionToDelete, refetch])
+  }, [sectionToDelete, refetch, marketContext.marketMode])
 
   return (
     <>

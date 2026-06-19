@@ -180,7 +180,7 @@ export default function ItemsPage() {
 
   const { data: sections = [] } = useQuery({
     queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
-    queryFn: cmd.getSections,
+    queryFn: () => cmd.getSections(marketContext.marketMode),
     staleTime: 5 * 60 * 1000,
   });
 

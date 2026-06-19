@@ -21,7 +21,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-const LATEST_SCHEMA_VERSION: i64 = 16;
+const LATEST_SCHEMA_VERSION: i64 = 17;
 
 pub fn full_table_json_path() -> std::path::PathBuf {
     paths::data_dir().join("full_table.json")
@@ -462,6 +462,9 @@ async fn run_legacy_migrations(pool: &SqlitePool, current_version: i64) -> Resul
     if current_version < 16 {
         apply_fire_price_unique_migration(pool).await?;
     }
+    if current_version < 17 {
+        apply_sections_market_mode_migration(pool).await?;
+    }
 
     Ok(())
 }
@@ -577,6 +580,54 @@ async fn apply_fire_price_unique_migration(pool: &SqlitePool) -> Result<(), Stri
     Ok(())
 }
 
+/// 迁移 v17：为 sections 表增加 market_mode 字段，实现普通/专家模式分组完全独立。
+///
+/// 修复问题：sections 表无 market_mode，两模式共享分组；删除分组时
+/// ON DELETE CASCADE 跨模式删除另一模式物品。
+///
+/// 步骤：
+/// 1. 加 market_mode 列（现有分组默认 season_normal）
+/// 2. 为每个 normal 分组创建 expert 副本（保持结构和排序）
+/// 3. 将 expert 的 section_items 指向新的 expert 分组
+///
+/// 表不存在时跳过：ensure_core_schema 会兜底建表。
+async fn apply_sections_market_mode_migration(pool: &SqlitePool) -> Result<(), String> {
+    tracing::info!("Applying migration v17: add market_mode to sections");
+    if !table_exists(pool, "sections").await? {
+        record_migration(pool, 17).await?;
+        return Ok(());
+    }
+
+    // 1. 加 market_mode 列
+    add_column_if_missing(pool, "sections", "market_mode", "TEXT NOT NULL DEFAULT 'season_normal'")
+        .await?;
+
+    // 2. 为每个 normal 分组创建 expert 副本
+    sqlx::query(
+        "INSERT INTO sections (id, name, strategy_id, market_mode, sort_order, collapsed, created_at, updated_at)
+         SELECT id || '-expert', name, strategy_id, 'season_expert', sort_order, collapsed, created_at, updated_at
+         FROM sections WHERE market_mode = 'season_normal'",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Migration v17 create expert sections failed: {e}"))?;
+
+    // 3. 将 expert 的 section_items 指向新的 expert 分组
+    sqlx::query("UPDATE section_items SET section_id = section_id || '-expert' WHERE market_mode = 'season_expert'")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Migration v17 relink expert section_items failed: {e}"))?;
+
+    // 4. 索引
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_sections_market_mode ON sections(market_mode, sort_order)")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Migration v17 create index failed: {e}"))?;
+
+    record_migration(pool, 17).await?;
+    Ok(())
+}
+
 async fn apply_strategy_outputs_realtime_value_migration(pool: &SqlitePool) -> Result<(), String> {
     tracing::info!("Applying migration v10: add realtime_value to strategy_outputs");
 
@@ -619,6 +670,15 @@ async fn ensure_legacy_schema(pool: &SqlitePool) -> Result<(), String> {
         "strategy_outputs",
         "realtime_value",
         "REAL NOT NULL DEFAULT 0",
+    )
+    .await?;
+
+    // 兜底：确保 sections 表有 market_mode 列（全新库经 001 已有，老库经 v17 迁移已有）
+    add_column_if_missing(
+        pool,
+        "sections",
+        "market_mode",
+        "TEXT NOT NULL DEFAULT 'season_normal'",
     )
     .await
 }
@@ -1822,7 +1882,7 @@ mod migration_tests {
             .fetch_one(&pool)
             .await
             .expect("migration version should be readable");
-        assert_eq!(version, 16);
+        assert_eq!(version, 17);
     }
 
     #[tokio::test]

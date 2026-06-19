@@ -190,7 +190,7 @@ impl Default for NotificationSettings {
             system_notifications: true,
             mac_desktop_notifications: true,
             win_desktop_notifications: true,
-            voice_alert_enabled: false,
+            voice_alert_enabled: true,
             voice_alert_path: String::new(),
             price_alert_enabled: true,
             price_alert_cooldown_seconds: 600,

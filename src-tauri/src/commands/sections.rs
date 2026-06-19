@@ -5,20 +5,24 @@ use std::sync::Arc;
 use tauri::State;
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn get_sections(
     state: State<'_, Arc<AppState>>,
+    marketMode: String,
 ) -> Result<Vec<crate::db::models::Section>, String> {
-    repo_sections::get_sections(&state.db)
+    repo_sections::get_sections(&state.db, &marketMode)
         .await
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn create_section(
     state: State<'_, Arc<AppState>>,
     name: String,
+    marketMode: String,
 ) -> Result<crate::db::models::Section, String> {
-    repo_sections::create_section(&state.db, &name)
+    repo_sections::create_section(&state.db, &name, &marketMode)
         .await
         .map_err(|e| e.to_string())
 }
@@ -34,11 +38,13 @@ pub async fn update_section(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn delete_section(
     state: State<'_, Arc<AppState>>,
     id: String,
+    marketMode: String,
 ) -> Result<OkResponse, String> {
-    repo_sections::delete_section(&state.db, &id).await?;
+    repo_sections::delete_section(&state.db, &id, &marketMode).await?;
     Ok(OkResponse::success("Section deleted"))
 }
 

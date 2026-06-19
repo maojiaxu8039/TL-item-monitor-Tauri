@@ -93,17 +93,22 @@ export function ArbitrageResultRow({ result, isExpanded, onToggleExpand, onEdit,
             <Surface padding="sm" className="bg-[var(--color-panel-soft)] border-[var(--color-border)]">
               <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-subtle)] mb-2">
                 <Package className="w-3.5 h-3.5 text-[var(--color-danger)]" />
-                原料成本
+                {result.recipe_type === "decompose" ? "可分解物品（取最低价）" : "原料成本"}
               </div>
               <div className="space-y-1">
-                {result.ingredients_detail.map(ing => (
-                  <div key={ing.item_name} className="flex items-center justify-between text-sm">
+                {[...result.ingredients_detail]
+                  .sort((a, b) => result.recipe_type === "decompose" ? a.total_cost - b.total_cost : 0)
+                  .map(ing => {
+                  const isLowest = result.recipe_type === "decompose" && ing.total_cost > 0 && Math.abs(ing.total_cost - result.total_cost) < 0.01;
+                  return (
+                  <div key={ing.item_name} className={`flex items-center justify-between text-sm rounded px-1 ${isLowest ? "bg-[rgba(255,184,0,0.08)]" : ""}`}>
                     <span className="text-[var(--color-text-muted)]">{ing.item_name} × {ing.count}</span>
-                    <span className="text-[var(--color-text)] font-medium">{formatPrice(ing.unit_price)} × {ing.count} = {formatPrice(ing.total_cost)}</span>
+                    <span className="text-[var(--color-text)] font-medium">{formatPrice(ing.unit_price)} × {ing.count} = {formatPrice(ing.total_cost)}{isLowest ? " ←" : ""}</span>
                   </div>
-                ))}
+                  );
+                  })}
                 <div className="pt-1.5 border-t border-[var(--color-border)] flex items-center justify-between font-medium">
-                  <span className="text-[var(--color-text-muted)] text-sm">总成本</span>
+                  <span className="text-[var(--color-text-muted)] text-sm">{result.recipe_type === "decompose" ? "成本（取最低）" : "总成本"}</span>
                   <span className="text-[var(--color-danger)] text-sm">{formatPrice(result.total_cost)} 火</span>
                 </div>
               </div>

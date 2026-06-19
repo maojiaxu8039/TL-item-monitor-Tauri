@@ -52,26 +52,38 @@ const FireChangeCard = memo(function FireChangeCard({ item, isRising }: FireChan
       <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
         <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded">
           <div className="text-[var(--color-text-subtle)]">5m</div>
-          <div className={`font-medium ${(item.change_rate_5m ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
-            {item.change_rate_5m !== null ? `${(item.change_rate_5m ?? 0) >= 0 ? "+" : ""}${item.change_rate_5m?.toFixed(1)}%` : "-"}
+          <div className="font-medium text-[var(--color-text)]">
+            {item.price_5m_ago !== null ? item.price_5m_ago?.toFixed(2) : "-"}
+          </div>
+          <div className={`text-[10px] ${(item.change_rate_5m ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
+            {item.change_rate_5m !== null ? `(${(item.change_rate_5m ?? 0) >= 0 ? "+" : ""}${item.change_rate_5m?.toFixed(1)}%)` : ""}
           </div>
         </div>
         <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded">
           <div className="text-[var(--color-text-subtle)]">30m</div>
-          <div className={`font-medium ${(item.change_rate_30m ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
-            {item.change_rate_30m !== null ? `${(item.change_rate_30m ?? 0) >= 0 ? "+" : ""}${item.change_rate_30m?.toFixed(1)}%` : "-"}
+          <div className="font-medium text-[var(--color-text)]">
+            {item.price_30m_ago !== null ? item.price_30m_ago?.toFixed(2) : "-"}
+          </div>
+          <div className={`text-[10px] ${(item.change_rate_30m ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
+            {item.change_rate_30m !== null ? `(${(item.change_rate_30m ?? 0) >= 0 ? "+" : ""}${item.change_rate_30m?.toFixed(1)}%)` : ""}
           </div>
         </div>
         <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded">
           <div className="text-[var(--color-text-subtle)]">1h</div>
-          <div className={`font-medium ${(item.change_rate_1h ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
-            {item.change_rate_1h !== null ? `${(item.change_rate_1h ?? 0) >= 0 ? "+" : ""}${item.change_rate_1h?.toFixed(1)}%` : "-"}
+          <div className="font-medium text-[var(--color-text)]">
+            {item.price_1h_ago !== null ? item.price_1h_ago?.toFixed(2) : "-"}
+          </div>
+          <div className={`text-[10px] ${(item.change_rate_1h ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
+            {item.change_rate_1h !== null ? `(${(item.change_rate_1h ?? 0) >= 0 ? "+" : ""}${item.change_rate_1h?.toFixed(1)}%)` : ""}
           </div>
         </div>
         <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded">
           <div className="text-[var(--color-text-subtle)]">3h</div>
-          <div className={`font-medium ${(item.change_rate_3h ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
-            {item.change_rate_3h !== null ? `${(item.change_rate_3h ?? 0) >= 0 ? "+" : ""}${item.change_rate_3h?.toFixed(1)}%` : "-"}
+          <div className="font-medium text-[var(--color-text)]">
+            {item.price_3h_ago !== null ? item.price_3h_ago?.toFixed(2) : "-"}
+          </div>
+          <div className={`text-[10px] ${(item.change_rate_3h ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
+            {item.change_rate_3h !== null ? `(${(item.change_rate_3h ?? 0) >= 0 ? "+" : ""}${item.change_rate_3h?.toFixed(1)}%)` : ""}
           </div>
         </div>
       </div>
@@ -198,26 +210,28 @@ export default function DealsPage() {
     localStorage.setItem("deals-settings", JSON.stringify(newSettings));
   }, []);
 
-  const riseItems = useMemo(() => fireChanges.filter(item => {
-    if (!item.trend.includes("rise")) return false;
-    const maxChange = Math.max(
+  const maxAbsChange = (item: FirePriceChangeItem) =>
+    Math.max(
       Math.abs(item.change_rate_3h ?? 0),
       Math.abs(item.change_rate_1h ?? 0),
       Math.abs(item.change_rate_30m ?? 0),
       Math.abs(item.change_rate_5m ?? 0)
     );
-    return maxChange >= settings.rise_threshold;
+
+  const riseItems = useMemo(() => fireChanges.filter(item => {
+    if (!item.trend.includes("rise")) return false;
+    return maxAbsChange(item) >= settings.rise_threshold;
+  }).sort((a, b) => {
+    const diff = maxAbsChange(b) - maxAbsChange(a);
+    return Math.abs(diff) < 1e-9 ? a.item_id.localeCompare(b.item_id) : diff;
   }), [fireChanges, settings.rise_threshold]);
 
   const fallItems = useMemo(() => fireChanges.filter(item => {
     if (!item.trend.includes("fall")) return false;
-    const maxChange = Math.max(
-      Math.abs(item.change_rate_3h ?? 0),
-      Math.abs(item.change_rate_1h ?? 0),
-      Math.abs(item.change_rate_30m ?? 0),
-      Math.abs(item.change_rate_5m ?? 0)
-    );
-    return maxChange >= settings.fall_threshold;
+    return maxAbsChange(item) >= settings.fall_threshold;
+  }).sort((a, b) => {
+    const diff = maxAbsChange(b) - maxAbsChange(a);
+    return Math.abs(diff) < 1e-9 ? a.item_id.localeCompare(b.item_id) : diff;
   }), [fireChanges, settings.fall_threshold]);
 
   return (

@@ -19,10 +19,12 @@ pub struct SectionAlertItem {
 
 pub async fn get_sections(
     pool: &SqlitePool,
+    market_mode: &str,
 ) -> Result<Vec<Section>, crate::core::errors::AppError> {
     let sections: Vec<Section> = sqlx::query_as(
-        "SELECT id, name, strategy_id, sort_order, collapsed, created_at, updated_at FROM sections ORDER BY sort_order"
+        "SELECT id, name, strategy_id, market_mode, sort_order, collapsed, created_at, updated_at FROM sections WHERE market_mode = ? ORDER BY sort_order"
     )
+    .bind(market_mode)
     .fetch_all(pool)
     .await?;
     Ok(sections)
@@ -31,21 +33,24 @@ pub async fn get_sections(
 pub async fn create_section(
     pool: &SqlitePool,
     name: &str,
+    market_mode: &str,
 ) -> Result<Section, crate::core::errors::AppError> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().timestamp();
 
     let max_order: Option<(i32,)> =
-        sqlx::query_as("SELECT COALESCE(MAX(sort_order), 0) FROM sections")
+        sqlx::query_as("SELECT COALESCE(MAX(sort_order), 0) FROM sections WHERE market_mode = ?")
+            .bind(market_mode)
             .fetch_optional(pool)
             .await?;
     let sort_order = max_order.map(|r| r.0 + 1).unwrap_or(0);
 
     sqlx::query(
-        "INSERT INTO sections (id, name, sort_order, collapsed, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)"
+        "INSERT INTO sections (id, name, market_mode, sort_order, collapsed, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)"
     )
     .bind(&id)
     .bind(name)
+    .bind(market_mode)
     .bind(sort_order)
     .bind(now)
     .bind(now)
@@ -56,6 +61,7 @@ pub async fn create_section(
         id,
         name: name.to_string(),
         strategy_id: None,
+        market_mode: market_mode.to_string(),
         sort_order,
         collapsed: 0,
         created_at: now,
@@ -81,9 +87,11 @@ pub async fn update_section(
 pub async fn delete_section(
     pool: &SqlitePool,
     id: &str,
+    market_mode: &str,
 ) -> Result<(), crate::core::errors::AppError> {
-    sqlx::query("DELETE FROM sections WHERE id = ?")
+    sqlx::query("DELETE FROM sections WHERE id = ? AND market_mode = ?")
         .bind(id)
+        .bind(market_mode)
         .execute(pool)
         .await?;
     Ok(())

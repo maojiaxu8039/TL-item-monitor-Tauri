@@ -415,14 +415,14 @@ export default function DataMonitorPage() {
       } else if (job.status === "partial") {
         toast.error(`部分同步成功: 成功 ${totalSuccess}，失败 ${totalFailed}`);
       } else if (job.status === "failed") {
-        toast.error(`同步失败: ${allFailures[0]?.reason || "未知错误"}`);
+        toast.error(`同步失败: ${errorMessage(allFailures[0]?.reason)}`);
       } else {
         toast.success(`同步成功: ${totalSuccess} 条`);
       }
     } catch (err) {
       job.status = "failed";
       job.finishedAt = Date.now();
-      job.firstError = err instanceof Error ? err.message : "未知错误";
+      job.firstError = errorMessage(err);
       setSyncJob({ ...job });
       toast.error(`同步失败: ${job.firstError}`);
     }

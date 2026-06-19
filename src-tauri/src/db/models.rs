@@ -52,6 +52,7 @@ pub struct Section {
     pub id: String,
     pub name: String,
     pub strategy_id: Option<String>,
+    pub market_mode: String,
     pub sort_order: i32,
     pub collapsed: i32,
     pub created_at: i64,

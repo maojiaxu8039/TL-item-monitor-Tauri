@@ -304,10 +304,30 @@ pub async fn get_price_changes(
         });
     }
 
+    // 按最大变化率绝对值降序排列（涨/跌幅越大的排越前），相同值时按 item_id 兜底保证稳定
     result.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
+        let a_max = [
+            a.change_rate_3h.unwrap_or(0.0).abs(),
+            a.change_rate_1h.unwrap_or(0.0).abs(),
+            a.change_rate_30m.unwrap_or(0.0).abs(),
+            a.change_rate_5m.unwrap_or(0.0).abs(),
+        ]
+        .into_iter()
+        .fold(0.0f64, f64::max);
+
+        let b_max = [
+            b.change_rate_3h.unwrap_or(0.0).abs(),
+            b.change_rate_1h.unwrap_or(0.0).abs(),
+            b.change_rate_30m.unwrap_or(0.0).abs(),
+            b.change_rate_5m.unwrap_or(0.0).abs(),
+        ]
+        .into_iter()
+        .fold(0.0f64, f64::max);
+
+        b_max
+            .partial_cmp(&a_max)
             .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.item_id.cmp(&b.item_id))
     });
 
     Ok(result)

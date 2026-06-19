@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { devLog } from "@/lib/devLog";
 import { errorMessage } from "@/lib/utils";
 import { RefreshCw, Plus, ArrowRightLeft, TrendingUp, TrendingDown, Layers } from "lucide-react";
@@ -87,20 +88,20 @@ export default function ArbitragePage() {
     }
   }, []);
 
-  const calculateAll = useCallback(async (forceShowAll?: boolean) => {
+  const calculateAll = useCallback(async (forceShowAll?: boolean, silent?: boolean) => {
     setCalculating(true);
     try {
       const result = await cmd.calculateArbitrage(undefined, undefined, forceShowAll ?? showAllRecipes);
       setCalculationResult(result.recipes);
       setLastCalculatedAt(result.calculated_at);
-      if (result.total_profitable > 0 && result.total_loss > 0) {
-        toast.success(`计算出 ${result.total_profitable} 个盈利 + ${result.total_loss} 个亏损配方`);
-      } else if (result.total_profitable > 0) {
-        toast.success(`计算出 ${result.total_profitable} 个可套利配方`);
-      } else if (result.total_loss > 0) {
-        toast.warning(`全部 ${result.total_loss} 个配方亏损`);
-      } else {
-        toast.warning("暂无套利数据");
+      if (!silent) {
+        if (result.total_profitable > 0 && result.total_loss > 0) {
+          toast.success(`计算出 ${result.total_profitable} 个盈利 + ${result.total_loss} 个亏损配方`);
+        } else if (result.total_profitable > 0) {
+          toast.success(`计算出 ${result.total_profitable} 个可套利配方`);
+        } else if (result.total_loss > 0) {
+          toast.warning(`全部 ${result.total_loss} 个配方亏损`);
+        }
       }
     } catch (err) {
       devLog.error("[Arbitrage] calculateAll error:", err);
@@ -108,6 +109,10 @@ export default function ArbitragePage() {
       setCalculating(false);
     }
   }, [showAllRecipes]);
+
+  // 保持对最新 calculateAll 的引用，供事件监听器调用（避免监听器因依赖变化反复重注册）
+  const calculateAllRef = useRef(calculateAll);
+  calculateAllRef.current = calculateAll;
 
   // 当赛季/模式切换时，重新计算套利
   useEffect(() => {
@@ -417,6 +422,30 @@ export default function ArbitragePage() {
     if (!marketContextReady) return;
     loadRecipes().then(() => calculateAll());
   }, [marketContextReady, loadRecipes, calculateAll]);
+
+  // 监听物品价格更新事件，自动静默重算套利（与获取物价同步刷新）
+  useEffect(() => {
+    if (!("__TAURI__" in window)) return;
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    listen("items-updated", () => {
+      calculateAllRef.current(undefined, true);
+    })
+      .then((fn) => {
+        if (cancelled) {
+          fn();
+          return;
+        }
+        unlisten = fn;
+      })
+      .catch((err) => {
+        devLog.error("[Arbitrage] listen items-updated error:", err);
+      });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   return (
     <PageShell size="xl" className="space-y-5">

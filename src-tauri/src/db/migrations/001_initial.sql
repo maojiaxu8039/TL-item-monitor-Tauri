@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS sections (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     strategy_id TEXT,
+    market_mode TEXT NOT NULL DEFAULT 'season_normal',
     sort_order INTEGER NOT NULL DEFAULT 0,
     collapsed INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,

@@ -36,6 +36,7 @@ export interface Section {
   id: string;
   name: string;
   strategy_id: string | null;
+  market_mode: string;
   sort_order: number;
   collapsed: number;
   created_at: number;
@@ -411,11 +412,11 @@ export const cmd = {
   searchItems: (keyword: string, page = 1, pageSize = 50, dayFilter?: number, typeFilter?: string) =>
     invoke<SearchResult>("search_items", { keyword, page, pageSize, dayFilter, typeFilter }),
 
-  getSections: () => invoke<Section[]>("get_sections"),
-  createSection: (name: string) => invoke<Section>("create_section", { name }),
+  getSections: (marketMode: string) => invoke<Section[]>("get_sections", { marketMode }),
+  createSection: (name: string, marketMode: string) => invoke<Section>("create_section", { name, marketMode }),
   updateSection: (id: string, name: string) =>
     invoke<OkResponse>("update_section", { id, name }),
-  deleteSection: (id: string) => invoke<OkResponse>("delete_section", { id }),
+  deleteSection: (id: string, marketMode: string) => invoke<OkResponse>("delete_section", { id, marketMode }),
   reorderSections: (ids: string[]) => invoke<OkResponse>("reorder_sections", { ids }),
 
   getSectionItems: (sectionId: string, seasonId: string, marketMode: string) =>

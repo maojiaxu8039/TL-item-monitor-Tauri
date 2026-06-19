@@ -96,7 +96,7 @@ export default function AlertsPage() {
       const [rulesData, eventsData, sectionsData] = await Promise.all([
         cmd.getAlertRules(),
         cmd.getAlertEvents(50),
-        cmd.getSections(),
+        cmd.getSections(marketContext.marketMode),
       ]);
       setRules(rulesData);
       setEvents(eventsData);
@@ -106,7 +106,7 @@ export default function AlertsPage() {
     } finally {
       setLoading(false);
     }
-  }, [addToast]);
+  }, [addToast, marketContext.marketMode]);
 
   useEffect(() => {
     if (!marketContextReady) return;

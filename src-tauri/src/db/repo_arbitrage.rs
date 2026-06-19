@@ -471,7 +471,22 @@ pub async fn calculate_arbitrage_for_all_recipes(
             })
             .collect();
 
-        let total_cost: f64 = ingredients_detail.iter().map(|i| i.total_cost).sum();
+        // 分解类型：从多种可分解物品中选择最低火价的作为成本（而非全部相加）
+        // 合成/兑换类型：所有原料都需要购买，成本为全部相加
+        let total_cost: f64 = if recipe.recipe_type == "decompose" {
+            let min_cost = ingredients_detail
+                .iter()
+                .map(|i| i.total_cost)
+                .filter(|&c| c > 0.0)
+                .fold(f64::INFINITY, f64::min);
+            if min_cost.is_infinite() {
+                0.0
+            } else {
+                min_cost
+            }
+        } else {
+            ingredients_detail.iter().map(|i| i.total_cost).sum()
+        };
 
         let outputs_detail: Vec<OutputRevenueDetail> = outputs
             .iter()

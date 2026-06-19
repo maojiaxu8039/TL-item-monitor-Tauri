@@ -230,7 +230,7 @@ export default function PriceAnalysisPage() {
 
   const { data: sections = [] } = useQuery({
     queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
-    queryFn: cmd.getSections,
+    queryFn: () => cmd.getSections(marketContext.marketMode),
     enabled: marketContextReady,
   });
 

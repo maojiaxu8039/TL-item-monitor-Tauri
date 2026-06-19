@@ -125,7 +125,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
 
   const handleExportList = async () => {
     try {
-      const allSections = await cmd.getSections()
+      const allSections = await cmd.getSections(marketContext.marketMode)
       let csvContent = "\uFEFF分组名称,物品名称,购买火价,数量\n"
       
       for (const section of allSections) {
@@ -175,7 +175,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
         let imported = 0
         const errors: string[] = []
 
-        const allSections = await cmd.getSections()
+        const allSections = await cmd.getSections(marketContext.marketMode)
         const sectionMap = new Map<string, Section>()
         for (const s of allSections) {
           sectionMap.set(s.name, s)
@@ -200,8 +200,8 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
               let section = sectionMap.get(sectionName)
 
               if (!section) {
-                await cmd.createSection(sectionName)
-                const newSections = await cmd.getSections()
+                await cmd.createSection(sectionName, marketContext.marketMode)
+                const newSections = await cmd.getSections(marketContext.marketMode)
                 for (const s of newSections) {
                   sectionMap.set(s.name, s)
                 }
