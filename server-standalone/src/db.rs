@@ -64,11 +64,15 @@ impl MarketMode {
     }
 
     pub fn fire_table(&self, season_id: &str) -> String {
-        format!("fire_price_snapshots_{}_{}", season_id, self.as_str())
+        checked_identifier(format!(
+            "fire_price_snapshots_{}_{}",
+            season_id,
+            self.as_str()
+        ))
     }
 
     pub fn items_table(&self, season_id: &str) -> String {
-        format!("item_snapshots_{}_{}", season_id, self.as_str())
+        checked_identifier(format!("item_snapshots_{}_{}", season_id, self.as_str()))
     }
 }
 
@@ -203,7 +207,16 @@ async fn create_items_indexes(pool: &SqlitePool, table: &str) -> Result<(), Stri
 }
 
 fn is_valid_identifier(s: &str) -> bool {
-    !s.is_empty() && s.len() <= 64 && s.chars().all(|c| c.is_alphanumeric() || c == '_')
+    !s.is_empty() && s.len() <= 64 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn checked_identifier(identifier: String) -> String {
+    assert!(
+        is_valid_identifier(&identifier),
+        "unsafe SQL identifier generated: {}",
+        identifier
+    );
+    identifier
 }
 
 const CACHE_TTL_SECS: u64 = 300;
@@ -390,7 +403,7 @@ pub async fn run_migrations(pool: &SqlitePool, default_season: &str) -> Result<(
     }
 
     for season in &seasons_to_migrate {
-        let table = format!("fire_price_snapshots_{}_normal", season);
+        let table = MarketMode::Normal.fire_table(season);
         sqlx::query(&format!(
             r#"
             CREATE TABLE IF NOT EXISTS {} (
@@ -411,16 +424,9 @@ pub async fn run_migrations(pool: &SqlitePool, default_season: &str) -> Result<(
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", table, e))?;
-        sqlx::query(&format!(
-            "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
-            table, table
-        ))
-        .execute(pool)
-        .await
-        .ok();
         create_fire_indexes(pool, &table).await?;
 
-        let items_table = format!("item_snapshots_{}_normal", season);
+        let items_table = MarketMode::Normal.items_table(season);
         sqlx::query(&format!(
             r#"
             CREATE TABLE IF NOT EXISTS {} (
@@ -439,20 +445,6 @@ pub async fn run_migrations(pool: &SqlitePool, default_season: &str) -> Result<(
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", items_table, e))?;
-        sqlx::query(&format!(
-            "CREATE INDEX IF NOT EXISTS idx_{}_item_scraped ON {}(item_id, scraped_at DESC)",
-            items_table, items_table
-        ))
-        .execute(pool)
-        .await
-        .ok();
-        sqlx::query(&format!(
-            "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
-            items_table, items_table
-        ))
-        .execute(pool)
-        .await
-        .ok();
         create_items_indexes(pool, &items_table).await?;
         add_column_if_missing(pool, &items_table, "name", "TEXT NOT NULL DEFAULT ''").await?;
         add_column_if_missing(pool, &items_table, "item_type", "TEXT NOT NULL DEFAULT ''").await?;
@@ -464,7 +456,7 @@ pub async fn run_migrations(pool: &SqlitePool, default_season: &str) -> Result<(
         )
         .await?;
 
-        let expert_table = format!("fire_price_snapshots_{}_expert", season);
+        let expert_table = MarketMode::Expert.fire_table(season);
         sqlx::query(&format!(
             r#"
             CREATE TABLE IF NOT EXISTS {} (
@@ -485,16 +477,9 @@ pub async fn run_migrations(pool: &SqlitePool, default_season: &str) -> Result<(
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", expert_table, e))?;
-        sqlx::query(&format!(
-            "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
-            expert_table, expert_table
-        ))
-        .execute(pool)
-        .await
-        .ok();
         create_fire_indexes(pool, &expert_table).await?;
 
-        let expert_items_table = format!("item_snapshots_{}_expert", season);
+        let expert_items_table = MarketMode::Expert.items_table(season);
         sqlx::query(&format!(
             r#"
             CREATE TABLE IF NOT EXISTS {} (
@@ -513,20 +498,6 @@ pub async fn run_migrations(pool: &SqlitePool, default_season: &str) -> Result<(
         .execute(pool)
         .await
         .map_err(|e| format!("创建 {} 表失败: {}", expert_items_table, e))?;
-        sqlx::query(&format!(
-            "CREATE INDEX IF NOT EXISTS idx_{}_item_scraped ON {}(item_id, scraped_at DESC)",
-            expert_items_table, expert_items_table
-        ))
-        .execute(pool)
-        .await
-        .ok();
-        sqlx::query(&format!(
-            "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
-            expert_items_table, expert_items_table
-        ))
-        .execute(pool)
-        .await
-        .ok();
         create_items_indexes(pool, &expert_items_table).await?;
         add_column_if_missing(
             pool,
@@ -896,6 +867,164 @@ pub async fn get_fire_history(
     Ok(records)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{
+        get_fast_sync_all, get_items_by_cursor, get_items_daily_aggregate, get_latest_prices,
+        is_valid_identifier, MarketMode,
+    };
+    use sqlx::sqlite::SqlitePoolOptions;
+    use sqlx::SqlitePool;
+
+    async fn test_pool_with_items() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("test sqlite pool should connect");
+
+        sqlx::query(
+            r#"
+            CREATE TABLE item_snapshots_ss12_normal (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id TEXT NOT NULL,
+                name TEXT NOT NULL DEFAULT '',
+                item_type TEXT NOT NULL DEFAULT '',
+                fire_price REAL NOT NULL,
+                scraped_at INTEGER NOT NULL,
+                season_day INTEGER NOT NULL DEFAULT 1,
+                UNIQUE(item_id, scraped_at)
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .expect("item snapshot table should be created");
+
+        for (item_id, price, scraped_at, season_day) in [
+            ("item_a", 100.0, 1000_i64, 1_i32),
+            ("item_a", 200.0, 2000_i64, 2_i32),
+            ("item_a", 300.0, 3000_i64, 3_i32),
+            ("item_b", 500.0, 2000_i64, 2_i32),
+        ] {
+            sqlx::query(
+                r#"
+                INSERT INTO item_snapshots_ss12_normal
+                    (item_id, name, item_type, fire_price, scraped_at, season_day)
+                VALUES (?, ?, '装备', ?, ?, ?)
+                "#,
+            )
+            .bind(item_id)
+            .bind(item_id)
+            .bind(price)
+            .bind(scraped_at)
+            .bind(season_day)
+            .execute(&pool)
+            .await
+            .expect("item snapshot should insert");
+        }
+
+        pool
+    }
+
+    #[test]
+    fn sql_identifiers_are_ascii_only() {
+        assert!(is_valid_identifier("item_snapshots_ss12_normal"));
+        assert!(is_valid_identifier(
+            "idx_fire_price_snapshots_ss12_normal_day"
+        ));
+
+        assert!(!is_valid_identifier(""));
+        assert!(!is_valid_identifier("item-snapshots"));
+        assert!(!is_valid_identifier("物品表"));
+        assert!(!is_valid_identifier("items;DROP_TABLE"));
+    }
+
+    #[test]
+    fn market_mode_table_names_are_checked_identifiers() {
+        assert_eq!(
+            MarketMode::Normal.fire_table("ss12"),
+            "fire_price_snapshots_ss12_normal"
+        );
+        assert_eq!(
+            MarketMode::Expert.items_table("ss12"),
+            "item_snapshots_ss12_expert"
+        );
+    }
+
+    #[tokio::test]
+    async fn items_cursor_binds_day_filters() {
+        let pool = test_pool_with_items().await;
+
+        let response = get_items_by_cursor(
+            &pool,
+            "ss12",
+            "normal",
+            10,
+            None,
+            None,
+            None,
+            None,
+            Some(2),
+            Some(2),
+        )
+        .await
+        .expect("cursor query should support day filters");
+
+        assert_eq!(response.records.len(), 2);
+        assert!(response.records.iter().all(|item| item.season_day == 2));
+        assert_eq!(response.total_remaining, 2);
+    }
+
+    #[tokio::test]
+    async fn daily_aggregate_binds_day_filters_and_latest_price() {
+        let pool = test_pool_with_items().await;
+
+        let days = get_items_daily_aggregate(&pool, "ss12", "normal", Some(2), Some(2))
+            .await
+            .expect("daily aggregate should support day filters");
+
+        assert_eq!(days.len(), 1);
+        assert_eq!(days[0].season_day, 2);
+        assert_eq!(days[0].items.len(), 2);
+
+        let item_a = days[0]
+            .items
+            .iter()
+            .find(|item| item.item_id == "item_a")
+            .expect("item_a aggregate should exist");
+        assert_eq!(item_a.latest_price, 300.0);
+    }
+
+    #[tokio::test]
+    async fn fast_sync_binds_day_filters() {
+        let pool = test_pool_with_items().await;
+
+        let response = get_fast_sync_all(&pool, "ss12", "normal", Some(2), Some(2))
+            .await
+            .expect("fast sync should support day filters");
+
+        assert_eq!(response.total_items, 2);
+        assert_eq!(response.total_days, 1);
+        assert!(response
+            .items
+            .iter()
+            .all(|item| item.daily_prices.iter().all(|price| price.day == 2)));
+    }
+
+    #[tokio::test]
+    async fn latest_prices_returns_latest_scraped_timestamp() {
+        let pool = test_pool_with_items().await;
+
+        let response = get_latest_prices(&pool, "ss12", "normal")
+            .await
+            .expect("latest prices should load");
+
+        assert_eq!(response.prices.len(), 2);
+        assert_eq!(response.scraped_at, 3000);
+    }
+}
+
 // ==================== 高效批量聚合 API（模仿刷图小助手）====================
 
 #[derive(Debug, Clone, Serialize)]
@@ -945,7 +1074,10 @@ pub async fn get_fast_sync_all(
     min_day: Option<i32>,
     max_day: Option<i32>,
 ) -> Result<FastSyncResponse, String> {
-    let table = format!("item_snapshots_{}_{}", season_id, market_mode);
+    validate_season_id(season_id)?;
+
+    let mode = MarketMode::parse(market_mode);
+    let table = mode.items_table(season_id);
 
     if !table_exists(pool, &table).await? {
         return Ok(FastSyncResponse {
@@ -956,11 +1088,22 @@ pub async fn get_fast_sync_all(
         });
     }
 
-    let day_condition = match (min_day, max_day) {
-        (Some(min), Some(max)) => format!("WHERE season_day >= {} AND season_day <= {}", min, max),
-        (Some(min), None) => format!("WHERE season_day >= {}", min),
-        (None, Some(max)) => format!("WHERE season_day <= {}", max),
-        (None, None) => String::new(),
+    let mut conditions = Vec::new();
+    let mut binds: Vec<i64> = Vec::new();
+
+    if let Some(day) = min_day.filter(|day| *day > 0) {
+        conditions.push("season_day >= ?".to_string());
+        binds.push(day as i64);
+    }
+    if let Some(day) = max_day.filter(|day| *day > 0) {
+        conditions.push("season_day <= ?".to_string());
+        binds.push(day as i64);
+    }
+
+    let day_condition = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
     };
 
     let query = format!(
@@ -978,7 +1121,12 @@ pub async fn get_fast_sync_all(
     );
 
     let start = std::time::Instant::now();
-    let rows = sqlx::query(&query)
+    let mut q = sqlx::query(&query);
+    for b in binds {
+        q = q.bind(b);
+    }
+
+    let rows = q
         .fetch_all(pool)
         .await
         .map_err(|e| format!("高效同步查询失败: {}", e))?;
@@ -992,11 +1140,13 @@ pub async fn get_fast_sync_all(
         let day: i32 = row.get("season_day");
         let price: f64 = row.get("fire_price");
 
-        let item = item_map.entry(item_id.clone()).or_insert_with(|| FastItemData {
-            item_id: item_id.clone(),
-            name,
-            daily_prices: Vec::new(),
-        });
+        let item = item_map
+            .entry(item_id.clone())
+            .or_insert_with(|| FastItemData {
+                item_id: item_id.clone(),
+                name,
+                daily_prices: Vec::new(),
+            });
 
         if let Some(last) = item.daily_prices.last_mut() {
             if last.day == day {
@@ -1032,12 +1182,17 @@ pub async fn get_fast_sync_all(
     items.sort_by(|a, b| a.item_id.cmp(&b.item_id));
 
     let total_items_count = items.len() as i64;
-    let total_days = items.iter()
+    let total_days = items
+        .iter()
         .map(|i| i.daily_prices.len() as i32)
         .max()
         .unwrap_or(0);
 
-    info!("[高效同步] 处理 {} 个物品，耗时: {:?}", items.len(), start.elapsed());
+    info!(
+        "[高效同步] 处理 {} 个物品，耗时: {:?}",
+        items.len(),
+        start.elapsed()
+    );
 
     Ok(FastSyncResponse {
         items,
@@ -1052,7 +1207,10 @@ pub async fn get_latest_prices(
     season_id: &str,
     market_mode: &str,
 ) -> Result<LatestPricesResponse, String> {
-    let table = format!("item_snapshots_{}_{}", season_id, market_mode);
+    validate_season_id(season_id)?;
+
+    let mode = MarketMode::parse(market_mode);
+    let table = mode.items_table(season_id);
 
     if !table_exists(pool, &table).await? {
         return Ok(LatestPricesResponse {
@@ -1079,27 +1237,27 @@ pub async fn get_latest_prices(
         .await
         .map_err(|e| format!("获取最新价格失败: {}", e))?;
 
+    let mut scraped_at = 0_i64;
     let prices: Vec<LatestPrice> = rows
         .into_iter()
-        .map(|row| LatestPrice {
-            item_id: row.get("item_id"),
-            name: row.get("name"),
-            fire_price: row.get("fire_price"),
-            season_day: row.get("season_day"),
+        .map(|row| {
+            scraped_at = scraped_at.max(row.get("scraped_at"));
+            LatestPrice {
+                item_id: row.get("item_id"),
+                name: row.get("name"),
+                fire_price: row.get("fire_price"),
+                season_day: row.get("season_day"),
+            }
         })
         .collect();
 
-    let scraped_at = prices.iter()
-        .map(|p| p.season_day)
-        .max()
-        .unwrap_or(0);
+    info!(
+        "[最新价格] 获取 {} 个物品，耗时: {:?}",
+        prices.len(),
+        start.elapsed()
+    );
 
-    info!("[最新价格] 获取 {} 个物品，耗时: {:?}", prices.len(), start.elapsed());
-
-    Ok(LatestPricesResponse {
-        prices,
-        scraped_at: scraped_at as i64,
-    })
+    Ok(LatestPricesResponse { prices, scraped_at })
 }
 
 // ==================== 高速数据同步 API ====================
@@ -1113,7 +1271,11 @@ pub struct ItemsSyncResponse {
 }
 
 impl ItemsSyncResponse {
-    pub fn new(records: Vec<ItemSnapshotWithInfo>, next_cursor: Option<String>, total_remaining: i64) -> Self {
+    pub fn new(
+        records: Vec<ItemSnapshotWithInfo>,
+        next_cursor: Option<String>,
+        total_remaining: i64,
+    ) -> Self {
         Self {
             has_more: !records.is_empty() && next_cursor.is_some(),
             next_cursor,
@@ -1170,7 +1332,10 @@ pub async fn get_items_sync_stats(
     season_id: &str,
     market_mode: &str,
 ) -> Result<ItemsSyncStats, String> {
-    let table = format!("item_snapshots_{}_{}", season_id, market_mode);
+    validate_season_id(season_id)?;
+
+    let mode = MarketMode::parse(market_mode);
+    let table = mode.items_table(season_id);
 
     if !table_exists(pool, &table).await? {
         return Ok(ItemsSyncStats {
@@ -1181,45 +1346,32 @@ pub async fn get_items_sync_stats(
         });
     }
 
-    let total_records: i64 = sqlx::query_scalar(&format!(
-        "SELECT COUNT(*) FROM {}",
-        table
-    ))
-    .fetch_one(pool)
-    .await
-    .map_err(|e| format!("统计记录数失败: {}", e))?;
+    let total_records: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table))
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("统计记录数失败: {}", e))?;
 
-    let total_items: i64 = sqlx::query_scalar(&format!(
-        "SELECT COUNT(DISTINCT item_id) FROM {}",
-        table
-    ))
-    .fetch_one(pool)
-    .await
-    .map_err(|e| format!("统计物品数失败: {}", e))?;
+    let total_items: i64 =
+        sqlx::query_scalar(&format!("SELECT COUNT(DISTINCT item_id) FROM {}", table))
+            .fetch_one(pool)
+            .await
+            .map_err(|e| format!("统计物品数失败: {}", e))?;
 
-    let earliest: Option<i64> = sqlx::query_scalar(&format!(
-        "SELECT MIN(scraped_at) FROM {}",
-        table
-    ))
-    .fetch_one(pool)
-    .await
-    .ok();
+    let earliest: Option<i64> =
+        sqlx::query_scalar(&format!("SELECT MIN(scraped_at) FROM {}", table))
+            .fetch_one(pool)
+            .await
+            .ok();
 
-    let latest: Option<i64> = sqlx::query_scalar(&format!(
-        "SELECT MAX(scraped_at) FROM {}",
-        table
-    ))
-    .fetch_one(pool)
-    .await
-    .ok();
+    let latest: Option<i64> = sqlx::query_scalar(&format!("SELECT MAX(scraped_at) FROM {}", table))
+        .fetch_one(pool)
+        .await
+        .ok();
 
     Ok(ItemsSyncStats {
         total_records,
         total_items,
-        date_range: DateRange {
-            earliest,
-            latest,
-        },
+        date_range: DateRange { earliest, latest },
         mode: market_mode.to_string(),
     })
 }
@@ -1236,34 +1388,39 @@ pub async fn get_items_by_cursor(
     min_day: Option<i32>,
     max_day: Option<i32>,
 ) -> Result<ItemsSyncResponse, String> {
-    let table = format!("item_snapshots_{}_{}", season_id, market_mode);
+    validate_season_id(season_id)?;
+
+    let mode = MarketMode::parse(market_mode);
+    let table = mode.items_table(season_id);
 
     if !table_exists(pool, &table).await? {
         return Ok(ItemsSyncResponse::new(vec![], None, 0));
     }
 
     let mut conditions = Vec::new();
-    let mut binds: Vec<String> = Vec::new();
+    let mut binds: Vec<i64> = Vec::new();
 
     if let (Some(ts), Some(id)) = (before_scraped_at, before_id) {
         conditions.push("(scraped_at < ? OR (scraped_at = ? AND id < ?))".to_string());
-        binds.push(ts.to_string());
-        binds.push(ts.to_string());
-        binds.push(id.to_string());
+        binds.push(ts);
+        binds.push(ts);
+        binds.push(id);
     }
 
     if let (Some(ts), Some(id)) = (since_scraped_at, since_id) {
         conditions.push("(scraped_at > ? OR (scraped_at = ? AND id > ?))".to_string());
-        binds.push(ts.to_string());
-        binds.push(ts.to_string());
-        binds.push(id.to_string());
+        binds.push(ts);
+        binds.push(ts);
+        binds.push(id);
     }
 
-    if min_day.is_some() {
+    if let Some(day) = min_day.filter(|day| *day > 0) {
         conditions.push("season_day >= ?".to_string());
+        binds.push(day as i64);
     }
-    if max_day.is_some() {
+    if let Some(day) = max_day.filter(|day| *day > 0) {
         conditions.push("season_day <= ?".to_string());
+        binds.push(day as i64);
     }
 
     let where_clause = if conditions.is_empty() {
@@ -1285,11 +1442,7 @@ pub async fn get_items_by_cursor(
 
     let mut q = sqlx::query(&query);
     for b in &binds {
-        if let Ok(v) = b.parse::<i64>() {
-            q = q.bind(v);
-        } else if let Ok(v) = b.parse::<i32>() {
-            q = q.bind(v);
-        }
+        q = q.bind(*b);
     }
     q = q.bind(limit + 1);
 
@@ -1310,8 +1463,12 @@ pub async fn get_items_by_cursor(
             fire_price: row.get("fire_price"),
             scraped_at: row.get("scraped_at"),
             season_day: row.get("season_day"),
-            name: row.get::<Option<String>, _>("name").filter(|name| !name.is_empty()),
-            item_type: row.get::<Option<String>, _>("item_type").filter(|item_type| !item_type.is_empty()),
+            name: row
+                .get::<Option<String>, _>("name")
+                .filter(|name| !name.is_empty()),
+            item_type: row
+                .get::<Option<String>, _>("item_type")
+                .filter(|item_type| !item_type.is_empty()),
         })
         .collect();
 
@@ -1337,10 +1494,12 @@ pub async fn get_items_by_cursor(
         table, where_clause
     );
 
-    let remaining: i64 = sqlx::query_scalar(&remaining_query)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0);
+    let mut remaining_q = sqlx::query_scalar(&remaining_query);
+    for b in &binds {
+        remaining_q = remaining_q.bind(*b);
+    }
+
+    let remaining: i64 = remaining_q.fetch_one(pool).await.unwrap_or(0);
 
     Ok(ItemsSyncResponse::new(records, next_cursor, remaining))
 }
@@ -1352,19 +1511,25 @@ pub async fn get_items_daily_aggregate(
     min_day: Option<i32>,
     max_day: Option<i32>,
 ) -> Result<Vec<ItemsDailyAggregate>, String> {
-    let table = format!("item_snapshots_{}_{}", season_id, market_mode);
+    validate_season_id(season_id)?;
+
+    let mode = MarketMode::parse(market_mode);
+    let table = mode.items_table(season_id);
 
     if !table_exists(pool, &table).await? {
         return Ok(vec![]);
     }
 
     let mut conditions = Vec::new();
+    let mut binds: Vec<i64> = Vec::new();
 
-    if let Some(day) = min_day {
-        conditions.push(format!("season_day >= {}", day));
+    if let Some(day) = min_day.filter(|day| *day > 0) {
+        conditions.push("season_day >= ?".to_string());
+        binds.push(day as i64);
     }
-    if let Some(day) = max_day {
-        conditions.push(format!("season_day <= {}", day));
+    if let Some(day) = max_day.filter(|day| *day > 0) {
+        conditions.push("season_day <= ?".to_string());
+        binds.push(day as i64);
     }
 
     let where_clause = if conditions.is_empty() {
@@ -1385,18 +1550,23 @@ pub async fn get_items_daily_aggregate(
             COUNT(*) as price_count,
             (
                 SELECT fire_price FROM {} i2
-                WHERE i2.item_id = {} i.item_id
-                ORDER BY scraped_at DESC LIMIT 1
+                WHERE i2.item_id = i.item_id
+                ORDER BY i2.scraped_at DESC, i2.id DESC LIMIT 1
             ) as latest_price
         FROM {} i
         {}
         GROUP BY season_day, item_id, name
         ORDER BY season_day DESC, item_id
         "#,
-        table, table, table, where_clause
+        table, table, where_clause
     );
 
-    let rows = sqlx::query(&query)
+    let mut q = sqlx::query(&query);
+    for b in binds {
+        q = q.bind(b);
+    }
+
+    let rows = q
         .fetch_all(pool)
         .await
         .map_err(|e| format!("按天聚合查询失败: {}", e))?;
@@ -1407,14 +1577,19 @@ pub async fn get_items_daily_aggregate(
         let season_day: i32 = row.get("season_day");
         let item = DailyItemPrice {
             item_id: row.get("item_id"),
-            name: row.get::<Option<String>, _>("name").filter(|n| !n.is_empty()),
+            name: row
+                .get::<Option<String>, _>("name")
+                .filter(|n| !n.is_empty()),
             min_price: row.get::<Option<f64>, _>("min_price").unwrap_or(0.0),
             max_price: row.get::<Option<f64>, _>("max_price").unwrap_or(0.0),
             avg_price: row.get::<Option<f64>, _>("avg_price").unwrap_or(0.0),
             latest_price: row.get::<Option<f64>, _>("latest_price").unwrap_or(0.0),
             price_count: row.get("price_count"),
         };
-        day_map.entry(season_day).or_insert_with(Vec::new).push(item);
+        day_map
+            .entry(season_day)
+            .or_insert_with(Vec::new)
+            .push(item);
     }
 
     let result: Vec<ItemsDailyAggregate> = day_map
@@ -1740,8 +1915,9 @@ pub async fn init_new_season(
     let mut created_tables = Vec::new();
 
     for mode in ["normal", "expert"] {
-        let fire_table = format!("fire_price_snapshots_{}_{}", season_id, mode);
-        let items_table = format!("item_snapshots_{}_{}", season_id, mode);
+        let market_mode = MarketMode::parse(mode);
+        let fire_table = market_mode.fire_table(season_id);
+        let items_table = market_mode.items_table(season_id);
 
         sqlx::query(&format!(
             r#"
@@ -1763,13 +1939,6 @@ pub async fn init_new_season(
         .execute(pool)
         .await
         .map_err(|e| format!("创建火价表失败: {}", e))?;
-        sqlx::query(&format!(
-            "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
-            fire_table, fire_table
-        ))
-        .execute(pool)
-        .await
-        .ok();
         create_fire_indexes(pool, &fire_table).await?;
         created_tables.push(fire_table);
 
@@ -1791,20 +1960,6 @@ pub async fn init_new_season(
         .execute(pool)
         .await
         .map_err(|e| format!("创建物品表失败: {}", e))?;
-        sqlx::query(&format!(
-            "CREATE INDEX IF NOT EXISTS idx_{}_item_scraped ON {}(item_id, scraped_at DESC)",
-            items_table, items_table
-        ))
-        .execute(pool)
-        .await
-        .ok();
-        sqlx::query(&format!(
-            "CREATE INDEX IF NOT EXISTS idx_{}_day ON {}(season_day)",
-            items_table, items_table
-        ))
-        .execute(pool)
-        .await
-        .ok();
         create_items_indexes(pool, &items_table).await?;
         created_tables.push(items_table);
     }
@@ -1874,25 +2029,41 @@ pub async fn get_fire_history_all(
         format!(" WHERE {}", conditions.join(" AND "))
     };
 
-    let query = format!(
-        r#"
-        SELECT id, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day
-        FROM {}
-        {}
-        ORDER BY scraped_at DESC, id DESC
-        LIMIT ?
-        OFFSET ?
-        "#,
-        table, where_clause
-    );
+    let use_offset = before_timestamp.is_none() && before_id.is_none() && offset > 0;
+    let query = if use_offset {
+        format!(
+            r#"
+            SELECT id, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day
+            FROM {}
+            {}
+            ORDER BY scraped_at DESC, id DESC
+            LIMIT ?
+            OFFSET ?
+            "#,
+            table, where_clause
+        )
+    } else {
+        format!(
+            r#"
+            SELECT id, rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day
+            FROM {}
+            {}
+            ORDER BY scraped_at DESC, id DESC
+            LIMIT ?
+            "#,
+            table, where_clause
+        )
+    };
 
     let mut q = sqlx::query(&query);
     for bind in binds {
         q = q.bind(bind);
     }
+    q = q.bind(limit);
+    if use_offset {
+        q = q.bind(offset);
+    }
     let rows = q
-        .bind(limit)
-        .bind(offset)
         .fetch_all(pool)
         .await
         .map_err(|e| format!("查询火价快照失败: {}", e))?;
@@ -2044,23 +2215,40 @@ pub async fn get_items_history_all(
         format!(" WHERE {}", conditions.join(" AND "))
     };
 
-    let query = format!(
-        r#"
-        SELECT id, item_id, name, item_type, fire_price, scraped_at, season_day
-        FROM {}
-        {}
-        ORDER BY scraped_at DESC, id DESC
-        LIMIT ?
-        OFFSET ?
-        "#,
-        table, where_clause
-    );
+    let use_offset = before_timestamp.is_none() && before_id.is_none() && offset > 0;
+    let query = if use_offset {
+        format!(
+            r#"
+            SELECT id, item_id, name, item_type, fire_price, scraped_at, season_day
+            FROM {}
+            {}
+            ORDER BY scraped_at DESC, id DESC
+            LIMIT ?
+            OFFSET ?
+            "#,
+            table, where_clause
+        )
+    } else {
+        format!(
+            r#"
+            SELECT id, item_id, name, item_type, fire_price, scraped_at, season_day
+            FROM {}
+            {}
+            ORDER BY scraped_at DESC, id DESC
+            LIMIT ?
+            "#,
+            table, where_clause
+        )
+    };
 
     let mut q = sqlx::query(&query);
     for b in binds {
         q = q.bind(b);
     }
-    q = q.bind(limit).bind(offset);
+    q = q.bind(limit);
+    if use_offset {
+        q = q.bind(offset);
+    }
     let rows = q
         .fetch_all(pool)
         .await

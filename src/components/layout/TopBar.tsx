@@ -13,6 +13,7 @@ import { invalidateMarketContextData, queryKeys } from "@/lib/queryKeys"
 import { cn } from "@/lib/utils"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { errorMessage } from "@/lib/utils";
+import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 
 const FireStaleTag = memo(function FireStaleTag({ scrapedAt }: { scrapedAt: number }) {
   const isStale = Date.now() / 1000 - scrapedAt > 3600;
@@ -159,12 +160,15 @@ export function TopBar({ page, onPageChange, isMiniMode: externalIsMiniMode, set
     setIsMiniMode(config.desktop.mini_mode)
   }, [config, setIsMiniMode])
 
+  const summaryRefetchInterval = useVisiblePolling(120000)
+
   const { data: summary } = useQuery({
     queryKey: [...queryKeys.dashboardSummary, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getDashboardSummary(),
     enabled: marketContextReady,
-    refetchInterval: 30000,
+    refetchInterval: summaryRefetchInterval,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   })
 
   useEffect(() => {

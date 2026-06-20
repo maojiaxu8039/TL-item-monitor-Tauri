@@ -46,6 +46,7 @@ interface ServerStatus {
 }
 
 interface FireHistoryRecord {
+  cursor_id?: number;
   id?: string;
   season_id: string;
   market_mode?: string;
@@ -60,6 +61,7 @@ interface FireHistoryRecord {
 }
 
 interface ItemsHistoryRecord {
+  cursor_id?: number;
   id?: string;
   item_id: string;
   season_id: string;
@@ -285,7 +287,6 @@ export default function DataMonitorPage() {
     job = { ...job, status: "running" as const, startedAt: Date.now() };
     setSyncJob(job);
 
-    let offset = 0;
     let totalSuccess = 0;
     let totalFailed = 0;
     let allFailures: SyncFailure[] = [];
@@ -293,6 +294,8 @@ export default function DataMonitorPage() {
     let maxScrapedAt = 0;
     let pageCount = 0;
     let lastUiUpdate = Date.now();
+    let beforeTimestamp: number | null = null;
+    let beforeId: number | null = null;
 
     try {
       if (dataType === "fire") {
@@ -300,7 +303,10 @@ export default function DataMonitorPage() {
         const baseUrl = `${serverUrl}/fire-history-all?mode=${modeParam}${timestampParam}`;
 
         while (hasMore && !cancelled) {
-          const url = `${baseUrl}&limit=${PAGE_SIZE}&offset=${offset}`;
+          const cursorParam = beforeTimestamp !== null && beforeId !== null
+            ? `&before_timestamp=${beforeTimestamp}&before_id=${beforeId}`
+            : "";
+          const url = `${baseUrl}&limit=${PAGE_SIZE}${cursorParam}`;
           const result = await cmd.fetchServerJson<{ success: boolean; data: FireHistoryRecord[]; error?: string }>(url);
           if (cancelled) break;
           if (!result.success) throw new Error(result.error || "Unknown error");
@@ -314,6 +320,9 @@ export default function DataMonitorPage() {
 
           const pageResult = await syncSinglePage(records, dataType, marketMode, marketContext);
           if (cancelled) break;
+          const lastRecord = records[records.length - 1];
+          beforeTimestamp = lastRecord.scraped_at ?? null;
+          beforeId = lastRecord.cursor_id ?? null;
           totalSuccess += pageResult.success;
           totalFailed += pageResult.failed;
           allFailures = [...allFailures, ...pageResult.failures];
@@ -335,8 +344,6 @@ export default function DataMonitorPage() {
 
           if (records.length < PAGE_SIZE) {
             hasMore = false;
-          } else {
-            offset += PAGE_SIZE;
           }
         }
       } else {
@@ -345,7 +352,10 @@ export default function DataMonitorPage() {
         const baseUrl = `${serverUrl}/items-history-all?mode=${modeParam}${timestampParam}`;
 
         while (hasMore && !cancelled) {
-          const url = `${baseUrl}&limit=${PAGE_SIZE}&offset=${offset}`;
+          const cursorParam = beforeTimestamp !== null && beforeId !== null
+            ? `&before_timestamp=${beforeTimestamp}&before_id=${beforeId}`
+            : "";
+          const url = `${baseUrl}&limit=${PAGE_SIZE}${cursorParam}`;
           const result = await cmd.fetchServerJson<{ success: boolean; data: ItemsHistoryRecord[]; error?: string }>(url);
           if (cancelled) break;
           if (!result.success) throw new Error(result.error || "Unknown error");
@@ -359,6 +369,9 @@ export default function DataMonitorPage() {
 
           const pageResult = await syncSinglePage(records, dataType, marketMode, marketContext);
           if (cancelled) break;
+          const lastRecord = records[records.length - 1];
+          beforeTimestamp = lastRecord.scraped_at ?? null;
+          beforeId = lastRecord.cursor_id ?? null;
           if (pageResult.success > 0) {
             records.forEach(r => { if (r.scraped_at > maxScrapedAt) maxScrapedAt = r.scraped_at; });
           }
@@ -383,8 +396,6 @@ export default function DataMonitorPage() {
 
           if (records.length < PAGE_SIZE) {
             hasMore = false;
-          } else {
-            offset += PAGE_SIZE;
           }
         }
       }

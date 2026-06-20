@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { cmd, type FirePriceChangeItem } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { queryKeys } from "@/lib/queryKeys";
+import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 
 interface FireChangeCardProps {
   item: FirePriceChangeItem;
@@ -220,6 +221,7 @@ export default function DealsPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState<{ rise_threshold: number; fall_threshold: number; max_price: number }>({ rise_threshold: 5, fall_threshold: 5, max_price: 0 });
   const { marketContext, marketContextReady } = useSectionRefresh();
+  const fireChangesRefetchInterval = useVisiblePolling(120000);
 
   useEffect(() => {
     try {
@@ -236,8 +238,9 @@ export default function DealsPage() {
     queryKey: [...queryKeys.realtimeFireChanges, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getRealtimeFireChanges(marketContext.seasonId, marketContext.marketMode),
     enabled: marketContextReady,
-    refetchInterval: 60000,
+    refetchInterval: fireChangesRefetchInterval,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     staleTime: 30000,
   });
 

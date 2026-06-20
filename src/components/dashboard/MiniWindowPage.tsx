@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query"
 import { RefreshCw, Copy, Check, Settings2, ExternalLink, Plus, Minus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
+import { useVisiblePolling } from "@/hooks/useVisiblePolling"
 import { queryKeys } from "@/lib/queryKeys"
 import { toast } from "sonner"
 
@@ -32,6 +33,7 @@ export default function MiniWindowPage() {
   const [showSettings, setShowSettings] = useState(false)
   const [opacity, setOpacity] = useState(0.92)
   const opacitySaveTimerRef = useRef<number | null>(null)
+  const feedRefetchInterval = useVisiblePolling(60000)
 
   useEffect(() => {
     cmd.getWindowModeState().then((state) => {
@@ -50,8 +52,9 @@ export default function MiniWindowPage() {
     queryKey: [...queryKeys.miniWindowFeed, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getMiniWindowFeed(marketContext.seasonId, marketContext.marketMode),
     enabled: !!marketContext.seasonId,
-    refetchInterval: 30000,
+    refetchInterval: feedRefetchInterval,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   })
 
   const feed = feedQuery.data

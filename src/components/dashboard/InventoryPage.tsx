@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/ui/PageHeader"
 import { Surface } from "@/components/ui/Surface"
 import { Button } from "@/components/ui/button"
 import { queryKeys } from "@/lib/queryKeys"
+import { useVisiblePolling } from "@/hooks/useVisiblePolling"
 
 type Tab = "positions" | "buy-watches"
 
@@ -68,29 +69,33 @@ export default function InventoryPage() {
 
   const seasonId = marketContext.seasonId
   const marketMode = marketContext.marketMode
+  const inventoryRefetchInterval = useVisiblePolling(300000)
 
   const positionsQuery = useQuery({
     queryKey: queryKeys.inventory.positions(seasonId, marketMode),
     queryFn: () => cmd.listInventoryPositions(seasonId, marketMode),
     enabled: !!seasonId,
-    refetchInterval: 60000,
+    refetchInterval: inventoryRefetchInterval,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   })
 
   const watchesQuery = useQuery({
     queryKey: queryKeys.inventory.buyWatches(seasonId, marketMode),
     queryFn: () => cmd.listInventoryBuyWatches(seasonId, marketMode),
     enabled: !!seasonId,
-    refetchInterval: 60000,
+    refetchInterval: inventoryRefetchInterval,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   })
 
   const summaryQuery = useQuery({
     queryKey: queryKeys.inventory.summary(seasonId, marketMode),
     queryFn: () => cmd.getInventorySummary(seasonId, marketMode),
     enabled: !!seasonId,
-    refetchInterval: 60000,
+    refetchInterval: inventoryRefetchInterval,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   })
 
   const markSoldMutation = useMutation({

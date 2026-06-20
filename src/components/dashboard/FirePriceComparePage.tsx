@@ -11,6 +11,7 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { queryKeys } from "@/lib/queryKeys";
+import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 
 type TimeRange = "all" | "3d" | "7d" | "14d" | "30d";
 type DayRange = { start: number; end: number };
@@ -42,12 +43,14 @@ export default function FirePriceComparePage() {
 
   const currentSeason = marketContext.seasonId;
   const marketMode = marketContext.marketMode;
+  const currentRefetchInterval = useVisiblePolling(5 * 60 * 1000);
 
   const currentQuery = useQuery({
     queryKey: [...queryKeys.fireTrendCurrent, currentSeason, marketMode, timeRange],
     queryFn: () => cmd.getFireHistoryBySeason(currentSeason, marketMode, 99999),
-    refetchInterval: 5 * 60 * 1000,
+    refetchInterval: currentRefetchInterval,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     staleTime: 30 * 1000,
     enabled: !!currentSeason,
   });

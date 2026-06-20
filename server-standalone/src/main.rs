@@ -749,6 +749,20 @@ async fn handle_request(
             .await;
             return;
         }
+        ("GET", "/admin.js") => {
+            let js = include_str!("admin.js");
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/javascript; charset=utf-8\r\nCache-Control: public, max-age=3600\r\nContent-Length: {}\r\n\r\n{}",
+                js.len(),
+                js
+            );
+            let _ = tokio::io::AsyncWriteExt::write_all(
+                &mut tokio::io::BufWriter::new(stream),
+                response.as_bytes(),
+            )
+            .await;
+            return;
+        }
         ("GET", "/api/admin/status") => {
             let body = serde_json::to_string_pretty(&ApiResponse {
                 success: true,
@@ -1474,7 +1488,7 @@ async fn handle_request(
                         (401, body)
                     } else {
                         let limit: i32 = req.limit.unwrap_or(50).clamp(1, 500);
-                        let offset: i32 = req.offset.unwrap_or(0);
+                        let offset: i32 = req.offset.unwrap_or(0).clamp(0, 10_000);
 
                         match db::get_audit_log(&state.db, limit, offset).await {
                             Ok(entries) => {
@@ -1979,16 +1993,23 @@ async fn handle_request(
         }
 
         // ==================== 高速数据同步 API ====================
-
         ("GET", "/sync-fast") => {
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
-            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
-            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
-            let min_day: Option<i32> = get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
-            let max_day: Option<i32> = get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
+            let mode =
+                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let market_mode = if mode == "expert" {
+                "season_expert"
+            } else {
+                "season_normal"
+            };
+            let min_day: Option<i32> =
+                get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
+            let max_day: Option<i32> =
+                get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
 
-            match db::get_fast_sync_all(&state.db, &season_id, market_mode, min_day, max_day).await {
+            match db::get_fast_sync_all(&state.db, &season_id, market_mode, min_day, max_day).await
+            {
                 Ok(result) => {
                     let body = serde_json::to_string(&ApiResponse {
                         success: true,
@@ -2013,8 +2034,13 @@ async fn handle_request(
         ("GET", "/prices-latest") => {
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
-            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
-            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
+            let mode =
+                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let market_mode = if mode == "expert" {
+                "season_expert"
+            } else {
+                "season_normal"
+            };
 
             match db::get_latest_prices(&state.db, &season_id, market_mode).await {
                 Ok(result) => {
@@ -2069,10 +2095,9 @@ async fn handle_request(
             let season_id: i32 = get_query_param(query_string, "season")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(1401);
-            let item_id = get_query_param(query_string, "item_id")
-                .unwrap_or_default();
-            let item_name = get_query_param(query_string, "name")
-                .unwrap_or_else(|| item_id.clone());
+            let item_id = get_query_param(query_string, "item_id").unwrap_or_default();
+            let item_name =
+                get_query_param(query_string, "name").unwrap_or_else(|| item_id.clone());
 
             if item_id.is_empty() {
                 let body = serde_json::to_string_pretty(&ApiResponse::<()> {
@@ -2084,10 +2109,9 @@ async fn handle_request(
                 (400, body)
             } else {
                 let history = scraper::DualSourceScraper::fetch_dual_source_history(
-                    season_id,
-                    &item_id,
-                    &item_name,
-                ).await;
+                    season_id, &item_id, &item_name,
+                )
+                .await;
 
                 let body = serde_json::to_string_pretty(&ApiResponse {
                     success: true,
@@ -2102,8 +2126,13 @@ async fn handle_request(
         ("GET", "/items-sync-stats") => {
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
-            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
-            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
+            let mode =
+                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let market_mode = if mode == "expert" {
+                "season_expert"
+            } else {
+                "season_normal"
+            };
 
             match db::get_items_sync_stats(&state.db, &season_id, market_mode).await {
                 Ok(stats) => {
@@ -2130,8 +2159,13 @@ async fn handle_request(
         ("GET", "/items-sync") => {
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
-            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
-            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
+            let mode =
+                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let market_mode = if mode == "expert" {
+                "season_expert"
+            } else {
+                "season_normal"
+            };
 
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
@@ -2150,8 +2184,10 @@ async fn handle_request(
                 (None, None)
             };
 
-            let min_day: Option<i32> = get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
-            let max_day: Option<i32> = get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
+            let min_day: Option<i32> =
+                get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
+            let max_day: Option<i32> =
+                get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
 
             match db::get_items_by_cursor(
                 &state.db,
@@ -2191,13 +2227,28 @@ async fn handle_request(
         ("GET", "/items-daily") => {
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
-            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
-            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
+            let mode =
+                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let market_mode = if mode == "expert" {
+                "season_expert"
+            } else {
+                "season_normal"
+            };
 
-            let min_day: Option<i32> = get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
-            let max_day: Option<i32> = get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
+            let min_day: Option<i32> =
+                get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
+            let max_day: Option<i32> =
+                get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
 
-            match db::get_items_daily_aggregate(&state.db, &season_id, market_mode, min_day, max_day).await {
+            match db::get_items_daily_aggregate(
+                &state.db,
+                &season_id,
+                market_mode,
+                min_day,
+                max_day,
+            )
+            .await
+            {
                 Ok(result) => {
                     let body = serde_json::to_string_pretty(&ApiResponse {
                         success: true,

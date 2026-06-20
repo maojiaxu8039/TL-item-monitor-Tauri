@@ -565,10 +565,15 @@ impl DualSourceScraper {
         Ok(map)
     }
 
-    pub async fn get_luosi_history(season_id: i32, item_id: &str) -> Result<LuosiHistoryResponse, String> {
+    pub async fn get_luosi_history(
+        season_id: i32,
+        item_id: &str,
+    ) -> Result<LuosiHistoryResponse, String> {
         let url = format!(
             "{}/price/history?season_id={}&item_id={}&range=season",
-            Self::LUOSI_SERVER, season_id, item_id
+            Self::LUOSI_SERVER,
+            season_id,
+            item_id
         );
 
         let resp = http_client()?
@@ -590,10 +595,15 @@ impl DualSourceScraper {
         Ok(history)
     }
 
-    pub async fn get_etor_history(season_id: i32, item_id: &str) -> Result<Vec<DualSourceHistoryPoint>, String> {
+    pub async fn get_etor_history(
+        season_id: i32,
+        item_id: &str,
+    ) -> Result<Vec<DualSourceHistoryPoint>, String> {
         let url = format!(
             "{}/chart/{}/{}?interval=1h",
-            Self::ETOR_BASE, season_id, item_id
+            Self::ETOR_BASE,
+            season_id,
+            item_id
         );
 
         let resp = http_client()?
@@ -602,7 +612,10 @@ impl DualSourceScraper {
             .header("accept-language", "zh-CN,zh;q=0.9")
             .header("x-frontend-version", "10.5.50")
             .header("seasonid", season_id.to_string())
-            .header("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .header(
+                "user-agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            )
             .timeout(Duration::from_secs(15))
             .send()
             .await
@@ -631,8 +644,8 @@ impl DualSourceScraper {
             price: f64,
         }
 
-        let chart_resp: EtorChartResponse = serde_json::from_str(&text)
-            .map_err(|e| format!("易火 JSON 解析失败: {}", e))?;
+        let chart_resp: EtorChartResponse =
+            serde_json::from_str(&text).map_err(|e| format!("易火 JSON 解析失败: {}", e))?;
 
         let items = chart_resp
             .trend
@@ -679,9 +692,7 @@ impl DualSourceScraper {
         all_points
     }
 
-    pub async fn fetch_all_dual_source(
-        season_id: i32,
-    ) -> Result<Vec<DualSourceItemData>, String> {
+    pub async fn fetch_all_dual_source(season_id: i32) -> Result<Vec<DualSourceItemData>, String> {
         info!("[双源] 开始获取所有物品数据 (赛季: {})", season_id);
 
         let overview = Self::get_overview(season_id).await?;
