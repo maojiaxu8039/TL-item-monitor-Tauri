@@ -650,7 +650,15 @@ export const cmd = {
       qiandaoSpecIdExpert: config.qiandao_spec_id_expert,
       luosiSeasonIdNormal: config.luosi_season_id_normal,
       luosiSeasonIdExpert: config.luosi_season_id_expert,
+      etorSeasonIdNormal: config.etor_season_id_normal,
+      etorSeasonIdExpert: config.etor_season_id_expert,
     }),
+
+  // Item mapping management
+  updateItemMapping: () =>
+    invoke<ItemMappingUpdateResult>("update_item_mapping"),
+  getItemMappingCount: () =>
+    invoke<number>("get_item_mapping_count"),
 
   // Skills management
   getInstalledSkills: () => invoke<SkillInfo[]>("get_installed_skills"),
@@ -741,6 +749,8 @@ export interface SeasonApiConfigResponse {
   qiandao_spec_id_expert: string;
   luosi_season_id_normal: number;
   luosi_season_id_expert: number;
+  etor_season_id_normal: number;
+  etor_season_id_expert: number;
 }
 
 export interface SeasonApiConfigInput {
@@ -750,6 +760,16 @@ export interface SeasonApiConfigInput {
   qiandao_spec_id_expert: string;
   luosi_season_id_normal: number;
   luosi_season_id_expert: number;
+  etor_season_id_normal: number;
+  etor_season_id_expert: number;
+}
+
+export interface ItemMappingUpdateResult {
+  total: number;
+  new_from_luosi: number;
+  new_from_etor: number;
+  updated: number;
+  deduplicated: number;
 }
 
 export interface DealAlert {

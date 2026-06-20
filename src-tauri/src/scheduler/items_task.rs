@@ -7,7 +7,6 @@ use tracing::{error, info, warn};
 use crate::core::state::AppState;
 use crate::db::repo_item_realtime_prices;
 use crate::db::repo_items;
-use crate::scraper;
 
 pub async fn run_items_reload_task(
     app: tauri::AppHandle,
@@ -153,18 +152,48 @@ pub async fn run_items_reload_task(
             market_mode
         );
 
+        // 获取当前赛季的 API 配置（含 luosi/etor 赛季ID）
+        let api_config = crate::db::repo_season_api::get_season_api_config(&state.db, &season_id)
+            .await
+            .unwrap_or_default();
+        info!(
+            "[ITEMS-TASK] API config: luosi(normal={}, expert={}), etor(normal={}, expert={})",
+            api_config.luosi_season_id_normal,
+            api_config.luosi_season_id_expert,
+            api_config.etor_season_id_normal,
+            api_config.etor_season_id_expert
+        );
+
         // Scrape normal mode items
         info!("[ITEMS-TASK] Fetching normal items from {}", items_source);
         let normal_future = async {
             if scrape_normal {
-                Some(scrape_for_mode(&season_id, "season_normal", &items_source, &json_path).await)
+                Some(
+                    scrape_for_mode(
+                        &season_id,
+                        "season_normal",
+                        &items_source,
+                        &json_path,
+                        &api_config,
+                    )
+                    .await,
+                )
             } else {
                 None
             }
         };
         let expert_future = async {
             if scrape_expert {
-                Some(scrape_for_mode(&season_id, "season_expert", &items_source, &json_path).await)
+                Some(
+                    scrape_for_mode(
+                        &season_id,
+                        "season_expert",
+                        &items_source,
+                        &json_path,
+                        &api_config,
+                    )
+                    .await,
+                )
             } else {
                 None
             }
@@ -296,28 +325,9 @@ async fn scrape_for_mode(
     mode: &str,
     source: &str,
     json_path: &str,
+    api_config: &crate::core::state::SeasonApiConfig,
 ) -> Result<Vec<crate::db::models::Item>, String> {
-    if source == "api" {
-        info!(
-            "[ITEMS-TASK] Fetching {} items from API for {}/{}",
-            mode, season_id, mode
-        );
-        tokio::time::timeout(
-            Duration::from_secs(45),
-            scraper::scrape_items(season_id, mode),
-        )
-        .await
-        .map_err(|_| format!("API scrape timed out for {} after 45s", mode))?
-        .map_err(|e| format!("API scrape failed for {}: {}", mode, e))
-    } else {
-        info!(
-            "[ITEMS-TASK] Loading {} items from JSON for {}/{}",
-            mode, season_id, mode
-        );
-        crate::app::load_items_from_json(season_id, mode, json_path)
-            .await
-            .map_err(|e| format!("JSON load failed for {}: {}", mode, e))
-    }
+    crate::scraper::scrape_items_by_source(season_id, mode, source, json_path, api_config).await
 }
 
 async fn wait_or_abort(

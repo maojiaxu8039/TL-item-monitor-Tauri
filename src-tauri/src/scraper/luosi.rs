@@ -24,14 +24,14 @@ static LUOSI_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         })
 });
 
-#[derive(Debug, Deserialize)]
-struct LuosiItem {
-    name: String,
-    price: f64,
+#[derive(Debug, Deserialize, Clone)]
+pub struct LuosiItem {
+    pub name: String,
+    pub price: f64,
     #[serde(rename = "last_time")]
-    last_time: i64,
+    pub last_time: i64,
     #[serde(rename = "type")]
-    item_type: Option<String>,
+    pub item_type: Option<String>,
 }
 
 pub async fn scrape_normal_items() -> Result<Vec<Item>, AppError> {
@@ -65,6 +65,48 @@ pub async fn scrape_items(season_id: &str, market_mode: &str) -> Result<Vec<Item
     let target_season_id = season_id.to_string();
     let target_market_mode = market_mode.to_string();
     scrape_by_season_id(api_season_id, &target_season_id, &target_market_mode).await
+}
+
+/// 使用指定的 API 赛季ID 抓取刷图小助手物品（用于双源合并时统一配置）
+pub async fn scrape_items_with_api_id(
+    season_id: &str,
+    market_mode: &str,
+    api_season_id: i32,
+) -> Result<Vec<Item>, AppError> {
+    scrape_by_season_id(api_season_id, season_id, market_mode).await
+}
+
+/// 获取刷图小助手的物品ID+名称+类型列表（用于对照表更新）
+pub async fn fetch_luosi_item_list(
+    api_season_id: i32,
+) -> Result<HashMap<String, LuosiItem>, AppError> {
+    let url = format!("{}?season_id={}", LUOSI_BASE_URL, api_season_id);
+    tracing::info!("[LUOSI] Fetching item list for mapping update: {}", url);
+
+    let resp = LUOSI_CLIENT
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await
+        .map_err(|e| AppError::Scrape(format!("luosi mapping request failed: {}", e)))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(AppError::Scrape(format!(
+            "luosi mapping API status: {}",
+            status
+        )));
+    }
+
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| AppError::Scrape(format!("luosi mapping read failed: {}", e)))?;
+    let map: HashMap<String, LuosiItem> = serde_json::from_str(&body)
+        .map_err(|e| AppError::Scrape(format!("luosi mapping parse failed: {}", e)))?;
+
+    tracing::info!("[LUOSI] Fetched {} items for mapping update", map.len());
+    Ok(map)
 }
 
 async fn scrape_by_season_id(

@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import { cmd, type PageId } from "@/lib/commands"
 import { publicAssetPath } from "@/lib/icons"
+import { queryKeys } from "@/lib/queryKeys"
 import { cn } from "@/lib/utils"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
-import { devLog } from "@/lib/devLog";
 import { errorMessage } from "@/lib/utils";
 
 const FireStaleTag = memo(function FireStaleTag({ scrapedAt }: { scrapedAt: number }) {
@@ -76,11 +76,56 @@ async function startDrag(e: MouseEvent) {
   }
 }
 
+function sourceLabel(source: string) {
+  switch (source) {
+    case "dual":
+      return "双源"
+    case "etor":
+      return "易火"
+    case "api":
+      return "小助手"
+    case "local":
+      return "本地"
+    default:
+      return "数据源"
+  }
+}
+
+function sourceTitle(source: string) {
+  switch (source) {
+    case "dual":
+      return "双源合并：刷图小助手 + 易火"
+    case "etor":
+      return "易火 API 数据源"
+    case "api":
+      return "刷图小助手 API 数据源"
+    case "local":
+      return "本地 JSON 数据源"
+    default:
+      return "物品数据源"
+  }
+}
+
+function sourceDotClass(source: string) {
+  switch (source) {
+    case "dual":
+      return "bg-[var(--color-brand-gold)]"
+    case "etor":
+      return "bg-[var(--color-ai)]"
+    case "api":
+      return "bg-[var(--color-success)]"
+    case "local":
+      return "bg-[var(--color-success)]"
+    default:
+      return "bg-[var(--color-text-subtle)]"
+  }
+}
+
 export function TopBar({ page, onPageChange }: TopBarProps) {
   const { refreshData, marketContext, marketContextReady, setMarketContext } = useSectionRefresh()
   const queryClient = useQueryClient()
   const [marketMode, setMarketMode] = useState(marketContext.marketMode)
-  const [dataSource, setDataSource] = useState<"api" | "local">("api")
+  const [dataSource, setDataSource] = useState("dual")
   const [notificationEnabled, setNotificationEnabled] = useState(true)
   const prevModeRef = useRef(marketContext.marketMode)
   const summaryRef = useRef<string | undefined>(undefined)
@@ -95,15 +140,17 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
     prevModeRef.current = marketContext.marketMode
   }, [marketContext.marketMode])
 
+  const { data: config } = useQuery({
+    queryKey: queryKeys.config,
+    queryFn: () => cmd.getConfig(),
+    staleTime: 30 * 1000,
+  })
+
   useEffect(() => {
-    let mounted = true
-    cmd.getConfig().then((cfg) => {
-      if (!mounted) return
-      setDataSource(cfg.scrape.items_source === "local" ? "local" : "api")
-      setNotificationEnabled(cfg.notification.system_notifications)
-    }).catch((e) => devLog.warn("getConfig failed", e))
-    return () => { mounted = false }
-  }, [])
+    if (!config) return
+    setDataSource(config.scrape.items_source || "dual")
+    setNotificationEnabled(config.notification.system_notifications)
+  }, [config])
 
   const { data: summary } = useQuery({
     queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode],
@@ -217,9 +264,9 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
           <RefreshCw className={cn("h-4 w-4", refreshMutation.isPending && "animate-spin")} />
         </Button>
 
-        <div className="torch-status-chip" title={dataSource === "api" ? "网络数据源" : "本地数据源"}>
-          <span className={cn("torch-status-dot", dataSource === "api" ? "bg-[var(--color-ai)]" : "bg-[var(--color-success)]")} />
-          {dataSource === "api" ? "网络" : "本地"}
+        <div className="torch-status-chip" title={sourceTitle(dataSource)}>
+          <span className={cn("torch-status-dot", sourceDotClass(dataSource))} />
+          {sourceLabel(dataSource)}
         </div>
 
         <div className="torch-status-chip" title={notificationEnabled ? "通知已开启" : "通知已关闭"}>

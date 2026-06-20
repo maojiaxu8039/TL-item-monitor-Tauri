@@ -23,24 +23,52 @@ pub async fn test_source_connection(
     let result = match source.as_str() {
         "qiandao" => crate::scraper::scrape_fire_price()
             .await
-            .map(|_| ())
+            .map(|_| None)
             .map_err(|e| e.to_string()),
         "luosi" => {
             let ctx = state.active_context.read().clone();
-            crate::scraper::scrape_items(&ctx.season_id, ctx.market_mode.as_str())
-                .await
-                .map(|_| ())
-                .map_err(|e| e.to_string())
+            let api_config =
+                crate::db::repo_season_api::get_season_api_config(&state.db, &ctx.season_id)
+                    .await
+                    .unwrap_or_default();
+            crate::scraper::scrape_items_by_source(
+                &ctx.season_id,
+                ctx.market_mode.as_str(),
+                "api",
+                "",
+                &api_config,
+            )
+            .await
+            .map(|items| Some(items.len() as i64))
+            .map_err(|e| e.to_string())
+        }
+        "etor" | "dual" => {
+            let ctx = state.active_context.read().clone();
+            let api_config =
+                crate::db::repo_season_api::get_season_api_config(&state.db, &ctx.season_id)
+                    .await
+                    .unwrap_or_default();
+            crate::scraper::scrape_items_by_source(
+                &ctx.season_id,
+                ctx.market_mode.as_str(),
+                source.as_str(),
+                "",
+                &api_config,
+            )
+            .await
+            .map(|items| Some(items.len() as i64))
+            .map_err(|e| e.to_string())
         }
         _ => Err(format!("Unknown source: {}", source)),
     };
 
     let duration_ms = start.elapsed().as_millis() as i64;
     let success = result.is_ok();
+    let item_count = result.as_ref().ok().copied().flatten();
     let error = result.err();
 
     let source_type = match source.as_str() {
-        "qiandao" | "luosi" => "api",
+        "qiandao" | "luosi" | "etor" | "dual" => "api",
         _ => "unknown",
     };
 
@@ -54,7 +82,7 @@ pub async fn test_source_connection(
         None,
         success,
         duration_ms,
-        None,
+        item_count,
         error.as_deref(),
     )
     .await

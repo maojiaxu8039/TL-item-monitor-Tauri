@@ -92,17 +92,18 @@ const FireChangeCard = memo(function FireChangeCard({ item, isRising }: FireChan
 });
 
 interface SettingsModalProps {
-  settings: { rise_threshold: number; fall_threshold: number };
-  onSave: (settings: { rise_threshold: number; fall_threshold: number }) => void;
+  settings: { rise_threshold: number; fall_threshold: number; max_price: number };
+  onSave: (settings: { rise_threshold: number; fall_threshold: number; max_price: number }) => void;
   onClose: () => void;
 }
 
 function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
   const [riseThreshold, setRiseThreshold] = useState(settings.rise_threshold);
   const [fallThreshold, setFallThreshold] = useState(settings.fall_threshold);
+  const [maxPrice, setMaxPrice] = useState(settings.max_price);
 
   const handleSave = () => {
-    onSave({ rise_threshold: riseThreshold, fall_threshold: fallThreshold });
+    onSave({ rise_threshold: riseThreshold, fall_threshold: fallThreshold, max_price: maxPrice });
     onClose();
   };
 
@@ -169,6 +170,40 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
               </div>
             </div>
           </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-[var(--color-text)]">物品火价下限</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  value={maxPrice}
+                  onChange={(e) => setMaxPrice(Math.max(0, Number(e.target.value) || 0))}
+                  className="w-20 px-2 py-1 text-sm text-center bg-[var(--color-panel-soft)] border border-[var(--color-border-soft)] rounded-lg text-[var(--color-brand)] focus:outline-none focus:border-[var(--color-brand)]"
+                />
+                <span className="text-sm text-[var(--color-text-subtle)]">火</span>
+              </div>
+            </div>
+            <div className="pl-6">
+              <div className="text-xs text-[var(--color-text-subtle)] mb-1.5">只显示单价不低于此火价的物品（0 为不限）</div>
+              <input
+                type="range"
+                min={0}
+                max={2000}
+                step={5}
+                value={Math.min(maxPrice, 2000)}
+                onChange={(e) => setMaxPrice(Number(e.target.value) || 0)}
+                className="w-full h-1.5 bg-[var(--color-panel-soft)] rounded-lg appearance-none cursor-pointer accent-[var(--color-brand)]"
+              />
+              <div className="flex justify-between text-xs text-[var(--color-text-subtle)] mt-1">
+                <span>0 (不限)</span>
+                <span>2000+</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
@@ -182,7 +217,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
 
 export default function DealsPage() {
   const [showSettings, setShowSettings] = useState(false);
-  const [settings, setSettings] = useState({ rise_threshold: 5, fall_threshold: 5 });
+  const [settings, setSettings] = useState<{ rise_threshold: number; fall_threshold: number; max_price: number }>({ rise_threshold: 5, fall_threshold: 5, max_price: 0 });
   const { marketContext, marketContextReady } = useSectionRefresh();
 
   useEffect(() => {
@@ -205,7 +240,7 @@ export default function DealsPage() {
     staleTime: 30000,
   });
 
-  const handleSaveSettings = useCallback((newSettings: { rise_threshold: number; fall_threshold: number }) => {
+  const handleSaveSettings = useCallback((newSettings: { rise_threshold: number; fall_threshold: number; max_price: number }) => {
     setSettings(newSettings);
     localStorage.setItem("deals-settings", JSON.stringify(newSettings));
   }, []);
@@ -220,19 +255,21 @@ export default function DealsPage() {
 
   const riseItems = useMemo(() => fireChanges.filter(item => {
     if (!item.trend.includes("rise")) return false;
+    if (settings.max_price > 0 && (item.current_price ?? 0) < settings.max_price) return false;
     return maxAbsChange(item) >= settings.rise_threshold;
   }).sort((a, b) => {
     const diff = maxAbsChange(b) - maxAbsChange(a);
     return Math.abs(diff) < 1e-9 ? a.item_id.localeCompare(b.item_id) : diff;
-  }), [fireChanges, settings.rise_threshold]);
+  }), [fireChanges, settings.rise_threshold, settings.max_price]);
 
   const fallItems = useMemo(() => fireChanges.filter(item => {
     if (!item.trend.includes("fall")) return false;
+    if (settings.max_price > 0 && (item.current_price ?? 0) < settings.max_price) return false;
     return maxAbsChange(item) >= settings.fall_threshold;
   }).sort((a, b) => {
     const diff = maxAbsChange(b) - maxAbsChange(a);
     return Math.abs(diff) < 1e-9 ? a.item_id.localeCompare(b.item_id) : diff;
-  }), [fireChanges, settings.fall_threshold]);
+  }), [fireChanges, settings.fall_threshold, settings.max_price]);
 
   return (
     <PageShell size="xl" className="h-full flex flex-col">

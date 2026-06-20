@@ -157,29 +157,29 @@ pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats,
     let season_id = fresh_config.app.season_id.clone();
     let items_source = fresh_config.scrape.items_source.clone();
     let json_path = fresh_config.scrape.items_json_path.clone();
+    let market_mode = "season_normal";
 
-    let items = if items_source == "api" {
-        tracing::info!(
-            "reload_items: fetching from API for season_id={}",
-            season_id
-        );
-        scraper::scrape_items(&season_id, "season_normal")
-            .await
-            .map_err(|e| format!("Failed to scrape from API: {}", e))?
-    } else {
-        tracing::info!("reload_items: loading from JSON file: {}", json_path);
-        crate::app::load_items_from_json(&season_id, "season_normal", &json_path)
-            .await
-            .map_err(|e| format!("Failed to load JSON: {}", e))?
-    };
+    let api_config = crate::db::repo_season_api::get_season_api_config(&state.db, &season_id)
+        .await
+        .unwrap_or_default();
+
+    let items = scraper::scrape_items_by_source(
+        &season_id,
+        market_mode,
+        &items_source,
+        &json_path,
+        &api_config,
+    )
+    .await
+    .map_err(|e| format!("Failed to reload items: {}", e))?;
 
     tracing::info!("reload_items: loaded {} items", items.len());
     let count = items.len() as i64;
 
-    repo_items::bulk_insert_items(&state.db, &season_id, "season_normal", &items)
+    repo_items::bulk_insert_items(&state.db, &season_id, market_mode, &items)
         .await
         .map_err(|e| format!("Failed to bulk-insert items: {}", e))?;
-    repo_item_realtime_prices::record_item_prices(&state.db, &items, &season_id, "season_normal")
+    repo_item_realtime_prices::record_item_prices(&state.db, &items, &season_id, market_mode)
         .await
         .map_err(|e| format!("Failed to insert realtime prices: {}", e))?;
 

@@ -60,7 +60,7 @@ pub async fn search_items(
                 '{}' as market_mode, 
                 name, 
                 item_type, 
-                'realtime' as source, 
+                source, 
                 price, 
                 last_time, 
                 updated_at

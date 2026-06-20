@@ -94,7 +94,7 @@ impl Default for ScrapeSettings {
             fire_price_scrape_enabled: true,
             fire_scrape_normal_enabled: true,
             fire_scrape_expert_enabled: false,
-            items_source: "api".to_string(),
+            items_source: "dual".to_string(),
             items_json_path: String::new(),
             items_reload_interval: 300,
             auto_reload: true,
@@ -152,7 +152,7 @@ pub struct AppSettings {
 }
 
 /// Per-season API configuration for data sources.
-/// Each season may have different API parameters from Qiandao and Luosi.
+/// Each season may have different API parameters from Qiandao, Luosi and Etor.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct SeasonApiConfig {
@@ -168,6 +168,10 @@ pub struct SeasonApiConfig {
     pub luosi_season_id_normal: i32,
     /// Luosi API season_id for expert mode (e.g. 1431 for ss12)
     pub luosi_season_id_expert: i32,
+    /// Etor (易火) API season_id for normal mode
+    pub etor_season_id_normal: i32,
+    /// Etor (易火) API season_id for expert mode
+    pub etor_season_id_expert: i32,
 }
 
 impl Default for SeasonApiConfig {
@@ -180,6 +184,9 @@ impl Default for SeasonApiConfig {
             qiandao_spec_id_expert: "267417".to_string(),
             luosi_season_id_normal: 1401,
             luosi_season_id_expert: 1431,
+            // 易火与刷图小助手使用相同的赛季ID
+            etor_season_id_normal: 1401,
+            etor_season_id_expert: 1431,
         }
     }
 }

@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus, type JsonFileValidationResult, type SeasonInfo } from "@/lib/commands";
+import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus, type JsonFileValidationResult, type SeasonInfo, type ItemMappingUpdateResult } from "@/lib/commands";
 import { devLog } from "@/lib/devLog";
 import { errorMessage } from "@/lib/utils";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Save, Bell, Database, Globe, AlertTriangle, Trash2, Edit3, Key } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -13,6 +13,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
+import { queryKeys } from "@/lib/queryKeys";
 
 const INTERVAL_OPTIONS = [
   { label: "30 秒", value: 30 },
@@ -33,7 +34,9 @@ const COOLDOWN_OPTIONS = [
 ];
 
 const SOURCE_OPTIONS = [
-  { label: "API接口", value: "api" },
+  { label: "双源合并（推荐）", value: "dual" },
+  { label: "易火 API", value: "etor" },
+  { label: "刷图小助手 API", value: "api" },
   { label: "本地JSON", value: "local" },
 ];
 
@@ -44,13 +47,14 @@ function getDefaultJsonPath(appDataDir: string): string {
 }
 
 export default function SettingsPage() {
+  const queryClient = useQueryClient();
   const [fireEnabled, setFireEnabled] = useState(true);
   const [fireInterval, setFireInterval] = useState(300);
   const [fireScrapeNormal, setFireScrapeNormal] = useState(true);
   const [fireScrapeExpert, setFireScrapeExpert] = useState(false);
   const [itemsEnabled, setItemsEnabled] = useState(false);
   const [itemsInterval, setItemsInterval] = useState(300);
-  const [itemsSource, setItemsSource] = useState("api");
+  const [itemsSource, setItemsSource] = useState("dual");
   const [itemsScrapeNormal, setItemsScrapeNormal] = useState(true);
   const [itemsScrapeExpert, setItemsScrapeExpert] = useState(false);
   const [jsonPath, setJsonPath] = useState("");
@@ -65,6 +69,7 @@ export default function SettingsPage() {
   const [voiceAlertPath, setVoiceAlertPath] = useState("");
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionStatus | null>(null);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [mappingCount, setMappingCount] = useState<number | null>(null);
 
   // API config editing state
   const [editingApiSeason, setEditingApiSeason] = useState<string | null>(null);
@@ -75,6 +80,8 @@ export default function SettingsPage() {
     qiandao_spec_id_expert: "",
     luosi_season_id_normal: "",
     luosi_season_id_expert: "",
+    etor_season_id_normal: "",
+    etor_season_id_expert: "",
   });
 
   const buildConfig = (): AppConfig => ({
@@ -143,6 +150,22 @@ export default function SettingsPage() {
 
   const refreshMutation = useMutation<OkResponse, Error, void>({
     mutationFn: () => cmd.refreshItems(),
+    onSuccess: async () => {
+      toast.success("物品数据已同步");
+      try {
+        const summary = await cmd.getDashboardSummary();
+        setItemCount(summary.item_count);
+      } catch (e) {
+        devLog.warn("getDashboardSummary failed", e);
+      }
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboardSummary });
+      queryClient.invalidateQueries({ queryKey: queryKeys.itemsSearch });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dbStats });
+      queryClient.invalidateQueries({ queryKey: queryKeys.arbitrageCalculation });
+    },
+    onError: (err) => {
+      toast.error(`同步失败: ${errorMessage(err)}`);
+    },
   });
 
   const clearMutation = useMutation<string, Error, void>({
@@ -150,9 +173,26 @@ export default function SettingsPage() {
     onSuccess: () => {
       toast.success("物品数据库已清空");
       setItemCount(0);
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboardSummary });
+      queryClient.invalidateQueries({ queryKey: queryKeys.itemsSearch });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dbStats });
     },
     onError: (err) => {
       toast.error(`清空失败: ${errorMessage(err)}`);
+    },
+  });
+
+  const updateMappingMutation = useMutation<ItemMappingUpdateResult, Error, void>({
+    mutationFn: () => cmd.updateItemMapping(),
+    onSuccess: (result) => {
+      const dedupeText = result.deduplicated > 0 ? `，合并重复 ${result.deduplicated}` : "";
+      toast.success(
+        `对照表已更新：共 ${result.total} 个物品（新增刷图小助手 ${result.new_from_luosi}，新增易火 ${result.new_from_etor}，更新 ${result.updated}${dedupeText}）`
+      );
+      setMappingCount(result.total);
+    },
+    onError: (err) => {
+      toast.error(`更新对照表失败: ${errorMessage(err)}`);
     },
   });
 
@@ -166,6 +206,8 @@ export default function SettingsPage() {
         qiandao_spec_id_expert: apiConfigForm.qiandao_spec_id_expert,
         luosi_season_id_normal: parseInt(apiConfigForm.luosi_season_id_normal || "0", 10),
         luosi_season_id_expert: parseInt(apiConfigForm.luosi_season_id_expert || "0", 10),
+        etor_season_id_normal: parseInt(apiConfigForm.etor_season_id_normal || "0", 10),
+        etor_season_id_expert: parseInt(apiConfigForm.etor_season_id_expert || "0", 10),
       });
     },
     onSuccess: () => {
@@ -187,6 +229,8 @@ export default function SettingsPage() {
         qiandao_spec_id_expert: config.qiandao_spec_id_expert || "",
         luosi_season_id_normal: config.luosi_season_id_normal?.toString() || "",
         luosi_season_id_expert: config.luosi_season_id_expert?.toString() || "",
+        etor_season_id_normal: config.etor_season_id_normal?.toString() || "",
+        etor_season_id_expert: config.etor_season_id_expert?.toString() || "",
       });
       setEditingApiSeason(seasonId);
     } catch (err) {
@@ -206,6 +250,16 @@ export default function SettingsPage() {
     },
     onError: (err) => {
       toast.error(`请求权限失败: ${errorMessage(err)}`);
+    },
+  });
+
+  const testNotificationMutation = useMutation<OkResponse, Error, void>({
+    mutationFn: () => cmd.testNotification(),
+    onSuccess: (res) => {
+      toast.success(res.message || "测试提醒已触发");
+    },
+    onError: (err) => {
+      toast.error(`测试提醒失败: ${errorMessage(err)}`);
     },
   });
 
@@ -254,6 +308,11 @@ export default function SettingsPage() {
       if (!mounted) return;
       setItemCount(summary.item_count);
     }).catch((e) => devLog.warn("getDashboardSummary failed", e));
+
+    cmd.getItemMappingCount().then((count) => {
+      if (!mounted) return;
+      setMappingCount(count);
+    }).catch((e) => devLog.warn("getItemMappingCount failed", e));
 
     cmd.getNotificationPermissionStatus().then((status) => {
       if (!mounted) return;
@@ -431,10 +490,10 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* 物品火价 API */}
+                {/* 刷图小助手 API */}
                 <div>
                   <div className="text-xs font-medium text-[var(--color-text-subtle)] uppercase tracking-wider mb-2">
-                    物品火价 API 参数
+                    刷图小助手 API 参数
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -453,6 +512,35 @@ export default function SettingsPage() {
                         type="number"
                         value={apiConfigForm.luosi_season_id_expert}
                         onChange={(e) => setApiConfigForm({ ...apiConfigForm, luosi_season_id_expert: e.target.value })}
+                        placeholder="如 1431"
+                        className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 易火 API */}
+                <div>
+                  <div className="text-xs font-medium text-[var(--color-text-subtle)] uppercase tracking-wider mb-2">
+                    易火 API 参数
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-[var(--color-text-subtle)] block mb-1">普通服 season_id</label>
+                      <input
+                        type="number"
+                        value={apiConfigForm.etor_season_id_normal}
+                        onChange={(e) => setApiConfigForm({ ...apiConfigForm, etor_season_id_normal: e.target.value })}
+                        placeholder="如 1401"
+                        className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-[var(--color-text-subtle)] block mb-1">专家服 season_id</label>
+                      <input
+                        type="number"
+                        value={apiConfigForm.etor_season_id_expert}
+                        onChange={(e) => setApiConfigForm({ ...apiConfigForm, etor_season_id_expert: e.target.value })}
                         placeholder="如 1431"
                         className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
                       />
@@ -526,7 +614,18 @@ export default function SettingsPage() {
               <div className="text-sm font-medium text-[var(--color-text)]">开启语音提醒</div>
               <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">预警触发时播放语音提示</div>
             </div>
-            <Toggle checked={voiceAlertEnabled} onChange={setVoiceAlertEnabled} />
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={testNotificationMutation.isPending}
+                onClick={() => testNotificationMutation.mutate()}
+                className="text-xs"
+              >
+                {testNotificationMutation.isPending ? "测试中..." : "测试提醒"}
+              </Button>
+              <Toggle checked={voiceAlertEnabled} onChange={setVoiceAlertEnabled} />
+            </div>
           </div>
 
           {voiceAlertEnabled && (
@@ -647,7 +746,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium text-[var(--color-text)]">自动同步物品价格</div>
-              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">定时从小助手获取当前赛季物品价格数据</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">按所选数据源定时同步当前赛季物品价格</div>
             </div>
             <Toggle checked={itemsEnabled} onChange={setItemsEnabled} />
           </div>
@@ -769,6 +868,23 @@ export default function SettingsPage() {
                 {refreshMutation.isPending ? "同步中…" : "立即同步"}
               </Button>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-1 border-t border-[var(--color-border-soft)] mt-2">
+            <div className="text-sm text-[var(--color-text-subtle)]">
+              物品对照表 <span className="font-semibold text-[var(--color-text)]">{mappingCount ?? "—"}</span> 个
+              <span className="ml-2 text-xs text-[var(--color-text-subtle)]">（从刷图小助手和易火合并）</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => updateMappingMutation.mutate()}
+              disabled={updateMappingMutation.isPending}
+              title="从刷图小助手和易火获取最新物品列表，合并更新对照表"
+            >
+              <Database className={`w-3.5 h-3.5 ${updateMappingMutation.isPending ? "animate-spin" : ""} mr-1.5`} />
+              {updateMappingMutation.isPending ? "更新中…" : "更新对照表"}
+            </Button>
           </div>
         </div>
       </Surface>

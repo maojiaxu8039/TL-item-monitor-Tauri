@@ -254,6 +254,9 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
         is_quitting: AtomicBool::new(false),
     };
 
+    // 加载本地对照表文件（如果存在），覆盖内置对照表
+    crate::commands::mapping::load_local_mapping_if_exists();
+
     Ok(state)
 }
 
@@ -465,6 +468,14 @@ async fn run_legacy_migrations(pool: &SqlitePool, current_version: i64) -> Resul
     if current_version < 17 {
         apply_sections_market_mode_migration(pool).await?;
     }
+    if current_version < 18 {
+        apply_sql_migration(
+            pool,
+            18,
+            include_str!("db/migrations/018_add_etor_season_id.sql"),
+        )
+        .await?;
+    }
 
     Ok(())
 }
@@ -599,8 +610,13 @@ async fn apply_sections_market_mode_migration(pool: &SqlitePool) -> Result<(), S
     }
 
     // 1. 加 market_mode 列
-    add_column_if_missing(pool, "sections", "market_mode", "TEXT NOT NULL DEFAULT 'season_normal'")
-        .await?;
+    add_column_if_missing(
+        pool,
+        "sections",
+        "market_mode",
+        "TEXT NOT NULL DEFAULT 'season_normal'",
+    )
+    .await?;
 
     // 2. 为每个 normal 分组创建 expert 副本
     sqlx::query(
@@ -619,10 +635,12 @@ async fn apply_sections_market_mode_migration(pool: &SqlitePool) -> Result<(), S
         .map_err(|e| format!("Migration v17 relink expert section_items failed: {e}"))?;
 
     // 4. 索引
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_sections_market_mode ON sections(market_mode, sort_order)")
-        .execute(pool)
-        .await
-        .map_err(|e| format!("Migration v17 create index failed: {e}"))?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_sections_market_mode ON sections(market_mode, sort_order)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Migration v17 create index failed: {e}"))?;
 
     record_migration(pool, 17).await?;
     Ok(())

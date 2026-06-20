@@ -423,7 +423,7 @@ export default function ArbitragePage() {
     loadRecipes().then(() => calculateAll());
   }, [marketContextReady, loadRecipes, calculateAll]);
 
-  // 监听物品价格更新事件，自动静默重算套利（与获取物价同步刷新）
+  // 监听物品价格更新事件，自动静默重算套利（与后端物品同步间隔一致）
   useEffect(() => {
     if (!("__TAURI__" in window)) return;
     let unlisten: (() => void) | undefined;

@@ -23,6 +23,8 @@ pub struct SeasonApiConfigResponse {
     pub qiandao_spec_id_expert: String,
     pub luosi_season_id_normal: i32,
     pub luosi_season_id_expert: i32,
+    pub etor_season_id_normal: i32,
+    pub etor_season_id_expert: i32,
 }
 
 /// Get API config for a season.
@@ -43,6 +45,8 @@ pub async fn get_season_api_config_cmd(
         qiandao_spec_id_expert: config.qiandao_spec_id_expert,
         luosi_season_id_normal: config.luosi_season_id_normal,
         luosi_season_id_expert: config.luosi_season_id_expert,
+        etor_season_id_normal: config.etor_season_id_normal,
+        etor_season_id_expert: config.etor_season_id_expert,
     })
 }
 
@@ -58,6 +62,8 @@ pub async fn set_season_api_config_cmd(
     #[allow(non_snake_case)] qiandaoSpecIdExpert: String,
     #[allow(non_snake_case)] luosiSeasonIdNormal: i32,
     #[allow(non_snake_case)] luosiSeasonIdExpert: i32,
+    #[allow(non_snake_case)] etorSeasonIdNormal: i32,
+    #[allow(non_snake_case)] etorSeasonIdExpert: i32,
 ) -> Result<crate::commands::types::OkResponse, String> {
     let config = SeasonApiConfig {
         qiandao_tag_id_normal: qiandaoTagIdNormal,
@@ -66,6 +72,8 @@ pub async fn set_season_api_config_cmd(
         qiandao_spec_id_expert: qiandaoSpecIdExpert,
         luosi_season_id_normal: luosiSeasonIdNormal,
         luosi_season_id_expert: luosiSeasonIdExpert,
+        etor_season_id_normal: etorSeasonIdNormal,
+        etor_season_id_expert: etorSeasonIdExpert,
     };
 
     crate::db::repo_season_api::set_season_api_config(&state.db, &seasonId, &config)

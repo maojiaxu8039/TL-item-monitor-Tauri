@@ -369,9 +369,29 @@ pub async fn refresh_items(
     state: State<'_, Arc<AppState>>,
 ) -> Result<OkResponse, String> {
     let ctx = state.active_context.read().clone();
-    let items = crate::scraper::scrape_items(&ctx.season_id, ctx.market_mode.as_str())
+    let items_source = state.config.read().scrape.items_source.clone();
+
+    tracing::info!(
+        "[REFRESH] items_source={}, season={}, mode={}",
+        items_source,
+        ctx.season_id,
+        ctx.market_mode.as_str()
+    );
+
+    let api_config = crate::db::repo_season_api::get_season_api_config(&state.db, &ctx.season_id)
         .await
-        .map_err(|e| format!("Scrape failed: {}", e))?;
+        .map_err(|e| format!("Failed to get season API config: {}", e))?;
+
+    let items = scraper::scrape_items_by_source(
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
+        &items_source,
+        "",
+        &api_config,
+    )
+    .await
+    .map_err(|e| format!("Scrape failed: {}", e))?;
+
     let count = items.len() as i64;
 
     let ctx = state.active_context.read().clone();

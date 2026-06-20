@@ -48,6 +48,32 @@ const COLUMN_HELPER = createColumnHelper<ItemData>();
 
 const PAGE_SIZE = 50;
 
+function sourceLabel(source: string) {
+  switch (source) {
+    case "etor_api":
+      return "易火"
+    case "luosi_api":
+      return "小助手"
+    case "local_json":
+      return "本地"
+    default:
+      return source || "未知"
+  }
+}
+
+function sourceBadgeClass(source: string) {
+  switch (source) {
+    case "etor_api":
+      return "border-[rgba(167,139,250,0.28)] bg-[rgba(167,139,250,0.12)] text-[var(--color-ai)]"
+    case "luosi_api":
+      return "border-[rgba(34,197,94,0.26)] bg-[rgba(34,197,94,0.1)] text-[var(--color-success)]"
+    case "local_json":
+      return "border-[rgba(255,184,0,0.28)] bg-[rgba(255,184,0,0.1)] text-[var(--color-brand-gold)]"
+    default:
+      return "border-[var(--color-border)] bg-[var(--color-panel-soft)] text-[var(--color-text-subtle)]"
+  }
+}
+
 const SectionPicker = memo(function SectionPicker({
   sections,
   onAdd,
@@ -324,6 +350,14 @@ export default function ItemsPage() {
             <span className="text-[var(--color-text)] font-bold">{info.getValue().toFixed(2)}</span>
             <span className="text-xs text-[var(--color-text-subtle)]">火</span>
           </div>
+        ),
+      }),
+      COLUMN_HELPER.accessor("source", {
+        header: "来源",
+        cell: (info) => (
+          <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${sourceBadgeClass(info.getValue())}`}>
+            {sourceLabel(info.getValue())}
+          </span>
         ),
       }),
       COLUMN_HELPER.display({

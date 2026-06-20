@@ -28,7 +28,7 @@ impl Default for LegacyAppConfig {
             fire_price_mode: "season_normal".to_string(),
             fire_price_scrape_interval: 300,
             fire_price_scrape_enabled: true,
-            items_source: "api".to_string(),
+            items_source: "dual".to_string(),
             items_json_path: String::new(),
             items_reload_interval: 300,
             auto_reload: true,
@@ -58,7 +58,7 @@ pub fn load_config() -> Result<AppConfig, String> {
     // Detect old flat format by checking for legacy top-level keys
     let is_flat = value.get("fire_price_mode").is_some() || value.get("items_source").is_some();
 
-    let config = if is_flat {
+    let mut config = if is_flat {
         let flat: LegacyAppConfig = serde_yaml::from_value(value)
             .map_err(|e| format!("Failed to parse legacy config: {}", e))?;
         let migrated = AppConfig {
@@ -90,6 +90,23 @@ pub fn load_config() -> Result<AppConfig, String> {
     } else {
         serde_yaml::from_value(value).map_err(|e| format!("Failed to parse config YAML: {}", e))?
     };
+
+    // 迁移：voice_alert_enabled 历史默认值为 false，现已改为 true。
+    // 对已存在的旧配置（值为 false 且未配置自定义语音路径），升级为 true。
+    if !config.notification.voice_alert_enabled
+        && config.notification.voice_alert_path.trim().is_empty()
+    {
+        config.notification.voice_alert_enabled = true;
+        let _ = save_config(&config);
+    }
+
+    // 迁移：items_source 历史默认值为 "api"，现已改为 "dual"（双源合并）。
+    // 旧配置值为 "api" 时自动升级为 "dual"，让用户用上新的双源合并功能。
+    // "local" 保持不变（用户明确选择了本地JSON）。
+    if config.scrape.items_source == "api" {
+        config.scrape.items_source = "dual".to_string();
+        let _ = save_config(&config);
+    }
 
     Ok(config)
 }
