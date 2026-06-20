@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Database, Download, RefreshCw, Server, Wifi, WifiOff, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Database, Download, RefreshCw, Server, Wifi, WifiOff, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp, Loader2, Zap } from "lucide-react";
 import { cmd } from "@/lib/commands";
 import { errorMessage } from "@/lib/utils";
 import { formatTimestamp } from "@/lib/format";
@@ -8,7 +8,7 @@ import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { useSyncContext } from "@/contexts/SyncContext";
 import { toast } from "sonner";
 import ServerAdminPanel from "./ServerAdminPanel";
-import type { SyncJobState, SyncFailure } from "@/lib/commands";
+import type { SyncJobState, SyncFailure, FastSyncResponse, LatestPricesResponse } from "@/lib/commands";
 import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
@@ -133,13 +133,16 @@ export default function DataMonitorPage() {
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
   const [dataType, setDataType] = useState<DataType>("fire");
   const [syncMode, setSyncMode] = useState<SyncMode>("normal");
+  const [syncMethod, setSyncMethod] = useState<"normal" | "fast" | "latest">("normal");
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
   const [showFailures, setShowFailures] = useState(false);
+  const [fastSyncStats, setFastSyncStats] = useState<{ items: number; days: number } | null>(null);
   const { marketContext } = useSectionRefresh();
   const [lastItemsSyncTimestamp, setLastItemsSyncTimestamp] = useState<number | null>(() =>
     readItemsSyncCursor(serverUrl, marketContext.seasonId, syncMode)
   );
   const { syncJob, setSyncJob, restoreSyncJob } = useSyncContext();
+  const queryClient = useQueryClient();
   const syncAbortRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -493,9 +496,238 @@ export default function DataMonitorPage() {
   const normalStatus = serverStatus?.last_collection?.normal;
   const expertStatus = serverStatus?.last_collection?.expert;
 
+  const syncFast = useCallback(async () => {
+    const marketMode = syncMode === "expert" ? "season_expert" : "season_normal";
+    const mode = syncMode;
+
+    const jobState: SyncJobState = {
+      id: `sync-${Date.now()}`,
+      dataType: "items",
+      mode,
+      range: timeRange,
+      status: "running",
+      total: 0,
+      success: 0,
+      failed: 0,
+      skipped: 0,
+      startedAt: Date.now(),
+      finishedAt: null,
+      firstError: null,
+      failures: [],
+    };
+    setSyncJob(jobState);
+
+    try {
+      const startTime = Date.now();
+      const baseUrl = serverUrl.replace(/\/$/, "");
+
+      const params = new URLSearchParams({
+        season: marketContext.seasonId,
+        mode,
+      });
+
+      if (timeRange === "season") {
+        params.set("min_day", "1");
+        params.set("max_day", "70");
+      } else if (timeRange === "30d") {
+        const day = Math.max(1, 70 - 30);
+        params.set("min_day", day.toString());
+        params.set("max_day", "70");
+      } else if (timeRange === "7d") {
+        params.set("min_day", "64");
+        params.set("max_day", "70");
+      } else if (timeRange === "3d") {
+        params.set("min_day", "68");
+        params.set("max_day", "70");
+      } else {
+        params.set("min_day", "69");
+        params.set("max_day", "70");
+      }
+
+      toast.info("正在获取高效同步数据...");
+
+      const response = await fetch(`${baseUrl}/sync-fast?${params.toString()}`);
+      const data = await response.json();
+
+      if (!data.success || !data.data) {
+        throw new Error(data.error || "获取数据失败");
+      }
+
+      const result: FastSyncResponse = data.data;
+      setFastSyncStats({ items: result.total_items, days: result.total_days });
+
+      const allItems: Array<{
+        season_id: string;
+        market_mode: string;
+        item_id: string;
+        name: string;
+        item_type: string | null;
+        price: number;
+        last_time: number | null;
+        recorded_at: number;
+      }> = [];
+
+      for (const item of result.items) {
+        for (const dayPrice of item.daily_prices) {
+          allItems.push({
+            season_id: marketContext.seasonId,
+            market_mode: marketMode,
+            item_id: item.item_id,
+            name: item.name,
+            item_type: null,
+            price: dayPrice.close,
+            last_time: null,
+            recorded_at: dayPrice.day * 86400,
+          });
+        }
+      }
+
+      const BATCH_SIZE = 500;
+      let successCount = 0;
+      for (let i = 0; i < allItems.length; i += BATCH_SIZE) {
+        const batch = allItems.slice(i, i + BATCH_SIZE);
+        try {
+          const result = await cmd.syncItemsBatch({
+            season_id: marketContext.seasonId,
+            market_mode: marketMode,
+            items: batch,
+          });
+          if (result.success) {
+            successCount += batch.length;
+          }
+        } catch (e) {
+          // 批次失败，继续下一个
+        }
+      }
+
+      const elapsed = Date.now() - startTime;
+
+      const finalState: SyncJobState = {
+        ...jobState,
+        status: "success",
+        total: result.total_items,
+        success: successCount,
+        failed: allItems.length - successCount,
+        skipped: 0,
+        finishedAt: Date.now(),
+      };
+      setSyncJob(finalState);
+
+      toast.success(
+        `快速同步完成: ${result.total_items} 个物品, ${result.total_days} 天, ${successCount} 条记录, 耗时 ${(elapsed / 1000).toFixed(1)}s`
+      );
+
+      queryClient.invalidateQueries({ queryKey: ["market-context"] });
+
+    } catch (error) {
+      const errorMsg = errorMessage(error as Error);
+      toast.error(`快速同步失败: ${errorMsg}`);
+
+      const finalState: SyncJobState = {
+        ...jobState,
+        status: "failed",
+        finishedAt: Date.now(),
+        firstError: errorMsg,
+      };
+      setSyncJob(finalState);
+    }
+  }, [syncMode, timeRange, serverUrl, marketContext.seasonId, setSyncJob, queryClient]);
+
+  const syncLatest = useCallback(async () => {
+    const marketMode = syncMode === "expert" ? "season_expert" : "season_normal";
+    const mode = syncMode;
+
+    const jobState: SyncJobState = {
+      id: `sync-${Date.now()}`,
+      dataType: "items",
+      mode,
+      range: timeRange,
+      status: "running",
+      total: 0,
+      success: 0,
+      failed: 0,
+      skipped: 0,
+      startedAt: Date.now(),
+      finishedAt: null,
+      firstError: null,
+      failures: [],
+    };
+    setSyncJob(jobState);
+
+    try {
+      const startTime = Date.now();
+      const baseUrl = serverUrl.replace(/\/$/, "");
+
+      toast.info("正在获取最新价格数据...");
+
+      const response = await fetch(`${baseUrl}/prices-latest?season=${marketContext.seasonId}&mode=${mode}`);
+      const data = await response.json();
+
+      if (!data.success || !data.data) {
+        throw new Error(data.error || "获取数据失败");
+      }
+
+      const result: LatestPricesResponse = data.data;
+
+      const allItems = result.prices.map(price => ({
+        season_id: marketContext.seasonId,
+        market_mode: marketMode,
+        item_id: price.item_id,
+        name: price.name,
+        item_type: null,
+        price: price.fire_price,
+        last_time: null,
+        recorded_at: Date.now(),
+      }));
+
+      const batchResult = await cmd.syncItemsBatch({
+        season_id: marketContext.seasonId,
+        market_mode: marketMode,
+        items: allItems,
+      });
+
+      const elapsed = Date.now() - startTime;
+
+      const finalState: SyncJobState = {
+        ...jobState,
+        status: batchResult.success ? "success" : "partial",
+        total: result.prices.length,
+        success: batchResult.success ? result.prices.length : 0,
+        failed: batchResult.success ? 0 : result.prices.length,
+        skipped: 0,
+        finishedAt: Date.now(),
+      };
+      setSyncJob(finalState);
+
+      toast.success(
+        `最新价格同步完成: ${result.prices.length} 个物品, 耗时 ${(elapsed / 1000).toFixed(1)}s`
+      );
+
+      queryClient.invalidateQueries({ queryKey: ["market-context"] });
+
+    } catch (error) {
+      const errorMsg = errorMessage(error as Error);
+      toast.error(`最新价格同步失败: ${errorMsg}`);
+
+      const finalState: SyncJobState = {
+        ...jobState,
+        status: "failed",
+        finishedAt: Date.now(),
+        firstError: errorMsg,
+      };
+      setSyncJob(finalState);
+    }
+  }, [syncMode, timeRange, serverUrl, marketContext.seasonId, setSyncJob, queryClient]);
+
   const handleSync = useCallback(() => {
-    syncPaginated();
-  }, [syncPaginated]);
+    if (syncMethod === "fast") {
+      syncFast();
+    } else if (syncMethod === "latest") {
+      syncLatest();
+    } else {
+      syncPaginated();
+    }
+  }, [syncMethod, syncPaginated, syncFast, syncLatest]);
 
   const isSyncing = syncJob?.status === "running";
 
@@ -773,6 +1005,59 @@ export default function DataMonitorPage() {
             </label>
           </div>
 
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-[var(--color-text-subtle)]">同步方式</label>
+            <div className="flex rounded-lg border border-[var(--color-border)] overflow-hidden">
+              <button
+                onClick={() => setSyncMethod("normal")}
+                disabled={isSyncing}
+                className={`px-3 py-1.5 text-xs flex items-center gap-1 ${
+                  syncMethod === "normal"
+                    ? "bg-[var(--color-panel)] text-[var(--color-text)] border border-[var(--color-brand)]"
+                    : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
+                } disabled:opacity-50`}
+              >
+                <RefreshCw className="w-3 h-3" />
+                普通
+              </button>
+              <button
+                onClick={() => setSyncMethod("fast")}
+                disabled={isSyncing}
+                className={`px-3 py-1.5 text-xs flex items-center gap-1 ${
+                  syncMethod === "fast"
+                    ? "bg-[var(--color-brand)] text-black"
+                    : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
+                } disabled:opacity-50`}
+              >
+                <Zap className="w-3 h-3" />
+                快速
+              </button>
+              <button
+                onClick={() => setSyncMethod("latest")}
+                disabled={isSyncing}
+                className={`px-3 py-1.5 text-xs flex items-center gap-1 ${
+                  syncMethod === "latest"
+                    ? "bg-[var(--color-success)] text-black"
+                    : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
+                } disabled:opacity-50`}
+              >
+                <Download className="w-3 h-3" />
+                最新
+              </button>
+            </div>
+            <span className="text-xs text-[var(--color-text-subtle)]">
+              {syncMethod === "normal" && "（串行分页，较慢）"}
+              {syncMethod === "fast" && "（服务端聚合，推荐）"}
+              {syncMethod === "latest" && "（仅最新价格）"}
+            </span>
+          </div>
+
+          {fastSyncStats && (
+            <div className="text-xs text-[var(--color-text-subtle)] bg-[var(--color-panel-soft)] rounded-lg px-3 py-2">
+              上次快速同步: {fastSyncStats.items} 个物品, {fastSyncStats.days} 天
+            </div>
+          )}
+
           <div className="flex items-center gap-4 pt-2">
             <button
               onClick={handleSync}
@@ -786,8 +1071,8 @@ export default function DataMonitorPage() {
                 </>
               ) : (
                 <>
-                  <Download className="w-4 h-4" />
-                  同步数据
+                  {syncMethod === "fast" ? <Zap className="w-4 h-4" /> : syncMethod === "latest" ? <Download className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
+                  {syncMethod === "fast" ? "快速同步" : syncMethod === "latest" ? "获取最新" : "同步数据"}
                 </>
               )}
             </button>

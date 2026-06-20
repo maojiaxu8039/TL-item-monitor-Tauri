@@ -896,6 +896,543 @@ pub async fn get_fire_history(
     Ok(records)
 }
 
+// ==================== 高效批量聚合 API（模仿刷图小助手）====================
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FastSyncResponse {
+    pub items: Vec<FastItemData>,
+    pub total_items: i64,
+    pub total_days: i32,
+    pub generated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FastItemData {
+    pub item_id: String,
+    pub name: String,
+    pub daily_prices: Vec<DayPrice>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DayPrice {
+    pub day: i32,
+    pub open: f64,
+    pub close: f64,
+    pub min: f64,
+    pub max: f64,
+    pub avg: f64,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LatestPricesResponse {
+    pub prices: Vec<LatestPrice>,
+    pub scraped_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LatestPrice {
+    pub item_id: String,
+    pub name: String,
+    pub fire_price: f64,
+    pub season_day: i32,
+}
+
+pub async fn get_fast_sync_all(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    min_day: Option<i32>,
+    max_day: Option<i32>,
+) -> Result<FastSyncResponse, String> {
+    let table = format!("item_snapshots_{}_{}", season_id, market_mode);
+
+    if !table_exists(pool, &table).await? {
+        return Ok(FastSyncResponse {
+            items: vec![],
+            total_items: 0,
+            total_days: 0,
+            generated_at: chrono::Utc::now().timestamp(),
+        });
+    }
+
+    let day_condition = match (min_day, max_day) {
+        (Some(min), Some(max)) => format!("WHERE season_day >= {} AND season_day <= {}", min, max),
+        (Some(min), None) => format!("WHERE season_day >= {}", min),
+        (None, Some(max)) => format!("WHERE season_day <= {}", max),
+        (None, None) => String::new(),
+    };
+
+    let query = format!(
+        r#"
+        SELECT
+            item_id,
+            name,
+            season_day,
+            fire_price,
+            scraped_at
+        FROM {} {}
+        ORDER BY item_id, season_day, scraped_at
+        "#,
+        table, day_condition
+    );
+
+    let start = std::time::Instant::now();
+    let rows = sqlx::query(&query)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("高效同步查询失败: {}", e))?;
+    info!("[高效同步] 查询耗时: {:?}", start.elapsed());
+
+    let mut item_map: HashMap<String, FastItemData> = HashMap::new();
+
+    for row in rows {
+        let item_id: String = row.get("item_id");
+        let name: String = row.get("name");
+        let day: i32 = row.get("season_day");
+        let price: f64 = row.get("fire_price");
+
+        let item = item_map.entry(item_id.clone()).or_insert_with(|| FastItemData {
+            item_id: item_id.clone(),
+            name,
+            daily_prices: Vec::new(),
+        });
+
+        if let Some(last) = item.daily_prices.last_mut() {
+            if last.day == day {
+                last.max = last.max.max(price);
+                last.min = last.min.min(price);
+                last.close = price;
+                last.count += 1;
+            } else {
+                item.daily_prices.push(DayPrice {
+                    day,
+                    open: price,
+                    close: price,
+                    min: price,
+                    max: price,
+                    avg: price,
+                    count: 1,
+                });
+            }
+        } else {
+            item.daily_prices.push(DayPrice {
+                day,
+                open: price,
+                close: price,
+                min: price,
+                max: price,
+                avg: price,
+                count: 1,
+            });
+        }
+    }
+
+    let mut items: Vec<FastItemData> = item_map.into_values().collect();
+    items.sort_by(|a, b| a.item_id.cmp(&b.item_id));
+
+    let total_items_count = items.len() as i64;
+    let total_days = items.iter()
+        .map(|i| i.daily_prices.len() as i32)
+        .max()
+        .unwrap_or(0);
+
+    info!("[高效同步] 处理 {} 个物品，耗时: {:?}", items.len(), start.elapsed());
+
+    Ok(FastSyncResponse {
+        items,
+        total_items: total_items_count,
+        total_days,
+        generated_at: chrono::Utc::now().timestamp(),
+    })
+}
+
+pub async fn get_latest_prices(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<LatestPricesResponse, String> {
+    let table = format!("item_snapshots_{}_{}", season_id, market_mode);
+
+    if !table_exists(pool, &table).await? {
+        return Ok(LatestPricesResponse {
+            prices: vec![],
+            scraped_at: chrono::Utc::now().timestamp(),
+        });
+    }
+
+    let query = format!(
+        r#"
+        SELECT item_id, name, fire_price, season_day, scraped_at
+        FROM {} t1
+        WHERE scraped_at = (
+            SELECT MAX(scraped_at) FROM {} t2 WHERE t2.item_id = t1.item_id
+        )
+        ORDER BY item_id
+        "#,
+        table, table
+    );
+
+    let start = std::time::Instant::now();
+    let rows = sqlx::query(&query)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("获取最新价格失败: {}", e))?;
+
+    let prices: Vec<LatestPrice> = rows
+        .into_iter()
+        .map(|row| LatestPrice {
+            item_id: row.get("item_id"),
+            name: row.get("name"),
+            fire_price: row.get("fire_price"),
+            season_day: row.get("season_day"),
+        })
+        .collect();
+
+    let scraped_at = prices.iter()
+        .map(|p| p.season_day)
+        .max()
+        .unwrap_or(0);
+
+    info!("[最新价格] 获取 {} 个物品，耗时: {:?}", prices.len(), start.elapsed());
+
+    Ok(LatestPricesResponse {
+        prices,
+        scraped_at: scraped_at as i64,
+    })
+}
+
+// ==================== 高速数据同步 API ====================
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ItemsSyncResponse {
+    pub records: Vec<ItemSnapshotWithInfo>,
+    pub next_cursor: Option<String>,
+    pub total_remaining: i64,
+    pub has_more: bool,
+}
+
+impl ItemsSyncResponse {
+    pub fn new(records: Vec<ItemSnapshotWithInfo>, next_cursor: Option<String>, total_remaining: i64) -> Self {
+        Self {
+            has_more: !records.is_empty() && next_cursor.is_some(),
+            next_cursor,
+            total_remaining,
+            records,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ItemsDailyAggregate {
+    pub season_day: i32,
+    pub date: String,
+    pub item_count: i64,
+    pub items: Vec<DailyItemPrice>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DailyItemPrice {
+    pub item_id: String,
+    pub name: Option<String>,
+    pub min_price: f64,
+    pub max_price: f64,
+    pub avg_price: f64,
+    pub latest_price: f64,
+    pub price_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ItemsSyncStats {
+    pub total_records: i64,
+    pub total_items: i64,
+    pub date_range: DateRange,
+    pub mode: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DateRange {
+    pub earliest: Option<i64>,
+    pub latest: Option<i64>,
+}
+
+impl DateRange {
+    pub fn new() -> Self {
+        Self {
+            earliest: None,
+            latest: None,
+        }
+    }
+}
+
+pub async fn get_items_sync_stats(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<ItemsSyncStats, String> {
+    let table = format!("item_snapshots_{}_{}", season_id, market_mode);
+
+    if !table_exists(pool, &table).await? {
+        return Ok(ItemsSyncStats {
+            total_records: 0,
+            total_items: 0,
+            date_range: DateRange::new(),
+            mode: market_mode.to_string(),
+        });
+    }
+
+    let total_records: i64 = sqlx::query_scalar(&format!(
+        "SELECT COUNT(*) FROM {}",
+        table
+    ))
+    .fetch_one(pool)
+    .await
+    .map_err(|e| format!("统计记录数失败: {}", e))?;
+
+    let total_items: i64 = sqlx::query_scalar(&format!(
+        "SELECT COUNT(DISTINCT item_id) FROM {}",
+        table
+    ))
+    .fetch_one(pool)
+    .await
+    .map_err(|e| format!("统计物品数失败: {}", e))?;
+
+    let earliest: Option<i64> = sqlx::query_scalar(&format!(
+        "SELECT MIN(scraped_at) FROM {}",
+        table
+    ))
+    .fetch_one(pool)
+    .await
+    .ok();
+
+    let latest: Option<i64> = sqlx::query_scalar(&format!(
+        "SELECT MAX(scraped_at) FROM {}",
+        table
+    ))
+    .fetch_one(pool)
+    .await
+    .ok();
+
+    Ok(ItemsSyncStats {
+        total_records,
+        total_items,
+        date_range: DateRange {
+            earliest,
+            latest,
+        },
+        mode: market_mode.to_string(),
+    })
+}
+
+pub async fn get_items_by_cursor(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    limit: i32,
+    before_scraped_at: Option<i64>,
+    before_id: Option<i64>,
+    since_scraped_at: Option<i64>,
+    since_id: Option<i64>,
+    min_day: Option<i32>,
+    max_day: Option<i32>,
+) -> Result<ItemsSyncResponse, String> {
+    let table = format!("item_snapshots_{}_{}", season_id, market_mode);
+
+    if !table_exists(pool, &table).await? {
+        return Ok(ItemsSyncResponse::new(vec![], None, 0));
+    }
+
+    let mut conditions = Vec::new();
+    let mut binds: Vec<String> = Vec::new();
+
+    if let (Some(ts), Some(id)) = (before_scraped_at, before_id) {
+        conditions.push("(scraped_at < ? OR (scraped_at = ? AND id < ?))".to_string());
+        binds.push(ts.to_string());
+        binds.push(ts.to_string());
+        binds.push(id.to_string());
+    }
+
+    if let (Some(ts), Some(id)) = (since_scraped_at, since_id) {
+        conditions.push("(scraped_at > ? OR (scraped_at = ? AND id > ?))".to_string());
+        binds.push(ts.to_string());
+        binds.push(ts.to_string());
+        binds.push(id.to_string());
+    }
+
+    if min_day.is_some() {
+        conditions.push("season_day >= ?".to_string());
+    }
+    if max_day.is_some() {
+        conditions.push("season_day <= ?".to_string());
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", conditions.join(" AND "))
+    };
+
+    let query = format!(
+        r#"
+        SELECT id, item_id, name, item_type, fire_price, scraped_at, season_day
+        FROM {}
+        {}
+        ORDER BY scraped_at DESC, id DESC
+        LIMIT ?
+        "#,
+        table, where_clause
+    );
+
+    let mut q = sqlx::query(&query);
+    for b in &binds {
+        if let Ok(v) = b.parse::<i64>() {
+            q = q.bind(v);
+        } else if let Ok(v) = b.parse::<i32>() {
+            q = q.bind(v);
+        }
+    }
+    q = q.bind(limit + 1);
+
+    let rows = q
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("游标分页查询失败: {}", e))?;
+
+    let has_more = rows.len() > limit as usize;
+    let records: Vec<ItemSnapshotWithInfo> = rows
+        .iter()
+        .take(limit as usize)
+        .map(|row| ItemSnapshotWithInfo {
+            cursor_id: row.get("id"),
+            item_id: row.get("item_id"),
+            season_id: season_id.to_string(),
+            market_mode: market_mode.to_string(),
+            fire_price: row.get("fire_price"),
+            scraped_at: row.get("scraped_at"),
+            season_day: row.get("season_day"),
+            name: row.get::<Option<String>, _>("name").filter(|name| !name.is_empty()),
+            item_type: row.get::<Option<String>, _>("item_type").filter(|item_type| !item_type.is_empty()),
+        })
+        .collect();
+
+    let next_cursor = if has_more {
+        if let Some(last) = records.last() {
+            Some(format!("{},{}", last.scraped_at, last.cursor_id))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let remaining_query = format!(
+        r#"
+        SELECT COUNT(*) FROM (
+            SELECT 1 FROM {}
+            {}
+            ORDER BY scraped_at DESC, id DESC
+            LIMIT 10000
+        )
+        "#,
+        table, where_clause
+    );
+
+    let remaining: i64 = sqlx::query_scalar(&remaining_query)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+
+    Ok(ItemsSyncResponse::new(records, next_cursor, remaining))
+}
+
+pub async fn get_items_daily_aggregate(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    min_day: Option<i32>,
+    max_day: Option<i32>,
+) -> Result<Vec<ItemsDailyAggregate>, String> {
+    let table = format!("item_snapshots_{}_{}", season_id, market_mode);
+
+    if !table_exists(pool, &table).await? {
+        return Ok(vec![]);
+    }
+
+    let mut conditions = Vec::new();
+
+    if let Some(day) = min_day {
+        conditions.push(format!("season_day >= {}", day));
+    }
+    if let Some(day) = max_day {
+        conditions.push(format!("season_day <= {}", day));
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", conditions.join(" AND "))
+    };
+
+    let query = format!(
+        r#"
+        SELECT
+            season_day,
+            item_id,
+            name,
+            MIN(fire_price) as min_price,
+            MAX(fire_price) as max_price,
+            AVG(fire_price) as avg_price,
+            COUNT(*) as price_count,
+            (
+                SELECT fire_price FROM {} i2
+                WHERE i2.item_id = {} i.item_id
+                ORDER BY scraped_at DESC LIMIT 1
+            ) as latest_price
+        FROM {} i
+        {}
+        GROUP BY season_day, item_id, name
+        ORDER BY season_day DESC, item_id
+        "#,
+        table, table, table, where_clause
+    );
+
+    let rows = sqlx::query(&query)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("按天聚合查询失败: {}", e))?;
+
+    let mut day_map: HashMap<i32, Vec<DailyItemPrice>> = HashMap::new();
+
+    for row in rows {
+        let season_day: i32 = row.get("season_day");
+        let item = DailyItemPrice {
+            item_id: row.get("item_id"),
+            name: row.get::<Option<String>, _>("name").filter(|n| !n.is_empty()),
+            min_price: row.get::<Option<f64>, _>("min_price").unwrap_or(0.0),
+            max_price: row.get::<Option<f64>, _>("max_price").unwrap_or(0.0),
+            avg_price: row.get::<Option<f64>, _>("avg_price").unwrap_or(0.0),
+            latest_price: row.get::<Option<f64>, _>("latest_price").unwrap_or(0.0),
+            price_count: row.get("price_count"),
+        };
+        day_map.entry(season_day).or_insert_with(Vec::new).push(item);
+    }
+
+    let result: Vec<ItemsDailyAggregate> = day_map
+        .into_iter()
+        .map(|(day, items)| {
+            let count = items.len() as i64;
+            ItemsDailyAggregate {
+                season_day: day,
+                date: format!("Day {}", day),
+                item_count: count,
+                items,
+            }
+        })
+        .collect();
+
+    Ok(result)
+}
+
 #[allow(dead_code)]
 pub async fn get_items_history_count(
     pool: &SqlitePool,

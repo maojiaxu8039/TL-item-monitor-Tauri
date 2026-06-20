@@ -1315,3 +1315,55 @@ export interface UpdateIngredientsRequest {
 export interface UpdateOutputsRequest {
   outputs: CreateOutputRequest[];
 }
+
+// ==================== 高效数据同步类型 ====================
+
+export interface FastSyncResponse {
+  items: FastItemData[];
+  total_items: number;
+  total_days: number;
+  generated_at: number;
+}
+
+export interface FastItemData {
+  item_id: string;
+  name: string;
+  daily_prices: DayPrice[];
+}
+
+export interface DayPrice {
+  day: number;
+  open: number;
+  close: number;
+  min: number;
+  max: number;
+  avg: number;
+  count: number;
+}
+
+export interface LatestPricesResponse {
+  prices: LatestPrice[];
+  scraped_at: number;
+}
+
+export interface LatestPrice {
+  item_id: string;
+  name: string;
+  fire_price: number;
+  season_day: number;
+}
+
+export interface DualSourceItem {
+  item_id: string;
+  name: string;
+  current_price: number;
+  price_24h_ago: number | null;
+  last_time: number;
+  source: string;
+}
+
+export interface DualSourceHistoryPoint {
+  ts: number;
+  price: number;
+  source: string;
+}

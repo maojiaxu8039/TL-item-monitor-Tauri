@@ -497,3 +497,209 @@ fn mask_url_for_log(url: &str) -> String {
     url.replace("api.qiandao.com", "***")
         .replace("115.231.176.101", "***")
 }
+
+// ==================== 双源数据获取 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LuosiHistoryPoint {
+    pub ts: i64,
+    pub price: f64,
+    #[serde(default)]
+    pub count: Option<i64>,
+    #[serde(default)]
+    pub filled: Option<bool>,
+    #[serde(default)]
+    pub realtime: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LuosiHistoryResponse {
+    pub status: String,
+    #[serde(default)]
+    pub points: Vec<LuosiHistoryPoint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DualSourceItemData {
+    pub item_id: String,
+    pub name: String,
+    pub current_price: f64,
+    pub price_24h_ago: Option<f64>,
+    pub last_time: i64,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DualSourceHistoryPoint {
+    pub ts: i64,
+    pub price: f64,
+    pub source: String,
+}
+
+pub struct DualSourceScraper;
+
+impl DualSourceScraper {
+    const LUOSI_SERVER: &'static str = "http://115.231.176.101:8080";
+    const ETOR_BASE: &'static str = "https://api.etor.com/etor-api/api";
+
+    pub async fn get_overview(season_id: i32) -> Result<HashMap<String, LuosiItem>, String> {
+        let url = format!("{}/get?season_id={}", Self::LUOSI_SERVER, season_id);
+        info!("[双源] 获取物品概览: {}", mask_url_for_log(&url));
+
+        let resp = http_client()?
+            .get(&url)
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await
+            .map_err(|e| format!("刷图小助手请求失败: {}", e))?;
+
+        if !resp.status().is_success() {
+            return Err(format!("刷图小助手 API 返回错误: {}", resp.status()));
+        }
+
+        let map: HashMap<String, LuosiItem> = resp
+            .json()
+            .await
+            .map_err(|e| format!("JSON 解析失败: {}", e))?;
+
+        Ok(map)
+    }
+
+    pub async fn get_luosi_history(season_id: i32, item_id: &str) -> Result<LuosiHistoryResponse, String> {
+        let url = format!(
+            "{}/price/history?season_id={}&item_id={}&range=season",
+            Self::LUOSI_SERVER, season_id, item_id
+        );
+
+        let resp = http_client()?
+            .get(&url)
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await
+            .map_err(|e| format!("请求失败: {}", e))?;
+
+        if !resp.status().is_success() {
+            return Err(format!("API 返回错误: {}", resp.status()));
+        }
+
+        let history: LuosiHistoryResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("JSON 解析失败: {}", e))?;
+
+        Ok(history)
+    }
+
+    pub async fn get_etor_history(season_id: i32, item_id: &str) -> Result<Vec<DualSourceHistoryPoint>, String> {
+        let url = format!(
+            "{}/chart/{}/{}?interval=1h",
+            Self::ETOR_BASE, season_id, item_id
+        );
+
+        let resp = http_client()?
+            .get(&url)
+            .header("accept", "application/json,text/plain,*/*")
+            .header("accept-language", "zh-CN,zh;q=0.9")
+            .header("x-frontend-version", "10.5.50")
+            .header("seasonid", season_id.to_string())
+            .header("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await
+            .map_err(|e| format!("易火请求失败: {}", e))?;
+
+        if !resp.status().is_success() {
+            return Err(format!("易火 API 返回错误: {}", resp.status()));
+        }
+
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| format!("读取响应失败: {}", e))?;
+
+        let text = String::from_utf8_lossy(&bytes);
+
+        #[derive(Deserialize)]
+        struct EtorChartResponse {
+            #[serde(default)]
+            trend: Option<Vec<EtorTrendPoint>>,
+        }
+
+        #[derive(Deserialize)]
+        struct EtorTrendPoint {
+            timestamp: i64,
+            price: f64,
+        }
+
+        let chart_resp: EtorChartResponse = serde_json::from_str(&text)
+            .map_err(|e| format!("易火 JSON 解析失败: {}", e))?;
+
+        let items = chart_resp
+            .trend
+            .unwrap_or_default()
+            .into_iter()
+            .map(|t| DualSourceHistoryPoint {
+                ts: t.timestamp / 1000,
+                price: t.price,
+                source: "etor".to_string(),
+            })
+            .collect();
+
+        Ok(items)
+    }
+
+    pub async fn fetch_dual_source_history(
+        season_id: i32,
+        item_id: &str,
+        item_name: &str,
+    ) -> Vec<DualSourceHistoryPoint> {
+        let mut all_points: Vec<DualSourceHistoryPoint> = Vec::new();
+
+        if let Ok(history) = Self::get_luosi_history(season_id, item_id).await {
+            for pt in history.points {
+                all_points.push(DualSourceHistoryPoint {
+                    ts: pt.ts,
+                    price: pt.price,
+                    source: "luosi".to_string(),
+                });
+            }
+        }
+
+        if let Ok(history) = Self::get_etor_history(season_id, item_id).await {
+            for pt in history {
+                all_points.push(DualSourceHistoryPoint {
+                    ts: pt.ts,
+                    price: pt.price,
+                    source: "etor".to_string(),
+                });
+            }
+        }
+
+        all_points.sort_by_key(|p| p.ts);
+        all_points
+    }
+
+    pub async fn fetch_all_dual_source(
+        season_id: i32,
+    ) -> Result<Vec<DualSourceItemData>, String> {
+        info!("[双源] 开始获取所有物品数据 (赛季: {})", season_id);
+
+        let overview = Self::get_overview(season_id).await?;
+        let now = chrono::Utc::now().timestamp();
+
+        let items: Vec<DualSourceItemData> = overview
+            .into_iter()
+            .map(|(item_id, item)| DualSourceItemData {
+                item_id,
+                name: item.name.clone(),
+                current_price: item.item_price.unwrap_or(0.0),
+                price_24h_ago: None,
+                last_time: item.last_time.unwrap_or(now),
+                source: "luosi".to_string(),
+            })
+            .collect();
+
+        info!("[双源] 获取到 {} 个物品", items.len());
+        Ok(items)
+    }
+}

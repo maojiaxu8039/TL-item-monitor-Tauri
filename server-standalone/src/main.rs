@@ -1948,6 +1948,247 @@ async fn handle_request(
             }
         }
 
+        // ==================== 高速数据同步 API ====================
+
+        ("GET", "/sync-fast") => {
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
+            let min_day: Option<i32> = get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
+            let max_day: Option<i32> = get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
+
+            match db::get_fast_sync_all(&state.db, &season_id, market_mode, min_day, max_day).await {
+                Ok(result) => {
+                    let body = serde_json::to_string(&ApiResponse {
+                        success: true,
+                        data: Some(result),
+                        error: None,
+                    })
+                    .unwrap_or_default();
+                    (200, body)
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(e),
+                    })
+                    .unwrap_or_default();
+                    (500, body)
+                }
+            }
+        }
+
+        ("GET", "/prices-latest") => {
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
+
+            match db::get_latest_prices(&state.db, &season_id, market_mode).await {
+                Ok(result) => {
+                    let body = serde_json::to_string(&ApiResponse {
+                        success: true,
+                        data: Some(result),
+                        error: None,
+                    })
+                    .unwrap_or_default();
+                    (200, body)
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(e),
+                    })
+                    .unwrap_or_default();
+                    (500, body)
+                }
+            }
+        }
+
+        ("GET", "/dual-source-overview") => {
+            let season_id: i32 = get_query_param(query_string, "season")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(1401);
+
+            match scraper::DualSourceScraper::fetch_all_dual_source(season_id).await {
+                Ok(items) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse {
+                        success: true,
+                        data: Some(items),
+                        error: None,
+                    })
+                    .unwrap_or_default();
+                    (200, body)
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(e),
+                    })
+                    .unwrap_or_default();
+                    (500, body)
+                }
+            }
+        }
+
+        ("GET", "/dual-source-history") => {
+            let season_id: i32 = get_query_param(query_string, "season")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(1401);
+            let item_id = get_query_param(query_string, "item_id")
+                .unwrap_or_default();
+            let item_name = get_query_param(query_string, "name")
+                .unwrap_or_else(|| item_id.clone());
+
+            if item_id.is_empty() {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some("item_id is required".to_string()),
+                })
+                .unwrap_or_default();
+                (400, body)
+            } else {
+                let history = scraper::DualSourceScraper::fetch_dual_source_history(
+                    season_id,
+                    &item_id,
+                    &item_name,
+                ).await;
+
+                let body = serde_json::to_string_pretty(&ApiResponse {
+                    success: true,
+                    data: Some(history),
+                    error: None,
+                })
+                .unwrap_or_default();
+                (200, body)
+            }
+        }
+
+        ("GET", "/items-sync-stats") => {
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
+
+            match db::get_items_sync_stats(&state.db, &season_id, market_mode).await {
+                Ok(stats) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse {
+                        success: true,
+                        data: Some(stats),
+                        error: None,
+                    })
+                    .unwrap_or_default();
+                    (200, body)
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(e),
+                    })
+                    .unwrap_or_default();
+                    (500, body)
+                }
+            }
+        }
+
+        ("GET", "/items-sync") => {
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
+
+            let limit: i32 = get_query_param(query_string, "limit")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(5000)
+                .clamp(100, 10000);
+
+            let before_cursor = get_query_param(query_string, "before");
+            let (before_scraped_at, before_id) = if let Some(ref cursor) = before_cursor {
+                let parts: Vec<&str> = cursor.split(',').collect();
+                if parts.len() == 2 {
+                    (parts[0].parse().ok(), parts[1].parse().ok())
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
+            };
+
+            let min_day: Option<i32> = get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
+            let max_day: Option<i32> = get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
+
+            match db::get_items_by_cursor(
+                &state.db,
+                &season_id,
+                market_mode,
+                limit,
+                before_scraped_at,
+                before_id,
+                None,
+                None,
+                min_day,
+                max_day,
+            )
+            .await
+            {
+                Ok(result) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse {
+                        success: true,
+                        data: Some(result),
+                        error: None,
+                    })
+                    .unwrap_or_default();
+                    (200, body)
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(e),
+                    })
+                    .unwrap_or_default();
+                    (500, body)
+                }
+            }
+        }
+
+        ("GET", "/items-daily") => {
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+            let mode = get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let market_mode = if mode == "expert" { "season_expert" } else { "season_normal" };
+
+            let min_day: Option<i32> = get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
+            let max_day: Option<i32> = get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
+
+            match db::get_items_daily_aggregate(&state.db, &season_id, market_mode, min_day, max_day).await {
+                Ok(result) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse {
+                        success: true,
+                        data: Some(result),
+                        error: None,
+                    })
+                    .unwrap_or_default();
+                    (200, body)
+                }
+                Err(e) => {
+                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                        success: false,
+                        data: None,
+                        error: Some(e),
+                    })
+                    .unwrap_or_default();
+                    (500, body)
+                }
+            }
+        }
+
         _ => {
             let body = serde_json::to_string_pretty(&ApiResponse::<()> {
                 success: false,
