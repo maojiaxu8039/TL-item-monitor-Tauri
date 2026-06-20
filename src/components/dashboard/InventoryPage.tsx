@@ -1,5 +1,10 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { cmd, type InventoryPositionView, type InventoryBuyWatchView, type CreatePositionRequest, type CreateBuyWatchRequest, type UpdatePositionRequest, type UpdateBuyWatchRequest } from "@/lib/commands"
+
+interface ItemSuggestion {
+  item_id: string
+  item_name: string
+}
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -479,6 +484,39 @@ function AddPositionDialog({
   const [targetSellPrice, setTargetSellPrice] = useState("")
   const [note, setNote] = useState("")
   const [loading, setLoading] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [suggestions, setSuggestions] = useState<ItemSuggestion[]>([])
+
+  const searchQuery = useQuery({
+    queryKey: ["item-search", itemName],
+    queryFn: () => cmd.searchItems(itemName, 1, 10),
+    enabled: itemName.length >= 1,
+  })
+
+  useEffect(() => {
+    if (searchQuery.data?.items && itemName.length >= 1) {
+      const items = searchQuery.data.items.slice(0, 8).map(item => ({
+        item_id: item.item_id,
+        item_name: item.name,
+      }))
+      setSuggestions(items)
+      setShowSuggestions(true)
+    } else {
+      setSuggestions([])
+      setShowSuggestions(false)
+    }
+  }, [searchQuery.data, itemName])
+
+  const handleSelectItem = (item: ItemSuggestion) => {
+    setItemName(item.item_name)
+    setItemId(item.item_id)
+    setShowSuggestions(false)
+  }
+
+  const handleInputChange = (value: string) => {
+    setItemName(value)
+    setItemId("")
+  }
 
   const createMutation = useMutation({
     mutationFn: (request: CreatePositionRequest) => cmd.createInventoryPosition(request),
@@ -517,26 +555,30 @@ function AddPositionDialog({
         <h3 className="text-lg font-medium text-[var(--color-text)] mb-4">添加持仓记录</h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
+          <div className="relative">
             <label className="block text-sm text-[var(--color-text-subtle)] mb-1">物品名称 *</label>
             <input
               type="text"
               value={itemName}
-              onChange={e => setItemName(e.target.value)}
-              placeholder="输入物品名称"
+              onChange={e => handleInputChange(e.target.value)}
+              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+              placeholder="输入物品名称搜索"
               className="w-full px-3 py-2 bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-lg text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
             />
-          </div>
-
-          <div>
-            <label className="block text-sm text-[var(--color-text-subtle)] mb-1">物品 ID</label>
-            <input
-              type="text"
-              value={itemId}
-              onChange={e => setItemId(e.target.value)}
-              placeholder="可选"
-              className="w-full px-3 py-2 bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-lg text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
-            />
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {suggestions.map(item => (
+                  <button
+                    key={item.item_id}
+                    type="button"
+                    onClick={() => handleSelectItem(item)}
+                    className="w-full px-3 py-2 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-panel-soft)]"
+                  >
+                    {item.item_name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -846,6 +888,39 @@ function AddWatchDialog({
   const [maxQuantity, setMaxQuantity] = useState("")
   const [note, setNote] = useState("")
   const [loading, setLoading] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [suggestions, setSuggestions] = useState<ItemSuggestion[]>([])
+
+  const searchQuery = useQuery({
+    queryKey: ["item-search-watch", itemName],
+    queryFn: () => cmd.searchItems(itemName, 1, 10),
+    enabled: itemName.length >= 1,
+  })
+
+  useEffect(() => {
+    if (searchQuery.data?.items && itemName.length >= 1) {
+      const items = searchQuery.data.items.slice(0, 8).map(item => ({
+        item_id: item.item_id,
+        item_name: item.name,
+      }))
+      setSuggestions(items)
+      setShowSuggestions(true)
+    } else {
+      setSuggestions([])
+      setShowSuggestions(false)
+    }
+  }, [searchQuery.data, itemName])
+
+  const handleSelectItem = (item: ItemSuggestion) => {
+    setItemName(item.item_name)
+    setItemId(item.item_id)
+    setShowSuggestions(false)
+  }
+
+  const handleInputChange = (value: string) => {
+    setItemName(value)
+    setItemId("")
+  }
 
   const createMutation = useMutation({
     mutationFn: (request: CreateBuyWatchRequest) => cmd.createInventoryBuyWatch(request),
@@ -882,26 +957,30 @@ function AddWatchDialog({
         <h3 className="text-lg font-medium text-[var(--color-text)] mb-4">添加买入监控</h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
+          <div className="relative">
             <label className="block text-sm text-[var(--color-text-subtle)] mb-1">物品名称 *</label>
             <input
               type="text"
               value={itemName}
-              onChange={e => setItemName(e.target.value)}
-              placeholder="输入物品名称"
+              onChange={e => handleInputChange(e.target.value)}
+              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+              placeholder="输入物品名称搜索"
               className="w-full px-3 py-2 bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-lg text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
             />
-          </div>
-
-          <div>
-            <label className="block text-sm text-[var(--color-text-subtle)] mb-1">物品 ID</label>
-            <input
-              type="text"
-              value={itemId}
-              onChange={e => setItemId(e.target.value)}
-              placeholder="可选"
-              className="w-full px-3 py-2 bg-[var(--color-panel-soft)] border border-[var(--color-border)] rounded-lg text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
-            />
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {suggestions.map(item => (
+                  <button
+                    key={item.item_id}
+                    type="button"
+                    onClick={() => handleSelectItem(item)}
+                    className="w-full px-3 py-2 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-panel-soft)]"
+                  >
+                    {item.item_name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
