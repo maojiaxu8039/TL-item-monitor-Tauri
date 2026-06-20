@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, memo, type ChangeEvent, type MouseEvent } from "react"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, Minimize2, Maximize2 } from "lucide-react"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { motion } from "framer-motion"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
@@ -38,11 +38,14 @@ const PAGE_TITLES: Record<PageId, string> = {
   help: "帮助",
   alerts: "提醒设置",
   arbitrage: "套利比价",
+  inventory: "囤货出货",
 }
 
 interface TopBarProps {
   page: PageId
   onPageChange: (page: PageId) => void
+  isMiniMode?: boolean
+  setIsMiniMode?: (value: boolean) => void
 }
 
 async function withWindow(action: "minimize" | "toggleMaximize" | "close") {
@@ -121,12 +124,15 @@ function sourceDotClass(source: string) {
   }
 }
 
-export function TopBar({ page, onPageChange }: TopBarProps) {
+export function TopBar({ page, onPageChange, isMiniMode: externalIsMiniMode, setIsMiniMode: externalSetIsMiniMode }: TopBarProps) {
   const { refreshData, marketContext, marketContextReady, setMarketContext } = useSectionRefresh()
   const queryClient = useQueryClient()
   const [marketMode, setMarketMode] = useState(marketContext.marketMode)
   const [dataSource, setDataSource] = useState("dual")
   const [notificationEnabled, setNotificationEnabled] = useState(true)
+  const [internalMiniMode, setInternalMiniMode] = useState(false)
+  const isMiniMode = externalIsMiniMode ?? internalMiniMode
+  const setIsMiniMode = externalSetIsMiniMode ?? setInternalMiniMode
   const prevModeRef = useRef(marketContext.marketMode)
   const summaryRef = useRef<string | undefined>(undefined)
   const marketContextRef = useRef(marketContext)
@@ -150,7 +156,8 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
     if (!config) return
     setDataSource(config.scrape.items_source || "dual")
     setNotificationEnabled(config.notification.system_notifications)
-  }, [config])
+    setIsMiniMode(config.desktop.mini_mode)
+  }, [config, setIsMiniMode])
 
   const { data: summary } = useQuery({
     queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode],
@@ -204,11 +211,86 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
     },
   })
 
+  const [miniModeLoading, setMiniModeLoading] = useState(false)
+
+  const handleToggleMiniMode = async () => {
+    if (miniModeLoading) return
+    setMiniModeLoading(true)
+    try {
+      const newMode = !isMiniMode
+      await cmd.setMiniWindowMode(newMode)
+      setIsMiniMode(newMode)
+      toast.success(newMode ? "已切换到小窗口模式" : "已切换到主窗口模式")
+    } catch (error) {
+      toast.error(`切换失败: ${errorMessage(error)}`)
+    } finally {
+      setMiniModeLoading(false)
+    }
+  }
+
   const handleModeChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const newMode = e.target.value
     prevModeRef.current = marketMode
     setMarketMode(newMode)
     switchModeMutation.mutate(newMode)
+  }
+
+  if (isMiniMode) {
+    return (
+      <motion.header
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+        className="torch-topbar"
+        data-tauri-drag-region
+        onMouseDown={startDrag}
+      >
+        <div className="torch-topbar-drag-region" data-tauri-drag-region />
+        <button
+          className="relative z-[1] flex min-w-0 flex-1 items-center gap-2 rounded px-1.5 py-1 text-left"
+          onClick={() => onPageChange("dashboard")}
+          title="TorchScan 小窗口"
+        >
+          <img src={publicAssetPath("torchscan/logo-mark.png")} alt="TorchScan" className="h-7 w-auto" draggable={false} />
+          <div className="min-w-0">
+            <div className="truncate text-xs font-bold text-[var(--color-brand-gold)]">TorchScan 小窗</div>
+            <div className="truncate text-[10px] text-[var(--color-text-subtle)]">
+              {marketMode === "season_expert" ? "赛季专家" : "赛季普通"}
+              {summary?.fire?.rmb_per_10k_fire ? ` · ${summary.fire.rmb_per_10k_fire.toFixed(2)}元/万火` : ""}
+            </div>
+          </div>
+        </button>
+
+        <div className="relative z-[1] flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => refreshMutation.mutate()}
+            disabled={refreshMutation.isPending}
+            className="torch-icon-button h-8 w-8"
+            title="刷新数据"
+          >
+            <RefreshCw className={cn("h-4 w-4", refreshMutation.isPending && "animate-spin")} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleToggleMiniMode}
+            disabled={miniModeLoading}
+            className="torch-icon-button h-8 w-8 bg-[var(--color-brand-gold)]/20"
+            title="恢复主窗口"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </Button>
+          <button className="torch-window-button" onClick={() => withWindow("minimize")} title="最小化">
+            <AssetIcon name="window-minimize" className="h-[18px] w-[18px]" />
+          </button>
+          <button className="torch-window-button torch-window-close" onClick={() => withWindow("close")} title="关闭">
+            <AssetIcon name="window-close" className="h-[18px] w-[18px]" />
+          </button>
+        </div>
+      </motion.header>
+    )
   }
 
   return (
@@ -262,6 +344,21 @@ export function TopBar({ page, onPageChange }: TopBarProps) {
           title="获取最新数据"
         >
           <RefreshCw className={cn("h-4 w-4", refreshMutation.isPending && "animate-spin")} />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleToggleMiniMode}
+          disabled={miniModeLoading}
+          className={cn("torch-icon-button h-8 w-8", isMiniMode && "bg-[var(--color-brand-gold)]/20")}
+          title={isMiniMode ? "切换到主窗口" : "切换到小窗口"}
+        >
+          {isMiniMode ? (
+            <Maximize2 className="h-4 w-4" />
+          ) : (
+            <Minimize2 className="h-4 w-4" />
+          )}
         </Button>
 
         <div className="torch-status-chip" title={sourceTitle(dataSource)}>

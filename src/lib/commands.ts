@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 // Types (mirror Rust structs)
 // ============================================================================
 
-export type PageId = "dashboard" | "firecompare" | "items" | "deals" | "records" | "strategies" | "priceanalysis" | "aianalysis" | "import_export" | "settings" | "help" | "alerts" | "arbitrage";
+export type PageId = "dashboard" | "firecompare" | "items" | "deals" | "records" | "strategies" | "priceanalysis" | "aianalysis" | "import_export" | "settings" | "help" | "alerts" | "arbitrage" | "inventory";
 
 export interface FirePriceUI {
   price_per_wan: number;
@@ -236,6 +236,22 @@ export interface DesktopSettings {
   tray_on_close: boolean;
   mini_mode: boolean;
   free_layout: boolean;
+  mini_opacity: number;
+  mini_always_on_top: boolean;
+  mini_width: number;
+  mini_height: number;
+  mini_x: number | null;
+  mini_y: number | null;
+}
+
+export interface WindowModeState {
+  mini_mode: boolean;
+  opacity: number;
+  always_on_top: boolean;
+  width: number;
+  height: number;
+  x: number | null;
+  y: number | null;
 }
 
 export interface NotificationSettings {
@@ -246,6 +262,10 @@ export interface NotificationSettings {
   voice_alert_path: string;
   price_alert_enabled: boolean;
   price_alert_cooldown_seconds: number;
+  buy_alert_enabled: boolean;
+  buy_alert_cooldown_seconds: number;
+  sell_alert_enabled: boolean;
+  sell_alert_cooldown_seconds: number;
   quiet_start: string | null;
   quiet_end: string | null;
 }
@@ -729,7 +749,94 @@ export const cmd = {
     invoke<number | null>("get_arbitrage_item_price", { itemId }),
   toggleArbitrageRecipeEnabled: (recipeId: string, enabled: boolean) =>
     invoke<OkResponse>("toggle_arbitrage_recipe_enabled", { recipeId, enabled }),
+
+  // Window mode commands
+  getWindowModeState: () => invoke<WindowModeState>("get_window_mode_state"),
+  setMiniWindowMode: (enabled: boolean) =>
+    invoke<OkResponse>("set_mini_window_mode", { enabled }),
+  setWindowOpacity: (opacity: number) =>
+    invoke<OkResponse>("set_window_opacity", { opacity }),
+  saveWindowLayout: (x?: number, y?: number, width?: number, height?: number) =>
+    invoke<OkResponse>("save_window_layout", { x, y, width, height }),
+
+  // Inventory commands
+  listInventoryPositions: (seasonId: string, marketMode: string) =>
+    invoke<InventoryPositionView[]>("list_inventory_positions", { seasonId, marketMode }),
+  createInventoryPosition: (request: CreatePositionRequest) =>
+    invoke<OkResponse>("create_inventory_position", { request }),
+  updateInventoryPosition: (request: UpdatePositionRequest) =>
+    invoke<OkResponse>("update_inventory_position", { request }),
+  deleteInventoryPosition: (id: string) =>
+    invoke<OkResponse>("delete_inventory_position", { id }),
+  markInventorySold: (id: string, soldPrice: number) =>
+    invoke<OkResponse>("mark_inventory_sold", { id, soldPrice }),
+  markInventoryIgnored: (id: string) =>
+    invoke<OkResponse>("mark_inventory_ignored", { id }),
+  getInventorySummary: (seasonId: string, marketMode: string) =>
+    invoke<InventorySummary>("get_inventory_summary", { seasonId, marketMode }),
+  getSellReadyPositions: (seasonId: string, marketMode: string) =>
+    invoke<InventoryPositionView[]>("get_sell_ready_positions", { seasonId, marketMode }),
+  listInventoryBuyWatches: (seasonId: string, marketMode: string) =>
+    invoke<InventoryBuyWatchView[]>("list_inventory_buy_watches", { seasonId, marketMode }),
+  createInventoryBuyWatch: (request: CreateBuyWatchRequest) =>
+    invoke<OkResponse>("create_inventory_buy_watch", { request }),
+  updateInventoryBuyWatch: (request: UpdateBuyWatchRequest) =>
+    invoke<OkResponse>("update_inventory_buy_watch", { request }),
+  deleteInventoryBuyWatch: (id: string) =>
+    invoke<OkResponse>("delete_inventory_buy_watch", { id }),
+  getBuyReadyWatches: (seasonId: string, marketMode: string) =>
+    invoke<InventoryBuyWatchView[]>("get_buy_ready_watches", { seasonId, marketMode }),
+
+  getMiniWindowFeed: (seasonId?: string, marketMode?: string) =>
+    invoke<MiniWindowFeed>("get_mini_window_feed", { seasonId, marketMode }),
 };
+
+export interface MiniWindowFeed {
+  worth_items: MiniWorthItem[];
+  profitable_arbitrage: ArbitrageCalculationResult[];
+  buy_ready_watches: InventoryBuyWatchView[];
+  sell_ready_positions: InventoryPositionView[];
+  updated_at: number;
+}
+
+export interface MiniWorthItem {
+  item_id: string;
+  item_name: string;
+  section_name: string;
+  current_price: number | null;
+  purchase_fire_price: number;
+  count: number;
+  profit: number | null;
+}
+
+export interface ArbitrageCalculationResult {
+  recipe_id: string;
+  recipe_name: string;
+  recipe_type: string;
+  total_cost: number;
+  total_output_value: number;
+  profit: number;
+  profit_margin: number;
+  ingredients_detail: IngredientCostDetail[];
+  outputs_detail: OutputRevenueDetail[];
+  is_profitable: boolean;
+  used_lowest_price: boolean;
+}
+
+export interface IngredientCostDetail {
+  item_name: string;
+  count: number;
+  unit_price: number;
+  total_cost: number;
+}
+
+export interface OutputRevenueDetail {
+  item_name: string;
+  count: number;
+  unit_price: number;
+  total_value: number;
+  after_tax_value: number;
+}
 
 export interface SeasonInfo {
   season_id: string;
@@ -770,6 +877,127 @@ export interface ItemMappingUpdateResult {
   new_from_etor: number;
   updated: number;
   deduplicated: number;
+}
+
+// Inventory types
+export interface InventoryPosition {
+  id: string;
+  season_id: string;
+  market_mode: string;
+  item_id: string;
+  item_name: string;
+  item_type: string;
+  buy_price: number;
+  quantity: number;
+  extra_cost: number;
+  fee_rate: number;
+  target_sell_price: number | null;
+  bought_at: number;
+  status: string;
+  sold_price: number | null;
+  sold_at: number | null;
+  note: string;
+  alert_enabled: boolean;
+  last_alert_at: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface InventoryPositionView {
+  position: InventoryPosition;
+  current_price: number | null;
+  break_even_price: number;
+  total_cost: number;
+  estimated_net_value: number | null;
+  profit: number | null;
+  profit_ratio: number | null;
+  sell_signal: string;
+}
+
+export interface InventoryBuyWatch {
+  id: string;
+  season_id: string;
+  market_mode: string;
+  item_id: string;
+  item_name: string;
+  item_type: string;
+  target_buy_price: number;
+  max_quantity: number | null;
+  note: string;
+  alert_enabled: boolean;
+  auto_create_position: boolean;
+  last_alert_at: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface InventoryBuyWatchView {
+  watch: InventoryBuyWatch;
+  current_price: number | null;
+  discount_to_target: number | null;
+  buy_signal: string;
+}
+
+export interface InventorySummary {
+  total_cost: number;
+  current_value: number;
+  profit: number;
+  sell_ready_count: number;
+  buy_ready_count: number;
+  loss_risk_count: number;
+  holding_count: number;
+}
+
+export interface CreatePositionRequest {
+  season_id: string;
+  market_mode: string;
+  item_id: string;
+  item_name: string;
+  item_type?: string;
+  buy_price: number;
+  quantity: number;
+  extra_cost?: number;
+  fee_rate?: number;
+  target_sell_price?: number;
+  bought_at?: number;
+  note?: string;
+}
+
+export interface UpdatePositionRequest {
+  id: string;
+  item_name?: string;
+  item_type?: string;
+  buy_price?: number;
+  quantity?: number;
+  extra_cost?: number;
+  fee_rate?: number;
+  target_sell_price?: number;
+  bought_at?: number;
+  note?: string;
+  alert_enabled?: boolean;
+}
+
+export interface CreateBuyWatchRequest {
+  season_id: string;
+  market_mode: string;
+  item_id: string;
+  item_name: string;
+  item_type?: string;
+  target_buy_price: number;
+  max_quantity?: number;
+  note?: string;
+  auto_create_position?: boolean;
+}
+
+export interface UpdateBuyWatchRequest {
+  id: string;
+  item_name?: string;
+  item_type?: string;
+  target_buy_price?: number;
+  max_quantity?: number;
+  note?: string;
+  alert_enabled?: boolean;
+  auto_create_position?: boolean;
 }
 
 export interface DealAlert {

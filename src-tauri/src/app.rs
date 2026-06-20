@@ -21,7 +21,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-const LATEST_SCHEMA_VERSION: i64 = 17;
+const LATEST_SCHEMA_VERSION: i64 = 19;
 
 pub fn full_table_json_path() -> std::path::PathBuf {
     paths::data_dir().join("full_table.json")
@@ -374,6 +374,55 @@ async fn create_latest_schema_baseline(pool: &SqlitePool) -> Result<(), String> 
     Ok(())
 }
 
+async fn apply_column_if_not_exists(
+    pool: &SqlitePool,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> Result<(), String> {
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pragma_table_info(?1) WHERE name = ?2)")
+            .bind(table)
+            .bind(column)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+    if !exists {
+        let sql = format!("ALTER TABLE {} ADD COLUMN {} {}", table, column, definition);
+        sqlx::query(&sql)
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        tracing::info!("[MIGRATION] Added column {} to table {}", column, table);
+    } else {
+        tracing::info!(
+            "[MIGRATION] Column {} already exists in table {}, skipping",
+            column,
+            table
+        );
+    }
+    Ok(())
+}
+
+async fn apply_v18_migration(pool: &SqlitePool) -> Result<(), String> {
+    apply_column_if_not_exists(
+        pool,
+        "season_api_configs",
+        "etor_season_id_normal",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    .await?;
+    apply_column_if_not_exists(
+        pool,
+        "season_api_configs",
+        "etor_season_id_expert",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    .await?;
+    Ok(())
+}
+
 async fn run_legacy_migrations(pool: &SqlitePool, current_version: i64) -> Result<(), String> {
     if current_version < 1 {
         apply_sql_migration(pool, 1, include_str!("db/migrations/001_initial.sql")).await?;
@@ -469,10 +518,14 @@ async fn run_legacy_migrations(pool: &SqlitePool, current_version: i64) -> Resul
         apply_sections_market_mode_migration(pool).await?;
     }
     if current_version < 18 {
+        apply_v18_migration(pool).await?;
+        record_migration(pool, 18).await?;
+    }
+    if current_version < 19 {
         apply_sql_migration(
             pool,
-            18,
-            include_str!("db/migrations/018_add_etor_season_id.sql"),
+            19,
+            include_str!("db/migrations/019_create_inventory_tables.sql"),
         )
         .await?;
     }

@@ -4,13 +4,15 @@ use tracing::{error, info, warn};
 
 use crate::core::paths::resolve_voice_alert_path;
 use crate::core::state::{AppState, NotificationSettings};
-use crate::db::{repo_alerts, repo_sections};
+use crate::db::{repo_alerts, repo_inventory, repo_sections};
 use crate::services::{
     desktop_notifications_enabled, format_worth_alert_notification, send_notification,
     WorthAlertNotificationItem,
 };
 
 static WORTH_ALERT_LAST_TRIGGERED: OnceLock<Mutex<Option<i64>>> = OnceLock::new();
+static BUY_ALERT_LAST_TRIGGERED: OnceLock<Mutex<Option<i64>>> = OnceLock::new();
+static SELL_ALERT_LAST_TRIGGERED: OnceLock<Mutex<Option<i64>>> = OnceLock::new();
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct WorthItem {
@@ -70,6 +72,7 @@ pub async fn run_price_alert_task(
 async fn run_price_alert_checks(app: &tauri::AppHandle, state: &Arc<AppState>) {
     check_worth_items(app, state).await;
     check_custom_alert_rules(app, state).await;
+    check_inventory_alerts(app, state).await;
 }
 
 async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
@@ -560,5 +563,242 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
         Ok(played)
     } else {
         Err(format!("Voice alert played {}/{} time(s)", played, count))
+    }
+}
+
+async fn check_inventory_alerts(app: &tauri::AppHandle, state: &Arc<AppState>) {
+    let notification_config: NotificationSettings = {
+        let config = state.config.read();
+        config.notification.clone()
+    };
+
+    let ctx = state.active_context.read().clone();
+    let season_id = &ctx.season_id;
+    let market_mode = ctx.market_mode.as_str();
+
+    check_buy_ready_alerts(app, state, &notification_config, season_id, market_mode).await;
+    check_sell_ready_alerts(app, state, &notification_config, season_id, market_mode).await;
+}
+
+async fn check_buy_ready_alerts(
+    app: &tauri::AppHandle,
+    state: &Arc<AppState>,
+    notification_config: &NotificationSettings,
+    season_id: &str,
+    market_mode: &str,
+) {
+    if !notification_config.buy_alert_enabled {
+        return;
+    }
+
+    let buy_ready_watches =
+        match repo_inventory::get_buy_ready_watches(&state.db, season_id, market_mode).await {
+            Ok(watches) => watches,
+            Err(e) => {
+                error!("Failed to get buy ready watches: {}", e);
+                return;
+            }
+        };
+
+    if buy_ready_watches.is_empty() {
+        return;
+    }
+
+    let now = chrono::Utc::now().timestamp();
+    if !should_send_inventory_alert(
+        now,
+        &BUY_ALERT_LAST_TRIGGERED,
+        notification_config.buy_alert_cooldown_seconds,
+    ) {
+        return;
+    }
+
+    let mut message = String::from("📉 低价买入提醒\n\n");
+    for (i, view) in buy_ready_watches.iter().take(5).enumerate() {
+        let watch = &view.watch;
+        let current = view.current_price.unwrap_or(0.0);
+        let target = watch.target_buy_price;
+        let discount = view.discount_to_target.unwrap_or(0.0);
+
+        message.push_str(&format!(
+            "{}. {} 目标:{} 当前:{} ({:.1}%低于目标)\n",
+            i + 1,
+            watch.item_name,
+            format_price(target),
+            format_price(current),
+            discount
+        ));
+
+        if let Some(qty) = watch.max_quantity {
+            message.push_str(&format!("   计划数量: {}\n", qty));
+        }
+    }
+
+    if buy_ready_watches.len() > 5 {
+        message.push_str(&format!("\n...还有 {} 个物品", buy_ready_watches.len() - 5));
+    }
+
+    if desktop_notifications_enabled(notification_config) {
+        let title = format!("📉 低价买入提醒 ({}件)", buy_ready_watches.len());
+        if let Err(e) = send_notification(app, &title, &message) {
+            warn!("Failed to send buy alert notification: {}", e);
+        }
+    }
+
+    if let Err(e) = emit_alert_triggered(
+        serde_json::json!({
+            "alert_kind": "inventory_buy",
+            "count": buy_ready_watches.len(),
+            "message": message.clone(),
+            "triggered_at": now,
+        }),
+        app,
+    ) {
+        warn!("Failed to emit inventory buy alert: {}", e);
+    }
+
+    if notification_config.voice_alert_enabled {
+        if let Err(e) = play_configured_voice_alert(app, notification_config, 1).await {
+            warn!("Failed to play buy alert voice: {}", e);
+        }
+    }
+}
+
+async fn check_sell_ready_alerts(
+    app: &tauri::AppHandle,
+    state: &Arc<AppState>,
+    notification_config: &NotificationSettings,
+    season_id: &str,
+    market_mode: &str,
+) {
+    if !notification_config.sell_alert_enabled {
+        return;
+    }
+
+    let sell_ready_positions =
+        match repo_inventory::get_sell_ready_positions(&state.db, season_id, market_mode).await {
+            Ok(positions) => positions,
+            Err(e) => {
+                error!("Failed to get sell ready positions: {}", e);
+                return;
+            }
+        };
+
+    if sell_ready_positions.is_empty() {
+        return;
+    }
+
+    let now = chrono::Utc::now().timestamp();
+    if !should_send_inventory_alert(
+        now,
+        &SELL_ALERT_LAST_TRIGGERED,
+        notification_config.sell_alert_cooldown_seconds,
+    ) {
+        return;
+    }
+
+    let mut message = String::from("📈 囤货可出货提醒\n\n");
+    let mut total_profit = 0.0;
+
+    for (i, view) in sell_ready_positions.iter().take(5).enumerate() {
+        let position = &view.position;
+        let current = view.current_price.unwrap_or(0.0);
+        let profit = view.profit.unwrap_or(0.0);
+        let signal = if view.sell_signal == "profitable" {
+            "盈利"
+        } else {
+            "保本"
+        };
+
+        total_profit += profit;
+
+        message.push_str(&format!(
+            "{}. {} {} 买入:{} 现价:{} 预计:{} ({:.1}%)\n",
+            i + 1,
+            position.item_name,
+            signal,
+            format_price(position.buy_price),
+            format_price(current),
+            if profit >= 0.0 {
+                format!("+{}", format_price(profit))
+            } else {
+                format_price(profit)
+            },
+            view.profit_ratio.unwrap_or(0.0)
+        ));
+    }
+
+    if sell_ready_positions.len() > 5 {
+        message.push_str(&format!(
+            "\n...还有 {} 个物品",
+            sell_ready_positions.len() - 5
+        ));
+    }
+
+    message.push_str(&format!(
+        "\n预计总盈利: {}",
+        if total_profit >= 0.0 {
+            format!("+{}", format_price(total_profit))
+        } else {
+            format_price(total_profit)
+        }
+    ));
+
+    if desktop_notifications_enabled(notification_config) {
+        let title = format!("📈 囤货可出货提醒 ({}件)", sell_ready_positions.len());
+        if let Err(e) = send_notification(app, &title, &message) {
+            warn!("Failed to send sell alert notification: {}", e);
+        }
+    }
+
+    if let Err(e) = emit_alert_triggered(
+        serde_json::json!({
+            "alert_kind": "inventory_sell",
+            "count": sell_ready_positions.len(),
+            "total_profit": total_profit,
+            "message": message.clone(),
+            "triggered_at": now,
+        }),
+        app,
+    ) {
+        warn!("Failed to emit inventory sell alert: {}", e);
+    }
+
+    if notification_config.voice_alert_enabled {
+        if let Err(e) = play_configured_voice_alert(app, notification_config, 1).await {
+            warn!("Failed to play sell alert voice: {}", e);
+        }
+    }
+}
+
+fn should_send_inventory_alert(
+    now: i64,
+    last_triggered: &OnceLock<Mutex<Option<i64>>>,
+    cooldown_seconds: i32,
+) -> bool {
+    let cooldown_seconds = cooldown_seconds.max(1) as i64;
+    let last = last_triggered.get_or_init(|| Mutex::new(None));
+    let mut last = match last.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    if let Some(last_time) = *last {
+        if now - last_time < cooldown_seconds {
+            return false;
+        }
+    }
+
+    *last = Some(now);
+    true
+}
+
+fn format_price(price: f64) -> String {
+    if price >= 10000.0 {
+        format!("{:.0}万", price / 10000.0)
+    } else if price >= 1000.0 {
+        format!("{:.1}k", price / 1000.0)
+    } else {
+        format!("{:.1}", price)
     }
 }

@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from "react"
+import { useState, lazy, Suspense, useEffect } from "react"
 import { QueryClientProvider } from "@tanstack/react-query"
 import { Toaster } from "sonner"
 import { queryClient } from "@/lib/query"
@@ -10,6 +10,7 @@ import { Sidebar } from "@/components/layout/Sidebar"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 import type { PageId } from "@/lib/commands"
 import { publicAssetPath } from "@/lib/icons"
+import { cmd } from "@/lib/commands"
 
 const DashboardContent = lazy(() => import("@/components/dashboard/DashboardContent"))
 const StrategiesPage = lazy(() => import("@/components/dashboard/StrategiesPage"))
@@ -24,6 +25,8 @@ const FirePriceComparePage = lazy(() => import("@/components/dashboard/FirePrice
 const HelpPage = lazy(() => import("@/components/dashboard/HelpPage"))
 const AlertsPage = lazy(() => import("@/components/dashboard/AlertsPage"))
 const ArbitragePage = lazy(() => import("@/components/dashboard/ArbitragePage"))
+const InventoryPage = lazy(() => import("@/components/dashboard/InventoryPage"))
+const MiniWindowPage = lazy(() => import("@/components/dashboard/MiniWindowPage"))
 
 function PageLoading() {
   return (
@@ -51,14 +54,49 @@ function LazyPage({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const [page, setPage] = useState<PageId>("dashboard")
+  const [isMiniMode, setIsMiniMode] = useState(false)
   useTauriEvents()
+
+  useEffect(() => {
+    cmd.getWindowModeState().then((state) => {
+      setIsMiniMode(state.mini_mode)
+      document.documentElement.style.setProperty("--mini-opacity", String(state.opacity))
+      if (state.mini_mode) {
+        cmd.setMiniWindowMode(true).catch(() => {})
+      }
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("mini-window-active", isMiniMode)
+    if (!isMiniMode) {
+      document.documentElement.style.removeProperty("--mini-opacity")
+    }
+  }, [isMiniMode])
+
+  if (isMiniMode) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <SectionRefreshProvider>
+          <SyncProvider>
+            <div className="torchscan-theme torchscan-theme-mini flex h-screen flex-col overflow-hidden">
+              <TopBar page={page} onPageChange={setPage} isMiniMode={isMiniMode} setIsMiniMode={setIsMiniMode} />
+              <main className="torchscan-main flex-1 overflow-hidden">
+                <MiniWindowPage />
+              </main>
+            </div>
+          </SyncProvider>
+        </SectionRefreshProvider>
+      </QueryClientProvider>
+    )
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
       <SectionRefreshProvider>
         <SyncProvider>
           <div className="torchscan-theme flex h-screen flex-col overflow-hidden">
-            <TopBar page={page} onPageChange={setPage} />
+            <TopBar page={page} onPageChange={setPage} isMiniMode={isMiniMode} setIsMiniMode={setIsMiniMode} />
             <div className="relative z-[1] flex min-h-0 flex-1">
               <Sidebar page={page} onPageChange={setPage} />
               <main className="torchscan-main scrollbar-thin flex-1 overflow-auto px-5 py-5">
@@ -126,6 +164,11 @@ export default function App() {
                 {page === "arbitrage" && (
                   <LazyPage>
                     <ArbitragePage />
+                  </LazyPage>
+                )}
+                {page === "inventory" && (
+                  <LazyPage>
+                    <InventoryPage />
                   </LazyPage>
                 )}
               </main>

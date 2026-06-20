@@ -19,6 +19,11 @@ export const queryKeys = {
   alertRules: ["alert-rules"] as const,
   config: ["config"] as const,
   dbStats: ["db-stats"] as const,
+  inventory: {
+    positions: (seasonId: string, marketMode: string) => ["inventory-positions", seasonId, marketMode] as const,
+    buyWatches: (seasonId: string, marketMode: string) => ["inventory-buy-watches", seasonId, marketMode] as const,
+    summary: (seasonId: string, marketMode: string) => ["inventory-summary", seasonId, marketMode] as const,
+  },
 }
 
 export function invalidateFireData(queryClient: QueryClient) {

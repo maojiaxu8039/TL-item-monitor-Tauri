@@ -76,6 +76,12 @@
   #root {
     min-height: 100vh;
   }
+
+  html.mini-window-active,
+  html.mini-window-active body,
+  html.mini-window-active #root {
+    background: transparent !important;
+  }
 }
 
 @layer components {
@@ -88,6 +94,30 @@
       radial-gradient(circle at 17% -10%, rgba(255, 106, 0, 0.22), transparent 28rem),
       radial-gradient(circle at 88% 4%, rgba(255, 184, 0, 0.1), transparent 22rem),
       linear-gradient(180deg, #090b0e 0%, #0b0d10 52%, #07080a 100%);
+  }
+
+  .torchscan-theme-mini {
+    --color-app-bg: rgba(11, 13, 16, var(--mini-opacity, 0.92));
+    --color-panel: rgba(17, 20, 24, var(--mini-opacity, 0.92));
+    --color-panel-soft: rgba(23, 26, 31, var(--mini-opacity, 0.92));
+    background:
+      radial-gradient(circle at 15% -8%, rgba(255, 106, 0, 0.13), transparent 18rem),
+      rgba(9, 11, 14, var(--mini-opacity, 0.92));
+  }
+
+  .torchscan-theme-mini::before {
+    opacity: 0.35;
+  }
+
+  .torchscan-theme-mini .torch-topbar {
+    height: 44px;
+    padding: 0.35rem 0.5rem;
+    background: rgba(17, 20, 24, var(--mini-opacity, 0.92));
+    backdrop-filter: blur(14px);
+  }
+
+  .torchscan-theme-mini .torchscan-main {
+    background: transparent;
   }
 
   .torchscan-theme::before {

@@ -10,6 +10,7 @@
     "beforeBuildCommand": "npm run typecheck && npm run vite:build"
   },
   "app": {
+    "macOSPrivateApi": true,
     "withGlobalTauri": false,
     "windows": [
       {
@@ -18,6 +19,7 @@
         "height": 800,
         "resizable": true,
         "decorations": false,
+        "transparent": true,
         "center": true,
         "minWidth": 900,
         "minHeight": 600,

@@ -18,6 +18,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "alerts", label: "提醒设置", icon: "alerts" },
   { id: "firecompare", label: "火价分析", icon: "fire-price" },
   { id: "arbitrage", label: "套利比价", icon: "arbitrage" },
+  { id: "inventory", label: "囤货出货", icon: "deals" },
   { id: "strategies", label: "策略管理", icon: "strategies" },
   { id: "aianalysis", label: "AI分析", icon: "ai-analysis" },
   { id: "records", label: "数据监控", icon: "data-monitor" },

@@ -104,13 +104,36 @@ impl Default for ScrapeSettings {
     }
 }
 
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct DesktopSettings {
     pub auto_start: bool,
     pub tray_on_close: bool,
     pub mini_mode: bool,
     pub free_layout: bool,
+    pub mini_opacity: f64,
+    pub mini_always_on_top: bool,
+    pub mini_width: i32,
+    pub mini_height: i32,
+    pub mini_x: Option<i32>,
+    pub mini_y: Option<i32>,
+}
+
+impl Default for DesktopSettings {
+    fn default() -> Self {
+        Self {
+            auto_start: false,
+            tray_on_close: true,
+            mini_mode: false,
+            free_layout: false,
+            mini_opacity: 0.92,
+            mini_always_on_top: true,
+            mini_width: 420,
+            mini_height: 620,
+            mini_x: None,
+            mini_y: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -123,6 +146,10 @@ pub struct NotificationSettings {
     pub voice_alert_path: String,
     pub price_alert_enabled: bool,
     pub price_alert_cooldown_seconds: i32,
+    pub buy_alert_enabled: bool,
+    pub buy_alert_cooldown_seconds: i32,
+    pub sell_alert_enabled: bool,
+    pub sell_alert_cooldown_seconds: i32,
     pub quiet_start: Option<String>,
     pub quiet_end: Option<String>,
 }
@@ -201,6 +228,10 @@ impl Default for NotificationSettings {
             voice_alert_path: String::new(),
             price_alert_enabled: true,
             price_alert_cooldown_seconds: 600,
+            buy_alert_enabled: true,
+            buy_alert_cooldown_seconds: 600,
+            sell_alert_enabled: true,
+            sell_alert_cooldown_seconds: 600,
             quiet_start: None,
             quiet_end: None,
         }

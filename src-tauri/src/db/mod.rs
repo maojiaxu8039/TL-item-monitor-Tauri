@@ -6,6 +6,7 @@ pub mod repo_arbitrage;
 pub mod repo_config;
 pub mod repo_fire;
 pub mod repo_history;
+pub mod repo_inventory;
 pub mod repo_item_realtime_prices;
 pub mod repo_items;
 pub mod repo_season_api;

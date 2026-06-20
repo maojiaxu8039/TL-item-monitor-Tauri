@@ -3,7 +3,7 @@ import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus
 import { devLog } from "@/lib/devLog";
 import { errorMessage } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, Save, Bell, Database, Globe, AlertTriangle, Trash2, Edit3, Key } from "lucide-react";
+import { RefreshCw, Save, Bell, Database, Globe, AlertTriangle, Trash2, Edit3, Key, Minimize2 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageShell } from "@/components/ui/PageShell";
@@ -70,6 +70,8 @@ export default function SettingsPage() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionStatus | null>(null);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [mappingCount, setMappingCount] = useState<number | null>(null);
+  const [desktopSettings, setDesktopSettings] = useState<AppConfig["desktop"] | null>(null);
+  const [miniOpacity, setMiniOpacity] = useState(0.92);
 
   // API config editing state
   const [editingApiSeason, setEditingApiSeason] = useState<string | null>(null);
@@ -100,10 +102,16 @@ export default function SettingsPage() {
       items_scrape_expert_enabled: itemsScrapeExpert,
     },
     desktop: {
-      auto_start: false,
-      tray_on_close: true,
-      mini_mode: false,
-      free_layout: false,
+      auto_start: desktopSettings?.auto_start ?? false,
+      tray_on_close: desktopSettings?.tray_on_close ?? true,
+      mini_mode: desktopSettings?.mini_mode ?? false,
+      free_layout: desktopSettings?.free_layout ?? false,
+      mini_opacity: miniOpacity,
+      mini_always_on_top: desktopSettings?.mini_always_on_top ?? true,
+      mini_width: desktopSettings?.mini_width ?? 360,
+      mini_height: desktopSettings?.mini_height ?? 540,
+      mini_x: desktopSettings?.mini_x ?? null,
+      mini_y: desktopSettings?.mini_y ?? null,
     },
     notification: {
       system_notifications: systemNotifications,
@@ -113,6 +121,10 @@ export default function SettingsPage() {
       voice_alert_path: voiceAlertPath,
       price_alert_enabled: priceAlertEnabled,
       price_alert_cooldown_seconds: priceAlertCooldown,
+      buy_alert_enabled: true,
+      buy_alert_cooldown_seconds: 600,
+      sell_alert_enabled: true,
+      sell_alert_cooldown_seconds: 600,
       quiet_start: null,
       quiet_end: null,
     },
@@ -295,6 +307,8 @@ export default function SettingsPage() {
         setSystemNotifications(cfg.notification.system_notifications);
         setVoiceAlertEnabled(cfg.notification.voice_alert_enabled);
         setVoiceAlertPath(cfg.notification.voice_alert_path || "");
+        setMiniOpacity(cfg.desktop.mini_opacity || 0.92);
+        setDesktopSettings(cfg.desktop);
         setLoaded(true);
         if (cfg.scrape.items_source === 'local') {
           cmd.validateJsonFile(cfg.scrape.items_json_path || defaultPath).then((v) => {
@@ -903,6 +917,61 @@ export default function SettingsPage() {
           >
             检查更新
           </Button>
+        </div>
+      </Surface>
+
+      {/* Mini Window settings */}
+      <Surface padding="lg">
+        <div className="flex items-center gap-2 mb-4">
+          <Minimize2 className="w-4 h-4 text-[var(--color-ai)]" />
+          <h2 className="text-sm font-semibold text-[var(--color-text)]">小窗口模式</h2>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-[var(--color-text)]">默认透明度</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">小窗口模式的默认透明度（40%-100%）</div>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="0.4"
+                max="1"
+                step="0.01"
+                value={miniOpacity}
+                onChange={(e) => setMiniOpacity(parseFloat(e.target.value))}
+                className="w-32 h-2 bg-[var(--color-border)] rounded-lg appearance-none cursor-pointer accent-[var(--color-brand)]"
+              />
+              <span className="text-sm text-[var(--color-text)] w-12 text-right">
+                {Math.round(miniOpacity * 100)}%
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-[var(--color-text)]">小窗口尺寸</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">默认 420 x 620，最小 340 x 420</div>
+            </div>
+            <div className="text-sm text-[var(--color-text)]">
+              420 × 620
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-[var(--color-border-soft)]">
+            <div>
+              <div className="text-sm font-medium text-[var(--color-text)]">始终置顶</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">小窗口模式默认开启置顶</div>
+            </div>
+            <StatusBadge variant="success">已开启</StatusBadge>
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <div className="text-xs text-[var(--color-text-subtle)]">
+              提示：点击顶部栏的小窗按钮可快速切换模式
+            </div>
+          </div>
         </div>
       </Surface>
 
