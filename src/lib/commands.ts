@@ -753,6 +753,10 @@ export const cmd = {
     invoke<number | null>("get_arbitrage_item_price", { itemId }),
   toggleArbitrageRecipeEnabled: (recipeId: string, enabled: boolean) =>
     invoke<OkResponse>("toggle_arbitrage_recipe_enabled", { recipeId, enabled }),
+  exportArbitrageRecipesCsv: (seasonId: string, marketMode: string) =>
+    invoke<string>("export_arbitrage_recipes_csv", { seasonId, marketMode }),
+  importArbitrageRecipesCsv: (content: string) =>
+    invoke<{ imported: number; errors: string[] }>("import_arbitrage_recipes_csv", { content }),
 
   // Window mode commands
   getWindowModeState: () => invoke<WindowModeState>("get_window_mode_state"),

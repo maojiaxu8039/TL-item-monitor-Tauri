@@ -6,6 +6,8 @@ pub struct ArbitrageRecipe {
     pub id: String,
     pub name: String,
     pub recipe_type: String,
+    pub season_id: String,
+    pub market_mode: String,
     pub enabled: i32,
     pub created_at: i64,
     pub updated_at: i64,

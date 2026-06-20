@@ -1,4 +1,4 @@
-use crate::commands::types::OkResponse;
+use crate::commands::types::{OkResponse, ImportResp};
 use crate::core::state::AppState;
 use crate::db::models_arbitrage::{
     ArbitrageRecipe, ArbitrageRecipeWithDetails, ArbitrageResponse, CreateRecipeRequest,
@@ -208,4 +208,77 @@ pub async fn toggle_arbitrage_recipe_enabled(
     } else {
         "Recipe disabled"
     }))
+}
+
+#[tauri::command]
+pub async fn export_arbitrage_recipes_csv(
+    state: State<'_, Arc<AppState>>,
+    season_id: String,
+    market_mode: String,
+) -> Result<String, String> {
+    let recipes = repo_arbitrage::get_recipes_by_season(&state.db, &season_id, &market_mode)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut wtr = csv::Writer::from_writer(vec![]);
+    wtr.write_record(["name", "recipe_type", "season_id", "market_mode", "enabled"])
+        .map_err(|e| e.to_string())?;
+
+    for recipe in recipes {
+        wtr.write_record([
+            recipe.name.as_str(),
+            recipe.recipe_type.as_str(),
+            recipe.season_id.as_str(),
+            recipe.market_mode.as_str(),
+            if recipe.enabled != 0 { "1" } else { "0" },
+        ])
+        .map_err(|e| e.to_string())?;
+    }
+
+    let data = wtr.into_inner().map_err(|e| e.to_string())?;
+    String::from_utf8(data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn import_arbitrage_recipes_csv(
+    state: State<'_, Arc<AppState>>,
+    content: String,
+) -> Result<ImportResp, String> {
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(content.as_bytes());
+
+    let mut imported_count = 0;
+    let mut error_list = Vec::new();
+
+    for (idx, result) in reader.records().enumerate() {
+        if let Ok(record) = result {
+            if record.len() >= 4 {
+                let name = record.get(0).unwrap_or("").to_string();
+                let recipe_type = record.get(1).unwrap_or("normal").to_string();
+                let _season_id = record.get(2).unwrap_or("").to_string();
+                let _market_mode = record.get(3).unwrap_or("season_normal").to_string();
+                let enabled = record.get(4).and_then(|s| s.parse().ok()).unwrap_or(true);
+
+                if name.is_empty() {
+                    error_list.push(format!("行 {}: 配方名称不能为空", idx + 2));
+                    continue;
+                }
+
+                match repo_arbitrage::create_recipe(&state.db, &name, &recipe_type, enabled, &[], &[]).await {
+                    Ok(_) => imported_count += 1,
+                    Err(e) => error_list.push(format!("行 {}: {}", idx + 2, e)),
+                }
+            } else {
+                error_list.push(format!("行 {}: 列数不足", idx + 2));
+            }
+        } else {
+            error_list.push(format!("行 {}: CSV 记录格式错误", idx + 2));
+        }
+    }
+
+    Ok(ImportResp {
+        imported: imported_count,
+        errors: error_list,
+    })
 }

@@ -3,7 +3,7 @@ import { cmd, type AppConfig, type OkResponse, type NotificationPermissionStatus
 import { devLog } from "@/lib/devLog";
 import { errorMessage } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, Save, Bell, Database, Globe, AlertTriangle, Trash2, Edit3, Key, Minimize2, Sun, Moon, Monitor } from "lucide-react";
+import { RefreshCw, Save, Bell, Database, Globe, AlertTriangle, Trash2, Edit3, Key, Minimize2 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageShell } from "@/components/ui/PageShell";
@@ -14,7 +14,7 @@ import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
 import { queryKeys } from "@/lib/queryKeys";
-import { useTheme } from "@/hooks/useTheme";
+
 
 const INTERVAL_OPTIONS = [
   { label: "30 秒", value: 30 },
@@ -49,7 +49,6 @@ function getDefaultJsonPath(appDataDir: string): string {
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
-  const { theme, setTheme } = useTheme();
   const [fireEnabled, setFireEnabled] = useState(true);
   const [fireInterval, setFireInterval] = useState(300);
   const [fireScrapeNormal, setFireScrapeNormal] = useState(true);
@@ -390,51 +389,6 @@ export default function SettingsPage() {
           </ToolbarActions>
         }
       />
-
-      <Surface padding="lg">
-        <div className="flex items-center gap-2 mb-4">
-          <Moon className="w-4 h-4 text-[var(--color-brand)]" />
-          <h2 className="text-sm font-semibold text-[var(--color-text)]">主题设置</h2>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex rounded-lg border border-[var(--color-border)] overflow-hidden">
-            <button
-              onClick={() => setTheme("light")}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
-                theme === "light"
-                  ? "bg-[var(--color-brand)] text-black"
-                  : "bg-[var(--color-panel)] text-[var(--color-text-subtle)] hover:bg-[var(--color-panel-soft)]"
-              }`}
-            >
-              <Sun className="w-4 h-4" />
-              浅色
-            </button>
-            <button
-              onClick={() => setTheme("dark")}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
-                theme === "dark"
-                  ? "bg-[var(--color-brand)] text-black"
-                  : "bg-[var(--color-panel)] text-[var(--color-text-subtle)] hover:bg-[var(--color-panel-soft)]"
-              }`}
-            >
-              <Moon className="w-4 h-4" />
-              深色
-            </button>
-            <button
-              onClick={() => setTheme("system")}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
-                theme === "system"
-                  ? "bg-[var(--color-brand)] text-black"
-                  : "bg-[var(--color-panel)] text-[var(--color-text-subtle)] hover:bg-[var(--color-panel-soft)]"
-              }`}
-            >
-              <Monitor className="w-4 h-4" />
-              跟随系统
-            </button>
-          </div>
-        </div>
-      </Surface>
 
       <Surface padding="lg">
         <div className="flex items-center gap-2 mb-4">

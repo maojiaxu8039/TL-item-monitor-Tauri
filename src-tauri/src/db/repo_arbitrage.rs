@@ -10,10 +10,28 @@ use std::collections::{HashMap, HashSet};
 
 pub async fn get_all_recipes(pool: &SqlitePool) -> Result<Vec<ArbitrageRecipe>, AppError> {
     let recipes: Vec<ArbitrageRecipe> = sqlx::query_as(
-        "SELECT id, name, recipe_type, enabled, created_at, updated_at 
-         FROM arbitrage_recipes 
+        "SELECT id, name, recipe_type, season_id, market_mode, enabled, created_at, updated_at
+         FROM arbitrage_recipes
          ORDER BY created_at DESC",
     )
+    .fetch_all(pool)
+    .await?;
+    Ok(recipes)
+}
+
+pub async fn get_recipes_by_season(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<Vec<ArbitrageRecipe>, AppError> {
+    let recipes: Vec<ArbitrageRecipe> = sqlx::query_as(
+        "SELECT id, name, recipe_type, season_id, market_mode, enabled, created_at, updated_at
+         FROM arbitrage_recipes
+         WHERE season_id = ? AND market_mode = ?
+         ORDER BY created_at DESC",
+    )
+    .bind(season_id)
+    .bind(market_mode)
     .fetch_all(pool)
     .await?;
     Ok(recipes)
@@ -24,8 +42,8 @@ pub async fn get_recipe_by_id(
     recipe_id: &str,
 ) -> Result<Option<ArbitrageRecipe>, AppError> {
     let recipe: Option<ArbitrageRecipe> = sqlx::query_as(
-        "SELECT id, name, recipe_type, enabled, created_at, updated_at 
-         FROM arbitrage_recipes 
+        "SELECT id, name, recipe_type, season_id, market_mode, enabled, created_at, updated_at
+         FROM arbitrage_recipes
          WHERE id = ?",
     )
     .bind(recipe_id)
@@ -121,12 +139,14 @@ pub async fn create_recipe(
     let mut tx = pool.begin().await?;
 
     sqlx::query(
-        "INSERT INTO arbitrage_recipes (id, name, recipe_type, enabled, created_at, updated_at) 
-         VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO arbitrage_recipes (id, name, recipe_type, season_id, market_mode, enabled, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&recipe_id)
     .bind(name)
     .bind(recipe_type)
+    .bind("")
+    .bind("season_normal")
     .bind(if enabled { 1 } else { 0 })
     .bind(now)
     .bind(now)

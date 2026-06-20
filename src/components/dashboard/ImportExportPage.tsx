@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { Download, Upload, Database, Clock, HardDrive, FileText, ChevronDown, ChevronUp } from "lucide-react";
+import { Download, Upload, Database, Clock, HardDrive, FileText, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -48,6 +48,58 @@ export default function ImportExportPage() {
     },
   });
 
+  const importInventoryMutation = useMutation({
+    mutationFn: async () => {
+      const file = await open({
+        multiple: false,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!file) return null;
+      await readTextFile(file);
+      toast.info("持仓导入功能开发中");
+      return { fileName: file };
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success("持仓导入功能开发中");
+    },
+  });
+
+  const importBuyWatchesMutation = useMutation({
+    mutationFn: async () => {
+      const file = await open({
+        multiple: false,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!file) return null;
+      await readTextFile(file);
+      toast.info("买入监控导入功能开发中");
+      return { fileName: file };
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success("买入监控导入功能开发中");
+    },
+  });
+
+  const importArbitrageMutation = useMutation({
+    mutationFn: async () => {
+      const file = await open({
+        multiple: false,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!file) return null;
+      const content = await readTextFile(file);
+      const result = await cmd.importArbitrageRecipesCsv(content);
+      return { result, fileName: file };
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      setImportResult(data.result);
+      setShowImportDetails(false);
+    },
+  });
+
   const exportCsvMutation = useMutation({
     mutationFn: async () => {
       const file = await save({
@@ -62,42 +114,6 @@ export default function ImportExportPage() {
     onSuccess: (file) => {
       if (!file) return;
       toast.success("关注列表 CSV 导出成功");
-    },
-  });
-
-  const backupMutation = useMutation({
-    mutationFn: async () => {
-      const file = await save({
-        defaultPath: `torchscan_backup_${Date.now()}.db`,
-        filters: [{ name: "SQLite", extensions: ["db"] }],
-      });
-      if (!file) return null;
-      await cmd.backupDatabase(file);
-      refetchBackupInfo();
-      return file;
-    },
-    onSuccess: (file) => {
-      if (!file) return;
-      toast.success("数据库备份成功");
-    },
-  });
-
-  const restoreMutation = useMutation({
-    mutationFn: async () => {
-      const file = await open({
-        multiple: false,
-        filters: [{ name: "SQLite", extensions: ["db"] }],
-      });
-      if (!file) return null;
-      await cmd.restoreDatabase(file);
-      return file;
-    },
-    onSuccess: (file) => {
-      if (!file) return;
-      toast.warning("数据库已恢复，请重启应用");
-    },
-    onError: () => {
-      toast.error("数据库恢复失败");
     },
   });
 
@@ -152,6 +168,59 @@ export default function ImportExportPage() {
     },
   });
 
+  const exportArbitrageMutation = useMutation({
+    mutationFn: async () => {
+      const file = await save({
+        defaultPath: `torchscan_arbitrage_${marketContext.seasonId}.csv`,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!file) return null;
+      const csv = await cmd.exportArbitrageRecipesCsv(marketContext.seasonId, marketContext.marketMode);
+      await writeTextFile(file, csv);
+      return file;
+    },
+    onSuccess: (file) => {
+      if (!file) return;
+      toast.success("套利比价 CSV 导出成功");
+    },
+  });
+
+  const backupMutation = useMutation({
+    mutationFn: async () => {
+      const file = await save({
+        defaultPath: `torchscan_backup_${Date.now()}.db`,
+        filters: [{ name: "SQLite", extensions: ["db"] }],
+      });
+      if (!file) return null;
+      await cmd.backupDatabase(file);
+      refetchBackupInfo();
+      return file;
+    },
+    onSuccess: (file) => {
+      if (!file) return;
+      toast.success("数据库备份成功");
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: async () => {
+      const file = await open({
+        multiple: false,
+        filters: [{ name: "SQLite", extensions: ["db"] }],
+      });
+      if (!file) return null;
+      await cmd.restoreDatabase(file);
+      return file;
+    },
+    onSuccess: (file) => {
+      if (!file) return;
+      toast.warning("数据库已恢复，请重启应用");
+    },
+    onError: () => {
+      toast.error("数据库恢复失败");
+    },
+  });
+
   const handleExport = (mutation: { mutate: () => void }) => {
     mutation.mutate();
   };
@@ -183,6 +252,48 @@ export default function ImportExportPage() {
         </div>
       )}
 
+      <Surface padding="none">
+        <div className="px-5 py-4 border-b border-[var(--color-border-soft)] bg-[var(--color-panel-soft)]">
+          <div className="flex items-center gap-2">
+            <Database className="w-4 h-4 text-[var(--color-brand)]" />
+            <h2 className="text-sm font-semibold text-[var(--color-text)]">数据库备份</h2>
+          </div>
+        </div>
+        <div className="p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-[var(--color-text-subtle)]">
+                完整备份 SQLite 数据库，包括所有数据
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => restoreMutation.mutate()}
+                disabled={restoreMutation.isPending}
+              >
+                <Upload className="w-4 h-4 mr-1.5" />
+                恢复
+              </Button>
+              <Button
+                onClick={() => handleExport(backupMutation)}
+                disabled={backupMutation.isPending}
+                className="bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] hover:opacity-90 text-black"
+              >
+                <Download className="w-4 h-4 mr-1.5" />
+                {backupMutation.isPending ? "备份中..." : "备份"}
+              </Button>
+            </div>
+          </div>
+          <div className="mt-3 flex items-start gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.2)] rounded-lg">
+            <AlertTriangle className="w-4 h-4 text-[var(--color-danger)] flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-[var(--color-text-subtle)]">
+              恢复数据库会覆盖当前所有数据，建议先进行备份操作
+            </p>
+          </div>
+        </div>
+      </Surface>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Surface padding="none">
           <div className="px-5 py-4 border-b border-[var(--color-border-soft)] bg-[var(--color-panel-soft)]">
@@ -191,18 +302,16 @@ export default function ImportExportPage() {
               <h2 className="text-sm font-semibold text-[var(--color-text)]">导入数据</h2>
             </div>
           </div>
-          
-          <div className="p-5 space-y-5">
-            <div className="space-y-3">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
-                  <span className="text-sm font-medium text-[var(--color-text)]">导入关注列表 CSV</span>
-                </div>
-                <p className="text-xs text-[var(--color-text-subtle)] ml-6">
-                  CSV 格式：section_id, season_id, market_mode, item_id, purchase_fire_price, count, more_value
-                </p>
+
+          <div className="p-5 space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 mb-1">
+                <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                <span className="text-sm font-medium text-[var(--color-text)]">关注列表</span>
               </div>
+              <p className="text-xs text-[var(--color-text-subtle)] ml-6 mb-2">
+                CSV 格式：section_id, season_id, market_mode, item_id, purchase_fire_price, count, more_value
+              </p>
               <div className="ml-6">
                 <Button
                   onClick={() => importCsvMutation.mutate()}
@@ -210,7 +319,67 @@ export default function ImportExportPage() {
                   className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
                 >
                   <Upload className="w-4 h-4 mr-1.5" />
-                  {importCsvMutation.isPending ? "导入中..." : "选择 CSV 文件"}
+                  {importCsvMutation.isPending ? "导入中..." : "导入 CSV"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="border-t border-[var(--color-border-soft)] pt-4 space-y-2">
+              <div className="flex items-center gap-2 mb-1">
+                <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                <span className="text-sm font-medium text-[var(--color-text)]">持仓数据</span>
+              </div>
+              <p className="text-xs text-[var(--color-text-subtle)] ml-6 mb-2">
+                导入持仓 CSV 文件
+              </p>
+              <div className="ml-6">
+                <Button
+                  variant="outline"
+                  onClick={() => importInventoryMutation.mutate()}
+                  disabled={importInventoryMutation.isPending}
+                >
+                  <Upload className="w-4 h-4 mr-1.5" />
+                  导入 CSV
+                </Button>
+              </div>
+            </div>
+
+            <div className="border-t border-[var(--color-border-soft)] pt-4 space-y-2">
+              <div className="flex items-center gap-2 mb-1">
+                <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                <span className="text-sm font-medium text-[var(--color-text)]">买入监控</span>
+              </div>
+              <p className="text-xs text-[var(--color-text-subtle)] ml-6 mb-2">
+                导入买入监控 CSV 文件
+              </p>
+              <div className="ml-6">
+                <Button
+                  variant="outline"
+                  onClick={() => importBuyWatchesMutation.mutate()}
+                  disabled={importBuyWatchesMutation.isPending}
+                >
+                  <Upload className="w-4 h-4 mr-1.5" />
+                  导入 CSV
+                </Button>
+              </div>
+            </div>
+
+            <div className="border-t border-[var(--color-border-soft)] pt-4 space-y-2">
+              <div className="flex items-center gap-2 mb-1">
+                <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                <span className="text-sm font-medium text-[var(--color-text)]">套利比价</span>
+              </div>
+              <p className="text-xs text-[var(--color-text-subtle)] ml-6 mb-2">
+                CSV 格式：name, recipe_type, season_id, market_mode, enabled
+              </p>
+              <div className="ml-6">
+                <Button
+                  variant="outline"
+                  onClick={() => importArbitrageMutation.mutate()}
+                  disabled={importArbitrageMutation.isPending}
+                >
+                  <Upload className="w-4 h-4 mr-1.5" />
+                  {importArbitrageMutation.isPending ? "导入中..." : "导入 CSV"}
                 </Button>
               </div>
             </div>
@@ -223,7 +392,7 @@ export default function ImportExportPage() {
                     {importResult.errors.length > 0 && `，失败 ${importResult.errors.length} 条`}
                   </span>
                 </div>
-                
+
                 {importResult.errors.length > 0 && (
                   <>
                     <button
@@ -233,7 +402,7 @@ export default function ImportExportPage() {
                       {showImportDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                       {showImportDetails ? "收起详情" : "查看失败详情"}
                     </button>
-                    
+
                     {showImportDetails && (
                       <div className="mt-2 space-y-1">
                         {importResult.errors.slice(0, 10).map((err, i) => (
@@ -253,30 +422,6 @@ export default function ImportExportPage() {
                 )}
               </Surface>
             )}
-
-            <div className="border-t border-[var(--color-border-soft)] pt-5">
-              <div className="space-y-3">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Database className="w-4 h-4 text-[var(--color-text-subtle)]" />
-                    <span className="text-sm font-medium text-[var(--color-text)]">导入数据库备份</span>
-                  </div>
-                  <p className="text-xs text-[var(--color-text-subtle)] ml-6">
-                    恢复之前导出的 .db 备份文件。操作会覆盖当前数据，建议先备份。
-                  </p>
-                </div>
-                <div className="ml-6">
-                  <Button
-                    variant="outline"
-                    onClick={() => restoreMutation.mutate()}
-                    disabled={restoreMutation.isPending}
-                  >
-                    <Database className="w-4 h-4 mr-1.5" />
-                    {restoreMutation.isPending ? "恢复中..." : "选择 .db 文件"}
-                  </Button>
-                </div>
-              </div>
-            </div>
           </div>
         </Surface>
 
@@ -287,17 +432,14 @@ export default function ImportExportPage() {
               <h2 className="text-sm font-semibold text-[var(--color-text)]">导出数据</h2>
             </div>
           </div>
-          
-          <div className="p-5 space-y-5">
+
+          <div className="p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
-                  <span className="text-sm font-medium text-[var(--color-text)]">导出关注列表</span>
+                  <span className="text-sm font-medium text-[var(--color-text)]">关注列表</span>
                 </div>
-                <p className="text-xs text-[var(--color-text-subtle)] ml-6 mt-1">
-                  导出所有分组的物品关注列表为 CSV 格式
-                </p>
               </div>
               <Button
                 onClick={() => handleExport(exportCsvMutation)}
@@ -305,19 +447,16 @@ export default function ImportExportPage() {
                 className="bg-[var(--color-success)] hover:opacity-90 text-black"
               >
                 <Download className="w-4 h-4 mr-1.5" />
-                {exportCsvMutation.isPending ? "导出中..." : "导出 CSV"}
+                {exportCsvMutation.isPending ? "导出中..." : "导出"}
               </Button>
             </div>
 
-            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-5">
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
               <div>
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
-                  <span className="text-sm font-medium text-[var(--color-text)]">导出火价历史</span>
+                  <span className="text-sm font-medium text-[var(--color-text)]">火价历史</span>
                 </div>
-                <p className="text-xs text-[var(--color-text-subtle)] ml-6 mt-1">
-                  导出最近 7 天的火价记录
-                </p>
               </div>
               <Button
                 onClick={() => handleExport(exportFireMutation)}
@@ -325,19 +464,16 @@ export default function ImportExportPage() {
                 className="bg-[var(--color-success)] hover:opacity-90 text-black"
               >
                 <Download className="w-4 h-4 mr-1.5" />
-                {exportFireMutation.isPending ? "导出中..." : "导出 CSV"}
+                {exportFireMutation.isPending ? "导出中..." : "导出"}
               </Button>
             </div>
 
-            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-5">
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
               <div>
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
-                  <span className="text-sm font-medium text-[var(--color-text)]">导出持仓数据</span>
+                  <span className="text-sm font-medium text-[var(--color-text)]">持仓数据</span>
                 </div>
-                <p className="text-xs text-[var(--color-text-subtle)] ml-6 mt-1">
-                  导出当前持仓为 CSV 格式
-                </p>
               </div>
               <Button
                 onClick={() => handleExport(exportInventoryMutation)}
@@ -345,19 +481,16 @@ export default function ImportExportPage() {
                 className="bg-[var(--color-success)] hover:opacity-90 text-black"
               >
                 <Download className="w-4 h-4 mr-1.5" />
-                {exportInventoryMutation.isPending ? "导出中..." : "导出 CSV"}
+                {exportInventoryMutation.isPending ? "导出中..." : "导出"}
               </Button>
             </div>
 
-            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-5">
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
               <div>
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
-                  <span className="text-sm font-medium text-[var(--color-text)]">导出买入监控</span>
+                  <span className="text-sm font-medium text-[var(--color-text)]">买入监控</span>
                 </div>
-                <p className="text-xs text-[var(--color-text-subtle)] ml-6 mt-1">
-                  导出买入监控列表为 CSV 格式
-                </p>
               </div>
               <Button
                 onClick={() => handleExport(exportBuyWatchesMutation)}
@@ -365,27 +498,24 @@ export default function ImportExportPage() {
                 className="bg-[var(--color-success)] hover:opacity-90 text-black"
               >
                 <Download className="w-4 h-4 mr-1.5" />
-                {exportBuyWatchesMutation.isPending ? "导出中..." : "导出 CSV"}
+                {exportBuyWatchesMutation.isPending ? "导出中..." : "导出"}
               </Button>
             </div>
 
-            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-5">
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-[var(--color-text-subtle)]" />
-                  <span className="text-sm font-medium text-[var(--color-text)]">备份数据库</span>
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">套利比价</span>
                 </div>
-                <p className="text-xs text-[var(--color-text-subtle)] ml-6 mt-1">
-                  完整备份当前 SQLite 数据库
-                </p>
               </div>
               <Button
-                onClick={() => handleExport(backupMutation)}
-                disabled={backupMutation.isPending}
-                className="bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] hover:opacity-90 text-black"
+                onClick={() => handleExport(exportArbitrageMutation)}
+                disabled={exportArbitrageMutation.isPending}
+                className="bg-[var(--color-success)] hover:opacity-90 text-black"
               >
-                <Database className="w-4 h-4 mr-1.5" />
-                {backupMutation.isPending ? "备份中..." : "备份数据库"}
+                <Download className="w-4 h-4 mr-1.5" />
+                {exportArbitrageMutation.isPending ? "导出中..." : "导出"}
               </Button>
             </div>
           </div>
