@@ -60,6 +60,20 @@
     --radius: 0.75rem;
   }
 
+  [data-theme="light"] {
+    --color-app-bg: #f5f6f8;
+    --color-panel: #ffffff;
+    --color-panel-soft: #f0f1f3;
+    --color-border: #e2e4e8;
+    --color-border-soft: #ebedf0;
+    --color-text: #1a1d21;
+    --color-text-muted: #5c6370;
+    --color-text-subtle: #9ca3af;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.08);
+    --shadow-md: 0 10px 30px -18px rgb(0 0 0 / 0.15);
+    --shadow-lg: 0 28px 80px -38px rgb(0 0 0 / 0.2);
+  }
+
   * {
     border-color: var(--color-border);
   }
