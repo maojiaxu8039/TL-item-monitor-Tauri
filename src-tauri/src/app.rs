@@ -21,7 +21,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-const LATEST_SCHEMA_VERSION: i64 = 19;
+const LATEST_SCHEMA_VERSION: i64 = 20;
+const MAX_MIGRATION_BACKUPS: usize = 3;
 
 pub fn full_table_json_path() -> std::path::PathBuf {
     paths::data_dir().join("full_table.json")
@@ -250,6 +251,7 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
             db_size_kb: 0.0,
         }),
         scheduler_handle: RwLock::new(None),
+        items_refresh_running: AtomicBool::new(false),
         snapshot_running: AtomicBool::new(false),
         is_quitting: AtomicBool::new(false),
     };
@@ -318,6 +320,7 @@ async fn run_migrations(pool: &SqlitePool, db_path: &Path, db_existed: bool) -> 
 
     finalize_schema(pool).await?;
     validate_database(pool).await?;
+    optimize_database(pool).await?;
 
     tracing::info!("Database migrations complete");
     Ok(())
@@ -368,6 +371,18 @@ async fn create_latest_schema_baseline(pool: &SqlitePool) -> Result<(), String> 
         .await
         .map_err(|e| format!("Failed to create baseline schema: {}", e))?;
 
+    sqlx::query(include_str!(
+        "db/migrations/019_create_inventory_tables.sql"
+    ))
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("Failed to create inventory baseline schema: {}", e))?;
+
+    sqlx::query(include_str!("db/migrations/020_add_inventory_indexes.sql"))
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("Failed to create inventory baseline indexes: {}", e))?;
+
     tx.commit()
         .await
         .map_err(|e| format!("Failed to commit baseline schema: {}", e))?;
@@ -380,6 +395,8 @@ async fn apply_column_if_not_exists(
     column: &str,
     definition: &str,
 ) -> Result<(), String> {
+    let table = safe_sql_identifier(table, "alter table")?;
+    let column = safe_sql_identifier(column, "alter column")?;
     let exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pragma_table_info(?1) WHERE name = ?2)")
             .bind(table)
@@ -406,6 +423,7 @@ async fn apply_column_if_not_exists(
 }
 
 async fn apply_v18_migration(pool: &SqlitePool) -> Result<(), String> {
+    ensure_core_schema(pool).await?;
     apply_column_if_not_exists(
         pool,
         "season_api_configs",
@@ -529,6 +547,14 @@ async fn run_legacy_migrations(pool: &SqlitePool, current_version: i64) -> Resul
         )
         .await?;
     }
+    if current_version < 20 {
+        apply_sql_migration(
+            pool,
+            20,
+            include_str!("db/migrations/020_add_inventory_indexes.sql"),
+        )
+        .await?;
+    }
 
     Ok(())
 }
@@ -615,6 +641,7 @@ async fn apply_sql_migration(pool: &SqlitePool, version: i64, sql: &str) -> Resu
 async fn apply_fire_price_unique_migration(pool: &SqlitePool) -> Result<(), String> {
     tracing::info!("Applying migration v16: add fire price scraped_at unique index");
     for table in ["fire_price_normal", "fire_price_expert"] {
+        let table = safe_sql_identifier(table, "fire price migration table")?;
         if !table_exists(pool, table).await? {
             continue;
         }
@@ -629,6 +656,7 @@ async fn apply_fire_price_unique_migration(pool: &SqlitePool) -> Result<(), Stri
         .map_err(|e| format!("Migration v16 cleanup {table} failed: {e}"))?;
         // 删除旧普通索引，改为同名唯一索引
         let idx = format!("idx_{table}_scraped");
+        let idx = safe_sql_identifier(&idx, "fire price migration index")?;
         sqlx::query(&format!("DROP INDEX IF EXISTS {idx}"))
             .execute(pool)
             .await
@@ -790,6 +818,96 @@ async fn ensure_core_schema(pool: &SqlitePool) -> Result<(), String> {
     add_column_if_missing(pool, "seasons", "created_at", "INTEGER NOT NULL DEFAULT 0").await?;
     add_column_if_missing(pool, "seasons", "updated_at", "INTEGER NOT NULL DEFAULT 0").await?;
 
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS season_api_configs (
+            season_id TEXT PRIMARY KEY,
+            qiandao_tag_id_normal TEXT NOT NULL DEFAULT '',
+            qiandao_spec_id_normal TEXT NOT NULL DEFAULT '',
+            qiandao_tag_id_expert TEXT NOT NULL DEFAULT '',
+            qiandao_spec_id_expert TEXT NOT NULL DEFAULT '',
+            luosi_season_id_normal INTEGER NOT NULL DEFAULT 0,
+            luosi_season_id_expert INTEGER NOT NULL DEFAULT 0,
+            etor_season_id_normal INTEGER NOT NULL DEFAULT 0,
+            etor_season_id_expert INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL DEFAULT 0
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Failed to ensure season_api_configs table: {}", e))?;
+
+    add_column_if_missing(
+        pool,
+        "season_api_configs",
+        "qiandao_tag_id_normal",
+        "TEXT NOT NULL DEFAULT ''",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "season_api_configs",
+        "qiandao_spec_id_normal",
+        "TEXT NOT NULL DEFAULT ''",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "season_api_configs",
+        "qiandao_tag_id_expert",
+        "TEXT NOT NULL DEFAULT ''",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "season_api_configs",
+        "qiandao_spec_id_expert",
+        "TEXT NOT NULL DEFAULT ''",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "season_api_configs",
+        "luosi_season_id_normal",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "season_api_configs",
+        "luosi_season_id_expert",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "season_api_configs",
+        "etor_season_id_normal",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "season_api_configs",
+        "etor_season_id_expert",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "season_api_configs",
+        "created_at",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "season_api_configs",
+        "updated_at",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    .await?;
+
     Ok(())
 }
 
@@ -836,7 +954,56 @@ async fn create_migration_backup(
         .await
         .map_err(|e| format!("Failed to create migration backup: {}", e))?;
 
+    prune_migration_backups(&backup_dir, MAX_MIGRATION_BACKUPS).await?;
+
     Ok(backup_path)
+}
+
+async fn prune_migration_backups(backup_dir: &Path, keep_latest: usize) -> Result<usize, String> {
+    if keep_latest == 0 {
+        return Ok(0);
+    }
+
+    let mut entries = tokio::fs::read_dir(backup_dir)
+        .await
+        .map_err(|e| format!("Failed to read migration backup directory: {}", e))?;
+    let mut backups = Vec::new();
+
+    while let Some(entry) = entries
+        .next_entry()
+        .await
+        .map_err(|e| format!("Failed to inspect migration backup directory: {}", e))?
+    {
+        let path = entry.path();
+        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if !file_name.starts_with("tl_monitor_migration_v") || !file_name.ends_with(".db") {
+            continue;
+        }
+
+        let modified = entry
+            .metadata()
+            .await
+            .and_then(|metadata| metadata.modified())
+            .map_err(|e| format!("Failed to inspect migration backup metadata: {}", e))?;
+        backups.push((modified, path));
+    }
+
+    if backups.len() <= keep_latest {
+        return Ok(0);
+    }
+
+    backups.sort_by_key(|(modified, _)| *modified);
+    let remove_count = backups.len() - keep_latest;
+    for (_, path) in backups.into_iter().take(remove_count) {
+        tokio::fs::remove_file(&path)
+            .await
+            .map_err(|e| format!("Failed to remove old migration backup {:?}: {}", path, e))?;
+        tracing::info!("Removed old migration backup {:?}", path);
+    }
+
+    Ok(remove_count)
 }
 
 async fn validate_database(pool: &SqlitePool) -> Result<(), String> {
@@ -893,6 +1060,14 @@ async fn validate_database(pool: &SqlitePool) -> Result<(), String> {
     Ok(())
 }
 
+async fn optimize_database(pool: &SqlitePool) -> Result<(), String> {
+    sqlx::query("PRAGMA optimize")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to optimize database: {}", e))?;
+    Ok(())
+}
+
 async fn table_exists(pool: &SqlitePool, table: &str) -> Result<bool, String> {
     let count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?")
@@ -923,6 +1098,8 @@ async fn add_column_if_missing(
     column: &str,
     definition: &str,
 ) -> Result<(), String> {
+    let table = safe_sql_identifier(table, "alter table")?;
+    let column = safe_sql_identifier(column, "alter column")?;
     if !table_exists(pool, table).await? {
         tracing::warn!("Table {} does not exist, skipping column {}", table, column);
         return Ok(());
@@ -979,7 +1156,19 @@ fn has_columns(columns: &std::collections::HashSet<String>, required: &[&str]) -
     required.iter().all(|column| columns.contains(*column))
 }
 
+fn safe_sql_identifier<'a>(identifier: &'a str, context: &str) -> Result<&'a str, String> {
+    if crate::db::table_resolver::TableResolver::is_safe_identifier(identifier) {
+        Ok(identifier)
+    } else {
+        Err(format!(
+            "Unsafe SQL identifier for {}: {}",
+            context, identifier
+        ))
+    }
+}
+
 async fn backup_table(pool: &SqlitePool, table: &str) -> Result<Option<String>, String> {
+    let table = safe_sql_identifier(table, "backup table")?;
     if !table_exists(pool, table).await? {
         return Ok(None);
     }
@@ -1006,6 +1195,7 @@ async fn backup_table(pool: &SqlitePool, table: &str) -> Result<Option<String>, 
 }
 
 async fn drop_index_if_exists(pool: &SqlitePool, index: &str) -> Result<(), String> {
+    let index = safe_sql_identifier(index, "drop index")?;
     sqlx::query(&format!("DROP INDEX IF EXISTS {}", index))
         .execute(pool)
         .await
@@ -1926,6 +2116,19 @@ mod migration_tests {
         }
     }
 
+    async fn assert_indexes(pool: &SqlitePool, indexes: &[&str]) {
+        for index in indexes {
+            let exists: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?",
+            )
+            .bind(index)
+            .fetch_one(pool)
+            .await
+            .expect("index metadata should be readable");
+            assert_eq!(exists, 1, "missing index {}", index);
+        }
+    }
+
     #[tokio::test]
     async fn fresh_migrations_create_current_schema() {
         let db_path = temp_db_path();
@@ -1948,12 +2151,27 @@ mod migration_tests {
         )
         .await;
         assert_columns(&pool, "item_realtime_prices", &["name", "fire_price"]).await;
+        assert_columns(
+            &pool,
+            "season_api_configs",
+            &["etor_season_id_normal", "etor_season_id_expert"],
+        )
+        .await;
+        assert_indexes(
+            &pool,
+            &[
+                "idx_inventory_positions_season_market",
+                "idx_inventory_buy_watches_season_market",
+                "idx_inventory_buy_watches_target_price",
+            ],
+        )
+        .await;
 
         let version: i64 = sqlx::query_scalar("SELECT MAX(version) FROM _migrations")
             .fetch_one(&pool)
             .await
             .expect("migration version should be readable");
-        assert_eq!(version, 17);
+        assert_eq!(version, LATEST_SCHEMA_VERSION);
     }
 
     #[tokio::test]
@@ -2078,6 +2296,21 @@ mod migration_tests {
         .await;
         assert_columns(&pool, "item_realtime_prices", &["name", "fire_price"]).await;
         assert_columns(&pool, "strategy_outputs", &["realtime_value"]).await;
+        assert_columns(
+            &pool,
+            "season_api_configs",
+            &["etor_season_id_normal", "etor_season_id_expert"],
+        )
+        .await;
+        assert_indexes(
+            &pool,
+            &[
+                "idx_inventory_positions_season_market",
+                "idx_inventory_buy_watches_season_market",
+                "idx_inventory_buy_watches_target_price",
+            ],
+        )
+        .await;
 
         let backup_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM sqlite_master
@@ -2095,6 +2328,46 @@ mod migration_tests {
         .await
         .unwrap();
         assert_eq!(copied, ("测试物品".to_string(), 12.5));
+    }
+
+    #[tokio::test]
+    async fn prunes_old_migration_backups() {
+        let db_path = temp_db_path();
+        let backup_dir = db_path.parent().unwrap().join("backups");
+        tokio::fs::create_dir_all(&backup_dir).await.unwrap();
+
+        for idx in 0..5 {
+            tokio::fs::write(
+                backup_dir.join(format!(
+                    "tl_monitor_migration_v{}_to_v{}_20260620_00000{}.000.db",
+                    idx, LATEST_SCHEMA_VERSION, idx
+                )),
+                b"backup",
+            )
+            .await
+            .unwrap();
+        }
+        tokio::fs::write(backup_dir.join("manual-note.txt"), b"keep me")
+            .await
+            .unwrap();
+
+        let removed = prune_migration_backups(&backup_dir, 3).await.unwrap();
+        let mut entries = tokio::fs::read_dir(&backup_dir).await.unwrap();
+        let mut migration_backup_count = 0usize;
+        let mut manual_note_exists = false;
+        while let Some(entry) = entries.next_entry().await.unwrap() {
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            if file_name.starts_with("tl_monitor_migration_v") && file_name.ends_with(".db") {
+                migration_backup_count += 1;
+            }
+            if file_name == "manual-note.txt" {
+                manual_note_exists = true;
+            }
+        }
+
+        assert_eq!(removed, 2);
+        assert_eq!(migration_backup_count, 3);
+        assert!(manual_note_exists);
     }
 }
 

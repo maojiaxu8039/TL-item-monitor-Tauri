@@ -20,6 +20,7 @@ import { ToastContainer } from "@/components/ui/Toast";
 import { useToast } from "@/hooks/useToast";
 import { AssetIcon } from "@/components/brand/AssetIcon";
 import { errorMessage } from "@/lib/utils";
+import { queryKeys } from "@/lib/queryKeys";
 
 interface AISettings {
   gatewayUrl: string;
@@ -212,7 +213,7 @@ export default function AIAnalysisPage() {
   }, [aiEnabled, settings, testConnection]);
 
   const { data: fireData } = useQuery({
-    queryKey: ["fire-history", marketContext.seasonId, marketContext.marketMode, 24],
+    queryKey: [...queryKeys.fireHistory, marketContext.seasonId, marketContext.marketMode, 24],
     queryFn: () => cmd.getFireHistory(24),
     enabled: marketContextReady,
     staleTime: 60 * 1000,

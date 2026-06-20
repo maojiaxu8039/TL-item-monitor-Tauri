@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query"
 import { RefreshCw, Copy, Check, Settings2, ExternalLink, Plus, Minus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
+import { queryKeys } from "@/lib/queryKeys"
 import { toast } from "sonner"
 
 type Tab = "worth" | "buy" | "sell" | "arbitrage"
@@ -46,9 +47,11 @@ export default function MiniWindowPage() {
   }, [])
 
   const feedQuery = useQuery({
-    queryKey: ["mini-window-feed", marketContext.seasonId, marketContext.marketMode],
+    queryKey: [...queryKeys.miniWindowFeed, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getMiniWindowFeed(marketContext.seasonId, marketContext.marketMode),
-    refetchInterval: 15000,
+    enabled: !!marketContext.seasonId,
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   })
 
   const feed = feedQuery.data

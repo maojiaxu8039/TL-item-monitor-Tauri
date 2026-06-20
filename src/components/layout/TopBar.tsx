@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import { cmd, type PageId } from "@/lib/commands"
 import { publicAssetPath } from "@/lib/icons"
-import { queryKeys } from "@/lib/queryKeys"
+import { invalidateMarketContextData, queryKeys } from "@/lib/queryKeys"
 import { cn } from "@/lib/utils"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { errorMessage } from "@/lib/utils";
@@ -160,10 +160,10 @@ export function TopBar({ page, onPageChange, isMiniMode: externalIsMiniMode, set
   }, [config, setIsMiniMode])
 
   const { data: summary } = useQuery({
-    queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode],
+    queryKey: [...queryKeys.dashboardSummary, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getDashboardSummary(),
     enabled: marketContextReady,
-    refetchInterval: 10000,
+    refetchInterval: 30000,
     refetchIntervalInBackground: false,
   })
 
@@ -182,14 +182,7 @@ export function TopBar({ page, onPageChange, isMiniMode: externalIsMiniMode, set
       const currentCtx = marketContextRef.current
       setMarketContext({ seasonId: currentCtx.seasonId, marketMode: newMode })
       toast.success("已切换到" + (newMode === "season_normal" ? "赛季普通" : "赛季专家"))
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] })
-      queryClient.invalidateQueries({ queryKey: ["fire-history"] })
-      queryClient.invalidateQueries({ queryKey: ["sections"] })
-      queryClient.invalidateQueries({ queryKey: ["section-items"] })
-      queryClient.invalidateQueries({ queryKey: ["all-section-items"] })
-      queryClient.invalidateQueries({ queryKey: ["items-search"] })
-      queryClient.invalidateQueries({ queryKey: ["arbitrage-recipes"] })
-      queryClient.invalidateQueries({ queryKey: ["arbitrage-calculation"] })
+      invalidateMarketContextData(queryClient)
     },
     onError: (error) => {
       setMarketMode(prevModeRef.current)

@@ -73,21 +73,24 @@ export default function InventoryPage() {
     queryKey: queryKeys.inventory.positions(seasonId, marketMode),
     queryFn: () => cmd.listInventoryPositions(seasonId, marketMode),
     enabled: !!seasonId,
-    refetchInterval: 15000,
+    refetchInterval: 60000,
+    refetchIntervalInBackground: false,
   })
 
   const watchesQuery = useQuery({
     queryKey: queryKeys.inventory.buyWatches(seasonId, marketMode),
     queryFn: () => cmd.listInventoryBuyWatches(seasonId, marketMode),
     enabled: !!seasonId,
-    refetchInterval: 15000,
+    refetchInterval: 60000,
+    refetchIntervalInBackground: false,
   })
 
   const summaryQuery = useQuery({
     queryKey: queryKeys.inventory.summary(seasonId, marketMode),
     queryFn: () => cmd.getInventorySummary(seasonId, marketMode),
     enabled: !!seasonId,
-    refetchInterval: 15000,
+    refetchInterval: 60000,
+    refetchIntervalInBackground: false,
   })
 
   const markSoldMutation = useMutation({
@@ -488,7 +491,7 @@ function AddPositionDialog({
   const [suggestions, setSuggestions] = useState<ItemSuggestion[]>([])
 
   const searchQuery = useQuery({
-    queryKey: ["item-search", itemName],
+    queryKey: queryKeys.inventory.itemSearch(itemName),
     queryFn: () => cmd.searchItems(itemName, 1, 10),
     enabled: itemName.length >= 1,
   })
@@ -892,7 +895,7 @@ function AddWatchDialog({
   const [suggestions, setSuggestions] = useState<ItemSuggestion[]>([])
 
   const searchQuery = useQuery({
-    queryKey: ["item-search-watch", itemName],
+    queryKey: queryKeys.inventory.buyWatchSearch(itemName),
     queryFn: () => cmd.searchItems(itemName, 1, 10),
     enabled: itemName.length >= 1,
   })

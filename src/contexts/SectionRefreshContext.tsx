@@ -1,7 +1,7 @@
 import { createContext, useContext, useCallback, useEffect, useState, useRef, useMemo, type ReactNode } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { cmd } from "@/lib/commands"
-import { invalidateSectionData, queryKeys } from "@/lib/queryKeys"
+import { invalidateMarketContextData, invalidateSectionData } from "@/lib/queryKeys"
 
 interface MarketContext {
   seasonId: string
@@ -67,13 +67,7 @@ export function SectionRefreshProvider({ children }: { children: ReactNode }) {
   }, [queryClient])
 
   const refreshData = useCallback(() => {
-    const ctx = marketContextRef.current
-    queryClient.invalidateQueries({ queryKey: [...queryKeys.dashboardSummary, ctx.seasonId, ctx.marketMode] })
-    invalidateSectionData(queryClient, ctx)
-    queryClient.invalidateQueries({ queryKey: [...queryKeys.itemsSearch, ctx.seasonId, ctx.marketMode] })
-    queryClient.invalidateQueries({ queryKey: [...queryKeys.fireHistory, ctx.seasonId, ctx.marketMode] })
-    queryClient.invalidateQueries({ queryKey: queryKeys.arbitrageRecipes })
-    queryClient.invalidateQueries({ queryKey: queryKeys.arbitrageCalculation })
+    invalidateMarketContextData(queryClient)
   }, [queryClient])
 
   const value = useMemo(() => ({

@@ -10,6 +10,7 @@ import { cmd, type ItemData, type Section } from "@/lib/commands"
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
+import { queryKeys } from "@/lib/queryKeys"
 import { save, open } from "@tauri-apps/plugin-dialog"
 import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs"
 
@@ -45,7 +46,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
   }, [searchValue])
 
   const { data: searchResult, error } = useQuery({
-    queryKey: ["items-search", marketContext.seasonId, marketContext.marketMode, debouncedSearch, typeFilter],
+    queryKey: [...queryKeys.itemsSearch, marketContext.seasonId, marketContext.marketMode, debouncedSearch, typeFilter],
     queryFn: async () => {
       try {
         const result = await cmd.searchItems(
@@ -65,7 +66,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
   })
 
   const { data: itemTypes } = useQuery({
-    queryKey: ["item-types", marketContext.seasonId, marketContext.marketMode],
+    queryKey: [...queryKeys.itemTypes, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getItemTypes(),
     enabled: marketContextReady,
   })

@@ -13,11 +13,22 @@ pub struct AppState {
     pub active_context: RwLock<MarketContext>,
     pub task_status: RwLock<TaskStatus>,
     pub scheduler_handle: RwLock<Option<crate::scheduler::SchedulerHandle>>,
+    pub items_refresh_running: AtomicBool,
     pub snapshot_running: AtomicBool,
     pub is_quitting: AtomicBool,
 }
 
 use std::sync::atomic::Ordering;
+
+pub struct ItemsRefreshGuard<'a> {
+    running: &'a AtomicBool,
+}
+
+impl Drop for ItemsRefreshGuard<'_> {
+    fn drop(&mut self) {
+        self.running.store(false, Ordering::SeqCst);
+    }
+}
 
 impl Clone for AppState {
     fn clone(&self) -> Self {
@@ -29,6 +40,9 @@ impl Clone for AppState {
             active_context: RwLock::new(self.active_context.read().clone()),
             task_status: RwLock::new(self.task_status.read().clone()),
             scheduler_handle: RwLock::new(self.scheduler_handle.read().clone()),
+            items_refresh_running: AtomicBool::new(
+                self.items_refresh_running.load(Ordering::SeqCst),
+            ),
             snapshot_running: AtomicBool::new(self.snapshot_running.load(Ordering::SeqCst)),
             is_quitting: AtomicBool::new(self.is_quitting.load(Ordering::SeqCst)),
         }
@@ -47,8 +61,21 @@ impl AppState {
             active_context: RwLock::new(self.active_context.read().clone()),
             task_status: RwLock::new(self.task_status.read().clone()),
             scheduler_handle: RwLock::new(self.scheduler_handle.read().clone()),
+            items_refresh_running: AtomicBool::new(
+                self.items_refresh_running.load(Ordering::SeqCst),
+            ),
             snapshot_running: AtomicBool::new(self.snapshot_running.load(Ordering::SeqCst)),
             is_quitting: AtomicBool::new(self.is_quitting.load(Ordering::SeqCst)),
+        }
+    }
+
+    pub fn try_begin_items_refresh(&self) -> Option<ItemsRefreshGuard<'_>> {
+        if self.items_refresh_running.swap(true, Ordering::SeqCst) {
+            None
+        } else {
+            Some(ItemsRefreshGuard {
+                running: &self.items_refresh_running,
+            })
         }
     }
 }

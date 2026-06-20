@@ -10,6 +10,8 @@ const ETOR_BASE_URL: &str = "https://etor.710421059.xyz";
 const ETOR_INVALID_PRICE_MARKER: f64 = 710421059.0;
 const ETOR_CHART_CONCURRENCY: usize = 48;
 const ETOR_CHART_TIMEOUT_SECS: u64 = 8;
+const ETOR_CACHE_TTL_SECS: i64 = 15 * 60;
+const ETOR_STALE_FALLBACK_SECS: i64 = 60 * 60;
 
 static ETOR_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
@@ -19,6 +21,15 @@ static ETOR_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .build()
         .unwrap_or_else(|_| reqwest::Client::new())
 });
+
+#[derive(Debug, Clone)]
+struct CachedEtorItems {
+    fetched_at: i64,
+    items: Vec<Item>,
+}
+
+static ETOR_ITEMS_CACHE: LazyLock<RwLock<HashMap<String, CachedEtorItems>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct MappingEntry {
@@ -88,6 +99,17 @@ pub async fn scrape_items(
     api_season_id: i32,
 ) -> Result<Vec<Item>, AppError> {
     let now = chrono::Utc::now().timestamp();
+    let cache_key = etor_cache_key(season_id, market_mode, api_season_id);
+
+    if let Some(cached) = get_fresh_cached_items(&cache_key, now) {
+        tracing::info!(
+            "[ETOR] Using cached chart data: key={}, age={}s, items={}",
+            cache_key,
+            now.saturating_sub(cached.fetched_at),
+            cached.items.len()
+        );
+        return Ok(cached.items);
+    }
 
     // 双源模式以本地 item_id_mapping 为全集。易火逐个按 itemId 查价格，
     // 成功返回的记录再与刷图小助手按 itemId + last_time 合并。
@@ -160,7 +182,46 @@ pub async fn scrape_items(
         market_mode
     );
 
+    if items.is_empty() {
+        if let Some(cached) = get_stale_cached_items(&cache_key, now) {
+            tracing::warn!(
+                "[ETOR] Fresh chart fetch returned no items, using stale cache: key={}, age={}s, items={}",
+                cache_key,
+                now.saturating_sub(cached.fetched_at),
+                cached.items.len()
+            );
+            return Ok(cached.items);
+        }
+    } else {
+        put_cached_items(cache_key, now, items.clone());
+    }
+
     Ok(items)
+}
+
+fn etor_cache_key(season_id: &str, market_mode: &str, api_season_id: i32) -> String {
+    format!("{}:{}:{}", season_id, market_mode, api_season_id)
+}
+
+fn get_fresh_cached_items(cache_key: &str, now: i64) -> Option<CachedEtorItems> {
+    let cache = ETOR_ITEMS_CACHE.read();
+    cache
+        .get(cache_key)
+        .filter(|cached| now.saturating_sub(cached.fetched_at) < ETOR_CACHE_TTL_SECS)
+        .cloned()
+}
+
+fn get_stale_cached_items(cache_key: &str, now: i64) -> Option<CachedEtorItems> {
+    let cache = ETOR_ITEMS_CACHE.read();
+    cache
+        .get(cache_key)
+        .filter(|cached| now.saturating_sub(cached.fetched_at) < ETOR_STALE_FALLBACK_SECS)
+        .cloned()
+}
+
+fn put_cached_items(cache_key: String, fetched_at: i64, items: Vec<Item>) {
+    let mut cache = ETOR_ITEMS_CACHE.write();
+    cache.insert(cache_key, CachedEtorItems { fetched_at, items });
 }
 
 fn decompress_brotli(bytes: &[u8]) -> Option<Vec<u8>> {
@@ -459,6 +520,7 @@ pub fn merge_and_update_mapping(
         updated,
         deduplicated
     );
+    clear_items_cache();
 
     MappingUpdateResult {
         total,
@@ -495,7 +557,13 @@ pub fn load_mapping_from_json(json: &str) -> Result<usize, String> {
         deduplicated,
         count
     );
+    clear_items_cache();
     Ok(count)
+}
+
+pub fn clear_items_cache() {
+    ETOR_ITEMS_CACHE.write().clear();
+    tracing::info!("[ETOR] Cleared cached chart items");
 }
 
 pub fn get_mapping_count() -> usize {

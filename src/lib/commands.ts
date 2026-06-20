@@ -1146,6 +1146,8 @@ export interface ServerApiConfig {
   qiandao_spec_id_expert: string;
   luosi_season_id_normal: number;
   luosi_season_id_expert: number;
+  etor_season_id_normal: number;
+  etor_season_id_expert: number;
 }
 
 export interface ServerFullConfig {

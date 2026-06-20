@@ -17,6 +17,7 @@ import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { queryKeys } from "@/lib/queryKeys";
 
 interface ServerStatus {
   server: string;
@@ -175,11 +176,10 @@ export default function DataMonitorPage() {
   };
 
   const { data: statusData, refetch: refetchStatus } = useQuery({
-    queryKey: ["server-status", serverUrl],
+    queryKey: [...queryKeys.serverStatus, serverUrl],
     queryFn: checkServerStatus,
-    refetchInterval: 30000,
-    refetchIntervalInBackground: false,
-    retry: 1,
+    enabled: false,
+    retry: 0,
   });
 
   useEffect(() => {
@@ -617,7 +617,7 @@ export default function DataMonitorPage() {
         `快速同步完成: ${result.total_items} 个物品, ${result.total_days} 天, ${successCount} 条记录, 耗时 ${(elapsed / 1000).toFixed(1)}s`
       );
 
-      queryClient.invalidateQueries({ queryKey: ["market-context"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.marketContext });
 
     } catch (error) {
       const errorMsg = errorMessage(error as Error);
@@ -703,7 +703,7 @@ export default function DataMonitorPage() {
         `最新价格同步完成: ${result.prices.length} 个物品, 耗时 ${(elapsed / 1000).toFixed(1)}s`
       );
 
-      queryClient.invalidateQueries({ queryKey: ["market-context"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.marketContext });
 
     } catch (error) {
       const errorMsg = errorMessage(error as Error);
@@ -741,7 +741,7 @@ export default function DataMonitorPage() {
           <ToolbarActions>
             <Button variant="outline" size="sm" onClick={() => refetchStatus()}>
               <RefreshCw className="w-4 h-4 mr-1.5" />
-              刷新
+              检测连接
             </Button>
           </ToolbarActions>
         }

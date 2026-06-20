@@ -314,8 +314,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 !cfg.admin_password.is_empty()
             );
             info!(
-                "API配置: qiandao_normal={}, luosi_normal={}",
-                cfg.api_config.qiandao_tag_id_normal, cfg.api_config.luosi_season_id_normal
+                "API配置: qiandao_normal={}, luosi_normal={}, etor_normal={}",
+                cfg.api_config.qiandao_tag_id_normal,
+                cfg.api_config.luosi_season_id_normal,
+                cfg.api_config.etor_season_id_normal
             );
             info!(
                 "限流配置: enabled={}, requests_per_minute={}",
@@ -713,7 +715,7 @@ async fn handle_request(
                 {"path": "/fire", "method": "GET", "description": "火价数据"},
                 {"path": "/sync-fast", "method": "GET", "description": "快速数据同步(服务端聚合)"},
                 {"path": "/prices-latest", "method": "GET", "description": "最新价格同步"},
-                {"path": "/dual-source-overview", "method": "GET", "description": "双源数据概览"},
+                {"path": "/dual-source-overview", "method": "GET", "description": "刷图小助手物品概览（历史接口，非完整双源合并）"},
                 {"path": "/dual-source-history", "method": "GET", "description": "双源历史数据"},
                 {"path": "/items-sync", "method": "GET", "description": "游标分页同步"},
                 {"path": "/items-sync-stats", "method": "GET", "description": "同步统计"}

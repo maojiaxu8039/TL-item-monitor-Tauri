@@ -25,6 +25,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Toolbar } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
+import { invalidateSectionData, queryKeys } from "@/lib/queryKeys";
 
 interface HoardAnalysis {
   item_id: string;
@@ -229,13 +230,13 @@ export default function PriceAnalysisPage() {
   const [trendItem, setTrendItem] = useState<{ itemId: string; itemName: string } | null>(null);
 
   const { data: sections = [] } = useQuery({
-    queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
+    queryKey: [...queryKeys.sections, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getSections(marketContext.marketMode),
     enabled: marketContextReady,
   });
 
   const { data: analysisData = [], isLoading: analysisLoading } = useQuery({
-    queryKey: ["item-price-insights", marketContext.seasonId, marketContext.marketMode],
+    queryKey: [...queryKeys.itemPriceInsights, marketContext.seasonId, marketContext.marketMode],
     queryFn: cmd.getItemPriceInsights,
     enabled: marketContextReady,
   });
@@ -275,10 +276,11 @@ export default function PriceAnalysisPage() {
         .addSectionItem(sectionId, marketContext.seasonId, marketContext.marketMode, itemId, price, 1, 0)
         .then(() => {
           addToast("success", `${itemName} 已添加到分组`);
-          queryClient.invalidateQueries({ queryKey: ["section-items"] });
-          queryClient.invalidateQueries({ queryKey: ["all-section-items"] });
-          queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
-          queryClient.invalidateQueries({ queryKey: ["sections"] });
+          invalidateSectionData(queryClient, {
+            seasonId: marketContext.seasonId,
+            marketMode: marketContext.marketMode,
+          });
+          queryClient.invalidateQueries({ queryKey: queryKeys.dashboardSummary });
         })
         .catch((err: unknown) => addToast("error", `添加失败: ${errorMessage(err)}`));
     },

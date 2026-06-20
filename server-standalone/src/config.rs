@@ -83,6 +83,18 @@ pub struct ApiConfig {
     pub qiandao_spec_id_expert: String,
     pub luosi_season_id_normal: i32,
     pub luosi_season_id_expert: i32,
+    #[serde(default = "default_etor_season_id_normal")]
+    pub etor_season_id_normal: i32,
+    #[serde(default = "default_etor_season_id_expert")]
+    pub etor_season_id_expert: i32,
+}
+
+fn default_etor_season_id_normal() -> i32 {
+    1401
+}
+
+fn default_etor_season_id_expert() -> i32 {
+    1431
 }
 
 impl Default for ApiConfig {
@@ -94,6 +106,8 @@ impl Default for ApiConfig {
             qiandao_spec_id_expert: "267417".to_string(),
             luosi_season_id_normal: 1401,
             luosi_season_id_expert: 1431,
+            etor_season_id_normal: default_etor_season_id_normal(),
+            etor_season_id_expert: default_etor_season_id_expert(),
         }
     }
 }

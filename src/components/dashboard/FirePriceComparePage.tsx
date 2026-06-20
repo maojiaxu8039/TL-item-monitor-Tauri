@@ -10,6 +10,7 @@ import { Surface } from "@/components/ui/Surface";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { queryKeys } from "@/lib/queryKeys";
 
 type TimeRange = "all" | "3d" | "7d" | "14d" | "30d";
 type DayRange = { start: number; end: number };
@@ -43,20 +44,19 @@ export default function FirePriceComparePage() {
   const marketMode = marketContext.marketMode;
 
   const currentQuery = useQuery({
-    queryKey: ["fire-trend-current", currentSeason, marketMode, timeRange],
+    queryKey: [...queryKeys.fireTrendCurrent, currentSeason, marketMode, timeRange],
     queryFn: () => cmd.getFireHistoryBySeason(currentSeason, marketMode, 99999),
-    refetchInterval: 60000,
+    refetchInterval: 5 * 60 * 1000,
     refetchIntervalInBackground: false,
     staleTime: 30 * 1000,
     enabled: !!currentSeason,
   });
 
   const historyQuery = useQuery({
-    queryKey: ["fire-trend-history", historySeason, marketMode, timeRange],
+    queryKey: [...queryKeys.fireTrendHistory, historySeason, marketMode, timeRange],
     queryFn: () => cmd.getFireHistoryBySeason(historySeason, marketMode, 99999),
-    refetchInterval: 60000,
     refetchIntervalInBackground: false,
-    staleTime: 30 * 1000,
+    staleTime: 30 * 60 * 1000,
     enabled: !!historySeason,
   });
 

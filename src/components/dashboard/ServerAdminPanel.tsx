@@ -46,7 +46,11 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
     setIsLoading(true);
     try {
       const config = await serverAdmin.getApiConfig(serverUrl, password, getSignal());
-      setEditedConfig(config.api_config);
+      setEditedConfig({
+        ...config.api_config,
+        etor_season_id_normal: config.api_config.etor_season_id_normal || config.api_config.luosi_season_id_normal || 1401,
+        etor_season_id_expert: config.api_config.etor_season_id_expert || config.api_config.luosi_season_id_expert || 1431,
+      });
       setIsConfigLoaded(true);
       toast.success("API配置已加载");
     } catch (err) {
@@ -256,6 +260,24 @@ export default function ServerAdminPanel({ serverUrl, connectionStatus, serverSt
                         type="number"
                         value={editedConfig.luosi_season_id_expert}
                         onChange={(e) => setEditedConfig({ ...editedConfig, luosi_season_id_expert: parseInt(e.target.value) || 0 })}
+                        className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[var(--color-text-subtle)] mb-1">易火赛季 ID (普通服)</label>
+                      <input
+                        type="number"
+                        value={editedConfig.etor_season_id_normal}
+                        onChange={(e) => setEditedConfig({ ...editedConfig, etor_season_id_normal: parseInt(e.target.value) || 0 })}
+                        className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[var(--color-text-subtle)] mb-1">易火赛季 ID (专家服)</label>
+                      <input
+                        type="number"
+                        value={editedConfig.etor_season_id_expert}
+                        onChange={(e) => setEditedConfig({ ...editedConfig, etor_season_id_expert: parseInt(e.target.value) || 0 })}
                         className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm"
                       />
                     </div>

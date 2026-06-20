@@ -17,6 +17,8 @@ api_config:
   qiandao_spec_id_expert: '267417'
   luosi_season_id_normal: 1401
   luosi_season_id_expert: 1431
+  etor_season_id_normal: 1401
+  etor_season_id_expert: 1431
 cors_allowed_origins:
   - "http://localhost:5173"
   - "http://localhost:8080"

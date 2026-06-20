@@ -10,6 +10,7 @@ import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
 import { cmd, type FirePriceChangeItem } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
+import { queryKeys } from "@/lib/queryKeys";
 
 interface FireChangeCardProps {
   item: FirePriceChangeItem;
@@ -232,7 +233,7 @@ export default function DealsPage() {
   }, []);
 
   const { data: fireChanges = [], isLoading, refetch } = useQuery({
-    queryKey: ["realtime-fire-changes", marketContext.seasonId, marketContext.marketMode],
+    queryKey: [...queryKeys.realtimeFireChanges, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getRealtimeFireChanges(marketContext.seasonId, marketContext.marketMode),
     enabled: marketContextReady,
     refetchInterval: 60000,

@@ -1,10 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { useSearchHistory, useDebounce } from "@/hooks/useSearchHistory";
+
+type SearchHistoryItem = {
+  query: string;
+  timestamp: number;
+};
 
 describe("useSearchHistory", () => {
   it("returns empty history by default", () => {
     // 测试逻辑：历史记录应该从 localStorage 读取或返回空数组
-    const history = [];
+    const history: SearchHistoryItem[] = [];
     expect(history).toEqual([]);
   });
 

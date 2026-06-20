@@ -22,6 +22,17 @@ function ensureDir(dir) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
+function removeStaleNodeBinaries(currentPlatform) {
+  const staleNames = currentPlatform === "win32" ? ["node"] : ["node.exe"];
+  for (const name of staleNames) {
+    const stalePath = join(RESOURCES_DIR, name);
+    if (existsSync(stalePath)) {
+      rmSync(stalePath, { force: true });
+      console.log(`[embedded-node] Removed stale ${stalePath}`);
+    }
+  }
+}
+
 async function download(url, dest) {
   console.log(`[embedded-node] Downloading ${url}...`);
   const resp = await fetch(url);
@@ -35,6 +46,7 @@ async function main() {
   ensureDir(RESOURCES_DIR);
   const platform = process.platform;
   const arch = process.arch;
+  removeStaleNodeBinaries(platform);
 
   if (platform === "darwin") {
     const url = `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-darwin-${arch === "arm64" ? "arm64" : "x64"}.tar.gz`;

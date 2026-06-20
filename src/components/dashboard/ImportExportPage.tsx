@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Button } from "@/components/ui/button";
+import { queryKeys } from "@/lib/queryKeys";
 
 function formatBytes(kb: number): string {
   if (kb < 1024) return `${kb.toFixed(1)} KB`;
@@ -24,7 +25,7 @@ export default function ImportExportPage() {
   const { marketContext, marketContextReady } = useSectionRefresh();
 
   const { data: backupInfo, refetch: refetchBackupInfo } = useQuery({
-    queryKey: ["backup-info", marketContext.seasonId, marketContext.marketMode],
+    queryKey: [...queryKeys.backupInfo, marketContext.seasonId, marketContext.marketMode],
     queryFn: cmd.getBackupInfo,
     enabled: marketContextReady,
   });

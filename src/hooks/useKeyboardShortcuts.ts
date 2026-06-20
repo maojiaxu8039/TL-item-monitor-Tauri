@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { cmd } from "@/lib/commands";
 
@@ -12,7 +12,7 @@ interface KeyboardShortcut {
 }
 
 export function useKeyboardShortcuts() {
-  const shortcuts: KeyboardShortcut[] = [
+  const shortcuts = useMemo<KeyboardShortcut[]>(() => [
     {
       key: "r",
       ctrl: true,
@@ -28,7 +28,7 @@ export function useKeyboardShortcuts() {
       },
       description: "关闭弹窗 (Esc)",
     },
-  ];
+  ], []);
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {

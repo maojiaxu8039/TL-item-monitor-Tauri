@@ -502,12 +502,20 @@
                 <form id="luosi-config-form">
                     <div class="grid">
                         <div class="form-group">
-                            <label>普通服 season_id</label>
+                            <label>刷图小助手普通服 season_id</label>
                             <input type="number" id="api-luosi-season-normal">
                         </div>
                         <div class="form-group">
-                            <label>专家服 season_id</label>
+                            <label>刷图小助手专家服 season_id</label>
                             <input type="number" id="api-luosi-season-expert">
+                        </div>
+                        <div class="form-group">
+                            <label>易火普通服 season_id</label>
+                            <input type="number" id="api-etor-season-normal">
+                        </div>
+                        <div class="form-group">
+                            <label>易火专家服 season_id</label>
+                            <input type="number" id="api-etor-season-expert">
                         </div>
                     </div>
                     <button type="submit" class="btn btn-primary">保存物品配置</button>
@@ -750,6 +758,8 @@
                 document.getElementById('api-qiandao-spec-expert').value = serverConfig.api_config.qiandao_spec_id_expert || '';
                 document.getElementById('api-luosi-season-normal').value = serverConfig.api_config.luosi_season_id_normal || '';
                 document.getElementById('api-luosi-season-expert').value = serverConfig.api_config.luosi_season_id_expert || '';
+                document.getElementById('api-etor-season-normal').value = serverConfig.api_config.etor_season_id_normal || serverConfig.api_config.luosi_season_id_normal || '';
+                document.getElementById('api-etor-season-expert').value = serverConfig.api_config.etor_season_id_expert || serverConfig.api_config.luosi_season_id_expert || '';
             }
         }
 
@@ -1091,6 +1101,8 @@
                         document.getElementById('api-qiandao-spec-expert').value = serverConfig.api_config.qiandao_spec_id_expert || '';
                         document.getElementById('api-luosi-season-normal').value = serverConfig.api_config.luosi_season_id_normal || '';
                         document.getElementById('api-luosi-season-expert').value = serverConfig.api_config.luosi_season_id_expert || '';
+                        document.getElementById('api-etor-season-normal').value = serverConfig.api_config.etor_season_id_normal || serverConfig.api_config.luosi_season_id_normal || '';
+                        document.getElementById('api-etor-season-expert').value = serverConfig.api_config.etor_season_id_expert || serverConfig.api_config.luosi_season_id_expert || '';
                     }
                     showAlert('success', '配置已加载');
                 } else {
@@ -1456,7 +1468,9 @@
                 qiandao_tag_id_expert: document.getElementById('api-qiandao-tag-expert').value,
                 qiandao_spec_id_expert: document.getElementById('api-qiandao-spec-expert').value,
                 luosi_season_id_normal: parseInt(document.getElementById('api-luosi-season-normal').value) || 0,
-                luosi_season_id_expert: parseInt(document.getElementById('api-luosi-season-expert').value) || 0
+                luosi_season_id_expert: parseInt(document.getElementById('api-luosi-season-expert').value) || 0,
+                etor_season_id_normal: parseInt(document.getElementById('api-etor-season-normal').value) || 0,
+                etor_season_id_expert: parseInt(document.getElementById('api-etor-season-expert').value) || 0
             };
 
             try {

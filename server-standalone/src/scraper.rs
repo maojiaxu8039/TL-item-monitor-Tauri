@@ -651,7 +651,7 @@ impl DualSourceScraper {
     pub async fn fetch_dual_source_history(
         season_id: i32,
         item_id: &str,
-        item_name: &str,
+        _item_name: &str,
     ) -> Vec<DualSourceHistoryPoint> {
         let mut all_points: Vec<DualSourceHistoryPoint> = Vec::new();
 

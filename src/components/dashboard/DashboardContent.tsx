@@ -10,6 +10,7 @@ import { AddSectionDialog } from "@/components/dashboard/AddSectionDialog"
 import { DashboardStats } from "@/components/dashboard/DashboardStats"
 import { Button } from "@/components/ui/button"
 import { cmd, type Section } from "@/lib/commands"
+import { queryKeys } from "@/lib/queryKeys"
 import { errorMessage } from "@/lib/utils"
 import {
   DndContext,
@@ -36,7 +37,7 @@ export default function DashboardContent() {
   const { marketContext } = useSectionRefresh()
 
   const { data: sections = [], refetch } = useQuery({
-    queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
+    queryKey: [...queryKeys.sections, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getSections(marketContext.marketMode),
   })
 

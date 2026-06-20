@@ -105,6 +105,20 @@ pub async fn get_items_count(
     Ok(count)
 }
 
+pub async fn get_latest_items_updated_at(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<Option<i64>, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
+    let items_table = TableResolver::items_table(season_id, market_mode);
+    let latest: Option<i64> =
+        sqlx::query_scalar(&format!("SELECT MAX(updated_at) FROM {}", items_table))
+            .fetch_one(pool)
+            .await?;
+    Ok(latest)
+}
+
 /// Replace items in the real-time table with the latest full scrape.
 /// The upstream item source returns a complete list, so rows missing from the
 /// new scrape must be removed to avoid showing stale prices as current data.

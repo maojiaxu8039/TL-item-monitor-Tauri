@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { queryClient } from "@/lib/query";
 import {
   invalidateFireData,
+  invalidateInventoryData,
   invalidateItemsData,
   invalidateMarketContextData,
   queryKeys,
@@ -53,10 +54,12 @@ export function useTauriEvents() {
         // 火价更新 → 失效火价历史和仪表盘摘要，然后重新拉取
         await safeListen("fire-price-updated", () => {
           invalidateFireData(queryClient);
+          invalidateInventoryData(queryClient);
+          queryClient.invalidateQueries({ queryKey: queryKeys.miniWindowFeed });
           queryClient.refetchQueries({ queryKey: queryKeys.dashboardSummary, type: "active" });
         });
 
-        // 物品更新 → 失效物品搜索和分组
+        // 物品更新 → 失效物品搜索、分组、库存估值和小窗口数据
         await safeListen("items-updated", () => {
           invalidateItemsData(queryClient);
         });

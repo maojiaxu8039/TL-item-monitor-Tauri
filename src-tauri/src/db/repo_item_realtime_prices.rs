@@ -4,6 +4,8 @@ use crate::db::models::Item;
 use serde::Serialize;
 use sqlx::SqlitePool;
 
+const MIN_REALTIME_SNAPSHOT_INTERVAL_SECONDS: i64 = 5 * 60;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ItemRealtimePrice {
     pub item_id: String,
@@ -93,6 +95,24 @@ pub async fn record_item_prices(
     market_mode: &str,
 ) -> Result<usize, AppError> {
     let scraped_at = chrono::Utc::now().timestamp();
+    let latest_scraped_at: Option<i64> = sqlx::query_scalar(
+        r#"
+            SELECT MAX(scraped_at)
+            FROM item_realtime_prices
+            WHERE season_id = ? AND market_mode = ?
+        "#,
+    )
+    .bind(season_id)
+    .bind(market_mode)
+    .fetch_one(pool)
+    .await?;
+
+    if latest_scraped_at.is_some_and(|latest| {
+        scraped_at.saturating_sub(latest) < MIN_REALTIME_SNAPSHOT_INTERVAL_SECONDS
+    }) {
+        return Ok(0);
+    }
+
     let records: Vec<(String, String, f64, i64)> = items
         .iter()
         .map(|item| {
@@ -457,6 +477,67 @@ mod tests {
             .expect("price changes should calculate");
 
         assert!(changes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn record_item_prices_skips_recent_snapshot_for_same_context() {
+        let pool = test_pool().await;
+        let item = Item {
+            item_id: "item-1".to_string(),
+            season_id: "ss12".to_string(),
+            market_mode: "season_normal".to_string(),
+            name: "测试物品".to_string(),
+            item_type: "材料".to_string(),
+            source: "test".to_string(),
+            price: 100.0,
+            last_time: None,
+            updated_at: chrono::Utc::now().timestamp(),
+        };
+
+        let first_inserted =
+            record_item_prices(&pool, std::slice::from_ref(&item), "ss12", "season_normal")
+                .await
+                .expect("first realtime snapshot should insert");
+        let second_inserted =
+            record_item_prices(&pool, std::slice::from_ref(&item), "ss12", "season_normal")
+                .await
+                .expect("recent duplicate snapshot should be skipped");
+
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM item_realtime_prices")
+            .fetch_one(&pool)
+            .await
+            .expect("snapshot count should load");
+
+        assert_eq!(first_inserted, 1);
+        assert_eq!(second_inserted, 0);
+        assert_eq!(total, 1);
+    }
+
+    #[tokio::test]
+    async fn record_item_prices_allows_recent_snapshot_for_different_context() {
+        let pool = test_pool().await;
+        let item = Item {
+            item_id: "item-1".to_string(),
+            season_id: "ss12".to_string(),
+            market_mode: "season_normal".to_string(),
+            name: "测试物品".to_string(),
+            item_type: "材料".to_string(),
+            source: "test".to_string(),
+            price: 100.0,
+            last_time: None,
+            updated_at: chrono::Utc::now().timestamp(),
+        };
+
+        let normal_inserted =
+            record_item_prices(&pool, std::slice::from_ref(&item), "ss12", "season_normal")
+                .await
+                .expect("normal snapshot should insert");
+        let expert_inserted = record_item_prices(&pool, &[item], "ss12", "season_expert")
+            .await
+            .expect("expert snapshot should insert independently");
+
+        assert_eq!(normal_inserted, 1);
+        assert_eq!(expert_inserted, 1);
     }
 
     #[test]

@@ -457,6 +457,27 @@ pub async fn list_buy_watches(
     Ok(rows.into_iter().map(InventoryBuyWatch::from).collect())
 }
 
+pub async fn get_buy_watch_by_id(
+    pool: &SqlitePool,
+    id: &str,
+) -> Result<Option<InventoryBuyWatch>, String> {
+    let row: Option<InventoryBuyWatchRow> = sqlx::query_as(
+        r#"
+        SELECT id, season_id, market_mode, item_id, item_name, item_type,
+               target_buy_price, max_quantity, note, alert_enabled,
+               auto_create_position, last_alert_at, created_at, updated_at
+        FROM inventory_buy_watches
+        WHERE id = ?
+        "#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(row.map(InventoryBuyWatch::from))
+}
+
 pub async fn list_buy_watches_with_current_price(
     pool: &SqlitePool,
     season_id: &str,
@@ -477,24 +498,25 @@ pub async fn list_buy_watches_with_current_price(
         .into_iter()
         .map(|watch| {
             let current_price = price_map.get(&watch.item_id).copied();
-            let discount_to_target = current_price
-                .map(|cp| ((watch.target_buy_price - cp) / watch.target_buy_price) * 100.0);
-
-            let buy_signal = if !watch.alert_enabled {
-                "disabled".to_string()
-            } else if current_price.is_none() {
-                "no_price".to_string()
-            } else if current_price.unwrap() <= watch.target_buy_price {
-                "buy_ready".to_string()
+            let discount_to_target = if watch.target_buy_price > 0.0 {
+                current_price
+                    .map(|cp| ((watch.target_buy_price - cp) / watch.target_buy_price) * 100.0)
             } else {
-                "waiting".to_string()
+                None
+            };
+
+            let buy_signal = match (watch.alert_enabled, current_price) {
+                (false, _) => "disabled",
+                (true, None) => "no_price",
+                (true, Some(cp)) if cp <= watch.target_buy_price => "buy_ready",
+                (true, Some(_)) => "waiting",
             };
 
             InventoryBuyWatchView {
                 watch,
                 current_price,
                 discount_to_target,
-                buy_signal,
+                buy_signal: buy_signal.to_string(),
             }
         })
         .collect();
@@ -648,4 +670,105 @@ pub async fn get_buy_ready_watches(
         .into_iter()
         .filter(|v| v.buy_signal == "buy_ready")
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn test_pool() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("test sqlite pool should connect");
+
+        sqlx::query(
+            r#"
+            CREATE TABLE inventory_buy_watches (
+                id TEXT PRIMARY KEY,
+                season_id TEXT NOT NULL,
+                market_mode TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                item_name TEXT NOT NULL,
+                item_type TEXT,
+                target_buy_price REAL NOT NULL,
+                max_quantity INTEGER,
+                note TEXT,
+                alert_enabled INTEGER NOT NULL DEFAULT 1,
+                auto_create_position INTEGER NOT NULL DEFAULT 0,
+                last_alert_at INTEGER,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .expect("inventory_buy_watches table should be created");
+
+        pool
+    }
+
+    fn watch(id: &str) -> InventoryBuyWatch {
+        InventoryBuyWatch {
+            id: id.to_string(),
+            season_id: "ss12".to_string(),
+            market_mode: "season_normal".to_string(),
+            item_id: "item-1".to_string(),
+            item_name: "测试物品".to_string(),
+            item_type: "材料".to_string(),
+            target_buy_price: 100.0,
+            max_quantity: Some(3),
+            note: "first".to_string(),
+            alert_enabled: true,
+            auto_create_position: false,
+            last_alert_at: None,
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    #[tokio::test]
+    async fn buy_watch_crud_round_trip_by_id() {
+        let pool = test_pool().await;
+        let mut buy_watch = watch("watch-1");
+
+        create_buy_watch(&pool, &buy_watch)
+            .await
+            .expect("buy watch should insert");
+
+        let loaded = get_buy_watch_by_id(&pool, "watch-1")
+            .await
+            .expect("buy watch should load")
+            .expect("buy watch should exist");
+        assert_eq!(loaded.item_name, "测试物品");
+        assert_eq!(loaded.target_buy_price, 100.0);
+
+        buy_watch.item_name = "测试物品-改".to_string();
+        buy_watch.target_buy_price = 88.0;
+        buy_watch.alert_enabled = false;
+        buy_watch.auto_create_position = true;
+        update_buy_watch(&pool, &buy_watch)
+            .await
+            .expect("buy watch should update");
+
+        let updated = get_buy_watch_by_id(&pool, "watch-1")
+            .await
+            .expect("updated buy watch should load")
+            .expect("updated buy watch should exist");
+        assert_eq!(updated.item_name, "测试物品-改");
+        assert_eq!(updated.target_buy_price, 88.0);
+        assert!(!updated.alert_enabled);
+        assert!(updated.auto_create_position);
+
+        delete_buy_watch(&pool, "watch-1")
+            .await
+            .expect("buy watch should delete");
+        assert!(get_buy_watch_by_id(&pool, "watch-1")
+            .await
+            .expect("deleted buy watch lookup should work")
+            .is_none());
+    }
 }

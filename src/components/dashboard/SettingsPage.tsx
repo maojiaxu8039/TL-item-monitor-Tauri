@@ -148,7 +148,7 @@ export default function SettingsPage() {
   });
 
   const seasonsQuery = useQuery<SeasonInfo[]>({
-    queryKey: ["seasons"],
+    queryKey: queryKeys.seasons,
     queryFn: () => cmd.listSeasons(),
   });
 

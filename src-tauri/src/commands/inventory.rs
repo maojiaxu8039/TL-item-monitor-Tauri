@@ -66,6 +66,34 @@ pub struct UpdateBuyWatchRequest {
     pub auto_create_position: Option<bool>,
 }
 
+fn ensure_positive_price(label: &str, value: f64) -> Result<(), String> {
+    if !value.is_finite() || value <= 0.0 {
+        return Err(format!("{}必须是大于 0 的有效价格", label));
+    }
+    Ok(())
+}
+
+fn ensure_non_negative_amount(label: &str, value: f64) -> Result<(), String> {
+    if !value.is_finite() || value < 0.0 {
+        return Err(format!("{}不能为负数", label));
+    }
+    Ok(())
+}
+
+fn ensure_positive_quantity(label: &str, value: i64) -> Result<(), String> {
+    if value <= 0 {
+        return Err(format!("{}必须大于 0", label));
+    }
+    Ok(())
+}
+
+fn ensure_fee_rate(value: f64) -> Result<(), String> {
+    if !value.is_finite() || !(0.0..1.0).contains(&value) {
+        return Err("手续费比例必须在 0 到 1 之间".to_string());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn list_inventory_positions(
     state: State<'_, Arc<AppState>>,
@@ -82,6 +110,14 @@ pub async fn create_inventory_position(
     state: State<'_, Arc<AppState>>,
     request: CreatePositionRequest,
 ) -> Result<OkResponse, String> {
+    ensure_positive_price("买入价格", request.buy_price)?;
+    ensure_positive_quantity("数量", request.quantity)?;
+    ensure_non_negative_amount("额外成本", request.extra_cost.unwrap_or(0.0))?;
+    ensure_fee_rate(request.fee_rate.unwrap_or(0.125))?;
+    if let Some(target_sell_price) = request.target_sell_price {
+        ensure_positive_price("目标出货价", target_sell_price)?;
+    }
+
     let position = InventoryPosition {
         id: Uuid::new_v4().to_string(),
         season_id: request.season_id,
@@ -133,6 +169,22 @@ pub async fn update_inventory_position(
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "持仓记录不存在".to_string())?;
+
+    if let Some(buy_price) = request.buy_price {
+        ensure_positive_price("买入价格", buy_price)?;
+    }
+    if let Some(quantity) = request.quantity {
+        ensure_positive_quantity("数量", quantity)?;
+    }
+    if let Some(extra_cost) = request.extra_cost {
+        ensure_non_negative_amount("额外成本", extra_cost)?;
+    }
+    if let Some(fee_rate) = request.fee_rate {
+        ensure_fee_rate(fee_rate)?;
+    }
+    if let Some(target_sell_price) = request.target_sell_price {
+        ensure_positive_price("目标出货价", target_sell_price)?;
+    }
 
     let updated = InventoryPosition {
         id: existing.id,
@@ -186,6 +238,8 @@ pub async fn mark_inventory_sold(
     id: String,
     sold_price: f64,
 ) -> Result<OkResponse, String> {
+    ensure_positive_price("出货价格", sold_price)?;
+
     repo_inventory::mark_position_sold(&state.db, &id, sold_price)
         .await
         .map_err(|e| e.to_string())?;
@@ -247,6 +301,11 @@ pub async fn create_inventory_buy_watch(
     state: State<'_, Arc<AppState>>,
     request: CreateBuyWatchRequest,
 ) -> Result<OkResponse, String> {
+    ensure_positive_price("目标买入价", request.target_buy_price)?;
+    if let Some(max_quantity) = request.max_quantity {
+        ensure_positive_quantity("最大数量", max_quantity)?;
+    }
+
     let watch = InventoryBuyWatch {
         id: Uuid::new_v4().to_string(),
         season_id: request.season_id,
@@ -285,12 +344,17 @@ pub async fn update_inventory_buy_watch(
     state: State<'_, Arc<AppState>>,
     request: UpdateBuyWatchRequest,
 ) -> Result<OkResponse, String> {
-    let existing = repo_inventory::list_buy_watches(&state.db, "", "")
+    let existing = repo_inventory::get_buy_watch_by_id(&state.db, &request.id)
         .await
         .map_err(|e| e.to_string())?
-        .into_iter()
-        .find(|w| w.id == request.id)
         .ok_or_else(|| "买入监控不存在".to_string())?;
+
+    if let Some(target_buy_price) = request.target_buy_price {
+        ensure_positive_price("目标买入价", target_buy_price)?;
+    }
+    if let Some(max_quantity) = request.max_quantity {
+        ensure_positive_quantity("最大数量", max_quantity)?;
+    }
 
     let updated = InventoryBuyWatch {
         id: existing.id,
@@ -345,4 +409,43 @@ pub async fn get_buy_ready_watches(
     repo_inventory::get_buy_ready_watches(&state.db, &season_id, &market_mode)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ensure_fee_rate, ensure_non_negative_amount, ensure_positive_price,
+        ensure_positive_quantity,
+    };
+
+    #[test]
+    fn inventory_price_validation_rejects_invalid_values() {
+        assert!(ensure_positive_price("买入价格", 1.0).is_ok());
+        assert!(ensure_positive_price("买入价格", 0.0).is_err());
+        assert!(ensure_positive_price("买入价格", -1.0).is_err());
+        assert!(ensure_positive_price("买入价格", f64::NAN).is_err());
+    }
+
+    #[test]
+    fn inventory_quantity_validation_requires_positive_values() {
+        assert!(ensure_positive_quantity("数量", 1).is_ok());
+        assert!(ensure_positive_quantity("数量", 0).is_err());
+        assert!(ensure_positive_quantity("数量", -1).is_err());
+    }
+
+    #[test]
+    fn inventory_fee_rate_validation_requires_fraction() {
+        assert!(ensure_fee_rate(0.125).is_ok());
+        assert!(ensure_fee_rate(0.0).is_ok());
+        assert!(ensure_fee_rate(-0.01).is_err());
+        assert!(ensure_fee_rate(1.0).is_err());
+        assert!(ensure_fee_rate(f64::INFINITY).is_err());
+    }
+
+    #[test]
+    fn inventory_extra_cost_allows_zero_but_not_negative() {
+        assert!(ensure_non_negative_amount("额外成本", 0.0).is_ok());
+        assert!(ensure_non_negative_amount("额外成本", 1.0).is_ok());
+        assert!(ensure_non_negative_amount("额外成本", -0.01).is_err());
+    }
 }

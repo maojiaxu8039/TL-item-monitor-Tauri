@@ -119,9 +119,44 @@ pub async fn run_items_reload_task(
             match cached_item_count {
                 Ok(Ok(count)) if count > 0 => {
                     info!(
-                        "[ITEMS-TASK] Database has {} cached items, proceeding with first background refresh",
+                        "[ITEMS-TASK] Database has {} cached items, checking freshness before first refresh",
                         count
                     );
+                    match repo_items::get_latest_items_updated_at(
+                        &state.db,
+                        &ctx.season_id,
+                        ctx.market_mode.as_str(),
+                    )
+                    .await
+                    {
+                        Ok(Some(updated_at)) => {
+                            let age_secs =
+                                chrono::Utc::now().timestamp().saturating_sub(updated_at) as u64;
+                            if age_secs < current_interval {
+                                info!(
+                                    "[ITEMS-TASK] Cached items are fresh (age={}s, interval={}s), skipping first background refresh",
+                                    age_secs, current_interval
+                                );
+                                first_run = false;
+                                continue;
+                            }
+                            info!(
+                                "[ITEMS-TASK] Cached items are stale (age={}s, interval={}s), proceeding with first refresh",
+                                age_secs, current_interval
+                            );
+                        }
+                        Ok(None) => {
+                            info!(
+                                "[ITEMS-TASK] Cached items have no updated_at value, proceeding with first refresh"
+                            );
+                        }
+                        Err(e) => {
+                            info!(
+                                "[ITEMS-TASK] Failed to inspect cached item freshness: {}, proceeding with first refresh",
+                                e
+                            );
+                        }
+                    }
                 }
                 Ok(Ok(count)) => {
                     info!("[ITEMS-TASK] Database is empty ({} items), proceeding with first scrape immediately", count);
@@ -151,6 +186,11 @@ pub async fn run_items_reload_task(
             season_id,
             market_mode
         );
+
+        let Some(_refresh_guard) = state.try_begin_items_refresh() else {
+            info!("[ITEMS-TASK] Items refresh already running, skipping this tick");
+            continue;
+        };
 
         // 获取当前赛季的 API 配置（含 luosi/etor 赛季ID）
         let api_config = crate::db::repo_season_api::get_season_api_config(&state.db, &season_id)
@@ -395,6 +435,14 @@ async fn process_scrape_result(
                             "[PROCESS] {} realtime prices insert SUCCESS: {} records",
                             mode_name,
                             items.len()
+                        );
+                    }
+
+                    if let Err(e) = repo_item_realtime_prices::cleanup_old_records(&state.db).await
+                    {
+                        warn!(
+                            "[PROCESS] {} realtime price cleanup FAILED: {}",
+                            mode_name, e
                         );
                     }
 

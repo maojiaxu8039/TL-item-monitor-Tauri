@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { cmd, SeasonInfo, ItemHistoryRecord } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
+import { queryKeys } from "@/lib/queryKeys";
 
 interface Props {
   itemId: string;
@@ -21,7 +22,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
   const [viewMode, setViewMode] = useState<ViewMode>("day");
 
   const seasonsQuery = useQuery<SeasonInfo[]>({
-    queryKey: ["seasons-for-trend"],
+    queryKey: queryKeys.itemTrend.seasons,
     queryFn: () => cmd.listSeasons(),
     staleTime: 5 * 60 * 1000,
   });
@@ -50,25 +51,25 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
 
 
   const currentDayQuery = useQuery<ItemHistoryRecord[]>({
-    queryKey: ["item-trend-current-day", itemId, currentSeason, currentDay],
+    queryKey: queryKeys.itemTrend.currentDay(itemId, currentSeason, currentDay),
     queryFn: () => cmd.getItemHistoryByDay(itemId, currentSeason, currentDay),
     enabled: !!itemId && !!currentSeason,
   });
 
   const historyDayQuery = useQuery<ItemHistoryRecord[]>({
-    queryKey: ["item-trend-history-day", itemId, historySeason, currentDay],
+    queryKey: queryKeys.itemTrend.historyDay(itemId, historySeason, currentDay),
     queryFn: () => cmd.getItemHistoryByDay(itemId, historySeason, currentDay),
     enabled: !!itemId && !!historySeason,
   });
 
   const currentSeasonQuery = useQuery<ItemHistoryRecord[]>({
-    queryKey: ["item-trend-current-season", itemId, currentSeason],
+    queryKey: queryKeys.itemTrend.currentSeason(itemId, currentSeason),
     queryFn: () => cmd.getItemHistoryBySeason(itemId, currentSeason, 1000),
     enabled: !!itemId && !!currentSeason && viewMode === "season",
   });
 
   const historySeasonQuery = useQuery<ItemHistoryRecord[]>({
-    queryKey: ["item-trend-history-season", itemId, historySeason],
+    queryKey: queryKeys.itemTrend.historySeason(itemId, historySeason),
     queryFn: () => cmd.getItemHistoryBySeason(itemId, historySeason, 1000),
     enabled: !!itemId && !!historySeason && viewMode === "season",
   });

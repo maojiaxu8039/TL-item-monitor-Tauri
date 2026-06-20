@@ -152,6 +152,14 @@ pub async fn validate_json_file(json_path: String) -> Result<JsonFileValidationR
 
 #[tauri::command]
 pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats, String> {
+    let Some(_refresh_guard) = state.try_begin_items_refresh() else {
+        let status = state.task_status.read().clone();
+        return Ok(ItemsStats {
+            total_items: state.items_cache.read().len() as i64,
+            last_reload: status.last_items_reload,
+        });
+    };
+
     let fresh_config =
         crate::core::config::load_config().map_err(|e| format!("Failed to load config: {}", e))?;
     let season_id = fresh_config.app.season_id.clone();
@@ -182,6 +190,9 @@ pub async fn reload_items(state: State<'_, Arc<AppState>>) -> Result<ItemsStats,
     repo_item_realtime_prices::record_item_prices(&state.db, &items, &season_id, market_mode)
         .await
         .map_err(|e| format!("Failed to insert realtime prices: {}", e))?;
+    if let Err(e) = repo_item_realtime_prices::cleanup_old_records(&state.db).await {
+        tracing::warn!("reload_items: failed to cleanup old realtime prices: {}", e);
+    }
 
     tracing::info!("reload_items: inserted {} items into database", count);
 

@@ -368,6 +368,12 @@ pub async fn refresh_items(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
 ) -> Result<OkResponse, String> {
+    let Some(_refresh_guard) = state.try_begin_items_refresh() else {
+        return Ok(OkResponse::success(
+            "物品刷新正在进行中，已跳过重复刷新请求",
+        ));
+    };
+
     let ctx = state.active_context.read().clone();
     let items_source = state.config.read().scrape.items_source.clone();
 
@@ -411,6 +417,9 @@ pub async fn refresh_items(
     )
     .await
     .map_err(|e| format!("Realtime price insert failed: {}", e))?;
+    if let Err(e) = repo_item_realtime_prices::cleanup_old_records(&state.db).await {
+        tracing::warn!("[REFRESH] Failed to cleanup old realtime prices: {}", e);
+    }
 
     {
         let mut cache = state.items_cache.write();

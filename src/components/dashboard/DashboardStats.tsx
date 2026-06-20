@@ -6,6 +6,7 @@ import { MetricCard } from "@/components/ui/MetricCard"
 import { StatusBadge } from "@/components/ui/StatusBadge"
 import { cmd } from "@/lib/commands"
 import type { DashboardSummary, FireHistoryItem, StrategyWithCosts, FirePriceUI } from "@/lib/commands"
+import { queryKeys } from "@/lib/queryKeys"
 import { calculateRecommendations } from "@/lib/strategyRecommend"
 
 const FirePriceHelper = memo(function FirePriceHelper({ fire }: { fire: FirePriceUI | null }) {
@@ -32,7 +33,7 @@ export function DashboardStats() {
   const { marketContext, marketContextReady } = useSectionRefresh()
 
   const { data: summary, isLoading: summaryLoading } = useQuery<DashboardSummary>({
-    queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode],
+    queryKey: [...queryKeys.dashboardSummary, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getDashboardSummary(),
     enabled: marketContextReady,
     staleTime: 30 * 1000,
@@ -41,7 +42,7 @@ export function DashboardStats() {
   })
 
   const { data: fireHistory = [], isLoading: fireHistoryLoading } = useQuery<FireHistoryItem[]>({
-    queryKey: ["fire-history", marketContext.seasonId, marketContext.marketMode, 24],
+    queryKey: [...queryKeys.fireHistory, marketContext.seasonId, marketContext.marketMode, 24],
     queryFn: () => cmd.getFireHistory(24),
     enabled: marketContextReady,
     staleTime: 60 * 1000,
@@ -50,7 +51,7 @@ export function DashboardStats() {
   })
 
   const { data: allSectionItems = [], isLoading: sectionItemsLoading } = useQuery({
-    queryKey: ["all-section-items", marketContext.seasonId, marketContext.marketMode],
+    queryKey: [...queryKeys.allSectionItems, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getSectionItemsForContext(marketContext.seasonId, marketContext.marketMode),
     enabled: marketContextReady,
     retry: 1,
@@ -58,7 +59,7 @@ export function DashboardStats() {
   })
 
   const { data: strategies = [], isLoading: strategiesLoading } = useQuery<StrategyWithCosts[]>({
-    queryKey: ["strategies", marketContext.marketMode],
+    queryKey: [...queryKeys.strategies, marketContext.marketMode],
     queryFn: () => cmd.getAllStrategiesWithCosts(marketContext.marketMode),
     staleTime: 60 * 1000,
     retry: 1,
@@ -124,12 +125,15 @@ export function DashboardStats() {
     if (currentIndex >= top3.length) {
       setCurrentIndex(0);
     }
+  }, [top3.length, currentIndex]);
+
+  useEffect(() => {
     if (top3.length === 0) return;
     const interval = setInterval(() => {
       setCurrentIndex(prev => (prev + 1) % top3.length);
     }, 3000);
     return () => clearInterval(interval);
-  }, [top3.length, currentIndex]);
+  }, [top3.length]);
 
   const getLevelText = useCallback((level: string) => {
     switch (level) {

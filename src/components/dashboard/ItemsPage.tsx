@@ -38,6 +38,7 @@ import { ToastContainer } from "@/components/ui/Toast";
 import { useToast } from "@/hooks/useToast";
 import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { invalidateSectionData, queryKeys } from "@/lib/queryKeys";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Surface } from "@/components/ui/Surface";
 import { Toolbar, ToolbarActions } from "@/components/ui/Toolbar";
@@ -189,7 +190,7 @@ export default function ItemsPage() {
   const queryClient = useQueryClient();
 
   const { data: searchResult, isLoading, refetch } = useQuery({
-    queryKey: ["items-search", marketContext.seasonId, marketContext.marketMode, debouncedKeyword, typeFilter, page, dayFilter],
+    queryKey: [...queryKeys.itemsSearch, marketContext.seasonId, marketContext.marketMode, debouncedKeyword, typeFilter, page, dayFilter],
     queryFn: () => {
       const keyword = debouncedKeyword;
       return cmd.searchItems(
@@ -205,19 +206,19 @@ export default function ItemsPage() {
   });
 
   const { data: sections = [] } = useQuery({
-    queryKey: ["sections", marketContext.seasonId, marketContext.marketMode],
+    queryKey: [...queryKeys.sections, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getSections(marketContext.marketMode),
     staleTime: 5 * 60 * 1000,
   });
 
   const { data: itemTypes = [] } = useQuery({
-    queryKey: ["item-types", marketContext.seasonId, marketContext.marketMode],
+    queryKey: [...queryKeys.itemTypes, marketContext.seasonId, marketContext.marketMode],
     queryFn: cmd.getItemTypes,
     staleTime: 5 * 60 * 1000,
   });
 
   const { data: priceCompareData, isLoading: isCompareLoading, error: compareError } = useQuery({
-    queryKey: ["items-compare", marketContext.seasonId, historySeason, marketContext.marketMode, dayFilter],
+    queryKey: [...queryKeys.itemsCompare, marketContext.seasonId, historySeason, marketContext.marketMode, dayFilter],
     staleTime: 60 * 1000,
     queryFn: async () => {
       try {
@@ -286,10 +287,11 @@ export default function ItemsPage() {
         )
         .then(() => {
           addToast("success", `已添加到分组`);
-          queryClient.invalidateQueries({ queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode] });
-          queryClient.invalidateQueries({ queryKey: ["all-section-items"] });
-          queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
-          queryClient.invalidateQueries({ queryKey: ["sections"] });
+          invalidateSectionData(queryClient, {
+            seasonId: marketContext.seasonId,
+            marketMode: marketContext.marketMode,
+          });
+          queryClient.invalidateQueries({ queryKey: queryKeys.dashboardSummary });
         })
         .catch((err: unknown) => {
           const errorMsg = errorMessage(err);

@@ -9,6 +9,7 @@ import { useQuery, useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import type { DashboardSummary } from "@/lib/commands"
+import { queryKeys } from "@/lib/queryKeys"
 
 interface GroupCardProps {
   section: Section
@@ -38,14 +39,14 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null)
 
   const { data: items = [], refetch, isFetching } = useQuery({
-    queryKey: ["section-items", marketContext.seasonId, marketContext.marketMode, section.id],
+    queryKey: [...queryKeys.sectionItems, marketContext.seasonId, marketContext.marketMode, section.id],
     queryFn: () => cmd.getSectionItems(section.id, marketContext.seasonId, marketContext.marketMode),
     enabled: marketContextReady,
     staleTime: 60 * 1000,
   })
 
   const { data: dashboardSummary } = useQuery<DashboardSummary>({
-    queryKey: ["dashboard-summary", marketContext.seasonId, marketContext.marketMode],
+    queryKey: [...queryKeys.dashboardSummary, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getDashboardSummary(),
     enabled: marketContextReady,
     staleTime: 5 * 60 * 1000,
