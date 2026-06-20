@@ -5,6 +5,7 @@ import { queryClient } from "@/lib/query"
 import { SectionRefreshProvider } from "@/contexts/SectionRefreshContext"
 import { SyncProvider } from "@/contexts/SyncContext"
 import { useTauriEvents } from "@/hooks/useTauriEvents"
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts"
 import { TopBar } from "@/components/layout/TopBar"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
@@ -56,6 +57,7 @@ export default function App() {
   const [page, setPage] = useState<PageId>("dashboard")
   const [isMiniMode, setIsMiniMode] = useState(false)
   useTauriEvents()
+  useKeyboardShortcuts()
 
   useEffect(() => {
     cmd.getWindowModeState().then((state) => {

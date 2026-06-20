@@ -1,10 +1,17 @@
-import { ExternalLink, Info } from "lucide-react";
+import { ExternalLink, Info, Keyboard } from "lucide-react";
 import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
 import { Button } from "@/components/ui/button";
 
 export default function HelpPage() {
+  const shortcuts = [
+    { keys: ["Ctrl", "R"], description: "刷新页面" },
+    { keys: ["Ctrl", "Shift", "M"], description: "切换小窗口模式" },
+    { keys: ["Ctrl", "F5"], description: "刷新当前页面数据" },
+    { keys: ["Esc"], description: "关闭弹窗" },
+  ];
+
   const faqs = [
     {
       q: "如何开始使用？",
@@ -57,6 +64,27 @@ export default function HelpPage() {
               TorchScan v1.0.0 · 基于 Tauri 2 + React 构建
             </p>
           </div>
+        </div>
+      </Surface>
+
+      <Surface padding="md">
+        <div className="flex items-center gap-2 mb-4">
+          <Keyboard className="h-4 w-4 text-[var(--color-brand)]" />
+          <h2 className="text-sm font-semibold text-[var(--color-text)]">键盘快捷键</h2>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {shortcuts.map((shortcut, index) => (
+            <div key={index} className="flex items-center justify-between p-2 rounded-lg bg-[var(--color-panel-soft)]">
+              <div className="flex gap-1">
+                {shortcut.keys.map((key, i) => (
+                  <kbd key={i} className="px-1.5 py-0.5 text-xs bg-[var(--color-panel)] border border-[var(--color-border)] rounded font-mono">
+                    {key}
+                  </kbd>
+                ))}
+              </div>
+              <span className="text-xs text-[var(--color-text-subtle)]">{shortcut.description}</span>
+            </div>
+          ))}
         </div>
       </Surface>
 

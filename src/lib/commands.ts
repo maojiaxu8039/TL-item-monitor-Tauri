@@ -479,6 +479,10 @@ export const cmd = {
   importWatchlistCsv: (content: string) =>
     invoke<{ imported: number; errors: string[] }>("import_watchlist_csv", { content }),
   exportWatchlistCsv: () => invoke<string>("export_watchlist_csv"),
+  exportInventoryCsv: (seasonId: string, marketMode: string) =>
+    invoke<string>("export_inventory_csv", { seasonId, marketMode }),
+  exportBuyWatchesCsv: (seasonId: string, marketMode: string) =>
+    invoke<string>("export_buy_watches_csv", { seasonId, marketMode }),
 
   getConfig: () => invoke<AppConfig>("get_config"),
   saveConfig: (config: AppConfig) =>

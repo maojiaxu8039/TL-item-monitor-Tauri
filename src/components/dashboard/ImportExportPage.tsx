@@ -117,6 +117,40 @@ export default function ImportExportPage() {
     },
   });
 
+  const exportInventoryMutation = useMutation({
+    mutationFn: async () => {
+      const file = await save({
+        defaultPath: `torchscan_positions_${marketContext.seasonId}.csv`,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!file) return null;
+      const csv = await cmd.exportInventoryCsv(marketContext.seasonId, marketContext.marketMode);
+      await writeTextFile(file, csv);
+      return file;
+    },
+    onSuccess: (file) => {
+      if (!file) return;
+      toast.success("持仓数据 CSV 导出成功");
+    },
+  });
+
+  const exportBuyWatchesMutation = useMutation({
+    mutationFn: async () => {
+      const file = await save({
+        defaultPath: `torchscan_watches_${marketContext.seasonId}.csv`,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!file) return null;
+      const csv = await cmd.exportBuyWatchesCsv(marketContext.seasonId, marketContext.marketMode);
+      await writeTextFile(file, csv);
+      return file;
+    },
+    onSuccess: (file) => {
+      if (!file) return;
+      toast.success("买入监控 CSV 导出成功");
+    },
+  });
+
   const handleExport = (mutation: { mutate: () => void }) => {
     mutation.mutate();
   };
@@ -291,6 +325,46 @@ export default function ImportExportPage() {
               >
                 <Download className="w-4 h-4 mr-1.5" />
                 {exportFireMutation.isPending ? "导出中..." : "导出 CSV"}
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-5">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">导出持仓数据</span>
+                </div>
+                <p className="text-xs text-[var(--color-text-subtle)] ml-6 mt-1">
+                  导出当前持仓为 CSV 格式
+                </p>
+              </div>
+              <Button
+                onClick={() => handleExport(exportInventoryMutation)}
+                disabled={exportInventoryMutation.isPending}
+                className="bg-[var(--color-success)] hover:opacity-90 text-black"
+              >
+                <Download className="w-4 h-4 mr-1.5" />
+                {exportInventoryMutation.isPending ? "导出中..." : "导出 CSV"}
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-5">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">导出买入监控</span>
+                </div>
+                <p className="text-xs text-[var(--color-text-subtle)] ml-6 mt-1">
+                  导出买入监控列表为 CSV 格式
+                </p>
+              </div>
+              <Button
+                onClick={() => handleExport(exportBuyWatchesMutation)}
+                disabled={exportBuyWatchesMutation.isPending}
+                className="bg-[var(--color-success)] hover:opacity-90 text-black"
+              >
+                <Download className="w-4 h-4 mr-1.5" />
+                {exportBuyWatchesMutation.isPending ? "导出中..." : "导出 CSV"}
               </Button>
             </div>
 

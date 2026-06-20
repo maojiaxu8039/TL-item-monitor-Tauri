@@ -2,6 +2,7 @@ use crate::commands::types::{BackupInfo, ImportResp, OkResponse};
 use crate::core::paths;
 use crate::core::state::AppState;
 use crate::db::repo_config;
+use crate::db::repo_inventory;
 use crate::db::repo_sections;
 use crate::db::table_resolver::TableResolver;
 use base64::{engine::general_purpose, Engine};
@@ -120,6 +121,85 @@ pub async fn export_watchlist_csv(state: State<'_, Arc<AppState>>) -> Result<Str
             row.5.as_str(),
             row.6.as_str(),
             row.7.as_str(),
+        ])
+        .map_err(|e| e.to_string())?;
+    }
+
+    let data = wtr.into_inner().map_err(|e| e.to_string())?;
+    String::from_utf8(data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn export_inventory_csv(
+    state: State<'_, Arc<AppState>>,
+    season_id: String,
+    market_mode: String,
+) -> Result<String, String> {
+    let positions = repo_inventory::list_positions(&state.db, &season_id, &market_mode)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut wtr = csv::Writer::from_writer(vec![]);
+    wtr.write_record([
+        "item_id",
+        "item_name",
+        "buy_price",
+        "quantity",
+        "target_sell_price",
+        "total_cost",
+        "note",
+        "created_at",
+    ])
+    .map_err(|e| e.to_string())?;
+
+    for pos in positions {
+        let total_cost = pos.buy_price * pos.quantity as f64 + pos.extra_cost;
+        wtr.write_record([
+            pos.item_id.as_str(),
+            pos.item_name.as_str(),
+            &pos.buy_price.to_string(),
+            &pos.quantity.to_string(),
+            &pos.target_sell_price.unwrap_or(0.0).to_string(),
+            &total_cost.to_string(),
+            pos.note.as_str(),
+            &pos.created_at.to_string(),
+        ])
+        .map_err(|e| e.to_string())?;
+    }
+
+    let data = wtr.into_inner().map_err(|e| e.to_string())?;
+    String::from_utf8(data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn export_buy_watches_csv(
+    state: State<'_, Arc<AppState>>,
+    season_id: String,
+    market_mode: String,
+) -> Result<String, String> {
+    let watches = repo_inventory::list_buy_watches(&state.db, &season_id, &market_mode)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut wtr = csv::Writer::from_writer(vec![]);
+    wtr.write_record([
+        "item_id",
+        "item_name",
+        "target_buy_price",
+        "max_quantity",
+        "note",
+        "created_at",
+    ])
+    .map_err(|e| e.to_string())?;
+
+    for watch in watches {
+        wtr.write_record([
+            watch.item_id.as_str(),
+            watch.item_name.as_str(),
+            &watch.target_buy_price.to_string(),
+            &watch.max_quantity.unwrap_or(0).to_string(),
+            watch.note.as_str(),
+            &watch.created_at.to_string(),
         ])
         .map_err(|e| e.to_string())?;
     }
