@@ -48,7 +48,7 @@ export default function MiniWindowPage() {
   const feedQuery = useQuery({
     queryKey: ["mini-window-feed", marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getMiniWindowFeed(marketContext.seasonId, marketContext.marketMode),
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   })
 
   const feed = feedQuery.data

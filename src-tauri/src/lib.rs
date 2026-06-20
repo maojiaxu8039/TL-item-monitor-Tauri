@@ -10,3 +10,6 @@ pub mod scheduler;
 pub mod scraper;
 pub mod services;
 pub mod tray;
+
+#[cfg(test)]
+mod tests;

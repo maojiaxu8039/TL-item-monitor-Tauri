@@ -595,7 +595,7 @@ export default function DataMonitorPage() {
           if (result.success) {
             successCount += batch.length;
           }
-        } catch (e) {
+        } catch {
           // 批次失败，继续下一个
         }
       }

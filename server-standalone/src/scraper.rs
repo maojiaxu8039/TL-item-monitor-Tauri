@@ -79,7 +79,7 @@ pub struct FirePriceSnapshot {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct LuosiItem {
+pub(crate) struct LuosiItem {
     name: String,
     #[serde(rename = "price")]
     item_price: Option<f64>,

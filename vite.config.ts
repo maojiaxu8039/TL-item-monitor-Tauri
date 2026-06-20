@@ -30,4 +30,16 @@ export default defineConfig({
     target: "esnext",
     minify: "esbuild",
   },
+  test: {
+    globals: true,
+    environment: "jsdom",
+    setupFiles: [resolve(__dirname, "src/test/setup.ts")],
+    include: [resolve(__dirname, "src/test/**/*.{test,spec}.{ts,tsx}")],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      include: [resolve(__dirname, "src/lib/**"), resolve(__dirname, "src/utils/**"), resolve(__dirname, "src/components/ui/**")],
+      exclude: ["node_modules", "dist"],
+    },
+  },
 });
