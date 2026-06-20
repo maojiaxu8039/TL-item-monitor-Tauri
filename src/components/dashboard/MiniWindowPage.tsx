@@ -7,7 +7,7 @@ import {
   type MiniWorthItem,
 } from "@/lib/commands"
 import { useQuery } from "@tanstack/react-query"
-import { RefreshCw, Copy, Check, Settings2 } from "lucide-react"
+import { RefreshCw, Copy, Check, Settings2, ExternalLink, Plus, Minus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { toast } from "sonner"
@@ -63,6 +63,14 @@ export default function MiniWindowPage() {
     }
   }
 
+  const openMainWindow = async () => {
+    try {
+      await cmd.setMiniWindowMode(false)
+    } catch {
+      toast.error("无法打开主窗口")
+    }
+  }
+
   const handleOpacityChange = async (newOpacity: number) => {
     const nextOpacity = Math.round(newOpacity * 100) / 100
     setOpacity(nextOpacity)
@@ -105,6 +113,15 @@ export default function MiniWindowPage() {
             disabled={feedQuery.isFetching}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${feedQuery.isFetching ? "animate-spin" : ""}`} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 !-webkit-app-region-no-drag"
+            onClick={openMainWindow}
+            title="打开主窗口"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
           </Button>
           <Button
             variant="ghost"
@@ -159,6 +176,49 @@ export default function MiniWindowPage() {
             {tab.label}{tab.count > 0 && <span className="ml-1 opacity-70">({tab.count})</span>}
           </button>
         ))}
+      </div>
+
+      {/* Quick Actions */}
+      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-[var(--color-border-soft)] bg-[var(--color-panel-soft)]">
+        {activeTab === "buy" && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-xs gap-1"
+            onClick={() => {
+              toast.info("请在主窗口中添加买入监控")
+              openMainWindow()
+            }}
+          >
+            <Plus className="w-3 h-3" />
+            添加监控
+          </Button>
+        )}
+        {activeTab === "sell" && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-xs gap-1"
+            onClick={() => {
+              toast.info("请在主窗口中管理持仓")
+              openMainWindow()
+            }}
+          >
+            <Minus className="w-3 h-3" />
+            管理持仓
+          </Button>
+        )}
+        {activeTab === "arbitrage" && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-xs gap-1"
+            onClick={openMainWindow}
+          >
+            <ExternalLink className="w-3 h-3" />
+            查看套利
+          </Button>
+        )}
       </div>
 
       {/* Content */}

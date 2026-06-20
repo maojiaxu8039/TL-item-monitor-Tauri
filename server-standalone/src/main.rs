@@ -705,6 +705,34 @@ async fn handle_request(
 
             (200, body)
         }
+        ("GET", "/api/info") => {
+            let endpoints = serde_json::json!([
+                {"path": "/status", "method": "GET", "description": "服务器状态"},
+                {"path": "/api/info", "method": "GET", "description": "API 信息"},
+                {"path": "/items", "method": "GET", "description": "物品数据"},
+                {"path": "/fire", "method": "GET", "description": "火价数据"},
+                {"path": "/sync-fast", "method": "GET", "description": "快速数据同步(服务端聚合)"},
+                {"path": "/prices-latest", "method": "GET", "description": "最新价格同步"},
+                {"path": "/dual-source-overview", "method": "GET", "description": "双源数据概览"},
+                {"path": "/dual-source-history", "method": "GET", "description": "双源历史数据"},
+                {"path": "/items-sync", "method": "GET", "description": "游标分页同步"},
+                {"path": "/items-sync-stats", "method": "GET", "description": "同步统计"}
+            ]);
+
+            let body = serde_json::to_string_pretty(&ApiResponse {
+                success: true,
+                data: Some(serde_json::json!({
+                    "version": SERVER_VERSION,
+                    "api_version": "v2",
+                    "server": "TL Monitor Server",
+                    "endpoints": endpoints
+                })),
+                error: None,
+            })
+            .unwrap_or_default();
+
+            (200, body)
+        }
         ("GET", "/admin.html") | ("GET", "/admin") => {
             let html = include_str!("admin.html");
             let response = format!(

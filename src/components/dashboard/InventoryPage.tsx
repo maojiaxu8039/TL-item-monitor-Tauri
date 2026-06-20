@@ -73,21 +73,21 @@ export default function InventoryPage() {
     queryKey: queryKeys.inventory.positions(seasonId, marketMode),
     queryFn: () => cmd.listInventoryPositions(seasonId, marketMode),
     enabled: !!seasonId,
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   })
 
   const watchesQuery = useQuery({
     queryKey: queryKeys.inventory.buyWatches(seasonId, marketMode),
     queryFn: () => cmd.listInventoryBuyWatches(seasonId, marketMode),
     enabled: !!seasonId,
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   })
 
   const summaryQuery = useQuery({
     queryKey: queryKeys.inventory.summary(seasonId, marketMode),
     queryFn: () => cmd.getInventorySummary(seasonId, marketMode),
     enabled: !!seasonId,
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   })
 
   const markSoldMutation = useMutation({
