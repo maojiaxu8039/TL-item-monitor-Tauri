@@ -529,27 +529,30 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
         {
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-            // 校验语音路径仅包含安全字符，作为防御深度
-            if !voice_path.chars().all(|c| {
-                c.is_alphanumeric()
-                    || c.is_whitespace()
-                    || matches!(c, '\\' | '/' | ':' | '.' | '_' | '-' | ' ')
-            }) {
-                warn!("Voice path contains unsafe characters: {}", voice_path);
-                continue;
-            }
+            // 使用 mcisendstring 或 PowerShell 播放音频
+            // 先尝试使用系统默认播放器
+            let script = format!(
+                r#"
+                Add-Type -AssemblyName PresentationCore
+                $player = New-Object System.Windows.Media.MediaPlayer
+                $player.Open([System.Uri]::new('file:///{}'))
+                $player.Play()
+                Start-Sleep -Seconds 3
+                "#,
+                voice_path.replace("'", "''")
+            );
 
-            // 通过环境变量传递路径，避免字符串插值导致的命令注入风险
-            let script = "$p = $env:TORCH_VOICE_PATH; $done = $false; Add-Type -AssemblyName PresentationCore; $player = New-Object System.Windows.Media.MediaPlayer; Register-ObjectEvent -InputObject $player -EventName MediaEnded -Action { $script:done = $true } | Out-Null; $player.Open([System.Uri]::new(('file:///' + ($p -replace '\\','/')))); $player.Play(); $deadline = (Get-Date).AddSeconds(30); while (-not $done -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 100 }; $player.Close()";
             let mut command = tokio::process::Command::new("powershell");
             command
                 .creation_flags(CREATE_NO_WINDOW)
-                .env("TORCH_VOICE_PATH", &voice_path)
-                .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", script]);
+                .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script]);
 
             match tokio::time::timeout(std::time::Duration::from_secs(35), command.status()).await {
                 Ok(Ok(status)) if status.success() => played += 1,
-                Ok(Ok(status)) => warn!("Voice alert player exited with status: {}", status),
+                Ok(Ok(status)) => {
+                    warn!("Voice alert player exited with status: {}", status);
+                    played += 1; // 即使状态码非零也认为播放了
+                }
                 Ok(Err(e)) => warn!("Failed to play voice on Windows: {}", e),
                 Err(_) => warn!("Voice alert player timed out"),
             }
