@@ -565,6 +565,15 @@ async fn run_legacy_migrations(pool: &SqlitePool, current_version: i64) -> Resul
         .await?;
     }
 
+    if current_version < 22 {
+        apply_sql_migration(
+            pool,
+            22,
+            include_str!("db/migrations/022_backfill_inventory_context.sql"),
+        )
+        .await?;
+    }
+
     Ok(())
 }
 

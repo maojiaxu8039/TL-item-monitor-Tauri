@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { useVisiblePolling } from "@/hooks/useVisiblePolling"
 import { queryKeys } from "@/lib/queryKeys"
+import { errorMessage } from "@/lib/utils"
 import { toast } from "sonner"
 
 type Tab = "worth" | "buy" | "sell" | "arbitrage"
@@ -191,9 +192,36 @@ export default function MiniWindowPage() {
             variant="outline"
             size="sm"
             className="h-6 text-xs gap-1"
-            onClick={() => {
-              toast.info("请在主窗口中添加买入监控")
-              openMainWindow()
+            onClick={async () => {
+              try {
+                const itemName = window.prompt("请输入要监控的物品名称：")
+                if (!itemName) return
+                const priceStr = window.prompt("请输入目标买入价格（火价）：")
+                if (!priceStr) return
+                const price = parseFloat(priceStr)
+                if (isNaN(price) || price <= 0) {
+                  toast.error("请输入有效的价格")
+                  return
+                }
+                const items = await cmd.searchItemsForArbitrage(itemName)
+                const match = items.find((i) => i.name === itemName) || items[0]
+                if (!match) {
+                  toast.error("未找到该物品")
+                  return
+                }
+                await cmd.createInventoryBuyWatch({
+                  season_id: marketContext.seasonId,
+                  market_mode: marketContext.marketMode,
+                  item_id: match.item_id,
+                  item_name: match.name,
+                  target_buy_price: price,
+                  note: "从小窗口添加",
+                })
+                toast.success("监控添加成功")
+                feedQuery.refetch()
+              } catch (error) {
+                toast.error(`添加失败: ${errorMessage(error)}`)
+              }
             }}
           >
             <Plus className="w-3 h-3" />
@@ -205,9 +233,40 @@ export default function MiniWindowPage() {
             variant="outline"
             size="sm"
             className="h-6 text-xs gap-1"
-            onClick={() => {
-              toast.info("请在主窗口中管理持仓")
-              openMainWindow()
+            onClick={async () => {
+              try {
+                const itemName = window.prompt("请输入物品名称：")
+                if (!itemName) return
+                const buyPriceStr = window.prompt("请输入买入价格：")
+                if (!buyPriceStr) return
+                const quantityStr = window.prompt("请输入数量：", "1")
+                if (!quantityStr) return
+                const buyPrice = parseFloat(buyPriceStr)
+                const quantity = parseInt(quantityStr, 10)
+                if (isNaN(buyPrice) || buyPrice <= 0 || isNaN(quantity) || quantity <= 0) {
+                  toast.error("请输入有效的价格和数量")
+                  return
+                }
+                const items = await cmd.searchItemsForArbitrage(itemName)
+                const match = items.find((i) => i.name === itemName) || items[0]
+                if (!match) {
+                  toast.error("未找到该物品")
+                  return
+                }
+                await cmd.createInventoryPosition({
+                  season_id: marketContext.seasonId,
+                  market_mode: marketContext.marketMode,
+                  item_id: match.item_id,
+                  item_name: match.name,
+                  buy_price: buyPrice,
+                  quantity: quantity,
+                  note: "从小窗口添加",
+                })
+                toast.success("持仓添加成功")
+                feedQuery.refetch()
+              } catch (error) {
+                toast.error(`添加失败: ${errorMessage(error)}`)
+              }
             }}
           >
             <Minus className="w-3 h-3" />
