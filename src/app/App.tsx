@@ -6,6 +6,7 @@ import { SectionRefreshProvider } from "@/contexts/SectionRefreshContext"
 import { SyncProvider } from "@/contexts/SyncContext"
 import { useTauriEvents } from "@/hooks/useTauriEvents"
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts"
+import { useGlobalErrorHandler } from "@/hooks/useGlobalErrorHandler"
 import { TopBar } from "@/components/layout/TopBar"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
@@ -58,6 +59,7 @@ export default function App() {
   const [isMiniMode, setIsMiniMode] = useState(false)
   useTauriEvents()
   useKeyboardShortcuts()
+  useGlobalErrorHandler()
 
   useEffect(() => {
     cmd.getWindowModeState().then((state) => {

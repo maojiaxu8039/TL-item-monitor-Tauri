@@ -137,6 +137,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             evaluate_worth_cmd,
             test_notification,
             open_log_dir,
+            health_check,
             select_local_items_file,
             get_app_data_dir,
             get_resource_path,

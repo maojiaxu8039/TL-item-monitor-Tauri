@@ -399,6 +399,21 @@ export interface BackupInfo {
   db_size_kb: number;
 }
 
+export interface ComponentHealth {
+  status: string;
+  message: string | null;
+  latency_ms: number | null;
+}
+
+export interface HealthStatus {
+  status: string;
+  version: string;
+  database: ComponentHealth;
+  data_dir: ComponentHealth;
+  uptime_seconds: number;
+  checked_at: number;
+}
+
 export interface DatabaseMaintenanceResult {
   db_size_kb_before: number;
   db_size_kb_after: number;
@@ -817,6 +832,8 @@ export const cmd = {
 
   getMiniWindowFeed: (seasonId?: string, marketMode?: string) =>
     invoke<MiniWindowFeed>("get_mini_window_feed", { seasonId, marketMode }),
+
+  healthCheck: () => invoke<HealthStatus>("health_check"),
 };
 
 export interface MiniWindowFeed {
