@@ -213,10 +213,10 @@ pub async fn toggle_arbitrage_recipe_enabled(
 #[tauri::command]
 pub async fn export_arbitrage_recipes_csv(
     state: State<'_, Arc<AppState>>,
-    season_id: String,
-    market_mode: String,
+    _season_id: String,
+    _market_mode: String,
 ) -> Result<String, String> {
-    let recipes = repo_arbitrage::get_recipes_by_season(&state.db, &season_id, &market_mode)
+    let recipes = repo_arbitrage::get_all_recipes(&state.db)
         .await
         .map_err(|e| e.to_string())?;
 

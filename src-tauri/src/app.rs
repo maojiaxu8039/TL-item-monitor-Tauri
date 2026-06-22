@@ -556,6 +556,15 @@ async fn run_legacy_migrations(pool: &SqlitePool, current_version: i64) -> Resul
         .await?;
     }
 
+    if current_version < 21 {
+        apply_sql_migration(
+            pool,
+            21,
+            include_str!("db/migrations/021_add_arbitrage_season_mode.sql"),
+        )
+        .await?;
+    }
+
     Ok(())
 }
 
