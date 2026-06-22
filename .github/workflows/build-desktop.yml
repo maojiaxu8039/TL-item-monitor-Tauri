@@ -10,6 +10,8 @@ on:
       - 'package.json'
       - 'vite.config.ts'
       - '.github/workflows/build-desktop.yml'
+    # 跳过以下前缀的 commit message（用于文档/琐碎修改）
+    # 在 commit 信息中包含 [skip ci] 即可跳过
   pull_request:
     branches:
       - main
@@ -23,6 +25,13 @@ env:
 jobs:
   build-windows:
     runs-on: windows-2022
+    if: |
+      github.event_name != 'push' ||
+      (
+        !contains(github.event.head_commit.message, '[skip ci]') &&
+        !contains(github.event.head_commit.message, '[ci skip]') &&
+        !startsWith(github.event.head_commit.message, 'docs:')
+      )
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -66,6 +75,13 @@ jobs:
 
   build-macos:
     runs-on: macos-15
+    if: |
+      github.event_name != 'push' ||
+      (
+        !contains(github.event.head_commit.message, '[skip ci]') &&
+        !contains(github.event.head_commit.message, '[ci skip]') &&
+        !startsWith(github.event.head_commit.message, 'docs:')
+      )
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
