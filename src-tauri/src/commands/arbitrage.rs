@@ -33,10 +33,13 @@ pub async fn create_arbitrage_recipe(
     state: State<'_, Arc<AppState>>,
     request: CreateRecipeRequest,
 ) -> Result<String, String> {
+    let ctx = state.active_context.read().clone();
     repo_arbitrage::create_recipe(
         &state.db,
         &request.name,
         &request.recipe_type,
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
         request.enabled,
         &request.ingredients,
         &request.outputs,
@@ -265,7 +268,7 @@ pub async fn import_arbitrage_recipes_csv(
                     continue;
                 }
 
-                match repo_arbitrage::create_recipe(&state.db, &name, &recipe_type, enabled, &[], &[]).await {
+                match repo_arbitrage::create_recipe(&state.db, &name, &recipe_type, &_season_id, &_market_mode, enabled, &[], &[]).await {
                     Ok(_) => imported_count += 1,
                     Err(e) => error_list.push(format!("行 {}: {}", idx + 2, e)),
                 }

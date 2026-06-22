@@ -106,6 +106,11 @@ export interface ItemHistoryRecord {
   scraped_at: number;
 }
 
+export interface ImportResp {
+  imported: number;
+  errors: string[];
+}
+
 export interface FirePriceChangeItem {
   item_id: string;
   name: string;
@@ -767,7 +772,7 @@ export const cmd = {
   exportArbitrageRecipesCsv: (seasonId: string, marketMode: string) =>
     invoke<string>("export_arbitrage_recipes_csv", { seasonId, marketMode }),
   importArbitrageRecipesCsv: (content: string) =>
-    invoke<{ imported: number; errors: string[] }>("import_arbitrage_recipes_csv", { content }),
+    invoke<ImportResp>("import_arbitrage_recipes_csv", { content }),
 
   // Window mode commands
   getWindowModeState: () => invoke<WindowModeState>("get_window_mode_state"),

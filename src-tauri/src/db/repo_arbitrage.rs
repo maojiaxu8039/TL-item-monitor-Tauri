@@ -129,6 +129,8 @@ pub async fn create_recipe(
     pool: &SqlitePool,
     name: &str,
     recipe_type: &str,
+    season_id: &str,
+    market_mode: &str,
     enabled: bool,
     ingredients: &[CreateIngredientRequest],
     outputs: &[CreateOutputRequest],
@@ -145,8 +147,8 @@ pub async fn create_recipe(
     .bind(&recipe_id)
     .bind(name)
     .bind(recipe_type)
-    .bind("")
-    .bind("season_normal")
+    .bind(season_id)
+    .bind(market_mode)
     .bind(if enabled { 1 } else { 0 })
     .bind(now)
     .bind(now)
