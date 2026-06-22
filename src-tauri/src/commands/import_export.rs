@@ -1,6 +1,7 @@
 use crate::commands::types::{BackupInfo, DatabaseMaintenanceResult, ImportResp, OkResponse};
 use crate::core::paths;
 use crate::core::state::AppState;
+use crate::db::repo_inventory::{InventoryBuyWatch, InventoryPosition};
 use crate::db::repo_config;
 use crate::db::repo_inventory;
 use crate::db::repo_sections;
@@ -9,6 +10,7 @@ use base64::{engine::general_purpose, Engine};
 use std::sync::Arc;
 use tauri::State;
 use tracing::warn;
+use uuid::Uuid;
 
 #[tauri::command]
 pub async fn import_watchlist_csv(
@@ -206,6 +208,156 @@ pub async fn export_buy_watches_csv(
 
     let data = wtr.into_inner().map_err(|e| e.to_string())?;
     String::from_utf8(data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn import_inventory_csv(
+    state: State<'_, Arc<AppState>>,
+    content: String,
+) -> Result<ImportResp, String> {
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(content.as_bytes());
+
+    let ctx = state.active_context.read().clone();
+    let mut imported_count = 0;
+    let mut error_list: Vec<String> = Vec::new();
+
+    for (idx, result) in reader.records().enumerate() {
+        let record = match result {
+            Ok(r) => r,
+            Err(e) => {
+                error_list.push(format!("行 {}: 解析失败: {}", idx + 2, e));
+                continue;
+            }
+        };
+
+        let item_id = record.get(0).unwrap_or("").trim().to_string();
+        let item_name = record.get(1).unwrap_or("").trim().to_string();
+        if item_id.is_empty() || item_name.is_empty() {
+            error_list.push(format!("行 {}: item_id 或 item_name 为空", idx + 2));
+            continue;
+        }
+
+        let buy_price: f64 = match record.get(2).unwrap_or("0").parse() {
+            Ok(v) if v > 0.0 => v,
+            _ => {
+                error_list.push(format!("行 {}: 无效的买入价格", idx + 2));
+                continue;
+            }
+        };
+        let quantity: i64 = record.get(3).unwrap_or("1").parse().unwrap_or(1);
+        let target_sell_price: Option<f64> = record.get(4).and_then(|s| s.parse().ok());
+        let total_cost: f64 = record.get(5).unwrap_or("0").parse().unwrap_or(0.0);
+        let note = record.get(6).unwrap_or("").to_string();
+        let bought_at: i64 = record
+            .get(7)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or_else(|| chrono::Utc::now().timestamp());
+
+        let extra_cost = (total_cost - buy_price * quantity as f64).max(0.0);
+
+        let position = InventoryPosition {
+            id: Uuid::new_v4().to_string(),
+            season_id: ctx.season_id.clone(),
+            market_mode: ctx.market_mode.as_str().to_string(),
+            item_id,
+            item_name,
+            item_type: String::new(),
+            buy_price,
+            quantity,
+            extra_cost,
+            fee_rate: 0.125,
+            target_sell_price,
+            bought_at,
+            status: "holding".to_string(),
+            sold_price: None,
+            sold_at: None,
+            note,
+            alert_enabled: true,
+            last_alert_at: None,
+            created_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp(),
+        };
+
+        match repo_inventory::create_position(&state.db, &position).await {
+            Ok(_) => imported_count += 1,
+            Err(e) => error_list.push(format!("行 {}: {}", idx + 2, e)),
+        }
+    }
+
+    Ok(ImportResp {
+        imported: imported_count,
+        errors: error_list,
+    })
+}
+
+#[tauri::command]
+pub async fn import_buy_watches_csv(
+    state: State<'_, Arc<AppState>>,
+    content: String,
+) -> Result<ImportResp, String> {
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(content.as_bytes());
+
+    let ctx = state.active_context.read().clone();
+    let mut imported_count = 0;
+    let mut error_list: Vec<String> = Vec::new();
+
+    for (idx, result) in reader.records().enumerate() {
+        let record = match result {
+            Ok(r) => r,
+            Err(e) => {
+                error_list.push(format!("行 {}: 解析失败: {}", idx + 2, e));
+                continue;
+            }
+        };
+
+        let item_id = record.get(0).unwrap_or("").trim().to_string();
+        let item_name = record.get(1).unwrap_or("").trim().to_string();
+        if item_id.is_empty() || item_name.is_empty() {
+            error_list.push(format!("行 {}: item_id 或 item_name 为空", idx + 2));
+            continue;
+        }
+
+        let target_buy_price: f64 = match record.get(2).unwrap_or("0").parse() {
+            Ok(v) if v > 0.0 => v,
+            _ => {
+                error_list.push(format!("行 {}: 无效的目标买入价", idx + 2));
+                continue;
+            }
+        };
+        let max_quantity: Option<i64> = record.get(3).and_then(|s| s.parse().ok());
+        let note = record.get(4).unwrap_or("").to_string();
+
+        let watch = InventoryBuyWatch {
+            id: Uuid::new_v4().to_string(),
+            season_id: ctx.season_id.clone(),
+            market_mode: ctx.market_mode.as_str().to_string(),
+            item_id,
+            item_name,
+            item_type: String::new(),
+            target_buy_price,
+            max_quantity,
+            note,
+            alert_enabled: true,
+            auto_create_position: false,
+            last_alert_at: None,
+            created_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp(),
+        };
+
+        match repo_inventory::create_buy_watch(&state.db, &watch).await {
+            Ok(_) => imported_count += 1,
+            Err(e) => error_list.push(format!("行 {}: {}", idx + 2, e)),
+        }
+    }
+
+    Ok(ImportResp {
+        imported: imported_count,
+        errors: error_list,
+    })
 }
 
 #[tauri::command]

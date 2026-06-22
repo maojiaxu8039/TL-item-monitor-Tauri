@@ -55,13 +55,14 @@ export default function ImportExportPage() {
         filters: [{ name: "CSV", extensions: ["csv"] }],
       });
       if (!file) return null;
-      await readTextFile(file);
-      toast.info("持仓导入功能开发中");
-      return { fileName: file };
+      const content = await readTextFile(file);
+      const result = await cmd.importInventoryCsv(content);
+      return { result, fileName: file };
     },
     onSuccess: (data) => {
       if (!data) return;
-      toast.success("持仓导入功能开发中");
+      setImportResult(data.result);
+      setShowImportDetails(false);
     },
   });
 
@@ -72,13 +73,14 @@ export default function ImportExportPage() {
         filters: [{ name: "CSV", extensions: ["csv"] }],
       });
       if (!file) return null;
-      await readTextFile(file);
-      toast.info("买入监控导入功能开发中");
-      return { fileName: file };
+      const content = await readTextFile(file);
+      const result = await cmd.importBuyWatchesCsv(content);
+      return { result, fileName: file };
     },
     onSuccess: (data) => {
       if (!data) return;
-      toast.success("买入监控导入功能开发中");
+      setImportResult(data.result);
+      setShowImportDetails(false);
     },
   });
 
@@ -349,16 +351,16 @@ export default function ImportExportPage() {
                 <span className="text-sm font-medium text-[var(--color-text)]">持仓数据</span>
               </div>
               <p className="text-xs text-[var(--color-text-subtle)] ml-6 mb-2">
-                导入持仓 CSV 文件
+                CSV 格式：item_id, item_name, buy_price, quantity, target_sell_price, total_cost, note, created_at
               </p>
               <div className="ml-6">
                 <Button
-                  variant="outline"
                   onClick={() => importInventoryMutation.mutate()}
                   disabled={importInventoryMutation.isPending}
+                  className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
                 >
                   <Upload className="w-4 h-4 mr-1.5" />
-                  导入 CSV
+                  {importInventoryMutation.isPending ? "导入中..." : "导入 CSV"}
                 </Button>
               </div>
             </div>
@@ -369,16 +371,16 @@ export default function ImportExportPage() {
                 <span className="text-sm font-medium text-[var(--color-text)]">买入监控</span>
               </div>
               <p className="text-xs text-[var(--color-text-subtle)] ml-6 mb-2">
-                导入买入监控 CSV 文件
+                CSV 格式：item_id, item_name, target_buy_price, max_quantity, note
               </p>
               <div className="ml-6">
                 <Button
-                  variant="outline"
                   onClick={() => importBuyWatchesMutation.mutate()}
                   disabled={importBuyWatchesMutation.isPending}
+                  className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
                 >
                   <Upload className="w-4 h-4 mr-1.5" />
-                  导入 CSV
+                  {importBuyWatchesMutation.isPending ? "导入中..." : "导入 CSV"}
                 </Button>
               </div>
             </div>

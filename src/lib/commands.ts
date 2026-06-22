@@ -773,6 +773,10 @@ export const cmd = {
     invoke<string>("export_arbitrage_recipes_csv", { seasonId, marketMode }),
   importArbitrageRecipesCsv: (content: string) =>
     invoke<ImportResp>("import_arbitrage_recipes_csv", { content }),
+  importInventoryCsv: (content: string) =>
+    invoke<ImportResp>("import_inventory_csv", { content }),
+  importBuyWatchesCsv: (content: string) =>
+    invoke<ImportResp>("import_buy_watches_csv", { content }),
 
   // Window mode commands
   getWindowModeState: () => invoke<WindowModeState>("get_window_mode_state"),

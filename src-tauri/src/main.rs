@@ -146,6 +146,8 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             export_buy_watches_csv,
             export_arbitrage_recipes_csv,
             import_arbitrage_recipes_csv,
+            import_inventory_csv,
+            import_buy_watches_csv,
             get_backup_info,
             backup_database,
             maintain_database,
