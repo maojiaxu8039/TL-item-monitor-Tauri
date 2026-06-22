@@ -394,6 +394,16 @@ export interface BackupInfo {
   db_size_kb: number;
 }
 
+export interface DatabaseMaintenanceResult {
+  db_size_kb_before: number;
+  db_size_kb_after: number;
+  wal_size_kb_before: number;
+  wal_size_kb_after: number;
+  total_size_kb_before: number;
+  total_size_kb_after: number;
+  freed_kb: number;
+}
+
 export interface SourceDiagnostic {
   source: string;
   source_type: string;
@@ -554,6 +564,7 @@ export const cmd = {
   getBackupInfo: () => invoke<BackupInfo>("get_backup_info"),
   backupDatabase: (destPath: string) =>
     invoke<OkResponse>("backup_database", { dest_path: destPath }),
+  maintainDatabase: () => invoke<DatabaseMaintenanceResult>("maintain_database"),
   restoreDatabase: (srcPath: string) =>
     invoke<OkResponse>("restore_database", { src_path: srcPath }),
   exportFireHistoryCsv: (hours: number) =>

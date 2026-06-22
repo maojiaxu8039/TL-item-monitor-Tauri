@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { Download, Upload, Database, Clock, HardDrive, FileText, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
+import { Download, Upload, Database, Clock, HardDrive, FileText, ChevronDown, ChevronUp, AlertTriangle, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -221,6 +221,17 @@ export default function ImportExportPage() {
     },
   });
 
+  const maintenanceMutation = useMutation({
+    mutationFn: cmd.maintainDatabase,
+    onSuccess: (result) => {
+      refetchBackupInfo();
+      toast.success(`数据库维护完成，释放 ${formatBytes(result.freed_kb)}`);
+    },
+    onError: () => {
+      toast.error("数据库维护失败");
+    },
+  });
+
   const handleExport = (mutation: { mutate: () => void }) => {
     mutation.mutate();
   };
@@ -267,6 +278,14 @@ export default function ImportExportPage() {
               </p>
             </div>
             <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => maintenanceMutation.mutate()}
+                disabled={maintenanceMutation.isPending}
+              >
+                <Wrench className="w-4 h-4 mr-1.5" />
+                {maintenanceMutation.isPending ? "维护中..." : "维护"}
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => restoreMutation.mutate()}

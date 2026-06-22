@@ -87,6 +87,17 @@ pub struct BackupInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseMaintenanceResult {
+    pub db_size_kb_before: f64,
+    pub db_size_kb_after: f64,
+    pub wal_size_kb_before: f64,
+    pub wal_size_kb_after: f64,
+    pub total_size_kb_before: f64,
+    pub total_size_kb_after: f64,
+    pub freed_kb: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ItemsStats {
     pub total_items: i64,
     pub last_reload: Option<i64>,

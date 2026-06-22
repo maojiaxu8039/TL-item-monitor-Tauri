@@ -144,6 +144,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             export_watchlist_csv,
             get_backup_info,
             backup_database,
+            maintain_database,
             restore_database,
             get_source_diagnostics,
             test_source_connection,

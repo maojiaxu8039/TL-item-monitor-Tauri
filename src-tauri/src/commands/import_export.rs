@@ -1,4 +1,4 @@
-use crate::commands::types::{BackupInfo, ImportResp, OkResponse};
+use crate::commands::types::{BackupInfo, DatabaseMaintenanceResult, ImportResp, OkResponse};
 use crate::core::paths;
 use crate::core::state::AppState;
 use crate::db::repo_config;
@@ -251,6 +251,49 @@ pub async fn backup_database(
     }
 
     Ok(OkResponse::success("备份已创建"))
+}
+
+async fn file_size_kb(path: &std::path::Path) -> f64 {
+    tokio::fs::metadata(path)
+        .await
+        .map(|m| m.len() as f64 / 1024.0)
+        .unwrap_or(0.0)
+}
+
+#[tauri::command]
+pub async fn maintain_database(
+    state: State<'_, Arc<AppState>>,
+) -> Result<DatabaseMaintenanceResult, String> {
+    let db_path = paths::db_path();
+    let wal_path = db_path.with_extension("db-wal");
+
+    let db_size_kb_before = file_size_kb(&db_path).await;
+    let wal_size_kb_before = file_size_kb(&wal_path).await;
+
+    sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+        .execute(&state.db)
+        .await
+        .map_err(|e| format!("WAL checkpoint 失败: {}", e))?;
+
+    sqlx::query("PRAGMA optimize")
+        .execute(&state.db)
+        .await
+        .map_err(|e| format!("数据库优化失败: {}", e))?;
+
+    let db_size_kb_after = file_size_kb(&db_path).await;
+    let wal_size_kb_after = file_size_kb(&wal_path).await;
+    let total_size_kb_before = db_size_kb_before + wal_size_kb_before;
+    let total_size_kb_after = db_size_kb_after + wal_size_kb_after;
+
+    Ok(DatabaseMaintenanceResult {
+        db_size_kb_before,
+        db_size_kb_after,
+        wal_size_kb_before,
+        wal_size_kb_after,
+        total_size_kb_before,
+        total_size_kb_after,
+        freed_kb: (total_size_kb_before - total_size_kb_after).max(0.0),
+    })
 }
 
 fn validate_path_within_app_dir(path: &str) -> Result<std::path::PathBuf, String> {

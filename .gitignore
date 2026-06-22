@@ -38,7 +38,6 @@ test_*.rs
 *.swp
 *.swo
 server-standalone/target/
-server-standalone/Cargo.lock
 
 # Runtime data (never commit)
 data/
