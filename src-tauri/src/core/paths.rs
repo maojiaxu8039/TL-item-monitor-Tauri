@@ -2,7 +2,8 @@
 use std::path::PathBuf;
 use tauri::Manager;
 
-pub const APP_DATA_DIR_NAME: &str = "com.tlmonitor.app";
+pub const APP_DATA_DIR_NAME: &str = "com.torchscan.desktop";
+pub const LEGACY_APP_DATA_DIR_NAME: &str = "com.tlmonitor.app";
 pub const DEFAULT_VOICE_ALERT_RESOURCE: &str = "resources/audio/萝莉音.mp3";
 const DEFAULT_VOICE_ALERT_FILE: &str = "萝莉音.mp3";
 const DEFAULT_VOICE_ALERT_AUDIO_RESOURCE: &str = "audio/萝莉音.mp3";
@@ -23,36 +24,125 @@ pub fn app_dir() -> PathBuf {
         PathBuf::new()
     };
 
+    if cfg!(debug_assertions) {
+        if !debug_data_path.exists() {
+            let _ = std::fs::create_dir_all(&debug_data_path);
+        }
+        return debug_data_path;
+    }
+
     // In production, use system data directory
-    let prod_dir = dirs::data_dir()
+    let base_dir = dirs::data_dir()
         .unwrap_or_else(|| {
             tracing::warn!("[PATHS] dirs::data_dir() returned None, using current directory");
             std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        })
-        .join(APP_DATA_DIR_NAME);
+        });
 
-    let final_dir = if cfg!(debug_assertions) {
-        debug_data_path
-    } else {
-        prod_dir
-    };
+    let new_dir = base_dir.join(APP_DATA_DIR_NAME);
+    let legacy_dir = base_dir.join(LEGACY_APP_DATA_DIR_NAME);
 
-    if !final_dir.exists() {
-        match std::fs::create_dir_all(&final_dir) {
+    // Migration: if new dir doesn't exist but legacy dir does, migrate data
+    if !new_dir.exists() && legacy_dir.exists() {
+        match migrate_legacy_data(&legacy_dir, &new_dir) {
             Ok(_) => {
-                tracing::info!("[PATHS] Created app directory: {:?}", final_dir);
+                tracing::info!(
+                    "[PATHS] Successfully migrated data from {:?} to {:?}",
+                    legacy_dir,
+                    new_dir
+                );
+            }
+            Err(e) => {
+                tracing::error!(
+                    "[PATHS] Failed to migrate legacy data: {}. Falling back to legacy directory.",
+                    e
+                );
+                return legacy_dir;
+            }
+        }
+    }
+
+    if !new_dir.exists() {
+        match std::fs::create_dir_all(&new_dir) {
+            Ok(_) => {
+                tracing::info!("[PATHS] Created app directory: {:?}", new_dir);
             }
             Err(e) => {
                 tracing::error!(
                     "[PATHS] Failed to create app directory {:?}: {}",
-                    final_dir,
+                    new_dir,
                     e
                 );
             }
         }
     }
 
-    final_dir
+    new_dir
+}
+
+fn migrate_legacy_data(
+    legacy_dir: &PathBuf,
+    new_dir: &PathBuf,
+) -> Result<(), std::io::Error> {
+    tracing::info!(
+        "[PATHS] Starting data migration from {:?} to {:?}",
+        legacy_dir,
+        new_dir
+    );
+
+    std::fs::create_dir_all(new_dir)?;
+
+    let entries = std::fs::read_dir(legacy_dir)?;
+    for entry in entries {
+        let entry = entry?;
+        let entry_path = entry.path();
+        let file_name = entry.file_name();
+        let dest_path = new_dir.join(&file_name);
+
+        if dest_path.exists() {
+            tracing::warn!(
+                "[PATHS] Skipping migration of {:?} because target already exists",
+                entry_path
+            );
+            continue;
+        }
+
+        match std::fs::rename(&entry_path, &dest_path) {
+            Ok(_) => {
+                tracing::info!("[PATHS] Migrated: {:?} -> {:?}", entry_path, dest_path);
+            }
+            Err(e) => {
+                tracing::error!(
+                    "[PATHS] Failed to migrate {:?}: {}. Trying copy.",
+                    entry_path,
+                    e
+                );
+                if entry_path.is_dir() {
+                    copy_dir_recursive(&entry_path, &dest_path)?;
+                } else {
+                    std::fs::copy(&entry_path, &dest_path)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> Result<(), std::io::Error> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        let file_name = entry.file_name();
+        let dest_path = dst.join(&file_name);
+
+        if entry_path.is_dir() {
+            copy_dir_recursive(&entry_path, &dest_path)?;
+        } else {
+            std::fs::copy(&entry_path, &dest_path)?;
+        }
+    }
+    Ok(())
 }
 
 pub fn db_path() -> PathBuf {

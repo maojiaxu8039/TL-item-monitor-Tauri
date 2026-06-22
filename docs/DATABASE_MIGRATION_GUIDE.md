@@ -17,12 +17,29 @@
 生产环境数据库路径由 `src-tauri/src/core/paths.rs` 统一管理：
 
 ```text
-Windows: %APPDATA%/com.tlmonitor.app/tl_monitor.db
-macOS:   ~/Library/Application Support/com.tlmonitor.app/tl_monitor.db
-Linux:   ~/.local/share/com.tlmonitor.app/tl_monitor.db
+Windows: %APPDATA%/com.torchscan.desktop/tl_monitor.db
+macOS:   ~/Library/Application Support/com.torchscan.desktop/tl_monitor.db
+Linux:   ~/.local/share/com.torchscan.desktop/tl_monitor.db
 ```
 
-当前 `tauri.conf.json` 的 `identifier` 是 `com.tlmonitor.desktop`，但数据目录名保留 `com.tlmonitor.app`。这是为了兼容已发布版本，避免覆盖升级后找不到旧数据库。
+当前 `tauri.conf.json` 的 `identifier` 是 `com.torchscan.desktop`，数据目录名也已统一为 `com.torchscan.desktop`。
+
+**自动迁移机制**：
+
+为了兼容旧版本用户，应用启动时自动检测并迁移数据：
+
+| 旧数据目录 | 新数据目录 | 行为 |
+|-----------|-----------|------|
+| `com.tlmonitor.app` 存在 | `com.torchscan.desktop` 不存在 | 自动迁移所有数据 |
+| 都不存在 | - | 创建新目录 |
+| `com.torchscan.desktop` 已存在 | - | 使用新目录，忽略旧目录 |
+
+迁移过程：
+1. 检测到旧目录 `com.tlmonitor.app` 存在
+2. 创建新目录 `com.torchscan.desktop`
+3. 移动所有文件/子目录到新位置
+4. 如果移动失败则降级为复制
+5. 迁移成功后旧目录为空目录
 
 安装/升级行为：
 
