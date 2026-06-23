@@ -3,14 +3,13 @@ import {
   Bell,
   Plus,
   X,
-  AlertCircle,
   CheckCircle,
   Clock,
   ChevronDown,
   ChevronRight,
   Search,
 } from "lucide-react";
-import { cmd, AlertRule, AlertEvent, ItemSearchResult, Section, SectionItem } from "@/lib/commands";
+import { cmd, AlertRule, ItemSearchResult, Section, SectionItem } from "@/lib/commands";
 import { formatTimestamp } from "@/lib/format";
 import { useToast } from "@/hooks/useToast";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
@@ -55,7 +54,6 @@ export default function AlertsPage() {
   const { addToast } = useToast();
   const { marketContext, marketContextReady } = useSectionRefresh();
   const [rules, setRules] = useState<AlertRule[]>([]);
-  const [events, setEvents] = useState<AlertEvent[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -93,13 +91,11 @@ export default function AlertsPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [rulesData, eventsData, sectionsData] = await Promise.all([
+      const [rulesData, sectionsData] = await Promise.all([
         cmd.getAlertRules(),
-        cmd.getAlertEvents(50),
         cmd.getSections(marketContext.marketMode),
       ]);
       setRules(rulesData);
-      setEvents(eventsData);
       setSections(sectionsData);
     } catch {
       addToast("error", "加载预警规则失败");
@@ -395,29 +391,7 @@ export default function AlertsPage() {
         </div>
       )}
 
-      {events.length > 0 && (
-        <Surface padding="none">
-          <div className="px-4 py-3 border-b border-[var(--color-border-soft)]">
-            <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-[var(--color-brand-gold)]" />
-              最近预警事件
-            </h3>
-          </div>
-          <div className="divide-y divide-[var(--color-border-soft)]">
-            {events.slice(0, 10).map(event => (
-              <div key={event.id} className="px-4 py-3 flex items-start gap-3 hover:bg-[var(--color-panel-soft)] transition-colors">
-                <AlertCircle className="w-4 h-4 text-[var(--color-brand-gold)] mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-[var(--color-text)]">{event.message}</div>
-                  <div className="text-xs text-[var(--color-text-subtle)] mt-1">
-                    {formatTimestamp(event.triggered_at)}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Surface>
-      )}
+      {/* 最近预警事件已隐藏 */}
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">

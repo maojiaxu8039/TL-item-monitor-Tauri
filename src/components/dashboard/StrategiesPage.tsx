@@ -430,7 +430,9 @@ export default function StrategiesPage() {
 
   const getLabelColor = useCallback((label: string) => {
     switch (label) {
-      case "K7": return "bg-[rgba(34,197,94,0.15)] text-[var(--color-success)]";
+      case "K7-0": return "bg-[rgba(34,197,94,0.15)] text-[var(--color-success)]";
+      case "K7-2": return "bg-[rgba(34,197,94,0.2)] text-[var(--color-success)] border border-[rgba(34,197,94,0.3)]";
+      case "K8-0": return "bg-[rgba(255,184,0,0.1)] text-[var(--color-brand-gold)] border border-[rgba(255,184,0,0.25)]";
       case "K8-1": return "bg-[rgba(255,184,0,0.15)] text-[var(--color-brand-gold)]";
       case "K8-2": return "bg-[rgba(239,68,68,0.15)] text-[var(--color-danger)]";
       case "U8": return "bg-[rgba(167,139,250,0.15)] text-[var(--color-ai)]";
@@ -829,8 +831,11 @@ export default function StrategiesPage() {
       )}
 
       <ImagePreviewDialog
-        image={previewImage}
-        onClose={() => setPreviewImage(null)}
+        imageUrl={previewImage ?? ""}
+        open={!!previewImage}
+        onOpenChange={(open) => {
+          if (!open) setPreviewImage(null)
+        }}
       />
     </PageShell>
   );
