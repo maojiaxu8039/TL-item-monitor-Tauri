@@ -4,8 +4,10 @@ use crate::core::events::{
     ItemsUpdatedPayload, TaskStatusPayload,
 };
 use crate::core::state::{AppState, FirePriceSnapshot, MarketMode};
+use crate::db::repo_arbitrage;
 use crate::db::repo_fire;
 use crate::db::repo_history;
+use crate::db::repo_inventory;
 use crate::db::repo_item_realtime_prices;
 use crate::db::repo_items;
 use crate::db::repo_sections;
@@ -74,6 +76,50 @@ pub async fn get_dashboard_summary(
         None
     };
 
+    let profitable_arbitrage_count = repo_arbitrage::count_profitable_arbitrage(
+        &state.db,
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
+    )
+    .await
+    .unwrap_or(0);
+
+    let positions = repo_inventory::list_positions(
+        &state.db,
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
+    )
+    .await
+    .unwrap_or_default();
+
+    let mut position_cost_fire = 0.0;
+    let mut position_current_value_fire = 0.0;
+    for p in &positions {
+        position_cost_fire += p.buy_price * p.quantity as f64;
+    }
+
+    let position_views =
+        repo_inventory::list_positions_with_current_price(&state.db, &ctx.season_id, ctx.market_mode.as_str())
+            .await
+            .unwrap_or_default();
+    for v in &position_views {
+        if let Some(cp) = v.current_price {
+            position_current_value_fire += cp * v.position.quantity as f64;
+        }
+    }
+
+    let rmb_per_10k = fire.as_ref().map(|f| f.rmb_per_10k_fire).unwrap_or(0.0);
+    let position_cost_rmb = if rmb_per_10k > 0.0 {
+        position_cost_fire * rmb_per_10k / 10000.0
+    } else {
+        0.0
+    };
+    let position_current_value_rmb = if rmb_per_10k > 0.0 {
+        position_current_value_fire * rmb_per_10k / 10000.0
+    } else {
+        0.0
+    };
+
     Ok(DashboardSummary {
         fire: fire.map(FirePriceUI::from),
         history_fire,
@@ -86,6 +132,11 @@ pub async fn get_dashboard_summary(
         last_fire_at,
         last_items_at,
         task_running: status.fire_scrape_running || status.items_reload_running,
+        profitable_arbitrage_count,
+        position_cost_fire,
+        position_cost_rmb,
+        position_current_value_fire,
+        position_current_value_rmb,
     })
 }
 

@@ -30,6 +30,11 @@ export interface DashboardSummary {
   last_fire_at: string | null;
   last_items_at: string | null;
   task_running: boolean;
+  profitable_arbitrage_count: number;
+  position_cost_fire: number;
+  position_cost_rmb: number;
+  position_current_value_fire: number;
+  position_current_value_rmb: number;
 }
 
 export interface Section {

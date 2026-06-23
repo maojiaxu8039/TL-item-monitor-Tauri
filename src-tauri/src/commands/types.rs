@@ -42,6 +42,11 @@ pub struct DashboardSummary {
     pub last_fire_at: Option<String>,
     pub last_items_at: Option<String>,
     pub task_running: bool,
+    pub profitable_arbitrage_count: i64,
+    pub position_cost_fire: f64,
+    pub position_cost_rmb: f64,
+    pub position_current_value_fire: f64,
+    pub position_current_value_rmb: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,13 +1,22 @@
 import { useQuery } from "@tanstack/react-query"
 import { useState, useEffect, useMemo, useCallback, memo } from "react"
-import { Package, Flame, TrendingUp, TrendingDown, Minus, History, ArrowUp, ArrowDown, Award, ChevronLeft, ChevronRight } from "lucide-react"
+import { Package, Flame, History, Award, ChevronLeft, ChevronRight } from "lucide-react"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { MetricCard } from "@/components/ui/MetricCard"
 import { StatusBadge } from "@/components/ui/StatusBadge"
 import { cmd } from "@/lib/commands"
-import type { DashboardSummary, FireHistoryItem, StrategyWithCosts, FirePriceUI } from "@/lib/commands"
+import type { DashboardSummary, StrategyWithCosts, FirePriceUI } from "@/lib/commands"
 import { queryKeys } from "@/lib/queryKeys"
 import { calculateRecommendations } from "@/lib/strategyRecommend"
+
+function formatFirePriceCompact(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "0";
+  const abs = Math.abs(value);
+  if (abs >= 100000000) return `${(value / 100000000).toFixed(2)}亿`;
+  if (abs >= 10000) return `${(value / 10000).toFixed(1)}万`;
+  if (abs >= 1000) return value.toFixed(0);
+  return value.toFixed(1);
+}
 
 const FirePriceHelper = memo(function FirePriceHelper({ fire }: { fire: FirePriceUI | null }) {
   if (!fire) return null;
@@ -41,23 +50,6 @@ export function DashboardStats() {
     retryDelay: 1000,
   })
 
-  const { data: fireHistory = [], isLoading: fireHistoryLoading } = useQuery<FireHistoryItem[]>({
-    queryKey: [...queryKeys.fireHistory, marketContext.seasonId, marketContext.marketMode, 24],
-    queryFn: () => cmd.getFireHistory(24),
-    enabled: marketContextReady,
-    staleTime: 60 * 1000,
-    retry: 1,
-    retryDelay: 1000,
-  })
-
-  const { data: allSectionItems = [], isLoading: sectionItemsLoading } = useQuery({
-    queryKey: [...queryKeys.allSectionItems, marketContext.seasonId, marketContext.marketMode],
-    queryFn: () => cmd.getSectionItemsForContext(marketContext.seasonId, marketContext.marketMode),
-    enabled: marketContextReady,
-    retry: 1,
-    retryDelay: 1000,
-  })
-
   const { data: strategies = [], isLoading: strategiesLoading } = useQuery<StrategyWithCosts[]>({
     queryKey: [...queryKeys.strategies, marketContext.marketMode],
     queryFn: () => cmd.getAllStrategiesWithCosts(marketContext.marketMode),
@@ -66,55 +58,17 @@ export function DashboardStats() {
     retryDelay: 1000,
   })
 
-  const isLoading = summaryLoading || fireHistoryLoading || sectionItemsLoading || strategiesLoading
+  const isLoading = summaryLoading || strategiesLoading
 
   const rmbPer10kFire = summary?.fire?.rmb_per_10k_fire
   const hasFirePrice = rmbPer10kFire !== null && rmbPer10kFire !== undefined
 
   const stats = useMemo(() => {
-    const s = {
+    return {
       itemCount: summary?.item_count ?? 0,
       currentFire: hasFirePrice ? rmbPer10kFire : null,
-      profit: 0,
-      profitPercent: 0,
     };
-    if (allSectionItems.length > 0 && hasFirePrice) {
-      let totalPurchaseValue = 0;
-      let totalCurrentValue = 0;
-      for (const item of allSectionItems) {
-        totalPurchaseValue += item.purchase_fire_price ?? 0;
-        totalCurrentValue += item.current_price ?? 0;
-      }
-      if (totalPurchaseValue > 0) {
-        s.profit = (totalCurrentValue - totalPurchaseValue) * rmbPer10kFire / 10000;
-        s.profitPercent = ((totalCurrentValue - totalPurchaseValue) / totalPurchaseValue) * 100;
-      }
-    }
-    return s;
-  }, [summary, allSectionItems, hasFirePrice, rmbPer10kFire]);
-
-  const getProfitStatus = () => {
-    if (stats.profit > 0) return "profit"
-    if (stats.profit < 0) return "loss"
-    return "neutral"
-  }
-
-  const profitStatus = getProfitStatus()
-
-  const fireStats = useMemo(() => {
-    const fs = { min: 0, max: 0, avg: 0, change: 0 };
-    if (fireHistory.length > 0) {
-      const prices = fireHistory.map(h => h.rmb_per_10k_fire);
-      fs.min = Math.min(...prices);
-      fs.max = Math.max(...prices);
-      fs.avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-      const sorted = [...fireHistory].sort((a, b) => a.scraped_at - b.scraped_at);
-      fs.change = sorted.length >= 2 && sorted[0].rmb_per_10k_fire !== 0
-        ? ((sorted[sorted.length - 1].rmb_per_10k_fire - sorted[0].rmb_per_10k_fire) / sorted[0].rmb_per_10k_fire) * 100
-        : 0;
-    }
-    return fs;
-  }, [fireHistory]);
+  }, [summary, hasFirePrice, rmbPer10kFire]);
 
   const recommendations = useMemo(() => calculateRecommendations(strategies), [strategies]);
 
@@ -195,38 +149,43 @@ export function DashboardStats() {
           }
         />
         <MetricCard
-          label="历史火价"
-          value={fireStats.avg.toFixed(2)}
+          label="套利比价"
+          value={(summary?.profitable_arbitrage_count ?? 0).toString()}
           icon={History}
           iconBg="bg-[rgba(167,139,250,0.12)]"
           iconColor="text-[var(--color-ai)]"
           helper={
-            fireHistory.length > 0 ? (
-              <div className="flex items-center gap-2 mt-1">
-                <span className="flex items-center gap-0.5 text-xs text-[var(--color-text-subtle)]">
-                  <ArrowDown className="w-3 h-3 text-[var(--color-success)]" />
-                  {fireStats.min.toFixed(2)}
+            <div className="flex items-center gap-1 text-xs text-[var(--color-text-subtle)]">
+              <span>可套利配方</span>
+              {(summary?.profitable_arbitrage_count ?? 0) > 0 && (
+                <span className="rounded bg-[rgba(167,139,250,0.18)] px-1 text-[10px] font-medium text-[var(--color-ai)]">
+                  机会
                 </span>
-                <span className="flex items-center gap-0.5 text-xs text-[var(--color-text-subtle)]">
-                  <ArrowUp className="w-3 h-3 text-[var(--color-danger)]" />
-                  {fireStats.max.toFixed(2)}
-                </span>
-              </div>
-            ) : <span className="text-xs text-[var(--color-text-subtle)]">元/万火</span>
+              )}
+            </div>
           }
         />
         <MetricCard
-          label="策略收益"
-          value={`${profitStatus === "profit" ? "+" : profitStatus === "loss" ? "-" : ""}${Math.abs(stats.profit).toFixed(2)}`}
-          icon={profitStatus === "profit" ? TrendingUp : profitStatus === "loss" ? TrendingDown : Minus}
-          iconBg={profitStatus === "profit" ? "bg-[rgba(239,68,68,0.1)]" : profitStatus === "loss" ? "bg-[rgba(34,197,94,0.1)]" : "bg-[rgba(255,255,255,0.04)]"}
-          iconColor={profitStatus === "profit" ? "text-[var(--color-danger)]" : profitStatus === "loss" ? "text-[var(--color-success)]" : "text-[var(--color-text-subtle)]"}
+          label="囤货出货"
+          value={formatFirePriceCompact(summary?.position_cost_fire ?? 0)}
+          icon={Package}
+          iconBg="bg-[rgba(34,197,94,0.1)]"
+          iconColor="text-[var(--color-success)]"
           helper={
-            allSectionItems.length > 0 ? (
-              <span className={`text-xs font-medium ${stats.profitPercent >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
-                {stats.profitPercent >= 0 ? "↑" : "↓"}{Math.abs(stats.profitPercent).toFixed(2)}%
-              </span>
-            ) : <span className="text-xs text-[var(--color-text-subtle)]">元</span>
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-1 text-[10px] text-[var(--color-text-subtle)]">
+                <span>持仓成本</span>
+                <span className="tabular-nums text-[var(--color-text-muted)]">
+                  ¥{(summary?.position_cost_rmb ?? 0).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 text-[10px] text-[var(--color-text-subtle)]">
+                <span>当前估值</span>
+                <span className="tabular-nums text-[var(--color-brand-gold)]">
+                  ¥{(summary?.position_current_value_rmb ?? 0).toFixed(2)}
+                </span>
+              </div>
+            </div>
           }
         />
       </div>

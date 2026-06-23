@@ -568,3 +568,13 @@ pub async fn calculate_arbitrage_for_all_recipes(
 
     Ok(results)
 }
+
+pub async fn count_profitable_arbitrage(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<i64, AppError> {
+    let results =
+        calculate_arbitrage_for_all_recipes(pool, season_id, market_mode).await?;
+    Ok(results.iter().filter(|r| r.is_profitable && r.profit > 0.0).count() as i64)
+}
