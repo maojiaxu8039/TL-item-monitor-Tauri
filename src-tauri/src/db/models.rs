@@ -84,6 +84,7 @@ pub struct AlertRule {
     pub strategy_id: Option<String>,
     pub section_id: Option<String>,
     pub item_id: Option<String>,
+    pub item_name: Option<String>,
     pub rule_type: String,
     pub threshold: f64,
     pub enabled: i32,

@@ -296,37 +296,63 @@ function WorthItemsList({ items, onCopy, copiedId }: { items: MiniWorthItem[]; o
 
   return (
     <div className="p-2 space-y-1">
-      {items.slice(0, 10).map((item) => (
-        <div key={item.item_id} className="flex items-center justify-between px-2 py-2 rounded bg-[var(--color-panel)] hover:bg-[var(--color-panel-soft)] group">
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-[var(--color-text)] truncate">{item.item_name}</div>
-            <div className="flex gap-3 text-xs text-[var(--color-text-subtle)] mt-0.5">
-              <span>现价 <span className="text-[var(--color-success)]">{formatPrice(item.current_price)}</span></span>
-              <span>目标 <span>{formatPrice(item.purchase_fire_price)}</span></span>
-              <span>数量 <span>{item.count}</span></span>
+      {items.length === 0 ? (
+        <EmptyState message="暂无分组物品" />
+      ) : (
+        items.slice(0, 10).map((item) => (
+          <div
+            key={item.item_id}
+            className={`flex items-center justify-between px-2 py-2 rounded group transition-colors ${
+              item.is_worth
+                ? "bg-[rgba(34,197,94,0.08)] hover:bg-[rgba(34,197,94,0.14)] border border-[rgba(34,197,94,0.2)]"
+                : "bg-[var(--color-panel)] hover:bg-[var(--color-panel-soft)]"
+            }`}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-medium text-[var(--color-text)] truncate">{item.item_name}</span>
+                {item.is_worth && (
+                  <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-[rgba(34,197,94,0.2)] text-[var(--color-success)] font-medium">
+                    值的
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-3 text-xs text-[var(--color-text-subtle)] mt-0.5">
+                <span>
+                  现价{" "}
+                  <span className={item.current_price ? "text-[var(--color-text)]" : ""}>
+                    {formatPrice(item.current_price)}
+                  </span>
+                </span>
+                <span>目标 <span className="text-[var(--color-text)]">{formatPrice(item.purchase_fire_price)}</span></span>
+                <span>数量 <span>{item.count}</span></span>
+                {item.section_name && (
+                  <span className="truncate text-[var(--color-text-subtle)]">· {item.section_name}</span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 ml-3">
+              {item.profit !== null && item.profit !== undefined && (
+                <span className="text-sm font-medium text-[var(--color-success)]">
+                  -{formatPrice(item.profit)}
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => onCopy(item.item_name, item.item_id)}
+              >
+                {copiedId === item.item_id ? (
+                  <Check className="w-4 h-4 text-[var(--color-success)]" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2 ml-3">
-            {item.profit && (
-              <span className="text-sm font-medium text-[var(--color-success)]">
-                -{formatPrice(item.profit)}
-              </span>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => onCopy(item.item_name, item.item_id)}
-            >
-              {copiedId === item.item_id ? (
-                <Check className="w-4 h-4 text-[var(--color-success)]" />
-              ) : (
-                <Copy className="w-4 h-4" />
-              )}
-            </Button>
-          </div>
-        </div>
-      ))}
+        ))
+      )}
     </div>
   )
 }

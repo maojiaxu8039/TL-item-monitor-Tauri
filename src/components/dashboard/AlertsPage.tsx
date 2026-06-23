@@ -344,7 +344,7 @@ export default function AlertsPage() {
                         </div>
                         {rule.item_id && (
                           <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">
-                            物品: {rule.item_id}
+                            物品: {rule.item_name || rule.item_id}
                           </div>
                         )}
                         {rule.section_id && (

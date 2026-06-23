@@ -1,20 +1,40 @@
 use crate::core::errors::AppError;
 use crate::db::models::{AlertEvent, AlertRule};
+use crate::db::table_resolver::TableResolver;
 use sqlx::SqlitePool;
 
 // ─── Alert Rules ───────────────────────────────────────────────────────────
 
-pub async fn get_alert_rules(pool: &SqlitePool) -> Result<Vec<AlertRule>, AppError> {
-    let rows: Vec<AlertRule> = sqlx::query_as(
-        "SELECT id, strategy_id, section_id, item_id, rule_type, threshold, enabled, cooldown_seconds, last_triggered_at, created_at, updated_at FROM alert_rules ORDER BY created_at DESC"
-    )
-    .fetch_all(pool)
-    .await?;
+pub async fn get_alert_rules(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<Vec<AlertRule>, AppError> {
+    TableResolver::validate(season_id, market_mode)?;
+    let items_table = TableResolver::items_table(season_id, market_mode);
+
+    let sql = format!(
+        r#"
+        SELECT
+            r.id, r.strategy_id, r.section_id, r.item_id,
+            i.name AS item_name,
+            r.rule_type, r.threshold, r.enabled, r.cooldown_seconds,
+            r.last_triggered_at, r.created_at, r.updated_at
+        FROM alert_rules r
+        LEFT JOIN {items_table} i ON i.item_id = r.item_id
+        ORDER BY r.created_at DESC
+        "#,
+        items_table = items_table
+    );
+
+    let rows: Vec<AlertRule> = sqlx::query_as(&sql).fetch_all(pool).await?;
     Ok(rows)
 }
 
 pub async fn create_alert_rule(
     pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
     strategy_id: Option<&str>,
     section_id: Option<&str>,
     item_id: Option<&str>,
@@ -41,11 +61,27 @@ pub async fn create_alert_rule(
     .execute(pool)
     .await?;
 
+    let item_name = if let Some(iid) = item_id {
+        let items_table = TableResolver::items_table(season_id, market_mode);
+        let sql = format!(
+            "SELECT name FROM {items_table} WHERE item_id = ? LIMIT 1",
+            items_table = items_table
+        );
+        let name: Option<(String,)> = sqlx::query_as(&sql)
+            .bind(iid)
+            .fetch_optional(pool)
+            .await?;
+        name.map(|(n,)| n)
+    } else {
+        None
+    };
+
     Ok(AlertRule {
         id,
         strategy_id: strategy_id.map(|s| s.to_string()),
         section_id: section_id.map(|s| s.to_string()),
         item_id: item_id.map(|s| s.to_string()),
+        item_name,
         rule_type: rule_type.to_string(),
         threshold,
         enabled: 1,

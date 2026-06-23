@@ -239,6 +239,7 @@ pub struct MiniWorthItem {
     pub purchase_fire_price: f64,
     pub count: i32,
     pub profit: Option<f64>,
+    pub is_worth: bool,
 }
 
 #[tauri::command]
@@ -261,21 +262,27 @@ pub async fn get_mini_window_feed(
 
     let worth_items: Vec<MiniWorthItem> = section_items
         .into_iter()
-        .filter_map(|item| {
-            let current_price = item.current_price?;
-            if current_price <= item.purchase_fire_price {
-                let profit = Some((item.purchase_fire_price - current_price) * item.count as f64);
-                Some(MiniWorthItem {
-                    item_id: item.item_id,
-                    item_name: item.item_name,
-                    section_name: item.section_name,
-                    current_price: Some(current_price),
-                    purchase_fire_price: item.purchase_fire_price,
-                    count: item.count,
-                    profit,
-                })
-            } else {
-                None
+        .filter(|item| item.purchase_fire_price > 0.0)
+        .map(|item| {
+            let is_worth = match item.current_price {
+                Some(cp) if cp > 0.0 => cp < item.purchase_fire_price,
+                _ => false,
+            };
+            let profit = match item.current_price {
+                Some(cp) if cp < item.purchase_fire_price => {
+                    Some((item.purchase_fire_price - cp) * item.count as f64)
+                }
+                _ => None,
+            };
+            MiniWorthItem {
+                item_id: item.item_id,
+                item_name: item.item_name,
+                section_name: item.section_name,
+                current_price: item.current_price,
+                purchase_fire_price: item.purchase_fire_price,
+                count: item.count,
+                profit,
+                is_worth,
             }
         })
         .collect();

@@ -205,7 +205,13 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
     let season_id = ctx.season_id.clone();
     let market_mode_str = ctx.market_mode.as_str();
 
-    let rules = match repo_alerts::get_alert_rules(&state.db).await {
+    let rules = match repo_alerts::get_alert_rules(
+        &state.db,
+        &season_id,
+        market_mode_str,
+    )
+    .await
+    {
         Ok(rules) => rules,
         Err(e) => {
             error!("Failed to get alert rules: {}", e);

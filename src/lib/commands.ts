@@ -360,6 +360,7 @@ export interface AlertRule {
   strategy_id: string | null;
   section_id: string | null;
   item_id: string | null;
+  item_name: string | null;
   rule_type: string;
   threshold: number;
   enabled: number;
@@ -852,6 +853,7 @@ export interface MiniWorthItem {
   purchase_fire_price: number;
   count: number;
   profit: number | null;
+  is_worth: boolean;
 }
 
 export interface ArbitrageCalculationResult {

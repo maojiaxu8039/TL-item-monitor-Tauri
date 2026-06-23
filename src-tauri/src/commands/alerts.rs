@@ -8,7 +8,8 @@ use tauri::State;
 pub async fn get_alert_rules(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<crate::db::models::AlertRule>, String> {
-    repo_alerts::get_alert_rules(&state.db)
+    let ctx = state.active_context.read().clone();
+    repo_alerts::get_alert_rules(&state.db, &ctx.season_id, ctx.market_mode.as_str())
         .await
         .map_err(|e| e.to_string())
 }
@@ -23,8 +24,11 @@ pub async fn create_alert_rule(
     threshold: f64,
     cooldown_seconds: i32,
 ) -> Result<crate::db::models::AlertRule, String> {
+    let ctx = state.active_context.read().clone();
     repo_alerts::create_alert_rule(
         &state.db,
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
         strategy_id.as_deref(),
         section_id.as_deref(),
         item_id.as_deref(),
