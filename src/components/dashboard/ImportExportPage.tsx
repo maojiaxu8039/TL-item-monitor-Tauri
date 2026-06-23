@@ -395,9 +395,9 @@ export default function ImportExportPage() {
               </p>
               <div className="ml-6">
                 <Button
-                  variant="outline"
                   onClick={() => importArbitrageMutation.mutate()}
                   disabled={importArbitrageMutation.isPending}
+                  className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
                 >
                   <Upload className="w-4 h-4 mr-1.5" />
                   {importArbitrageMutation.isPending ? "导入中..." : "导入 CSV"}

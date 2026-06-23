@@ -8,6 +8,14 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
+
+function formatCompactPrice(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "-";
+  const abs = Math.abs(value);
+  if (abs >= 10000) return `${(value / 1000).toFixed(1)}k`;
+  if (abs >= 1000) return value.toFixed(1);
+  return value.toFixed(2);
+}
 import { cmd, type FirePriceChangeItem } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { queryKeys } from "@/lib/queryKeys";
@@ -52,39 +60,39 @@ const FireChangeCard = memo(function FireChangeCard({ item, isRising }: FireChan
       </div>
 
       <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
-        <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded">
+        <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded min-w-0 overflow-hidden">
           <div className="text-[var(--color-text-subtle)]">5m</div>
-          <div className="font-medium text-[var(--color-text)]">
-            {item.price_5m_ago !== null ? item.price_5m_ago?.toFixed(2) : "-"}
+          <div className="font-medium text-[var(--color-text)] tabular-nums truncate">
+            {item.price_5m_ago !== null ? formatCompactPrice(item.price_5m_ago) : "-"}
           </div>
-          <div className={`text-[10px] ${(item.change_rate_5m ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
+          <div className={`text-[10px] tabular-nums truncate ${(item.change_rate_5m ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
             {item.change_rate_5m !== null ? `(${(item.change_rate_5m ?? 0) >= 0 ? "+" : ""}${item.change_rate_5m?.toFixed(1)}%)` : ""}
           </div>
         </div>
-        <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded">
+        <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded min-w-0 overflow-hidden">
           <div className="text-[var(--color-text-subtle)]">30m</div>
-          <div className="font-medium text-[var(--color-text)]">
-            {item.price_30m_ago !== null ? item.price_30m_ago?.toFixed(2) : "-"}
+          <div className="font-medium text-[var(--color-text)] tabular-nums truncate">
+            {item.price_30m_ago !== null ? formatCompactPrice(item.price_30m_ago) : "-"}
           </div>
-          <div className={`text-[10px] ${(item.change_rate_30m ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
+          <div className={`text-[10px] tabular-nums truncate ${(item.change_rate_30m ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
             {item.change_rate_30m !== null ? `(${(item.change_rate_30m ?? 0) >= 0 ? "+" : ""}${item.change_rate_30m?.toFixed(1)}%)` : ""}
           </div>
         </div>
-        <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded">
+        <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded min-w-0 overflow-hidden">
           <div className="text-[var(--color-text-subtle)]">1h</div>
-          <div className="font-medium text-[var(--color-text)]">
-            {item.price_1h_ago !== null ? item.price_1h_ago?.toFixed(2) : "-"}
+          <div className="font-medium text-[var(--color-text)] tabular-nums truncate">
+            {item.price_1h_ago !== null ? formatCompactPrice(item.price_1h_ago) : "-"}
           </div>
-          <div className={`text-[10px] ${(item.change_rate_1h ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
+          <div className={`text-[10px] tabular-nums truncate ${(item.change_rate_1h ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
             {item.change_rate_1h !== null ? `(${(item.change_rate_1h ?? 0) >= 0 ? "+" : ""}${item.change_rate_1h?.toFixed(1)}%)` : ""}
           </div>
         </div>
-        <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded">
+        <div className="text-center p-1.5 bg-[var(--color-panel-soft)] rounded min-w-0 overflow-hidden">
           <div className="text-[var(--color-text-subtle)]">3h</div>
-          <div className="font-medium text-[var(--color-text)]">
-            {item.price_3h_ago !== null ? item.price_3h_ago?.toFixed(2) : "-"}
+          <div className="font-medium text-[var(--color-text)] tabular-nums truncate">
+            {item.price_3h_ago !== null ? formatCompactPrice(item.price_3h_ago) : "-"}
           </div>
-          <div className={`text-[10px] ${(item.change_rate_3h ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
+          <div className={`text-[10px] tabular-nums truncate ${(item.change_rate_3h ?? 0) >= 0 ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}`}>
             {item.change_rate_3h !== null ? `(${(item.change_rate_3h ?? 0) >= 0 ? "+" : ""}${item.change_rate_3h?.toFixed(1)}%)` : ""}
           </div>
         </div>
