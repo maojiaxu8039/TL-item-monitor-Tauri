@@ -127,9 +127,9 @@ pub async fn get_section_items(
         r#"
         SELECT
             si.id, si.section_id, si.season_id, si.market_mode, si.item_id,
-            COALESCE(i.name, si.item_id) as item_name,
-            i.item_type as item_type,
-            i.price as current_price,
+            COALESCE(i.name, si.item_name, si.item_id) as item_name,
+            COALESCE(i.item_type, si.item_type, '') as item_type,
+            COALESCE(i.price, si.current_price) as current_price,
             si.purchase_fire_price, si.count, si.more_value, si.sort_order,
             CAST(i.last_time AS TEXT) as last_time,
             si.created_at, si.updated_at
@@ -163,9 +163,9 @@ pub async fn get_section_items_for_context(
             si.section_id,
             s.name as section_name,
             si.item_id,
-            COALESCE(i.name, si.item_id) as item_name,
-            i.item_type as item_type,
-            i.price as current_price,
+            COALESCE(i.name, si.item_name, si.item_id) as item_name,
+            COALESCE(i.item_type, si.item_type, '') as item_type,
+            COALESCE(i.price, si.current_price) as current_price,
             si.purchase_fire_price,
             si.count,
             si.more_value
@@ -393,6 +393,9 @@ mod tests {
                 season_id TEXT NOT NULL DEFAULT 'current',
                 market_mode TEXT NOT NULL DEFAULT 'season_normal',
                 item_id TEXT NOT NULL,
+                item_name TEXT,
+                item_type TEXT,
+                current_price REAL,
                 purchase_fire_price REAL NOT NULL DEFAULT 0,
                 count INTEGER NOT NULL DEFAULT 1,
                 more_value REAL NOT NULL DEFAULT 0,

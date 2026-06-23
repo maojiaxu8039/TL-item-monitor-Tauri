@@ -30,7 +30,7 @@ function formatPercent(value: number | null | undefined): string {
 }
 
 export default function MiniWindowPage() {
-  const { marketContext } = useSectionRefresh()
+  const { marketContext, marketContextReady } = useSectionRefresh()
   const [activeTab, setActiveTab] = useState<Tab>("worth")
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -55,7 +55,7 @@ export default function MiniWindowPage() {
   const feedQuery = useQuery({
     queryKey: [...queryKeys.miniWindowFeed, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getMiniWindowFeed(marketContext.seasonId, marketContext.marketMode),
-    enabled: !!marketContext.seasonId,
+    enabled: marketContextReady && !!marketContext.seasonId && !!marketContext.marketMode,
     refetchInterval: feedRefetchInterval,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
