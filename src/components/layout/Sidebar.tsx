@@ -12,17 +12,17 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "市场监控", icon: "market-monitor" },
-  { id: "items", label: "物品追踪", icon: "item-tracking" },
-  { id: "priceanalysis", label: "价格分析", icon: "price-analysis" },
-  { id: "deals", label: "捡漏出货", icon: "deals" },
-  { id: "alerts", label: "提醒设置", icon: "alerts" },
-  { id: "firecompare", label: "火价分析", icon: "fire-price" },
   { id: "arbitrage", label: "套利比价", icon: "arbitrage" },
   { id: "inventory", label: "囤货出货", icon: "deals" },
+  { id: "deals", label: "捡漏出货", icon: "deals" },
+  { id: "alerts", label: "提醒设置", icon: "alerts" },
   { id: "strategies", label: "策略管理", icon: "strategies" },
-  { id: "aianalysis", label: "AI分析", icon: "ai-analysis" },
+  { id: "items", label: "物品追踪", icon: "item-tracking" },
+  { id: "priceanalysis", label: "价格分析", icon: "price-analysis" },
+  { id: "firecompare", label: "火价分析", icon: "fire-price" },
   { id: "records", label: "数据监控", icon: "data-monitor" },
   { id: "import_export", label: "导入导出", icon: "import-export" },
+  { id: "aianalysis", label: "AI分析", icon: "ai-analysis" },
   { id: "settings", label: "设置", icon: "settings" },
   { id: "help", label: "帮助", icon: "help" },
 ]
