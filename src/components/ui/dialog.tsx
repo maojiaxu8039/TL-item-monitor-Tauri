@@ -18,9 +18,10 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      data-mini-no-drag
       onClick={handleBackdropClick}
     >
-      <div className="relative z-10 w-full max-w-md animate-fade-in" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 w-full max-w-md animate-fade-in" data-mini-no-drag onClick={e => e.stopPropagation()}>
         {children}
       </div>
     </div>
@@ -30,6 +31,7 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
 const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, children, ...props }, ref) => (
   <div 
     ref={ref} 
+    data-mini-no-drag
     className={cn(
       "animate-slide-up rounded-lg border border-[rgba(255,184,0,0.24)] bg-[var(--color-panel)] shadow-[var(--shadow-lg)]",
       className

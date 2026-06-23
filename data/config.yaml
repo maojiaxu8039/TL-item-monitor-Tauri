@@ -16,12 +16,12 @@ desktop:
   tray_on_close: false
   mini_mode: false
   free_layout: false
-  mini_opacity: 0.76
+  mini_opacity: 0.78
   mini_always_on_top: true
   mini_width: 1680
   mini_height: 2480
-  mini_x: 206
-  mini_y: 134
+  mini_x: 192
+  mini_y: 204
 notification:
   system_notifications: true
   mac_desktop_notifications: true

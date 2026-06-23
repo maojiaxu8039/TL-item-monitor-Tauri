@@ -291,13 +291,24 @@ pub async fn get_mini_window_feed(
         .take(20)
         .collect();
 
-    let arbitrage_results = repo_arbitrage::calculate_arbitrage_for_all_recipes(
+    let arbitrage_results = match repo_arbitrage::calculate_arbitrage_for_all_recipes(
         &state.db,
         &effective_season_id,
         &effective_market_mode,
     )
     .await
-    .map_err(|e| e.to_string())?;
+    {
+        Ok(results) => results,
+        Err(e) => {
+            tracing::warn!(
+                "Failed to calculate mini window arbitrage for season={}, mode={}: {}",
+                effective_season_id,
+                effective_market_mode,
+                e
+            );
+            Vec::new()
+        }
+    };
 
     let profitable_arbitrage: Vec<ArbitrageCalculationResult> = arbitrage_results
         .into_iter()
@@ -305,21 +316,43 @@ pub async fn get_mini_window_feed(
         .take(20)
         .collect();
 
-    let buy_ready_watches = repo_inventory::get_buy_ready_watches(
+    let buy_ready_watches = match repo_inventory::get_buy_ready_watches(
         &state.db,
         &effective_season_id,
         &effective_market_mode,
     )
     .await
-    .map_err(|e| e.to_string())?;
+    {
+        Ok(watches) => watches,
+        Err(e) => {
+            tracing::warn!(
+                "Failed to load mini window buy watches for season={}, mode={}: {}",
+                effective_season_id,
+                effective_market_mode,
+                e
+            );
+            Vec::new()
+        }
+    };
 
-    let sell_ready_positions = repo_inventory::get_sell_ready_positions(
+    let sell_ready_positions = match repo_inventory::get_sell_ready_positions(
         &state.db,
         &effective_season_id,
         &effective_market_mode,
     )
     .await
-    .map_err(|e| e.to_string())?;
+    {
+        Ok(positions) => positions,
+        Err(e) => {
+            tracing::warn!(
+                "Failed to load mini window sell positions for season={}, mode={}: {}",
+                effective_season_id,
+                effective_market_mode,
+                e
+            );
+            Vec::new()
+        }
+    };
 
     Ok(MiniWindowFeed {
         worth_items,

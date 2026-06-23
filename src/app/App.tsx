@@ -85,7 +85,7 @@ export default function App() {
           <SyncProvider>
             <div className="torchscan-theme torchscan-theme-mini flex h-screen flex-col overflow-hidden">
               <TopBar page={page} onPageChange={setPage} isMiniMode={isMiniMode} setIsMiniMode={setIsMiniMode} />
-              <main className="torchscan-main flex-1 overflow-hidden">
+              <main className="torchscan-main min-h-0 flex-1 overflow-hidden">
                 <MiniWindowPage />
               </main>
             </div>

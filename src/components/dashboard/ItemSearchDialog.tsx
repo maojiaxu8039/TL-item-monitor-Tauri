@@ -127,7 +127,7 @@ export function ItemSearchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="p-0 overflow-hidden">
+      <DialogContent className="p-0 overflow-hidden" data-mini-no-drag>
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border-soft)]">
           <h3 className="text-sm font-medium text-[var(--color-text)]">
             {title}
@@ -175,6 +175,7 @@ export function ItemSearchDialog({
                   return (
                     <li
                       key={item.item_id}
+                      data-mini-no-drag
                       className={`px-3 py-1.5 text-xs cursor-pointer transition-colors ${
                         isSelected
                           ? "bg-[rgba(255,184,0,0.16)] text-[var(--color-text)]"

@@ -102,7 +102,7 @@ export default function MiniWindowPage() {
 
   return (
     <div
-      className="h-full flex flex-col bg-[var(--color-bg)] select-none"
+      className="flex h-full min-h-0 flex-col bg-[var(--color-bg)] select-none"
       onPointerDown={handleDragStart}
       data-tauri-drag-region
     >
@@ -215,7 +215,7 @@ export default function MiniWindowPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {feedQuery.isLoading ? (
           <div className="flex items-center justify-center h-full">
             <RefreshCw className="w-5 h-5 animate-spin text-[var(--color-text-subtle)]" />

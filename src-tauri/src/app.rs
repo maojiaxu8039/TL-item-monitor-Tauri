@@ -21,7 +21,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-const LATEST_SCHEMA_VERSION: i64 = 20;
+const LATEST_SCHEMA_VERSION: i64 = 22;
 const MAX_MIGRATION_BACKUPS: usize = 3;
 
 pub fn full_table_json_path() -> std::path::PathBuf {
@@ -376,7 +376,7 @@ async fn create_latest_schema_baseline(pool: &SqlitePool) -> Result<(), String> 
     ))
     .execute(&mut *tx)
     .await
-    .map_err(|e| format!("Failed to create inventory baseline schema: {}", e))?;
+        .map_err(|e| format!("Failed to create inventory baseline schema: {}", e))?;
 
     sqlx::query(include_str!("db/migrations/020_add_inventory_indexes.sql"))
         .execute(&mut *tx)
@@ -557,15 +557,33 @@ async fn run_legacy_migrations(pool: &SqlitePool, current_version: i64) -> Resul
     }
 
     if current_version < 21 {
-        apply_sql_migration(
+        tracing::info!("Applying migration v21: add arbitrage season_id/market_mode");
+        ensure_arbitrage_schema(pool).await?;
+        apply_column_if_not_exists(
             pool,
-            21,
-            include_str!("db/migrations/021_add_arbitrage_season_mode.sql"),
+            "arbitrage_recipes",
+            "season_id",
+            "TEXT NOT NULL DEFAULT ''",
         )
         .await?;
+        apply_column_if_not_exists(
+            pool,
+            "arbitrage_recipes",
+            "market_mode",
+            "TEXT NOT NULL DEFAULT 'season_normal'",
+        )
+        .await?;
+        create_index_if_table_exists(
+            pool,
+            "arbitrage_recipes",
+            "CREATE INDEX IF NOT EXISTS idx_arbitrage_recipes_season_mode ON arbitrage_recipes(season_id, market_mode)",
+        )
+        .await?;
+        record_migration(pool, 21).await?;
     }
 
     if current_version < 22 {
+        tracing::info!("Applying migration v22: backfill inventory/arbitrage context");
         apply_sql_migration(
             pool,
             22,
@@ -1511,12 +1529,36 @@ async fn ensure_arbitrage_schema(pool: &SqlitePool) -> Result<(), String> {
             recipe_type TEXT NOT NULL DEFAULT 'decompose',
             enabled INTEGER NOT NULL DEFAULT 1,
             created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
+            updated_at INTEGER NOT NULL,
+            season_id TEXT NOT NULL DEFAULT '',
+            market_mode TEXT NOT NULL DEFAULT 'season_normal'
         )"#,
     )
     .execute(pool)
     .await
     .map_err(|e| format!("Failed to ensure arbitrage_recipes table: {}", e))?;
+
+    add_column_if_missing(
+        pool,
+        "arbitrage_recipes",
+        "season_id",
+        "TEXT NOT NULL DEFAULT ''",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "arbitrage_recipes",
+        "market_mode",
+        "TEXT NOT NULL DEFAULT 'season_normal'",
+    )
+    .await?;
+
+    create_index_if_table_exists(
+        pool,
+        "arbitrage_recipes",
+        "CREATE INDEX IF NOT EXISTS idx_arbitrage_recipes_season_mode ON arbitrage_recipes(season_id, market_mode)",
+    )
+    .await?;
 
     ensure_arbitrage_detail_table(
         pool,
