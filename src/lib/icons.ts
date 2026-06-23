@@ -12,7 +12,7 @@ export const iconAssetMap = {
   "window-maximize": publicAssetPath("torchscan/icons/original/window-maximize.png"),
   "window-close": publicAssetPath("torchscan/icons/original/window-close.png"),
   deals: publicAssetPath("torchscan/icons/original/deals.png"),
-  arbitrage: publicAssetPath("torchscan/icons/original/arbitrage.png"),
+  arbitrage: publicAssetPath("torchscan/icons/original/arbitrage.svg"),
   "ai-analysis": publicAssetPath("torchscan/icons/original/ai-analysis.png"),
   "data-monitor": publicAssetPath("torchscan/icons/original/data-monitor.png"),
   "import-export": publicAssetPath("torchscan/icons/original/import-export.png"),

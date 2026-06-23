@@ -18,7 +18,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 const rootElement = document.getElementById("root")
 if (!rootElement) {
-  document.body.innerHTML = '<div style="color: white; padding: 20px; background: #000;">Error: Root element (#root) not found</div>'
+  const fallback = document.createElement("div")
+  fallback.style.cssText = "color: white; padding: 20px; background: #000;"
+  fallback.textContent = "Error: Root element (#root) not found"
+  document.body.replaceChildren(fallback)
   devLog.error("[TorchScan] Root element not found!")
 } else {
   devLog.log("[TorchScan] Root element found, rendering...")
@@ -31,6 +34,9 @@ if (!rootElement) {
     devLog.log("[TorchScan] React rendered successfully")
   } catch (err) {
     devLog.error("[TorchScan] React render error:", err)
-    rootElement.innerHTML = `<div style="color: white; padding: 20px; background: #000;">Render Error: ${String(err)}</div>`
+    const fallback = document.createElement("div")
+    fallback.style.cssText = "color: white; padding: 20px; background: #000;"
+    fallback.textContent = `Render Error: ${String(err)}`
+    rootElement.replaceChildren(fallback)
   }
 }

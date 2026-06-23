@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type PointerEvent } from "react"
 import {
   cmd,
   type ArbitrageCalculationResult,
@@ -7,7 +7,8 @@ import {
   type MiniWorthItem,
 } from "@/lib/commands"
 import { useQuery } from "@tanstack/react-query"
-import { RefreshCw, Copy, Check, Settings2, ExternalLink, Plus, Minus } from "lucide-react"
+import { getCurrentWindow } from "@tauri-apps/api/window"
+import { RefreshCw, Copy, Check, Settings2, Plus, Minus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { useVisiblePolling } from "@/hooks/useVisiblePolling"
@@ -72,12 +73,11 @@ export default function MiniWindowPage() {
     }
   }
 
-  const openMainWindow = async () => {
-    try {
-      await cmd.setMiniWindowMode(false)
-    } catch {
-      toast.error("无法打开主窗口")
-    }
+  const handleDragStart = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    const target = event.target as HTMLElement | null
+    if (target?.closest("[data-mini-no-drag]")) return
+    getCurrentWindow().startDragging().catch(() => {})
   }
 
   const handleOpacityChange = async (newOpacity: number) => {
@@ -101,7 +101,11 @@ export default function MiniWindowPage() {
   const arbitrageCount = feed?.profitable_arbitrage.length || 0
 
   return (
-    <div className="h-full flex flex-col bg-[var(--color-bg)] select-none">
+    <div
+      className="h-full flex flex-col bg-[var(--color-bg)] select-none"
+      onPointerDown={handleDragStart}
+      data-tauri-drag-region
+    >
       {/* Header - Draggable */}
       <div
         className="flex items-center justify-between px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-panel)] cursor-move"
@@ -117,7 +121,8 @@ export default function MiniWindowPage() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 !-webkit-app-region-no-drag"
+            className="h-6 w-6"
+            data-mini-no-drag
             onClick={() => feedQuery.refetch()}
             disabled={feedQuery.isFetching}
           >
@@ -126,16 +131,8 @@ export default function MiniWindowPage() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 !-webkit-app-region-no-drag"
-            onClick={openMainWindow}
-            title="打开主窗口"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 !-webkit-app-region-no-drag"
+            className="h-6 w-6"
+            data-mini-no-drag
             onClick={() => setShowSettings(!showSettings)}
           >
             <Settings2 className={`w-3.5 h-3.5 ${showSettings ? "text-[var(--color-brand)]" : ""}`} />
@@ -149,6 +146,7 @@ export default function MiniWindowPage() {
           <div className="flex items-center gap-3">
             <span className="text-xs text-[var(--color-text-subtle)]">透明</span>
             <input
+              data-mini-no-drag
               type="range"
               min="0.4"
               max="1"
@@ -175,6 +173,7 @@ export default function MiniWindowPage() {
         ].map((tab) => (
           <button
             key={tab.id}
+            data-mini-no-drag
             className={`min-w-0 px-1 py-2 text-xs font-medium transition-colors ${
               activeTab === tab.id
                 ? `${tab.color} border-b-2 border-current`
@@ -194,6 +193,7 @@ export default function MiniWindowPage() {
             variant="outline"
             size="sm"
             className="h-6 text-xs gap-1"
+            data-mini-no-drag
             onClick={() => setDialogMode("watch")}
           >
             <Plus className="w-3 h-3" />
@@ -205,21 +205,11 @@ export default function MiniWindowPage() {
             variant="outline"
             size="sm"
             className="h-6 text-xs gap-1"
+            data-mini-no-drag
             onClick={() => setDialogMode("position")}
           >
             <Minus className="w-3 h-3" />
             管理持仓
-          </Button>
-        )}
-        {activeTab === "arbitrage" && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-6 text-xs gap-1"
-            onClick={openMainWindow}
-          >
-            <ExternalLink className="w-3 h-3" />
-            查看套利
           </Button>
         )}
       </div>
@@ -341,6 +331,7 @@ function WorthItemsList({ items, onCopy, copiedId }: { items: MiniWorthItem[]; o
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
+                data-mini-no-drag
                 onClick={() => onCopy(item.item_name, item.item_id)}
               >
                 {copiedId === item.item_id ? (
@@ -383,6 +374,7 @@ function BuyWatchesList({ watches, onCopy, copiedId }: { watches: InventoryBuyWa
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
+                data-mini-no-drag
                 onClick={() => onCopy(watch.item_name, watch.id)}
               >
                 {copiedId === watch.id ? (
@@ -434,6 +426,7 @@ function SellPositionsList({ positions, onCopy, copiedId }: { positions: Invento
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
+                data-mini-no-drag
                 onClick={() => onCopy(pos.item_name, pos.id)}
               >
                 {copiedId === pos.id ? (
@@ -472,6 +465,7 @@ function ArbitrageList({ recipes, onCopy, copiedId }: { recipes: ArbitrageCalcul
               variant="ghost"
               size="icon"
               className="h-7 w-7"
+              data-mini-no-drag
               onClick={() => onCopy(recipe.recipe_name, recipe.recipe_id)}
             >
               {copiedId === recipe.recipe_id ? (

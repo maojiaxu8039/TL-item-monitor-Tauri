@@ -325,84 +325,72 @@ export default function ImportExportPage() {
           </div>
 
           <div className="p-5 space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 mb-1">
-                <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
-                <span className="text-sm font-medium text-[var(--color-text)]">关注列表</span>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">关注列表</span>
+                </div>
               </div>
-              <p className="text-xs text-[var(--color-text-subtle)] ml-6 mb-2">
-                CSV 格式：section_id, season_id, market_mode, item_id, purchase_fire_price, count, more_value
-              </p>
-              <div className="ml-6">
-                <Button
-                  onClick={() => importCsvMutation.mutate()}
-                  disabled={importCsvMutation.isPending}
-                  className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
-                >
-                  <Upload className="w-4 h-4 mr-1.5" />
-                  {importCsvMutation.isPending ? "导入中..." : "导入 CSV"}
-                </Button>
-              </div>
+              <Button
+                onClick={() => importCsvMutation.mutate()}
+                disabled={importCsvMutation.isPending}
+                className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
+              >
+                <Upload className="w-4 h-4 mr-1.5" />
+                {importCsvMutation.isPending ? "导入中..." : "导入 CSV"}
+              </Button>
             </div>
 
-            <div className="border-t border-[var(--color-border-soft)] pt-4 space-y-2">
-              <div className="flex items-center gap-2 mb-1">
-                <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
-                <span className="text-sm font-medium text-[var(--color-text)]">持仓数据</span>
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">持仓数据</span>
+                </div>
               </div>
-              <p className="text-xs text-[var(--color-text-subtle)] ml-6 mb-2">
-                CSV 格式：item_id, item_name, buy_price, quantity, target_sell_price, total_cost, note, created_at
-              </p>
-              <div className="ml-6">
-                <Button
-                  onClick={() => importInventoryMutation.mutate()}
-                  disabled={importInventoryMutation.isPending}
-                  className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
-                >
-                  <Upload className="w-4 h-4 mr-1.5" />
-                  {importInventoryMutation.isPending ? "导入中..." : "导入 CSV"}
-                </Button>
-              </div>
+              <Button
+                onClick={() => importInventoryMutation.mutate()}
+                disabled={importInventoryMutation.isPending}
+                className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
+              >
+                <Upload className="w-4 h-4 mr-1.5" />
+                {importInventoryMutation.isPending ? "导入中..." : "导入 CSV"}
+              </Button>
             </div>
 
-            <div className="border-t border-[var(--color-border-soft)] pt-4 space-y-2">
-              <div className="flex items-center gap-2 mb-1">
-                <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
-                <span className="text-sm font-medium text-[var(--color-text)]">买入监控</span>
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">买入监控</span>
+                </div>
               </div>
-              <p className="text-xs text-[var(--color-text-subtle)] ml-6 mb-2">
-                CSV 格式：item_id, item_name, target_buy_price, max_quantity, note
-              </p>
-              <div className="ml-6">
-                <Button
-                  onClick={() => importBuyWatchesMutation.mutate()}
-                  disabled={importBuyWatchesMutation.isPending}
-                  className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
-                >
-                  <Upload className="w-4 h-4 mr-1.5" />
-                  {importBuyWatchesMutation.isPending ? "导入中..." : "导入 CSV"}
-                </Button>
-              </div>
+              <Button
+                onClick={() => importBuyWatchesMutation.mutate()}
+                disabled={importBuyWatchesMutation.isPending}
+                className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
+              >
+                <Upload className="w-4 h-4 mr-1.5" />
+                {importBuyWatchesMutation.isPending ? "导入中..." : "导入 CSV"}
+              </Button>
             </div>
 
-            <div className="border-t border-[var(--color-border-soft)] pt-4 space-y-2">
-              <div className="flex items-center gap-2 mb-1">
-                <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
-                <span className="text-sm font-medium text-[var(--color-text)]">套利比价</span>
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">套利比价</span>
+                </div>
               </div>
-              <p className="text-xs text-[var(--color-text-subtle)] ml-6 mb-2">
-                CSV 格式：name, recipe_type, season_id, market_mode, enabled
-              </p>
-              <div className="ml-6">
-                <Button
-                  onClick={() => importArbitrageMutation.mutate()}
-                  disabled={importArbitrageMutation.isPending}
-                  className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
-                >
-                  <Upload className="w-4 h-4 mr-1.5" />
-                  {importArbitrageMutation.isPending ? "导入中..." : "导入 CSV"}
-                </Button>
-              </div>
+              <Button
+                onClick={() => importArbitrageMutation.mutate()}
+                disabled={importArbitrageMutation.isPending}
+                className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
+              >
+                <Upload className="w-4 h-4 mr-1.5" />
+                {importArbitrageMutation.isPending ? "导入中..." : "导入 CSV"}
+              </Button>
             </div>
 
             {importResult && (
