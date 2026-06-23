@@ -1,6 +1,6 @@
 {
   "name": "torchscan",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "TorchScan - Tauri Desktop App for Torchlight market and fire price monitoring",
   "type": "module",
   "scripts": {
