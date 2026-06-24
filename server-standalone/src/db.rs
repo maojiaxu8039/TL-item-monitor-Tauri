@@ -1296,21 +1296,30 @@ pub async fn get_fast_sync_all(
         table, day_condition
     );
 
+    // 流式聚合：避免一次性 fetch_all 百万行到内存
+    // 之前: .fetch_all(pool) 加载整表到 Vec + HashMap，赛季后期内存峰值数百 MB
+    // 现在: .fetch(pool) + pin_mut + try_next 逐行读取，立即处理后释放
+    // 内存占用从 O(行数) 降到 O(1)
+    use futures_util::TryStreamExt;
+
     let start = std::time::Instant::now();
     let mut q = sqlx::query(&query);
     for b in binds {
         q = q.bind(b);
     }
 
-    let rows = q
-        .fetch_all(pool)
-        .await
-        .map_err(|e| format!("高效同步查询失败: {}", e))?;
-    info!("[高效同步] 查询耗时: {:?}", start.elapsed());
+    let stream = q.fetch(pool);
+    // pin_mut 把 BoxStream<'_, ...> pin 到栈上才能 await
+    let mut stream = std::pin::pin!(stream);
 
     let mut item_map: HashMap<String, FastItemData> = HashMap::new();
+    let mut rows_processed: i64 = 0;
 
-    for row in rows {
+    while let Some(row) = stream
+        .try_next()
+        .await
+        .map_err(|e| format!("流式读取行失败: {}", e))?
+    {
         let item_id: String = row.get("item_id");
         let name: String = row.get("name");
         let day: i32 = row.get("season_day");
@@ -1352,7 +1361,16 @@ pub async fn get_fast_sync_all(
                 count: 1,
             });
         }
+
+        rows_processed += 1;
     }
+
+    info!(
+        "[高效同步] 流式处理 {} 行, {} 个物品, 耗时: {:?}",
+        rows_processed,
+        item_map.len(),
+        start.elapsed()
+    );
 
     let mut items: Vec<FastItemData> = item_map.into_values().collect();
     items.sort_by(|a, b| a.item_id.cmp(&b.item_id));
@@ -1363,12 +1381,6 @@ pub async fn get_fast_sync_all(
         .map(|i| i.daily_prices.len() as i32)
         .max()
         .unwrap_or(0);
-
-    info!(
-        "[高效同步] 处理 {} 个物品，耗时: {:?}",
-        items.len(),
-        start.elapsed()
-    );
 
     Ok(FastSyncResponse {
         items,

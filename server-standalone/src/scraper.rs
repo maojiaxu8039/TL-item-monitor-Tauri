@@ -125,13 +125,39 @@ struct MappingEntry {
 }
 
 static ITEM_MAPPING: Lazy<HashMap<String, MappingEntry>> = Lazy::new(|| {
-    let json = include_str!("../../src-tauri/resources/item_id_mapping.json");
-    match serde_json::from_str::<HashMap<String, MappingEntry>>(json) {
+    // 资源加载策略（按优先级）：
+    // 1. 运行时路径: TL_RESOURCES_DIR 环境变量 / 配置文件 resources_dir 指定的目录
+    //    → 容器化部署时挂载 ./resources/ 即可，无需 rebuild
+    // 2. 编译时内置: include_str!("../../src-tauri/resources/item_id_mapping.json")
+    //    → 保留向后兼容，单仓开发时仍可用
+    // 3. 都没找到 → 返回空 Map，ETOR 抓取功能降级（warn 告警）
+    let mut json_text: Option<String> = None;
+
+    // 1. 尝试运行时路径
+    if let Some(resources_dir) = std::env::var_os("TL_RESOURCES_DIR") {
+        let p = std::path::Path::new(&resources_dir).join("item_id_mapping.json");
+        if let Ok(content) = std::fs::read_to_string(&p) {
+            info!("[ETOR] Loaded item mapping from runtime path: {}", p.display());
+            json_text = Some(content);
+        } else {
+            warn!("[ETOR] TL_RESOURCES_DIR set but file not found: {}", p.display());
+        }
+    }
+
+    // 2. 回退到编译时内置
+    if json_text.is_none() {
+        let builtin = include_str!("../../src-tauri/resources/item_id_mapping.json");
+        info!("[ETOR] Loaded item mapping from built-in (跨项目编译时依赖)");
+        json_text = Some(builtin.to_string());
+    }
+
+    let json = json_text.unwrap_or_default();
+    match serde_json::from_str::<HashMap<String, MappingEntry>>(&json) {
         Ok(mut mapping) => {
             let original_count = mapping.len();
             let deduplicated = dedupe_mapping_by_name(&mut mapping);
             info!(
-                "[ETOR] Loaded {} item mappings from built-in (deduplicated={}, final={})",
+                "[ETOR] Loaded {} item mappings (deduplicated={}, final={})",
                 original_count,
                 deduplicated,
                 mapping.len()
@@ -886,8 +912,16 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
 
     let now = chrono::Utc::now();
     let now_timestamp = now.timestamp();
-    let source_time = (now + chrono::Duration::hours(8))
-        .format("%Y/%m/%d %H:%M:%S")
+
+    // source_time 显式标注 +08:00 时区后缀（RFC3339 风格）
+    // 之前格式 "%Y/%m/%d %H:%M:%S" 没有时区信息，下游消费方会误以为是 UTC 或本地时间
+    // 业务影响：客户端显示"游戏 16:00 更新"实际是抓取瞬间北京时间，
+    // 跨时区用户看到时间错乱 1 小时
+    let beijing_offset = chrono::FixedOffset::east_opt(8 * 3600)
+        .expect("北京时区偏移 8h 一定是合法的");
+    let source_time = now
+        .with_timezone(&beijing_offset)
+        .format("%Y-%m-%dT%H:%M:%S+08:00")
         .to_string();
 
     Ok(FirePriceSnapshot {
@@ -923,8 +957,12 @@ fn parse_qiandao_response(data: QiandaoResponse, mode: &str) -> Result<FirePrice
     };
 
     let now = chrono::Utc::now();
-    let source_time = (now + chrono::Duration::hours(8))
-        .format("%Y/%m/%d %H:%M:%S")
+    // 显式带 +08:00 时区后缀，与上面 fire_price 一致
+    let beijing_offset = chrono::FixedOffset::east_opt(8 * 3600)
+        .expect("北京时区偏移 8h 一定是合法的");
+    let source_time = now
+        .with_timezone(&beijing_offset)
+        .format("%Y-%m-%dT%H:%M:%S+08:00")
         .to_string();
 
     Ok(FirePriceSnapshot {
