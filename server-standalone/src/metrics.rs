@@ -17,14 +17,24 @@ use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::Mutex;
 
 pub struct Metrics {
+    // 字段公开以便外部模块直接原子访问
+    // scrape_errors / last_scrape_ts 由 scraper 模块更新
+    // 当前 scraper.rs 还没集成 (TODO 后续),加 #[allow(dead_code)]
+    #[allow(dead_code)]
     pub http_requests: Mutex<HashMap<String, AtomicU64>>,
+    #[allow(dead_code)]
     pub http_duration_sum_us: Mutex<HashMap<String, AtomicU64>>,
+    #[allow(dead_code)]
     pub http_duration_count: Mutex<HashMap<String, AtomicU64>>,
     pub ws_clients: AtomicU64,
+    #[allow(dead_code)]
     pub scrape_errors: AtomicU64,
+    #[allow(dead_code)]
     pub last_scrape_ts: AtomicI64,
     pub server_start_ts: i64,
+    #[allow(dead_code)]
     pub db_pool_acquired: AtomicU64,
+    #[allow(dead_code)]
     pub db_pool_acquire_errors: AtomicU64,
 }
 

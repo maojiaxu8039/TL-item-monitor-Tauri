@@ -119,7 +119,7 @@ TL-item-monitor-Tauri/
 │   └── resources/                # 资源文件
 │
 ├── server-standalone/            # 独立服务器 (可选)
-│   ├── README.md                 # 构建与极空间部署说明
+│   ├── API.md                   # HTTP API 完整参考 (34 个端点)
 │   ├── server_config.example.yaml # 服务器配置模板
 │   └── src/
 │       └── main.rs               # HTTP 服务器入口
