@@ -118,7 +118,7 @@ pub async fn test_notification(
 
     let desktop_enabled = desktop_notifications_enabled(&notification_config);
     if desktop_enabled {
-        send_notification(&app, &title, &message)
+        send_notification(&app, &title, &message, Some("notification/buy.png"))
             .map_err(|e| format!("Notification failed: {}", e))?;
     }
 

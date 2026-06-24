@@ -32,11 +32,10 @@ pub fn app_dir() -> PathBuf {
     }
 
     // In production, use system data directory
-    let base_dir = dirs::data_dir()
-        .unwrap_or_else(|| {
-            tracing::warn!("[PATHS] dirs::data_dir() returned None, using current directory");
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        });
+    let base_dir = dirs::data_dir().unwrap_or_else(|| {
+        tracing::warn!("[PATHS] dirs::data_dir() returned None, using current directory");
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    });
 
     let new_dir = base_dir.join(APP_DATA_DIR_NAME);
     let legacy_dir = base_dir.join(LEGACY_APP_DATA_DIR_NAME);
@@ -79,10 +78,7 @@ pub fn app_dir() -> PathBuf {
     new_dir
 }
 
-fn migrate_legacy_data(
-    legacy_dir: &PathBuf,
-    new_dir: &PathBuf,
-) -> Result<(), std::io::Error> {
+fn migrate_legacy_data(legacy_dir: &PathBuf, new_dir: &PathBuf) -> Result<(), std::io::Error> {
     tracing::info!(
         "[PATHS] Starting data migration from {:?} to {:?}",
         legacy_dir,

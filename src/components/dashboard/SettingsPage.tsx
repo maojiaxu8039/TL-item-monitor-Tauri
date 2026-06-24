@@ -13,10 +13,20 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
-import { queryKeys } from "@/lib/queryKeys";
+import { invalidateItemsData, queryKeys } from "@/lib/queryKeys";
 
 
-const INTERVAL_OPTIONS = [
+const FIRE_INTERVAL_OPTIONS = [
+  { label: "15 分钟", value: 900 },
+  { label: "30 分钟", value: 1800 },
+  { label: "60 分钟", value: 3600 },
+];
+
+function normalizeFireInterval(seconds: number): number {
+  return FIRE_INTERVAL_OPTIONS.some((opt) => opt.value === seconds) ? seconds : 900;
+}
+
+const ITEM_INTERVAL_OPTIONS = [
   { label: "30 秒", value: 30 },
   { label: "1 分钟", value: 60 },
   { label: "3 分钟", value: 180 },
@@ -50,7 +60,8 @@ function getDefaultJsonPath(appDataDir: string): string {
 export default function SettingsPage() {
   const queryClient = useQueryClient();
   const [fireEnabled, setFireEnabled] = useState(true);
-  const [fireInterval, setFireInterval] = useState(300);
+  const [firePriceMode, setFirePriceMode] = useState("season_normal");
+  const [fireInterval, setFireInterval] = useState(900);
   const [fireScrapeNormal, setFireScrapeNormal] = useState(true);
   const [fireScrapeExpert, setFireScrapeExpert] = useState(false);
   const [itemsEnabled, setItemsEnabled] = useState(false);
@@ -90,7 +101,7 @@ export default function SettingsPage() {
   const buildConfig = (): AppConfig => ({
     schema_version: 1,
     scrape: {
-      fire_price_mode: "season_normal",
+      fire_price_mode: firePriceMode,
       fire_price_scrape_enabled: fireEnabled,
       fire_price_scrape_interval: fireInterval,
       fire_scrape_normal_enabled: fireScrapeNormal,
@@ -171,10 +182,8 @@ export default function SettingsPage() {
       } catch (e) {
         devLog.warn("getDashboardSummary failed", e);
       }
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboardSummary });
-      queryClient.invalidateQueries({ queryKey: queryKeys.itemsSearch });
+      invalidateItemsData(queryClient);
       queryClient.invalidateQueries({ queryKey: queryKeys.dbStats });
-      queryClient.invalidateQueries({ queryKey: queryKeys.arbitrageCalculation });
     },
     onError: (err) => {
       toast.error(`同步失败: ${errorMessage(err)}`);
@@ -186,8 +195,7 @@ export default function SettingsPage() {
     onSuccess: () => {
       toast.success("物品数据库已清空");
       setItemCount(0);
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboardSummary });
-      queryClient.invalidateQueries({ queryKey: queryKeys.itemsSearch });
+      invalidateItemsData(queryClient);
       queryClient.invalidateQueries({ queryKey: queryKeys.dbStats });
     },
     onError: (err) => {
@@ -293,7 +301,8 @@ export default function SettingsPage() {
       cmd.getConfig().then((cfg) => {
         if (!mounted) return;
         setFireEnabled(cfg.scrape.fire_price_scrape_enabled);
-        setFireInterval(cfg.scrape.fire_price_scrape_interval);
+        setFirePriceMode(cfg.scrape.fire_price_mode || "season_normal");
+        setFireInterval(normalizeFireInterval(cfg.scrape.fire_price_scrape_interval || 900));
         setFireScrapeNormal(cfg.scrape.fire_scrape_normal_enabled ?? true);
         setFireScrapeExpert(cfg.scrape.fire_scrape_expert_enabled ?? false);
         setItemsEnabled(cfg.scrape.auto_reload);
@@ -717,7 +726,7 @@ export default function SettingsPage() {
               disabled={!fireEnabled}
               className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {INTERVAL_OPTIONS.map((opt) => (
+              {FIRE_INTERVAL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
@@ -777,7 +786,7 @@ export default function SettingsPage() {
               disabled={!itemsEnabled}
               className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-[var(--color-text)] bg-[var(--color-panel-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {INTERVAL_OPTIONS.map((opt) => (
+              {ITEM_INTERVAL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>

@@ -29,9 +29,7 @@ fn get_start_time() -> Instant {
 }
 
 #[tauri::command]
-pub async fn health_check(
-    state: State<'_, Arc<AppState>>,
-) -> Result<HealthStatus, String> {
+pub async fn health_check(state: State<'_, Arc<AppState>>) -> Result<HealthStatus, String> {
     let database = check_database(&state).await;
     let data_dir = check_data_dir().await;
     let overall_status = if database.status == "healthy" && data_dir.status == "healthy" {

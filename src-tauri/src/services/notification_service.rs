@@ -1,4 +1,6 @@
+use std::path::PathBuf;
 use tauri::AppHandle;
+use tauri::Manager;
 use tauri_plugin_notification::{NotificationExt, PermissionState};
 use tracing::{error, info, warn};
 
@@ -65,18 +67,47 @@ pub fn format_worth_alert_notification(items: &[WorthAlertNotificationItem<'_>])
     lines.join("\n")
 }
 
-/// Send a desktop notification via tauri-plugin-notification.
-/// Supports both macOS and Windows.
-/// Automatically requests permission if not already granted.
-pub fn send_notification(app: &AppHandle, title: &str, body: &str) -> Result<(), String> {
+// 将相对资源路径解析为绝对路径。开发与打包环境下均能命中 tauri resources 目录。
+// 若传入的就是绝对路径且存在，则原样返回。
+fn resolve_resource_path(app: &AppHandle, relative: &str) -> Option<PathBuf> {
+    let p = std::path::Path::new(relative);
+    if p.is_absolute() && p.exists() {
+        return Some(p.to_path_buf());
+    }
+    if let Ok(resolved) = app
+        .path()
+        .resolve(relative, tauri::path::BaseDirectory::Resource)
+    {
+        if resolved.exists() {
+            return Some(resolved);
+        }
+    }
+    None
+}
+
+/// 发送一条桌面通知。
+///
+/// `icon_resource`: 可选的资源相对路径（相对于 tauri resources 目录），
+/// 例如 `"notification/buy.png"`，用于在通知左侧展示自定义图标。
+/// 若为 `None` 或资源不存在，则使用系统默认图标。
+pub fn send_notification(
+    app: &AppHandle,
+    title: &str,
+    body: &str,
+    icon_resource: Option<&str>,
+) -> Result<(), String> {
     info!(
-        "Attempting to send notification: title='{}', body='{}'",
-        title, body
+        "Attempting to send notification: title='{}', body_len={}, icon={:?}",
+        title,
+        body.chars().count(),
+        icon_resource
     );
+
+    let icon_path = icon_resource.and_then(|r| resolve_resource_path(app, r));
 
     #[cfg(target_os = "macos")]
     {
-        match send_macos_notification(app, title, body) {
+        match send_macos_notification(app, title, body, icon_path.as_deref()) {
             Ok(()) => {
                 info!("macOS notification sent successfully");
                 return Ok(());
@@ -123,24 +154,32 @@ pub fn send_notification(app: &AppHandle, title: &str, body: &str) -> Result<(),
         }
     }
 
-    // Send the notification
-    notification
+    let mut builder = notification
         .builder()
         .title(title)
         .body(body)
-        .sound("Default")
-        .show()
-        .map_err(|e| {
-            error!("Notification failed: {}", e);
-            format!("Notification failed: {}", e)
-        })?;
+        .sound("Default");
+    if let Some(p) = icon_path.as_ref() {
+        if let Some(s) = p.to_str() {
+            builder = builder.icon(s.to_string());
+        }
+    }
+    builder.show().map_err(|e| {
+        error!("Notification failed: {}", e);
+        format!("Notification failed: {}", e)
+    })?;
 
     info!("Notification sent successfully");
     Ok(())
 }
 
 #[cfg(target_os = "macos")]
-fn send_macos_notification(app: &AppHandle, title: &str, body: &str) -> Result<(), String> {
+fn send_macos_notification(
+    app: &AppHandle,
+    title: &str,
+    body: &str,
+    icon_path: Option<&std::path::Path>,
+) -> Result<(), String> {
     let identifier = app.config().identifier.clone();
 
     match mac_notification_sys::set_application(&identifier) {
@@ -155,7 +194,13 @@ fn send_macos_notification(app: &AppHandle, title: &str, body: &str) -> Result<(
         }
     }
 
-    mac_notification_sys::Notification::new()
+    let mut notification = mac_notification_sys::Notification::new();
+    if let Some(p) = icon_path {
+        if let Some(s) = p.to_str() {
+            notification.app_icon(s);
+        }
+    }
+    notification
         .title(title)
         .message(body)
         .default_sound()

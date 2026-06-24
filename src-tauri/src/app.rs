@@ -376,7 +376,7 @@ async fn create_latest_schema_baseline(pool: &SqlitePool) -> Result<(), String> 
     ))
     .execute(&mut *tx)
     .await
-        .map_err(|e| format!("Failed to create inventory baseline schema: {}", e))?;
+    .map_err(|e| format!("Failed to create inventory baseline schema: {}", e))?;
 
     sqlx::query(include_str!("db/migrations/020_add_inventory_indexes.sql"))
         .execute(&mut *tx)

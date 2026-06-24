@@ -13,11 +13,116 @@ import { Surface } from "@/components/ui/Surface";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Button } from "@/components/ui/button";
 import { queryKeys } from "@/lib/queryKeys";
+import { parseCsv, rowsToCsv, findColumnIndex } from "@/lib/csv";
 
 function formatBytes(kb: number): string {
   if (kb < 1024) return `${kb.toFixed(1)} KB`;
   return `${(kb / 1024).toFixed(2)} MB`;
 }
+
+// 一个列的规范：用于把用户上传的 CSV 重整为后端期望的列顺序
+export interface ColumnSpec {
+  // 后端期望的字段名（输出列名）
+  key: string;
+  // 可识别的别名（用于在用户文件表头中查找列，大小写无关）
+  aliases: string[];
+  // 是否必须出现在用户文件中（缺失则整份文件无法导入）
+  required?: boolean;
+  // 当列缺失或单元为空时填充的默认值
+  defaultValue?: string;
+  // 校验单元格内容；返回字符串表示错误描述并跳过该行
+  validate?: (raw: string) => string | null;
+}
+
+// 对用户上传的 CSV 做前端预处理：
+// 1. 用 RFC 4180 解析器读取（兼容 BOM / CRLF / 双引号转义 / 字段含逗号）
+// 2. 根据列名别名匹配每一列，缺失必填列直接返回错误
+// 3. 按 spec 的列顺序重新序列化，发给后端
+// 4. 收集行级别校验失败，作为 preErrors 返回（不会发往后端）
+export function preprocessCsv(
+  content: string,
+  spec: ColumnSpec[],
+): { csv: string | null; preErrors: string[]; rowCount: number } {
+  const rows = parseCsv(content);
+  if (rows.length === 0) {
+    return { csv: null, preErrors: ["CSV 文件为空"], rowCount: 0 };
+  }
+  if (rows.length < 2) {
+    return { csv: null, preErrors: ["CSV 文件缺少数据行"], rowCount: 0 };
+  }
+
+  const headerRow = rows[0];
+  const colIdx = spec.map((s) => findColumnIndex(headerRow, s.key, ...s.aliases));
+
+  // 校验必填列存在
+  const missingRequired = spec
+    .map((s, i) => ({ spec: s, idx: colIdx[i] }))
+    .filter((x) => x.spec.required && x.idx < 0)
+    .map((x) => x.spec.key);
+  if (missingRequired.length > 0) {
+    return {
+      csv: null,
+      preErrors: [`CSV 缺少必填列: ${missingRequired.join(", ")}`],
+      rowCount: 0,
+    };
+  }
+
+  const outputRows: string[][] = [spec.map((s) => s.key)];
+  const preErrors: string[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const lineNo = i + 1;
+    const outputRow: string[] = [];
+    let rowError: string | null = null;
+
+    for (let c = 0; c < spec.length; c++) {
+      const s = spec[c];
+      const idx = colIdx[c];
+      const raw = idx >= 0 ? (row[idx] ?? "").trim() : "";
+      const value = raw === "" ? s.defaultValue ?? "" : raw;
+      if (s.validate) {
+        const err = s.validate(value);
+        if (err) {
+          rowError = `第${lineNo}行: ${err}`;
+          break;
+        }
+      }
+      outputRow.push(value);
+    }
+
+    if (rowError) {
+      preErrors.push(rowError);
+      continue;
+    }
+    outputRows.push(outputRow);
+  }
+
+  // 后端 csv crate 默认不处理 BOM，前端重新序列化时关闭 BOM，避免污染第一列
+  const csv = rowsToCsv(outputRows, { withBom: false, eol: "\n" });
+  return { csv, preErrors, rowCount: outputRows.length - 1 };
+}
+
+// 校验非负数字；空字符串视为合法（由 defaultValue 兜底）
+const validateNumber = (raw: string): string | null => {
+  if (raw === "") return null;
+  const n = Number.parseFloat(raw);
+  if (!Number.isFinite(n)) return `"${raw}" 不是有效数字`;
+  if (n < 0) return `"${raw}" 不能为负数`;
+  return null;
+};
+
+// 校验非负整数
+const validateInteger = (raw: string): string | null => {
+  if (raw === "") return null;
+  if (!/^\d+$/.test(raw.trim())) return `"${raw}" 不是有效整数`;
+  return null;
+};
+
+const validateNonEmpty = (label: string) => (raw: string): string | null => {
+  if (raw.trim() === "") return `${label} 不能为空`;
+  return null;
+};
 
 export default function ImportExportPage() {
   const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
@@ -30,75 +135,133 @@ export default function ImportExportPage() {
     enabled: marketContextReady,
   });
 
+  // ===== 各导入入口的列规范 =====
+  // 关注列表：兼容导出后重导入，也支持用户用“分组名称 + 物品ID”导入。
+  const watchlistSpec: ColumnSpec[] = [
+    { key: "section_id", aliases: ["分组ID", "section"], defaultValue: "" },
+    { key: "section_name", aliases: ["分组名称", "group", "分组"], defaultValue: "" },
+    { key: "season_id", aliases: ["赛季ID", "season"], defaultValue: marketContext.seasonId },
+    { key: "market_mode", aliases: ["市场模式", "mode"], defaultValue: marketContext.marketMode },
+    { key: "item_id", aliases: ["物品ID", "item"], required: true, validate: validateNonEmpty("物品ID") },
+    { key: "purchase_fire_price", aliases: ["购买火价", "fire_price", "price"], defaultValue: "0", validate: validateNumber },
+    { key: "count", aliases: ["数量", "qty", "quantity"], defaultValue: "1", validate: validateInteger },
+    { key: "more_value", aliases: ["更多价值", "extra_value"], defaultValue: "0", validate: validateNumber },
+  ];
+
+  // 持仓：对应后端 import_inventory_csv
+  const inventorySpec: ColumnSpec[] = [
+    { key: "item_id", aliases: ["物品ID", "id"], required: true, validate: validateNonEmpty("物品ID") },
+    { key: "item_name", aliases: ["物品名称", "name"], required: true, validate: validateNonEmpty("物品名称") },
+    { key: "buy_price", aliases: ["买入价格", "price"], required: true, validate: (raw) => {
+      if (raw.trim() === "") return "买入价格不能为空";
+      const n = Number.parseFloat(raw);
+      if (!Number.isFinite(n) || n <= 0) return `买入价格 "${raw}" 必须为正数`;
+      return null;
+    } },
+    { key: "quantity", aliases: ["数量", "qty"], defaultValue: "1", validate: validateInteger },
+    { key: "target_sell_price", aliases: ["目标卖价", "sell_price"], defaultValue: "" },
+    { key: "total_cost", aliases: ["总成本", "cost"], defaultValue: "0", validate: validateNumber },
+    { key: "note", aliases: ["备注", "remark"], defaultValue: "" },
+    { key: "bought_at", aliases: ["买入时间", "created_at"], defaultValue: "" },
+  ];
+
+  // 买入监控：对应后端 import_buy_watches_csv
+  const buyWatchesSpec: ColumnSpec[] = [
+    { key: "item_id", aliases: ["物品ID", "id"], required: true, validate: validateNonEmpty("物品ID") },
+    { key: "item_name", aliases: ["物品名称", "name"], required: true, validate: validateNonEmpty("物品名称") },
+    { key: "target_buy_price", aliases: ["目标买入价", "buy_price", "price"], required: true, validate: (raw) => {
+      if (raw.trim() === "") return "目标买入价不能为空";
+      const n = Number.parseFloat(raw);
+      if (!Number.isFinite(n) || n <= 0) return `目标买入价 "${raw}" 必须为正数`;
+      return null;
+    } },
+    { key: "max_quantity", aliases: ["最大数量", "qty"], defaultValue: "" },
+    { key: "note", aliases: ["备注", "remark"], defaultValue: "" },
+  ];
+
+  // 套利配方：对应后端 import_arbitrage_recipes_csv
+  const arbitrageSpec: ColumnSpec[] = [
+    { key: "name", aliases: ["配方名称"], required: true, validate: validateNonEmpty("配方名称") },
+    { key: "recipe_type", aliases: ["配方类型", "type"], defaultValue: "normal" },
+    { key: "season_id", aliases: ["赛季ID", "season"], defaultValue: marketContext.seasonId },
+    { key: "market_mode", aliases: ["市场模式", "mode"], defaultValue: marketContext.marketMode },
+    { key: "enabled", aliases: ["启用"], defaultValue: "true" },
+  ];
+
+  // 共享的 CSV 导入流水线：选文件 → 预处理 → 调后端 → 合并错误
+  const runCsvImport = async (
+    spec: ColumnSpec[],
+    backendCall: (csv: string) => Promise<{ imported: number; errors: string[] }>,
+  ): Promise<{ result: { imported: number; errors: string[] }; fileName: string } | null> => {
+    const file = await open({
+      multiple: false,
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+    });
+    if (!file) return null;
+
+    const content = await readTextFile(file);
+    const { csv, preErrors } = preprocessCsv(content, spec);
+
+    if (csv === null) {
+      // 必填列缺失等严重错误，直接展示错误，不调后端
+      return { result: { imported: 0, errors: preErrors }, fileName: file };
+    }
+
+    const result = await backendCall(csv);
+    return {
+      result: {
+        imported: result.imported,
+        errors: [...preErrors, ...result.errors],
+      },
+      fileName: file,
+    };
+  };
+
   const importCsvMutation = useMutation({
-    mutationFn: async () => {
-      const file = await open({
-        multiple: false,
-        filters: [{ name: "CSV", extensions: ["csv"] }],
-      });
-      if (!file) return null;
-      const content = await readTextFile(file);
-      const result = await cmd.importWatchlistCsv(content);
-      return { result, fileName: file };
-    },
+    mutationFn: () => runCsvImport(watchlistSpec, cmd.importWatchlistCsv),
     onSuccess: (data) => {
       if (!data) return;
       setImportResult(data.result);
       setShowImportDetails(false);
+    },
+    onError: (err) => {
+      toast.error(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
     },
   });
 
   const importInventoryMutation = useMutation({
-    mutationFn: async () => {
-      const file = await open({
-        multiple: false,
-        filters: [{ name: "CSV", extensions: ["csv"] }],
-      });
-      if (!file) return null;
-      const content = await readTextFile(file);
-      const result = await cmd.importInventoryCsv(content);
-      return { result, fileName: file };
-    },
+    mutationFn: () => runCsvImport(inventorySpec, cmd.importInventoryCsv),
     onSuccess: (data) => {
       if (!data) return;
       setImportResult(data.result);
       setShowImportDetails(false);
+    },
+    onError: (err) => {
+      toast.error(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
     },
   });
 
   const importBuyWatchesMutation = useMutation({
-    mutationFn: async () => {
-      const file = await open({
-        multiple: false,
-        filters: [{ name: "CSV", extensions: ["csv"] }],
-      });
-      if (!file) return null;
-      const content = await readTextFile(file);
-      const result = await cmd.importBuyWatchesCsv(content);
-      return { result, fileName: file };
-    },
+    mutationFn: () => runCsvImport(buyWatchesSpec, cmd.importBuyWatchesCsv),
     onSuccess: (data) => {
       if (!data) return;
       setImportResult(data.result);
       setShowImportDetails(false);
+    },
+    onError: (err) => {
+      toast.error(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
     },
   });
 
   const importArbitrageMutation = useMutation({
-    mutationFn: async () => {
-      const file = await open({
-        multiple: false,
-        filters: [{ name: "CSV", extensions: ["csv"] }],
-      });
-      if (!file) return null;
-      const content = await readTextFile(file);
-      const result = await cmd.importArbitrageRecipesCsv(content);
-      return { result, fileName: file };
-    },
+    mutationFn: () => runCsvImport(arbitrageSpec, cmd.importArbitrageRecipesCsv),
     onSuccess: (data) => {
       if (!data) return;
       setImportResult(data.result);
       setShowImportDetails(false);
+    },
+    onError: (err) => {
+      toast.error(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
     },
   });
 

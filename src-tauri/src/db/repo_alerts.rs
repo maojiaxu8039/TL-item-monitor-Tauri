@@ -67,10 +67,7 @@ pub async fn create_alert_rule(
             "SELECT name FROM {items_table} WHERE item_id = ? LIMIT 1",
             items_table = items_table
         );
-        let name: Option<(String,)> = sqlx::query_as(&sql)
-            .bind(iid)
-            .fetch_optional(pool)
-            .await?;
+        let name: Option<(String,)> = sqlx::query_as(&sql).bind(iid).fetch_optional(pool).await?;
         name.map(|(n,)| n)
     } else {
         None

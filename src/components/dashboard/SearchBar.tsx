@@ -13,6 +13,7 @@ import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { queryKeys } from "@/lib/queryKeys"
 import { save, open } from "@tauri-apps/plugin-dialog"
 import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs"
+import { parseCsv, rowsToCsv, findColumnIndex } from "@/lib/csv"
 
 interface SearchBarProps {
   sections?: Section[]
@@ -127,21 +128,27 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
   const handleExportList = async () => {
     try {
       const allSections = await cmd.getSections(marketContext.marketMode)
-      let csvContent = "\uFEFF分组名称,物品名称,购买火价,数量\n"
-      
+      const rows: (string | number)[][] = [['分组名称', '物品名称', '购买火价', '数量']]
+
       for (const section of allSections) {
         const sectionItems = await cmd.getSectionItems(section.id, marketContext.seasonId, marketContext.marketMode)
         for (const item of sectionItems) {
-          csvContent += `"${section.name}","${item.item_name || ''}",${item.purchase_fire_price || ''},${item.count || ''}\n`
+          rows.push([
+            section.name,
+            item.item_name || '',
+            item.purchase_fire_price ?? '',
+            item.count ?? '',
+          ])
         }
       }
-      
+      const csvContent = rowsToCsv(rows)
+
       const date = new Date().toISOString().slice(0, 10)
       const filePath = await save({
         filters: [{ name: 'CSV', extensions: ['csv'] }],
         defaultPath: `TorchScan_groups_${date}.csv`,
       })
-      
+
       if (filePath) {
         await writeTextFile(filePath, csvContent)
         toast.success(`已导出 ${allSections.length} 个分组`)
@@ -157,101 +164,134 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
         filters: [{ name: 'CSV', extensions: ['csv'] }],
         multiple: false,
       })
+      if (!filePath) return
 
-      if (filePath) {
-        const csvContent = await readTextFile(filePath as string)
-        const lines = csvContent.trim().split('\n')
+      const csvContent = await readTextFile(filePath as string)
+      const rows = parseCsv(csvContent)
 
-        if (lines.length < 2) {
-          toast.error('CSV 文件为空或格式错误')
-          return
+      if (rows.length < 2) {
+        toast.error('CSV 文件为空或缺少数据行')
+        return
+      }
+
+      // 表头列名 → 列索引映射，允许中英文混用与列顺序不固定
+      const headerRow = rows[0]
+      const sectionCol = findColumnIndex(headerRow, '分组名称', 'section', 'section_name', 'group')
+      const itemCol = findColumnIndex(headerRow, '物品名称', 'item', 'item_name', 'name')
+      const priceCol = findColumnIndex(headerRow, '购买火价', 'purchase_fire_price', 'fire_price', 'price')
+      const countCol = findColumnIndex(headerRow, '数量', 'count', 'qty', 'quantity')
+
+      if (sectionCol < 0 || itemCol < 0) {
+        toast.error('CSV 文件格式不正确，必须包含"分组名称"和"物品名称"两列')
+        return
+      }
+
+      let imported = 0
+      const errors: string[] = []
+
+      const allSections = await cmd.getSections(marketContext.marketMode)
+      const sectionMap = new Map<string, Section>()
+      for (const s of allSections) {
+        sectionMap.set(s.name.trim(), s)
+      }
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i]
+        const lineNo = i + 1
+        const sectionName = (row[sectionCol] ?? '').trim()
+        const itemName = (row[itemCol] ?? '').trim()
+        const priceRaw = priceCol >= 0 ? (row[priceCol] ?? '').trim() : ''
+        const countRaw = countCol >= 0 ? (row[countCol] ?? '').trim() : ''
+
+        if (!sectionName || !itemName) {
+          errors.push(`第${lineNo}行: 分组名称或物品名称为空`)
+          continue
         }
 
-        const header = lines[0].toLowerCase()
-        if (!header.includes('分组名称') && !header.includes('section')) {
-          toast.error('CSV 文件格式不正确，需要包含"分组名称"和"物品名称"列')
-          return
+        const purchaseFirePrice = priceRaw === '' ? 0 : Number.parseFloat(priceRaw)
+        if (priceRaw !== '' && !Number.isFinite(purchaseFirePrice)) {
+          errors.push(`第${lineNo}行: 购买火价 "${priceRaw}" 不是有效数字`)
+          continue
+        }
+        const count = countRaw === '' ? 1 : Number.parseInt(countRaw, 10)
+        if (countRaw !== '' && (!Number.isFinite(count) || count <= 0)) {
+          errors.push(`第${lineNo}行: 数量 "${countRaw}" 不是有效正整数`)
+          continue
         }
 
-        let imported = 0
-        const errors: string[] = []
+        try {
+          // 优先精确匹配；其次去空格后匹配
+          const searchResult = await cmd.searchItems(itemName, 1, 10)
+          const item =
+            searchResult.items.find((it: ItemData) => it.name === itemName) ||
+            searchResult.items.find((it: ItemData) => it.name.trim() === itemName)
 
-        const allSections = await cmd.getSections(marketContext.marketMode)
-        const sectionMap = new Map<string, Section>()
-        for (const s of allSections) {
-          sectionMap.set(s.name, s)
-        }
+          if (!item) {
+            errors.push(`第${lineNo}行: 未找到物品 "${itemName}"`)
+            continue
+          }
 
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim()
-          if (!line) continue
-
-          const match = line.match(/^"([^"]+)","([^"]+)"(?:,([^,]*))?(?:,([^,]*))?$/)
-          if (match) {
-            const [, sectionName, itemName, purchaseFirePrice, count] = match
-            try {
-              const searchResult = await cmd.searchItems(itemName, 1, 5)
-              const item = searchResult.items.find((it: ItemData) => it.name === itemName)
-
-              if (!item) {
-                errors.push(`第${i + 1}行: 未找到物品"${itemName}"`)
-                continue
-              }
-
-              let section = sectionMap.get(sectionName)
-
-              if (!section) {
-                await cmd.createSection(sectionName, marketContext.marketMode)
-                const newSections = await cmd.getSections(marketContext.marketMode)
-                for (const s of newSections) {
-                  sectionMap.set(s.name, s)
-                }
-                section = sectionMap.get(sectionName)
-              }
-
-              if (section) {
-                await cmd.addSectionItem(
-                  section.id,
-                  marketContext.seasonId,
-                  marketContext.marketMode,
-                  item.item_id,
-                  parseFloat(purchaseFirePrice || '') || 0,
-                  parseInt(count || '') || 1,
-                  0
-                )
-                imported++
-              }
-            } catch (err: unknown) {
-              const errorMsg = errorMessage(err)
-              if (errorMsg.includes("UNIQUE constraint failed")) {
-                errors.push(`第${i + 1}行: 物品"${itemName}"已在分组"${sectionName}"中`)
-              } else {
-                errors.push(`第${i + 1}行: ${errorMsg}`)
-              }
+          let section = sectionMap.get(sectionName)
+          if (!section) {
+            await cmd.createSection(sectionName, marketContext.marketMode)
+            const newSections = await cmd.getSections(marketContext.marketMode)
+            for (const s of newSections) {
+              sectionMap.set(s.name.trim(), s)
             }
-          } else {
-            errors.push(`第${i + 1}行: CSV格式不正确`)
+            section = sectionMap.get(sectionName)
           }
-        }
-
-        refreshSections()
-
-        if (errors.length > 0) {
-          if (imported > 0) {
-            toast.success(`已导入 ${imported} 个物品`)
+          if (!section) {
+            errors.push(`第${lineNo}行: 无法创建分组 "${sectionName}"`)
+            continue
           }
-          toast.error(
-            <div className="max-h-40 overflow-auto">
-              <div className="font-medium mb-1">导入完成，但有以下问题：</div>
-              {errors.map((err, idx) => (
-                <div key={idx} className="text-xs text-[var(--color-danger)]">{err}</div>
-              ))}
-            </div>
+
+          await cmd.addSectionItem(
+            section.id,
+            marketContext.seasonId,
+            marketContext.marketMode,
+            item.item_id,
+            purchaseFirePrice,
+            count || 1,
+            0,
           )
-        } else {
-          toast.success(`成功导入 ${imported} 个物品`)
+          imported++
+        } catch (err: unknown) {
+          const errorMsg = errorMessage(err)
+          if (errorMsg.includes('UNIQUE constraint failed')) {
+            errors.push(`第${lineNo}行: 物品 "${itemName}" 已在分组 "${sectionName}" 中`)
+          } else {
+            errors.push(`第${lineNo}行: ${errorMsg}`)
+          }
         }
       }
+
+      refreshSections()
+
+      if (errors.length === 0) {
+        toast.success(`成功导入 ${imported} 个物品`)
+        return
+      }
+
+      if (imported > 0) {
+        toast.success(`已导入 ${imported} 个物品`)
+      }
+      const previewErrors = errors.slice(0, 10)
+      const remaining = errors.length - previewErrors.length
+      toast.error(
+        <div className="max-h-40 overflow-auto">
+          <div className="font-medium mb-1">
+            导入完成：成功 {imported} 条，失败 {errors.length} 条
+          </div>
+          {previewErrors.map((err, idx) => (
+            <div key={idx} className="text-xs text-[var(--color-danger)]">{err}</div>
+          ))}
+          {remaining > 0 && (
+            <div className="text-xs text-[var(--color-text-subtle)] mt-1">
+              ... 还有 {remaining} 条错误未显示
+            </div>
+          )}
+        </div>,
+      )
     } catch (err) {
       toast.error(`导入失败: ${errorMessage(err)}`)
     }

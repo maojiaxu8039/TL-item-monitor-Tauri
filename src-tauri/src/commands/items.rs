@@ -324,7 +324,8 @@ pub async fn trigger_price_alert(
     let title = format!("🔥 发现 {} 件满足条件预警", count);
 
     if desktop_notifications_enabled(&config.notification) {
-        send_notification(&app, &title, &message).map_err(|e| e.to_string())?;
+        send_notification(&app, &title, &message, Some("notification/buy.png"))
+            .map_err(|e| e.to_string())?;
     }
 
     if config.notification.voice_alert_enabled {

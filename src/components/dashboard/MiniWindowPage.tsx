@@ -167,7 +167,7 @@ export default function MiniWindowPage() {
       {/* Tabs */}
       <div className="grid grid-cols-4 border-b border-[var(--color-border)] bg-[var(--color-panel)]">
         {[
-          { id: "worth" as Tab, label: "值得买", count: worthCount, color: "text-[var(--color-success)]" },
+          { id: "worth" as Tab, label: "值得买", count: worthCount, color: "text-[var(--color-danger)]" },
           { id: "buy" as Tab, label: "买入监控", count: buyCount, color: "text-[var(--color-brand-gold)]" },
           { id: "sell" as Tab, label: "可出货", count: sellCount, color: "text-[var(--color-danger)]" },
           { id: "arbitrage" as Tab, label: "套利", count: arbitrageCount, color: "text-[var(--color-ai)]" },
@@ -295,7 +295,7 @@ function WorthItemsList({ items, onCopy, copiedId }: { items: MiniWorthItem[]; o
           key={item.item_id}
           className={`flex items-center justify-between px-2 py-2 rounded group transition-colors ${
             item.is_worth
-              ? "bg-[rgba(34,197,94,0.08)] hover:bg-[rgba(34,197,94,0.14)] border border-[rgba(34,197,94,0.2)]"
+              ? "bg-[rgba(239,68,68,0.08)] hover:bg-[rgba(239,68,68,0.14)] border border-[rgba(239,68,68,0.25)]"
               : "bg-[var(--color-panel)] hover:bg-[var(--color-panel-soft)]"
           }`}
         >
@@ -303,7 +303,7 @@ function WorthItemsList({ items, onCopy, copiedId }: { items: MiniWorthItem[]; o
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-medium text-[var(--color-text)] truncate">{item.item_name}</span>
               {item.is_worth && (
-                <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-[rgba(34,197,94,0.2)] text-[var(--color-success)] font-medium">
+                <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-[rgba(239,68,68,0.18)] text-[var(--color-danger)] font-medium">
                   值的
                 </span>
               )}
@@ -323,9 +323,9 @@ function WorthItemsList({ items, onCopy, copiedId }: { items: MiniWorthItem[]; o
             </div>
           </div>
           <div className="flex items-center gap-2 ml-3">
-            {item.profit !== null && item.profit !== undefined && (
-              <span className="text-sm font-medium text-[var(--color-success)]">
-                -{formatPrice(item.profit)}
+            {item.profit !== null && item.profit !== undefined && item.profit > 0 && (
+              <span className="text-sm font-semibold text-[var(--color-danger)] whitespace-nowrap">
+                省 {formatPrice(item.profit)}
               </span>
             )}
             <Button

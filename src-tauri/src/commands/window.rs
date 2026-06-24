@@ -99,7 +99,11 @@ pub async fn set_mini_window_mode(
             }));
             let _ = window.set_always_on_top(true);
             let _ = apply_opacity(&window, opacity);
-            tracing::info!("[WINDOW] Switched to mini mode: {}x{}", MINI_DEFAULT_WIDTH, MINI_DEFAULT_HEIGHT);
+            tracing::info!(
+                "[WINDOW] Switched to mini mode: {}x{}",
+                MINI_DEFAULT_WIDTH,
+                MINI_DEFAULT_HEIGHT
+            );
         } else {
             let _ = window.set_min_size(Some(tauri::Size::Logical(tauri::LogicalSize {
                 width: MAIN_MIN_WIDTH as f64,

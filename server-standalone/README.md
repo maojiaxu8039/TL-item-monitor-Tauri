@@ -181,7 +181,7 @@ sudo systemctl start tl-monitor-server
 
 ```bash
 # 健康检查（使用实际映射端口）
-curl http://100.124.122.65:38457/health
+curl http://100.124.122.65:38457/health/ready
 
 # 管理员状态查询
 curl -s http://100.124.122.65:38457/api/admin/status \

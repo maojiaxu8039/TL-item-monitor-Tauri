@@ -1,16 +1,73 @@
 use crate::commands::types::{BackupInfo, DatabaseMaintenanceResult, ImportResp, OkResponse};
 use crate::core::paths;
 use crate::core::state::AppState;
-use crate::db::repo_inventory::{InventoryBuyWatch, InventoryPosition};
 use crate::db::repo_config;
 use crate::db::repo_inventory;
+use crate::db::repo_inventory::{InventoryBuyWatch, InventoryPosition};
 use crate::db::repo_sections;
 use crate::db::table_resolver::TableResolver;
 use base64::{engine::general_purpose, Engine};
+use csv::StringRecord;
 use std::sync::Arc;
 use tauri::State;
 use tracing::warn;
 use uuid::Uuid;
+
+fn csv_field<'a>(headers: &StringRecord, record: &'a StringRecord, aliases: &[&str]) -> &'a str {
+    aliases
+        .iter()
+        .find_map(|alias| {
+            headers
+                .iter()
+                .position(|h| h.trim().eq_ignore_ascii_case(alias))
+                .and_then(|idx| record.get(idx))
+        })
+        .unwrap_or("")
+        .trim()
+}
+
+async fn resolve_watchlist_section_id(
+    pool: &sqlx::SqlitePool,
+    section_id: &str,
+    section_name: &str,
+    market_mode: &str,
+) -> Result<String, String> {
+    if !section_id.trim().is_empty() {
+        let exists: Option<String> =
+            sqlx::query_scalar("SELECT id FROM sections WHERE id = ? AND market_mode = ?")
+                .bind(section_id)
+                .bind(market_mode)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+
+        if exists.is_some() || section_name.trim().is_empty() {
+            return Ok(section_id.trim().to_string());
+        }
+    }
+
+    let name = section_name.trim();
+    if name.is_empty() {
+        return Err("section_id 和 section_name 不能同时为空".to_string());
+    }
+
+    if let Some(id) = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM sections WHERE name = ? AND market_mode = ?",
+    )
+    .bind(name)
+    .bind(market_mode)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?
+    {
+        return Ok(id);
+    }
+
+    repo_sections::create_section(pool, name, market_mode)
+        .await
+        .map(|section| section.id)
+        .map_err(|e| e.to_string())
+}
 
 #[tauri::command]
 pub async fn import_watchlist_csv(
@@ -21,39 +78,85 @@ pub async fn import_watchlist_csv(
         .has_headers(true)
         .from_reader(content.as_bytes());
 
+    let headers = reader.headers().map_err(|e| e.to_string())?.clone();
+    let ctx = state.active_context.read().clone();
     let mut imported_count = 0;
     let mut error_list = Vec::new();
     let mut batch: Vec<(String, String, String, String, f64, i32, f64)> = Vec::new();
 
     for (idx, result) in reader.records().enumerate() {
         if let Ok(record) = result {
-            if record.len() >= 7 {
-                let section_id = record.get(0).unwrap_or("").to_string();
-                let season_id = record.get(1).unwrap_or("ss12").to_string();
-                let market_mode = record.get(2).unwrap_or("season_normal").to_string();
-                let item_id = record.get(3).unwrap_or("").to_string();
-                let purchase_fire_price: f64 =
-                    record.get(4).and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                let count: i32 = record.get(5).and_then(|s| s.parse().ok()).unwrap_or(1);
-                let more_value: f64 = record.get(6).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+            let season_id = csv_field(&headers, &record, &["season_id", "赛季ID", "season"]);
+            let season_id = if season_id.is_empty() {
+                ctx.season_id.clone()
+            } else {
+                season_id.to_string()
+            };
+            let market_mode = csv_field(&headers, &record, &["market_mode", "市场模式", "mode"]);
+            let market_mode = if market_mode.is_empty() {
+                ctx.market_mode.as_str().to_string()
+            } else {
+                market_mode.to_string()
+            };
+            let section_id = csv_field(&headers, &record, &["section_id", "分组ID", "section"]);
+            let section_name = csv_field(
+                &headers,
+                &record,
+                &["section_name", "分组名称", "group", "分组"],
+            );
+            let item_id = csv_field(&headers, &record, &["item_id", "物品ID", "item"]).to_string();
+            let purchase_fire_price: f64 = csv_field(
+                &headers,
+                &record,
+                &["purchase_fire_price", "购买火价", "fire_price", "price"],
+            )
+            .parse()
+            .unwrap_or(0.0);
+            let count: i32 = csv_field(&headers, &record, &["count", "数量", "qty", "quantity"])
+                .parse()
+                .unwrap_or(1);
+            let more_value: f64 = csv_field(
+                &headers,
+                &record,
+                &["more_value", "更多价值", "extra_value"],
+            )
+            .parse()
+            .unwrap_or(0.0);
 
-                if let Err(e) = TableResolver::validate(&season_id, &market_mode) {
+            if item_id.trim().is_empty() {
+                error_list.push(format!("行 {}: item_id 为空", idx + 2));
+                continue;
+            }
+
+            if let Err(e) = TableResolver::validate(&season_id, &market_mode) {
+                error_list.push(format!("行 {}: {}", idx + 2, e));
+                continue;
+            }
+
+            let section_id = match resolve_watchlist_section_id(
+                &state.db,
+                section_id,
+                section_name,
+                &market_mode,
+            )
+            .await
+            {
+                Ok(id) => id,
+                Err(e) => {
                     error_list.push(format!("行 {}: {}", idx + 2, e));
                     continue;
                 }
+            };
 
-                batch.push((
-                    section_id,
-                    season_id,
-                    market_mode,
-                    item_id,
-                    purchase_fire_price,
-                    count,
-                    more_value,
-                ));
-            } else {
-                error_list.push(format!("行 {}: 列数不足", idx + 2));
-            }
+            batch.push((
+                section_id,
+                season_id,
+                market_mode,
+                item_id,
+                purchase_fire_price,
+                count,
+                more_value,
+            ));
         } else {
             error_list.push(format!("行 {}: CSV 记录格式错误", idx + 2));
         }
@@ -91,8 +194,33 @@ pub async fn export_watchlist_csv(state: State<'_, Arc<AppState>>) -> Result<Str
 
     TableResolver::validate(&ctx.season_id, ctx.market_mode.as_str())?;
 
-    let rows: Vec<(String, String, String, String, String, String, String, String)> = sqlx::query_as(
-        "SELECT section_id, season_id, market_mode, item_id, purchase_fire_price, count, more_value, COALESCE(last_time, '') FROM section_items WHERE season_id = ? AND market_mode = ? ORDER BY section_id, sort_order, created_at"
+    let rows: Vec<(
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+    )> = sqlx::query_as(
+        r#"
+        SELECT
+            si.section_id,
+            COALESCE(s.name, '') AS section_name,
+            si.season_id,
+            si.market_mode,
+            si.item_id,
+            si.purchase_fire_price,
+            si.count,
+            si.more_value,
+            COALESCE(si.last_time, '')
+        FROM section_items si
+        LEFT JOIN sections s ON s.id = si.section_id
+        WHERE si.season_id = ? AND si.market_mode = ?
+        ORDER BY s.sort_order, si.sort_order, si.created_at
+        "#,
     )
     .bind(&ctx.season_id)
     .bind(ctx.market_mode.as_str())
@@ -103,6 +231,7 @@ pub async fn export_watchlist_csv(state: State<'_, Arc<AppState>>) -> Result<Str
     let mut wtr = csv::Writer::from_writer(vec![]);
     wtr.write_record([
         "section_id",
+        "section_name",
         "season_id",
         "market_mode",
         "item_id",
@@ -123,6 +252,7 @@ pub async fn export_watchlist_csv(state: State<'_, Arc<AppState>>) -> Result<Str
             row.5.as_str(),
             row.6.as_str(),
             row.7.as_str(),
+            row.8.as_str(),
         ])
         .map_err(|e| e.to_string())?;
     }

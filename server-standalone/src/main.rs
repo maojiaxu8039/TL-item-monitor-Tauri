@@ -11,6 +11,7 @@
 //! - WebSocket 实时推送
 //! - WAL 定期 checkpoint
 
+mod alerting;
 mod config;
 mod constants;
 mod db;
@@ -482,6 +483,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         start_http_server(http_state, http_port, start_time).await;
     });
+
+    // 启动告警监控 task：每 60s 检查 scrape 活跃度、5xx 比例、磁盘空间
+    alerting::spawn_alerting_task(state.metrics.clone());
 
     if let Some(ws_port) = config.http_port.checked_add(1) {
         let ws_state = state.clone();
@@ -2665,14 +2669,22 @@ async fn send_response(
         "application/json; charset=utf-8"
     };
 
+    // HTTP/1.1 默认 keep-alive，但当前实现单连接单请求
+    // 显式声明 Connection: close 让客户端立即重连
+    // 比留空导致客户端等待 timeout 更明确
+    // 完整 keep-alive（pipeline/复用 buf_reader）需要重写 request 解析路径
+    // 属于 C-2 后续工作
+    let connection_header = "Connection: close\r\n";
+
     let response = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nCache-Control: {}\r\n{}Content-Length: {}\r\nAccess-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n\r\n{}",
+        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nCache-Control: {}\r\n{}Content-Length: {}\r\n{}Access-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n\r\n{}",
         status,
         reason_phrase(status),
         content_type,
         JSON_CACHE_CONTROL,
         security_headers(),
         body.len(),
+        connection_header,
         cors_header,
         body
     );

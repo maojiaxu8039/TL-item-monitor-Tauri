@@ -1,4 +1,4 @@
-use crate::commands::types::{OkResponse, ImportResp};
+use crate::commands::types::{ImportResp, OkResponse};
 use crate::core::state::AppState;
 use crate::db::models_arbitrage::{
     ArbitrageRecipe, ArbitrageRecipeWithDetails, ArbitrageResponse, CreateRecipeRequest,
@@ -268,7 +268,18 @@ pub async fn import_arbitrage_recipes_csv(
                     continue;
                 }
 
-                match repo_arbitrage::create_recipe(&state.db, &name, &recipe_type, &_season_id, &_market_mode, enabled, &[], &[]).await {
+                match repo_arbitrage::create_recipe(
+                    &state.db,
+                    &name,
+                    &recipe_type,
+                    &_season_id,
+                    &_market_mode,
+                    enabled,
+                    &[],
+                    &[],
+                )
+                .await
+                {
                     Ok(_) => imported_count += 1,
                     Err(e) => error_list.push(format!("行 {}: {}", idx + 2, e)),
                 }

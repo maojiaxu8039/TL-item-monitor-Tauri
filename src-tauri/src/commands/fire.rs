@@ -84,13 +84,10 @@ pub async fn get_dashboard_summary(
     .await
     .unwrap_or(0);
 
-    let positions = repo_inventory::list_positions(
-        &state.db,
-        &ctx.season_id,
-        ctx.market_mode.as_str(),
-    )
-    .await
-    .unwrap_or_default();
+    let positions =
+        repo_inventory::list_positions(&state.db, &ctx.season_id, ctx.market_mode.as_str())
+            .await
+            .unwrap_or_default();
 
     let mut position_cost_fire = 0.0;
     let mut position_current_value_fire = 0.0;
@@ -98,10 +95,13 @@ pub async fn get_dashboard_summary(
         position_cost_fire += p.buy_price * p.quantity as f64;
     }
 
-    let position_views =
-        repo_inventory::list_positions_with_current_price(&state.db, &ctx.season_id, ctx.market_mode.as_str())
-            .await
-            .unwrap_or_default();
+    let position_views = repo_inventory::list_positions_with_current_price(
+        &state.db,
+        &ctx.season_id,
+        ctx.market_mode.as_str(),
+    )
+    .await
+    .unwrap_or_default();
     for v in &position_views {
         if let Some(cp) = v.current_price {
             position_current_value_fire += cp * v.position.quantity as f64;
@@ -174,62 +174,9 @@ pub async fn set_active_market_context(
         }
     }
 
-    // Immediately fetch fresh fire price for new context
-    let mode_str = match mode {
-        MarketMode::SeasonExpert => "专家",
-        _ => "普通",
-    };
-    match crate::db::repo_season_api::get_season_api_config(&state.db, &seasonId).await {
-        Ok(api_config) => {
-            match scraper::qiandao::scrape_by_mode_with_api_config(mode_str, Some(&api_config))
-                .await
-            {
-                Ok(snapshot) => {
-                    if let Err(e) = crate::db::repo_fire::insert_fire_record(
-                        &state.db,
-                        &seasonId,
-                        mode.as_str(),
-                        &snapshot,
-                    )
-                    .await
-                    {
-                        tracing::warn!("Failed to insert fire record: {}", e);
-                    }
-
-                    {
-                        let mut fire_prices = state.fire_prices.write();
-                        fire_prices.insert(mode, snapshot.clone());
-                    }
-                    emit_fire_price_updated(
-                        &app,
-                        FirePricePayload {
-                            rmb_per_10k_fire: snapshot.rmb_per_10k_fire,
-                            fire_per_rmb: snapshot.fire_per_rmb,
-                            increase_ratio: snapshot.increase_ratio,
-                            trading_volume: snapshot.trading_volume.clone(),
-                            source: snapshot.source.clone(),
-                            source_time: snapshot.source_time.clone(),
-                            scraped_at: snapshot.scraped_at,
-                        },
-                    );
-                    tracing::info!(
-                        "Fire price refreshed for mode={}: {} RMB/10K",
-                        mode_str,
-                        snapshot.rmb_per_10k_fire
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to scrape fire price for mode={}: {}", mode_str, e);
-                    // Try to load from DB as fallback
-                    load_fire_from_db(&state, &app, &seasonId, mode.as_str()).await;
-                }
-            }
-        }
-        Err(e) => {
-            tracing::warn!("Failed to get season API config: {}", e);
-            load_fire_from_db(&state, &app, &seasonId, mode.as_str()).await;
-        }
-    }
+    // Context switching should be light: use local snapshots immediately and leave
+    // network refreshes to the scheduled/manual refresh paths.
+    load_fire_from_db(&state, &app, &seasonId, mode.as_str()).await;
 
     // Emit context changed event
     crate::core::events::emit_market_context_changed(
@@ -240,64 +187,39 @@ pub async fn set_active_market_context(
         },
     );
 
-    // Refresh items cache for new context
+    // Refresh in-memory items cache from local DB for the new context.
     let mode_str = mode.as_str().to_string();
     let season_for_cache = seasonId.clone();
     let state_clone = Arc::clone(&state);
+    let app_for_items = app.clone();
     tokio::spawn(async move {
-        // First scrape fresh items
-        match crate::scraper::scrape_items(&season_for_cache, &mode_str).await {
+        match repo_items::get_items_from_realtime_table(
+            &state_clone.db,
+            &season_for_cache,
+            &mode_str,
+        )
+        .await
+        {
             Ok(items) => {
                 let count = items.len() as i64;
-                if let Err(e) = crate::db::repo_items::bulk_insert_items(
-                    &state_clone.db,
-                    &season_for_cache,
-                    &mode_str,
-                    &items,
-                )
-                .await
-                {
-                    tracing::warn!("Failed to insert items: {}", e);
-                }
-                if let Err(e) = repo_item_realtime_prices::record_item_prices(
-                    &state_clone.db,
-                    &items,
-                    &season_for_cache,
-                    &mode_str,
-                )
-                .await
-                {
-                    tracing::warn!("Failed to record realtime item prices: {}", e);
-                }
-                {
-                    let mut cache = state_clone.items_cache.write();
-                    *cache = Arc::new(items.clone());
-                }
+                let mut cache = state_clone.items_cache.write();
+                *cache = Arc::new(items);
+                emit_items_updated(
+                    &app_for_items,
+                    ItemsUpdatedPayload {
+                        count,
+                        updated_at: chrono::Utc::now(),
+                    },
+                );
                 tracing::info!(
-                    "Items cache refreshed for season={}, mode={}, count={}",
+                    "Items cache loaded from DB for season={}, mode={}, count={}",
                     season_for_cache,
                     mode_str,
                     count
                 );
             }
             Err(e) => {
-                tracing::warn!("Failed to scrape items: {}", e);
-                // Try to load from DB as fallback
-                match repo_items::get_items_from_realtime_table(
-                    &state_clone.db,
-                    &season_for_cache,
-                    &mode_str,
-                )
-                .await
-                {
-                    Ok(items) => {
-                        let mut cache = state_clone.items_cache.write();
-                        *cache = Arc::new(items);
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to load items from DB: {}", e);
-                    }
-                }
+                tracing::warn!("Failed to load items from DB: {}", e);
             }
         }
     });

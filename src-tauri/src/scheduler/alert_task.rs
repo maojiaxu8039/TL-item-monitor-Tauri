@@ -159,11 +159,11 @@ async fn check_worth_items(app: &tauri::AppHandle, state: &Arc<AppState>) {
 
     if desktop_notifications_enabled(&notification_config) {
         let title = format!(
-            "🔥 发现 {} 件满足条件预警 {}",
+            "满足条件预警 · {}件 {}",
             worth_items.len(),
             notification_time_label(now)
         );
-        if let Err(e) = send_notification(app, &title, &message) {
+        if let Err(e) = send_notification(app, &title, &message, Some("notification/buy.png")) {
             warn!("Failed to send notification: {}", e);
         }
     }
@@ -205,13 +205,7 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
     let season_id = ctx.season_id.clone();
     let market_mode_str = ctx.market_mode.as_str();
 
-    let rules = match repo_alerts::get_alert_rules(
-        &state.db,
-        &season_id,
-        market_mode_str,
-    )
-    .await
-    {
+    let rules = match repo_alerts::get_alert_rules(&state.db, &season_id, market_mode_str).await {
         Ok(rules) => rules,
         Err(e) => {
             error!("Failed to get alert rules: {}", e);
@@ -242,8 +236,8 @@ async fn check_custom_alert_rules(app: &tauri::AppHandle, state: &Arc<AppState>)
             any_rule_triggered = true;
             let message = format_rule_notification(rule, &triggered_targets);
             if desktop_notifications_enabled(&notification_config) {
-                let title = format!("⚠️ 预警规则触发 {}", notification_time_label(now));
-                if let Err(e) = send_notification(app, &title, &message) {
+                let title = format!("预警规则触发 {}", notification_time_label(now));
+                if let Err(e) = send_notification(app, &title, &message, None) {
                     warn!("Failed to send notification: {}", e);
                 }
             }
@@ -549,9 +543,13 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
             );
 
             let mut command = tokio::process::Command::new("powershell");
-            command
-                .creation_flags(CREATE_NO_WINDOW)
-                .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script]);
+            command.creation_flags(CREATE_NO_WINDOW).args([
+                "-NoProfile",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                &script,
+            ]);
 
             match tokio::time::timeout(std::time::Duration::from_secs(35), command.status()).await {
                 Ok(Ok(status)) if status.success() => played += 1,
@@ -622,7 +620,7 @@ async fn check_buy_ready_alerts(
         return;
     }
 
-    let mut message = String::from("📉 低价买入提醒\n\n");
+    let mut message = String::new();
     for (i, view) in buy_ready_watches.iter().take(5).enumerate() {
         let watch = &view.watch;
         let current = view.current_price.unwrap_or(0.0);
@@ -630,7 +628,7 @@ async fn check_buy_ready_alerts(
         let discount = view.discount_to_target.unwrap_or(0.0);
 
         message.push_str(&format!(
-            "{}. {} 目标:{} 当前:{} ({:.1}%低于目标)\n",
+            "{}. {} 目标 {} 当前 {} ({:.1}% 低于目标)\n",
             i + 1,
             watch.item_name,
             format_price(target),
@@ -648,8 +646,8 @@ async fn check_buy_ready_alerts(
     }
 
     if desktop_notifications_enabled(notification_config) {
-        let title = format!("📉 低价买入提醒 ({}件)", buy_ready_watches.len());
-        if let Err(e) = send_notification(app, &title, &message) {
+        let title = format!("低价买入 · {}件", buy_ready_watches.len());
+        if let Err(e) = send_notification(app, &title, &message, Some("notification/buy.png")) {
             warn!("Failed to send buy alert notification: {}", e);
         }
     }
@@ -706,7 +704,7 @@ async fn check_sell_ready_alerts(
         return;
     }
 
-    let mut message = String::from("📈 囤货可出货提醒\n\n");
+    let mut message = String::new();
     let mut total_profit = 0.0;
 
     for (i, view) in sell_ready_positions.iter().take(5).enumerate() {
@@ -754,8 +752,18 @@ async fn check_sell_ready_alerts(
     ));
 
     if desktop_notifications_enabled(notification_config) {
-        let title = format!("📈 囤货可出货提醒 ({}件)", sell_ready_positions.len());
-        if let Err(e) = send_notification(app, &title, &message) {
+        let title = format!(
+            "可出货 · {}件 · 预计 {}",
+            sell_ready_positions.len(),
+            {
+                if total_profit >= 0.0 {
+                    format!("+{}", format_price(total_profit))
+                } else {
+                    format_price(total_profit)
+                }
+            }
+        );
+        if let Err(e) = send_notification(app, &title, &message, Some("notification/sell.png")) {
             warn!("Failed to send sell alert notification: {}", e);
         }
     }
