@@ -427,6 +427,12 @@ pub async fn run_migrations(pool: &SqlitePool, default_season: &str) -> Result<(
         .await
         .ok();
 
+    // 加索引以加速 is_current=1 ORDER BY started_at DESC 常见查询
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_seasons_is_current ON seasons(is_current, started_at DESC)")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("创建 seasons 索引失败: {}", e))?;
+
     let seasons = get_all_seasons_list(pool).await;
 
     let mut seasons_to_migrate = if seasons.is_empty() {
@@ -619,6 +625,22 @@ pub async fn init_audit_log(pool: &SqlitePool) -> Result<(), String> {
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON admin_audit_log(timestamp DESC)",
+    )
+    .execute(pool)
+    .await
+    .ok();
+
+    // action+timestamp 组合索引：审计日志常见查询按 action 过滤 + 时间排序
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_audit_action_ts ON admin_audit_log(action, timestamp DESC)",
+    )
+    .execute(pool)
+    .await
+    .ok();
+
+    // success+timestamp 组合索引：失败的 admin 操作查询
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_audit_success_ts ON admin_audit_log(success, timestamp DESC)",
     )
     .execute(pool)
     .await

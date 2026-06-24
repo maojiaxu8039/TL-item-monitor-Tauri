@@ -37,13 +37,29 @@ use tracing_subscriber::FmtSubscriber;
 use config::{ApiConfig, RateLimitConfig, ServerConfig};
 use scraper::Scraper;
 
-const DB_PATH: &str = "/data/tl_monitor.db";
-
-fn get_config_path() -> String {
-    std::env::var("TL_CONFIG_PATH").unwrap_or_else(|_| CONFIG_PATH.to_string())
+/// 默认数据库路径：Linux 容器部署 /data/...；其他平台用工作目录下的 ./data/...
+/// 可通过环境变量 TL_DB_PATH 覆盖
+fn default_db_path() -> String {
+    if cfg!(target_os = "linux") && std::path::Path::new("/data").exists() {
+        "/data/tl_monitor.db".to_string()
+    } else {
+        "./data/tl_monitor.db".to_string()
+    }
 }
 
-const CONFIG_PATH: &str = "/config/server_config.yaml";
+/// 默认配置文件路径：Linux 容器部署 /config/...；其他平台用工作目录下的 ./data/...
+/// 可通过环境变量 TL_CONFIG_PATH 覆盖
+fn default_config_path() -> String {
+    if cfg!(target_os = "linux") && std::path::Path::new("/config").exists() {
+        "/config/server_config.yaml".to_string()
+    } else {
+        "./data/server_config.yaml".to_string()
+    }
+}
+
+fn get_config_path() -> String {
+    std::env::var("TL_CONFIG_PATH").unwrap_or_else(|_| default_config_path())
+}
 
 #[derive(Clone)]
 struct ServerState {
@@ -76,7 +92,10 @@ const ADMIN_HTML_CACHE_CONTROL: &str = "no-store";
 const ADMIN_JS_CACHE_CONTROL: &str = "public, max-age=3600";
 
 fn security_headers() -> &'static str {
-    "X-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\n"
+    "X-Content-Type-Options: nosniff\r\n\
+     X-Frame-Options: DENY\r\n\
+     Referrer-Policy: no-referrer\r\n\
+     Vary: Origin\r\n"
 }
 
 struct LruCache {
@@ -365,7 +384,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let db_path = std::env::var("TL_DB_PATH").unwrap_or_else(|_| DB_PATH.to_string());
+    let db_path = std::env::var("TL_DB_PATH").unwrap_or_else(|_| default_db_path());
     info!("数据库路径: {}", db_path);
 
     if let Some(parent) = std::path::Path::new(&db_path).parent() {
@@ -373,15 +392,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let pool = SqlitePoolOptions::new()
-        .max_connections(4)
+        .max_connections(16) // 从 4 提升到 16，避免并发读时锁竞争
+        .min_connections(2)
+        .acquire_timeout(std::time::Duration::from_secs(10)) // 拿不到连接 10s 后失败，避免请求无限挂起
+        .idle_timeout(Some(std::time::Duration::from_secs(600))) // 空闲 10 分钟回收
+        .max_lifetime(Some(std::time::Duration::from_secs(3600))) // 连接最多存活 1 小时
+        .test_before_acquire(true) // 拿出前 ping 一下，自动剔除死连接
+        // after_connect 钩子：每条新连接创建后立即设置 PRAGMA
+        // 之前只对 pool 上 execute 的那条连接生效，新连接默认 synchronous=FULL 等
+        .after_connect(|conn, _meta| {
+            Box::pin(async move {
+                use sqlx::Executor;
+                conn.execute("PRAGMA busy_timeout = 5000").await?;
+                conn.execute("PRAGMA synchronous = NORMAL").await?;
+                conn.execute("PRAGMA temp_store = MEMORY").await?;
+                Ok(())
+            })
+        })
         .connect(&format!("sqlite:{}?mode=rwc", db_path))
         .await?;
 
+    // journal_mode 是数据库级（非连接级），但仍显式设置一次确保生效
     sqlx::query("PRAGMA journal_mode=WAL")
-        .execute(&pool)
-        .await
-        .ok();
-    sqlx::query("PRAGMA synchronous=NORMAL")
         .execute(&pool)
         .await
         .ok();

@@ -205,7 +205,37 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig, String> {
 
 pub fn save_config<P: AsRef<Path>>(path: P, config: &ServerConfig) -> Result<(), String> {
     let yaml = serde_yaml::to_string(config).map_err(|e| format!("序列化配置失败: {}", e))?;
-    std::fs::write(path, yaml).map_err(|e| format!("写入配置文件失败: {}", e))
+    let path = path.as_ref();
+
+    // 原子写入：先写到 .tmp 临时文件 → fsync → rename 替换
+    // 避免直接 write() 时进程被 kill/掉电导致 yaml 文件半截损坏
+    let tmp_path = path.with_extension("yaml.tmp");
+
+    // 使用 OpenOptions 显式打开 + 写入 + fsync
+    {
+        use std::io::Write;
+        let mut tmp_file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&tmp_path)
+            .map_err(|e| format!("创建临时配置文件失败 {}: {}", tmp_path.display(), e))?;
+        tmp_file
+            .write_all(yaml.as_bytes())
+            .map_err(|e| format!("写入临时配置文件失败: {}", e))?;
+        tmp_file
+            .sync_all()
+            .map_err(|e| format!("fsync 临时配置文件失败: {}", e))?;
+    }
+
+    // 原子替换：rename 在同一文件系统下是原子操作
+    std::fs::rename(&tmp_path, path).map_err(|e| {
+        // rename 失败：尝试清理临时文件，避免磁盘垃圾
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("替换配置文件失败 {}: {}", path.display(), e)
+    })?;
+
+    Ok(())
 }
 
 pub fn normalize_scrape_modes(modes: Vec<ScrapeMode>) -> Vec<ScrapeMode> {
