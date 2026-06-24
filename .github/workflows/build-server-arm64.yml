@@ -73,6 +73,23 @@ jobs:
             server-standalone/dist/linux-arm64-server/**
           retention-days: 30
 
+      - name: Build Docker image
+        run: |
+          cd server-standalone
+          docker buildx build \
+            --platform linux/arm64 \
+            -t ghcr.io/maojiaxu8039/tl-monitor-server:arm64 \
+            -t ghcr.io/maojiaxu8039/tl-monitor-server:latest-arm64 \
+            --load \
+            -f Dockerfile .
+
+      - name: Push Docker image to ghcr.io
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker push ghcr.io/maojiaxu8039/tl-monitor-server:arm64
+          docker push ghcr.io/maojiaxu8039/tl-monitor-server:latest-arm64
+
       - name: Deployment summary
         if: github.ref == 'refs/heads/main'
         run: |
@@ -80,6 +97,8 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Artifact:** linux-arm64-server" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**兼容性:** 需要 GLIBC (通过 ldd 检查依赖)" >> $GITHUB_STEP_SUMMARY
+          echo "**Docker Image:** ghcr.io/maojiaxu8039/tl-monitor-server:arm64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**兼容性:** GLIBC 2.31 (ubuntu-20.04)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build ID: ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
