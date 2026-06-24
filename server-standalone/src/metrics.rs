@@ -83,6 +83,7 @@ impl Metrics {
         self.ws_clients.fetch_add(1, Ordering::Relaxed);
     }
 
+    #[allow(dead_code)]
     pub fn dec_ws_clients(&self) {
         self.ws_clients.fetch_sub(1, Ordering::Relaxed);
     }
@@ -92,6 +93,7 @@ impl Metrics {
         self.scrape_errors.fetch_add(1, Ordering::Relaxed);
     }
 
+    #[allow(dead_code)]
     pub fn set_last_scrape(&self, ts: i64) {
         self.last_scrape_ts.store(ts, Ordering::Relaxed);
     }
