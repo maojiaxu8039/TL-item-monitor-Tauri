@@ -1,0 +1,15 @@
+.git
+.github
+.cargo
+node_modules
+src/node_modules
+src-tauri/target
+server-standalone/target
+server-standalone/data
+server-standalone/config
+data
+dist-react
+*.log
+*.db
+*.db-*
+*.zip

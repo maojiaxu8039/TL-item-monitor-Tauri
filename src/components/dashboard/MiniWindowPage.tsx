@@ -8,10 +8,11 @@ import {
 } from "@/lib/commands"
 import { useQuery } from "@tanstack/react-query"
 import { getCurrentWindow } from "@tauri-apps/api/window"
-import { RefreshCw, Copy, Check, Settings2, Plus, Minus } from "lucide-react"
+import { RefreshCw, Copy, Check, Settings2, Plus, Minus, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { useVisiblePolling } from "@/hooks/useVisiblePolling"
+import { useShowMore } from "@/hooks/useShowMore"
 import { queryKeys } from "@/lib/queryKeys"
 import { errorMessage } from "@/lib/utils"
 import { toast } from "sonner"
@@ -280,82 +281,85 @@ export default function MiniWindowPage() {
 }
 
 function WorthItemsList({ items, onCopy, copiedId }: { items: MiniWorthItem[]; onCopy: (name: string, id: string) => void; copiedId: string | null }) {
+  const { visibleCount, hasMore, remaining, showMore, collapse } = useShowMore(items.length)
+  const visible = items.slice(0, visibleCount)
+
   if (items.length === 0) {
     return <EmptyState message="暂无值得买的物品" />
   }
 
   return (
     <div className="p-2 space-y-1">
-      {items.length === 0 ? (
-        <EmptyState message="暂无分组物品" />
-      ) : (
-        items.slice(0, 10).map((item) => (
-          <div
-            key={item.item_id}
-            className={`flex items-center justify-between px-2 py-2 rounded group transition-colors ${
-              item.is_worth
-                ? "bg-[rgba(34,197,94,0.08)] hover:bg-[rgba(34,197,94,0.14)] border border-[rgba(34,197,94,0.2)]"
-                : "bg-[var(--color-panel)] hover:bg-[var(--color-panel-soft)]"
-            }`}
-          >
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm font-medium text-[var(--color-text)] truncate">{item.item_name}</span>
-                {item.is_worth && (
-                  <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-[rgba(34,197,94,0.2)] text-[var(--color-success)] font-medium">
-                    值的
-                  </span>
-                )}
-              </div>
-              <div className="flex gap-3 text-xs text-[var(--color-text-subtle)] mt-0.5">
-                <span>
-                  现价{" "}
-                  <span className={item.current_price ? "text-[var(--color-text)]" : ""}>
-                    {formatPrice(item.current_price)}
-                  </span>
-                </span>
-                <span>目标 <span className="text-[var(--color-text)]">{formatPrice(item.purchase_fire_price)}</span></span>
-                <span>数量 <span>{item.count}</span></span>
-                {item.section_name && (
-                  <span className="truncate text-[var(--color-text-subtle)]">· {item.section_name}</span>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2 ml-3">
-              {item.profit !== null && item.profit !== undefined && (
-                <span className="text-sm font-medium text-[var(--color-success)]">
-                  -{formatPrice(item.profit)}
+      {visible.map((item) => (
+        <div
+          key={item.item_id}
+          className={`flex items-center justify-between px-2 py-2 rounded group transition-colors ${
+            item.is_worth
+              ? "bg-[rgba(34,197,94,0.08)] hover:bg-[rgba(34,197,94,0.14)] border border-[rgba(34,197,94,0.2)]"
+              : "bg-[var(--color-panel)] hover:bg-[var(--color-panel-soft)]"
+          }`}
+        >
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-medium text-[var(--color-text)] truncate">{item.item_name}</span>
+              {item.is_worth && (
+                <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-[rgba(34,197,94,0.2)] text-[var(--color-success)] font-medium">
+                  值的
                 </span>
               )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                data-mini-no-drag
-                onClick={() => onCopy(item.item_name, item.item_id)}
-              >
-                {copiedId === item.item_id ? (
-                  <Check className="w-4 h-4 text-[var(--color-success)]" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </Button>
+            </div>
+            <div className="flex gap-3 text-xs text-[var(--color-text-subtle)] mt-0.5">
+              <span>
+                现价{" "}
+                <span className={item.current_price ? "text-[var(--color-text)]" : ""}>
+                  {formatPrice(item.current_price)}
+                </span>
+              </span>
+              <span>目标 <span className="text-[var(--color-text)]">{formatPrice(item.purchase_fire_price)}</span></span>
+              <span>数量 <span>{item.count}</span></span>
+              {item.section_name && (
+                <span className="truncate text-[var(--color-text-subtle)]">· {item.section_name}</span>
+              )}
             </div>
           </div>
-        ))
-      )}
+          <div className="flex items-center gap-2 ml-3">
+            {item.profit !== null && item.profit !== undefined && (
+              <span className="text-sm font-medium text-[var(--color-success)]">
+                -{formatPrice(item.profit)}
+              </span>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              data-mini-no-drag
+              onClick={() => onCopy(item.item_name, item.item_id)}
+            >
+              {copiedId === item.item_id ? (
+                <Check className="w-4 h-4 text-[var(--color-success)]" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
+            </Button>
+          </div>
+        </div>
+      ))}
+      <ShowMoreFooter hasMore={hasMore} remaining={remaining} onShowMore={showMore} onCollapse={collapse} />
     </div>
   )
 }
 
 function BuyWatchesList({ watches, onCopy, copiedId }: { watches: InventoryBuyWatchView[]; onCopy: (name: string, id: string) => void; copiedId: string | null }) {
+  const { visibleCount, hasMore, remaining, showMore, collapse } = useShowMore(watches.length)
+  const visible = watches.slice(0, visibleCount)
+
   if (watches.length === 0) {
     return <EmptyState message="暂无买入监控" />
   }
 
   return (
     <div className="p-2 space-y-1">
-      {watches.slice(0, 10).map((view) => {
+      {visible.map((view) => {
         const watch = view.watch
         return (
           <div key={watch.id} className="flex items-center justify-between px-2 py-2 rounded bg-[var(--color-panel)] hover:bg-[var(--color-panel-soft)] group">
@@ -387,18 +391,22 @@ function BuyWatchesList({ watches, onCopy, copiedId }: { watches: InventoryBuyWa
           </div>
         )
       })}
+      <ShowMoreFooter hasMore={hasMore} remaining={remaining} onShowMore={showMore} onCollapse={collapse} />
     </div>
   )
 }
 
 function SellPositionsList({ positions, onCopy, copiedId }: { positions: InventoryPositionView[]; onCopy: (name: string, id: string) => void; copiedId: string | null }) {
+  const { visibleCount, hasMore, remaining, showMore, collapse } = useShowMore(positions.length)
+  const visible = positions.slice(0, visibleCount)
+
   if (positions.length === 0) {
     return <EmptyState message="暂无可出货的持仓" />
   }
 
   return (
     <div className="p-2 space-y-1">
-      {positions.slice(0, 10).map((view) => {
+      {visible.map((view) => {
         const pos = view.position
         const profit = view.profit || 0
         return (
@@ -439,18 +447,22 @@ function SellPositionsList({ positions, onCopy, copiedId }: { positions: Invento
           </div>
         )
       })}
+      <ShowMoreFooter hasMore={hasMore} remaining={remaining} onShowMore={showMore} onCollapse={collapse} />
     </div>
   )
 }
 
 function ArbitrageList({ recipes, onCopy, copiedId }: { recipes: ArbitrageCalculationResult[]; onCopy: (name: string, id: string) => void; copiedId: string | null }) {
+  const { visibleCount, hasMore, remaining, showMore, collapse } = useShowMore(recipes.length)
+  const visible = recipes.slice(0, visibleCount)
+
   if (recipes.length === 0) {
     return <EmptyState message="暂无盈利套利" />
   }
 
   return (
     <div className="p-2 space-y-1">
-      {recipes.slice(0, 10).map((recipe) => (
+      {visible.map((recipe) => (
         <div key={recipe.recipe_id} className="flex items-center justify-between px-2 py-2 rounded bg-[var(--color-panel)] hover:bg-[var(--color-panel-soft)] group">
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium text-[var(--color-text)] truncate">{recipe.recipe_name}</div>
@@ -477,6 +489,7 @@ function ArbitrageList({ recipes, onCopy, copiedId }: { recipes: ArbitrageCalcul
           </div>
         </div>
       ))}
+      <ShowMoreFooter hasMore={hasMore} remaining={remaining} onShowMore={showMore} onCollapse={collapse} />
     </div>
   )
 }
@@ -485,6 +498,49 @@ function EmptyState({ message }: { message: string }) {
   return (
     <div className="flex items-center justify-center h-full text-[var(--color-text-subtle)]">
       <span className="text-sm">{message}</span>
+    </div>
+  )
+}
+
+function ShowMoreFooter({
+  hasMore,
+  remaining,
+  onShowMore,
+  onCollapse,
+}: {
+  hasMore: boolean
+  remaining: number
+  onShowMore: () => void
+  onCollapse: () => void
+}) {
+  const expanded = !hasMore && remaining === 0
+  if (!hasMore && !expanded) return null
+
+  return (
+    <div className="pt-1 flex justify-center">
+      {hasMore ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-xs gap-1 text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
+          data-mini-no-drag
+          onClick={onShowMore}
+        >
+          <ChevronDown className="w-3 h-3" />
+          显示更多{remaining > 0 ? ` (${remaining})` : ""}
+        </Button>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-xs gap-1 text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
+          data-mini-no-drag
+          onClick={onCollapse}
+        >
+          <ChevronUp className="w-3 h-3" />
+          收起
+        </Button>
+      )}
     </div>
   )
 }

@@ -524,6 +524,11 @@ pub async fn run_migrations(pool: &SqlitePool, default_season: &str) -> Result<(
         info!("已创建/验证赛季 {} 的表结构", season);
     }
 
+    sqlx::query("DROP TABLE IF EXISTS item_realtime_prices")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("删除服务端无用 item_realtime_prices 表失败: {}", e))?;
+
     info!("数据库迁移完成");
     Ok(())
 }

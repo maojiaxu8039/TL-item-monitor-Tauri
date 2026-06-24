@@ -3,6 +3,7 @@
 //! 使用客户端的 scraper::qiandao 模块进行火价采集
 //! 物品火价采集
 
+use futures_util::stream::{self, StreamExt};
 use once_cell::sync::Lazy;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -58,6 +59,7 @@ fn build_http_client(timeout_secs: u64) -> Result<Client, String> {
 
 static HTTP_CLIENT: Lazy<Result<Client, String>> = Lazy::new(|| build_http_client(30));
 static QIANDAO_CLIENT: Lazy<Result<Client, String>> = Lazy::new(|| build_http_client(15));
+static ETOR_CLIENT: Lazy<Result<Client, String>> = Lazy::new(|| build_http_client(12));
 
 fn http_client() -> Result<&'static Client, String> {
     HTTP_CLIENT.as_ref().map_err(|e| e.clone())
@@ -65,6 +67,10 @@ fn http_client() -> Result<&'static Client, String> {
 
 fn qiandao_client() -> Result<&'static Client, String> {
     QIANDAO_CLIENT.as_ref().map_err(|e| e.clone())
+}
+
+fn etor_client() -> Result<&'static Client, String> {
+    ETOR_CLIENT.as_ref().map_err(|e| e.clone())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,7 +97,7 @@ pub(crate) struct LuosiItem {
     last_time: Option<i64>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 #[allow(dead_code)]
 pub struct Item {
     pub item_id: String,
@@ -99,16 +105,60 @@ pub struct Item {
     pub item_type: String,
     pub price: f64,
     pub last_time: i64,
+    pub source: String,
 }
 
 const SCRAPE_MAX_RETRIES: u32 = 3;
 const SCRAPE_RETRY_DELAY_MS: u64 = 1000;
+const ETOR_BASE_URL: &str = "https://etor.710421059.xyz";
+const ETOR_INVALID_PRICE_MARKER: f64 = 710421059.0;
+const ETOR_CHART_CONCURRENCY: usize = 48;
+const ETOR_CHART_TIMEOUT_SECS: u64 = 8;
+
+#[derive(Debug, Clone, Deserialize)]
+struct MappingEntry {
+    name: String,
+    #[serde(rename = "type", default)]
+    item_type: String,
+    #[serde(default)]
+    source: String,
+}
+
+static ITEM_MAPPING: Lazy<HashMap<String, MappingEntry>> = Lazy::new(|| {
+    let json = include_str!("../../src-tauri/resources/item_id_mapping.json");
+    match serde_json::from_str::<HashMap<String, MappingEntry>>(json) {
+        Ok(mut mapping) => {
+            let original_count = mapping.len();
+            let deduplicated = dedupe_mapping_by_name(&mut mapping);
+            info!(
+                "[ETOR] Loaded {} item mappings from built-in (deduplicated={}, final={})",
+                original_count,
+                deduplicated,
+                mapping.len()
+            );
+            mapping
+        }
+        Err(e) => {
+            warn!("[ETOR] Failed to parse item mapping: {}", e);
+            HashMap::new()
+        }
+    }
+});
 
 pub struct Scraper;
 
 impl Scraper {
     pub async fn scrape_items(
-        _season_id: &str,
+        season_id: &str,
+        market_mode: &str,
+        config: &ApiConfig,
+        endpoints: &ApiEndpoints,
+    ) -> Result<Vec<Item>, String> {
+        Self::scrape_dual_items(season_id, market_mode, config, endpoints).await
+    }
+
+    async fn scrape_luosi_items(
+        season_id: &str,
         market_mode: &str,
         config: &ApiConfig,
         endpoints: &ApiEndpoints,
@@ -149,11 +199,141 @@ impl Scraper {
                 item_type: item.item_type.unwrap_or_default(),
                 price: item.item_price.unwrap_or(0.0),
                 last_time: item.last_time.unwrap_or(now),
+                source: "luosi_api".to_string(),
             })
             .collect();
 
-        debug!("抓取物品: 总数={}", raw_count);
+        debug!(
+            "抓取刷图小助手物品: season={}, mode={}, 总数={}",
+            season_id, market_mode, raw_count
+        );
         Ok(items)
+    }
+
+    async fn scrape_etor_items(
+        season_id: &str,
+        market_mode: &str,
+        config: &ApiConfig,
+    ) -> Result<Vec<Item>, String> {
+        let api_season_id = if market_mode.contains("expert") {
+            config.etor_season_id_expert
+        } else {
+            config.etor_season_id_normal
+        };
+        let now = chrono::Utc::now().timestamp();
+        let item_ids: Vec<String> = ITEM_MAPPING.keys().cloned().collect();
+
+        info!(
+            "[ETOR] Fetching chart data for {} items (season={}, api_season_id={}, concurrency={})",
+            item_ids.len(),
+            season_id,
+            api_season_id,
+            ETOR_CHART_CONCURRENCY
+        );
+
+        let chart_results = fetch_etor_chart_data_concurrent(api_season_id, &item_ids).await?;
+        let mut items = Vec::new();
+        let mut failed_count = 0usize;
+
+        for (item_id, chart) in chart_results {
+            match chart.and_then(|data| data.end_price.map(|price| (data, price))) {
+                Some((data, price)) if price > 0.0 && price < ETOR_INVALID_PRICE_MARKER => {
+                    let entry = ITEM_MAPPING.get(&item_id);
+                    let name = entry
+                        .map(|e| e.name.clone())
+                        .unwrap_or_else(|| format!("未知物品_{}", item_id));
+                    let item_type = entry.map(|e| e.item_type.clone()).unwrap_or_default();
+                    let last_time = data.last_timestamp.or(data.start_timestamp).unwrap_or(now);
+                    items.push(Item {
+                        item_id: item_id.clone(),
+                        name,
+                        item_type,
+                        price,
+                        last_time,
+                        source: "etor_api".to_string(),
+                    });
+                }
+                _ => failed_count += 1,
+            }
+        }
+
+        info!(
+            "[ETOR] Chart fetch complete: success={}, failed={}, total={} for {}/{}",
+            items.len(),
+            failed_count,
+            item_ids.len(),
+            season_id,
+            market_mode
+        );
+
+        if items.is_empty() {
+            return Err("易火 API 未返回有效物品价格".to_string());
+        }
+
+        Ok(items)
+    }
+
+    async fn scrape_dual_items(
+        season_id: &str,
+        market_mode: &str,
+        config: &ApiConfig,
+        endpoints: &ApiEndpoints,
+    ) -> Result<Vec<Item>, String> {
+        info!(
+            "[ITEM-SOURCE] Fetching items from DUAL sources for {}/{}",
+            season_id, market_mode
+        );
+
+        let (luosi_res, etor_res) = tokio::join!(
+            Self::scrape_luosi_items(season_id, market_mode, config, endpoints),
+            Self::scrape_etor_items(season_id, market_mode, config),
+        );
+
+        let luosi_items = match luosi_res {
+            Ok(items) => {
+                info!("[ITEM-SOURCE] DUAL: luosi returned {} items", items.len());
+                Some(items)
+            }
+            Err(e) => {
+                warn!("[ITEM-SOURCE] DUAL: luosi failed: {}", e);
+                None
+            }
+        };
+
+        let etor_items = match etor_res {
+            Ok(items) => {
+                info!("[ITEM-SOURCE] DUAL: etor returned {} items", items.len());
+                Some(items)
+            }
+            Err(e) => {
+                warn!("[ITEM-SOURCE] DUAL: etor failed: {}", e);
+                None
+            }
+        };
+
+        match (luosi_items, etor_items) {
+            (Some(l), Some(e)) => {
+                let merged = merge_dual_items(l, e);
+                info!(
+                    "[ITEM-SOURCE] DUAL: merged {} items for {}",
+                    merged.len(),
+                    market_mode
+                );
+                Ok(merged)
+            }
+            (Some(l), None) => {
+                warn!("[ITEM-SOURCE] DUAL: using luosi only for {}", market_mode);
+                Ok(l)
+            }
+            (None, Some(e)) => {
+                warn!("[ITEM-SOURCE] DUAL: using etor only for {}", market_mode);
+                Ok(e)
+            }
+            (None, None) => Err(format!(
+                "DUAL scrape failed for {}: both sources failed",
+                market_mode
+            )),
+        }
     }
 
     pub async fn scrape_fire_price(
@@ -205,6 +385,316 @@ impl Scraper {
             "火价抓取在 {} 次尝试后仍失败 (最后 Rust 错误: {})",
             SCRAPE_MAX_RETRIES, last_error
         ))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct EtorChartResponse {
+    #[serde(default)]
+    trend: Option<Vec<EtorTrendItem>>,
+    #[serde(default)]
+    summary: Option<EtorSummary>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EtorTrendItem {
+    timestamp: i64,
+    price: f64,
+}
+
+#[derive(Debug, Deserialize)]
+struct EtorSummary {
+    #[serde(rename = "endPrice")]
+    end_price: Option<f64>,
+    #[serde(rename = "lastTimestamp")]
+    last_timestamp: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+struct EtorChartSummary {
+    end_price: Option<f64>,
+    start_timestamp: Option<i64>,
+    last_timestamp: Option<i64>,
+}
+
+async fn fetch_etor_chart_data_concurrent(
+    api_season_id: i32,
+    item_ids: &[String],
+) -> Result<Vec<(String, Option<EtorChartSummary>)>, String> {
+    let client = etor_client()?.clone();
+    let results = stream::iter(item_ids.iter().cloned())
+        .map(|item_id| {
+            let client = client.clone();
+            async move {
+                let result = timeout(
+                    Duration::from_secs(ETOR_CHART_TIMEOUT_SECS),
+                    fetch_single_etor_chart(&client, api_season_id, &item_id),
+                )
+                .await
+                .unwrap_or_else(|_| {
+                    debug!(
+                        "[ETOR] Chart request timed out for {} after {}s",
+                        item_id, ETOR_CHART_TIMEOUT_SECS
+                    );
+                    None
+                });
+                (item_id, result)
+            }
+        })
+        .buffer_unordered(ETOR_CHART_CONCURRENCY)
+        .collect()
+        .await;
+    Ok(results)
+}
+
+async fn fetch_single_etor_chart(
+    client: &Client,
+    api_season_id: i32,
+    item_id: &str,
+) -> Option<EtorChartSummary> {
+    let url = format!(
+        "{}/etor-api/api/chart/{}/{}?interval=15m",
+        ETOR_BASE_URL, api_season_id, item_id
+    );
+
+    let resp = match client
+        .get(&url)
+        .header("accept", "application/json,text/plain,*/*")
+        .header("accept-language", "zh-CN,zh;q=0.9")
+        .header(
+            "user-agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
+        .header("x-frontend-version", "10.5.50")
+        .header("seasonid", api_season_id.to_string())
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            debug!("[ETOR] Chart request failed for {}: {}", item_id, e);
+            return None;
+        }
+    };
+
+    if !resp.status().is_success() {
+        debug!("[ETOR] Chart API status {} for {}", resp.status(), item_id);
+        return None;
+    }
+
+    let text = match resp.text().await {
+        Ok(text) => text,
+        Err(e) => {
+            debug!("[ETOR] Chart read failed for {}: {}", item_id, e);
+            return None;
+        }
+    };
+
+    if !text.starts_with('{') && !text.starts_with('[') {
+        let preview = text.chars().take(50).collect::<String>();
+        warn!("[ETOR] Non-JSON response for {}: {}...", item_id, preview);
+        return None;
+    }
+
+    let chart_resp: EtorChartResponse = match serde_json::from_str(&text) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!("[ETOR] Chart parse failed for {}: {}", item_id, e);
+            return None;
+        }
+    };
+
+    let summary = chart_resp.summary?;
+    let trend = chart_resp.trend;
+    let summary_last_ts = summary.last_timestamp.map(normalize_timestamp);
+    let last_ts = trend
+        .as_ref()
+        .and_then(|t| t.last())
+        .map(|t| normalize_timestamp(t.timestamp))
+        .or(summary_last_ts);
+
+    Some(EtorChartSummary {
+        end_price: summary
+            .end_price
+            .or_else(|| trend.as_ref().and_then(|t| t.last()).map(|t| t.price)),
+        start_timestamp: trend
+            .as_ref()
+            .and_then(|t| t.first())
+            .map(|t| normalize_timestamp(t.timestamp)),
+        last_timestamp: last_ts,
+    })
+}
+
+fn normalize_timestamp(ts: i64) -> i64 {
+    if ts > 10_000_000_000 {
+        ts / 1000
+    } else {
+        ts
+    }
+}
+
+fn merge_dual_items(luosi_items: Vec<Item>, etor_items: Vec<Item>) -> Vec<Item> {
+    let mut map: HashMap<String, Item> =
+        HashMap::with_capacity(luosi_items.len() + etor_items.len());
+    let input_total = luosi_items.len() + etor_items.len();
+
+    for item in luosi_items.into_iter().chain(etor_items) {
+        match map.get(&item.item_id) {
+            Some(existing) if should_keep_existing_item(existing, &item) => {}
+            _ => {
+                map.insert(item.item_id.clone(), item);
+            }
+        }
+    }
+
+    let after_id_merge = map.len();
+    let mut canonical_by_name: HashMap<String, String> = HashMap::with_capacity(map.len());
+    let mut ids: Vec<String> = map.keys().cloned().collect();
+    ids.sort_by_key(|id| numeric_item_id(id));
+
+    for item_id in ids {
+        let Some(item) = map.get(&item_id) else {
+            continue;
+        };
+        let normalized_name = normalize_item_name(&item.name);
+        if normalized_name.is_empty() || normalized_name.starts_with("未知物品_") {
+            continue;
+        }
+
+        match canonical_by_name.get(&normalized_name).cloned() {
+            Some(current_id) => {
+                let current_item = map.get(&current_id).cloned();
+                let candidate_item = map.get(&item_id).cloned();
+                let (Some(current_item), Some(candidate_item)) = (current_item, candidate_item)
+                else {
+                    continue;
+                };
+
+                if should_keep_existing_item(&current_item, &candidate_item) {
+                    map.remove(&item_id);
+                } else {
+                    map.remove(&current_id);
+                    canonical_by_name.insert(normalized_name, item_id.clone());
+                    if let Some(winner) = map.get_mut(&item_id) {
+                        winner.name = normalize_item_name(&winner.name);
+                    }
+                }
+            }
+            None => {
+                if let Some(item) = map.get_mut(&item_id) {
+                    item.name = normalized_name.clone();
+                }
+                canonical_by_name.insert(normalized_name, item_id);
+            }
+        }
+    }
+
+    let output_total = map.len();
+    if input_total != output_total {
+        info!(
+            "[ITEM-SOURCE] DUAL: input={}, after_id_merge={}, after_name_merge={}, removed_by_name={}",
+            input_total,
+            after_id_merge,
+            output_total,
+            after_id_merge.saturating_sub(output_total)
+        );
+    }
+
+    map.into_values().collect()
+}
+
+fn should_keep_existing_item(existing: &Item, candidate: &Item) -> bool {
+    item_score(existing) >= item_score(candidate)
+}
+
+fn item_score(item: &Item) -> (i64, u8, u8, std::cmp::Reverse<u64>) {
+    (
+        item.last_time,
+        u8::from(item.price > 0.0),
+        item_source_rank(&item.source),
+        std::cmp::Reverse(numeric_item_id(&item.item_id)),
+    )
+}
+
+fn item_source_rank(source: &str) -> u8 {
+    match source {
+        "etor_api" => 3,
+        "luosi_api" => 2,
+        _ => 1,
+    }
+}
+
+fn normalize_item_name(name: &str) -> String {
+    name.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn numeric_item_id(item_id: &str) -> u64 {
+    item_id.parse::<u64>().unwrap_or(u64::MAX)
+}
+
+fn dedupe_mapping_by_name(mapping: &mut HashMap<String, MappingEntry>) -> usize {
+    let mut canonical_by_name: HashMap<String, String> = HashMap::new();
+    let mut ids: Vec<String> = mapping.keys().cloned().collect();
+    ids.sort_by_key(|id| numeric_item_id(id));
+
+    let mut removed = 0usize;
+    for item_id in ids {
+        let Some(entry) = mapping.get(&item_id) else {
+            continue;
+        };
+        let normalized_name = normalize_item_name(&entry.name);
+        if normalized_name.is_empty() || normalized_name.starts_with("未知物品_") {
+            continue;
+        }
+
+        match canonical_by_name.get(&normalized_name).cloned() {
+            Some(current_id) => {
+                let current_entry = mapping.get(&current_id).cloned();
+                let candidate_entry = mapping.get(&item_id).cloned();
+                let (Some(current_entry), Some(candidate_entry)) = (current_entry, candidate_entry)
+                else {
+                    continue;
+                };
+
+                if mapping_score(&current_id, &current_entry)
+                    >= mapping_score(&item_id, &candidate_entry)
+                {
+                    mapping.remove(&item_id);
+                } else {
+                    mapping.remove(&current_id);
+                    canonical_by_name.insert(normalized_name, item_id.clone());
+                    if let Some(winner) = mapping.get_mut(&item_id) {
+                        winner.name = normalize_item_name(&winner.name);
+                    }
+                }
+                removed += 1;
+            }
+            None => {
+                if let Some(entry) = mapping.get_mut(&item_id) {
+                    entry.name = normalized_name.clone();
+                }
+                canonical_by_name.insert(normalized_name, item_id);
+            }
+        }
+    }
+    removed
+}
+
+fn mapping_score(item_id: &str, entry: &MappingEntry) -> (u8, u8, u8, std::cmp::Reverse<u64>) {
+    (
+        mapping_source_rank(&entry.source),
+        u8::from(!entry.name.trim().is_empty() && !entry.name.starts_with("未知物品_")),
+        u8::from(!entry.item_type.trim().is_empty()),
+        std::cmp::Reverse(numeric_item_id(item_id)),
+    )
+}
+
+fn mapping_source_rank(source: &str) -> u8 {
+    match source {
+        "both" => 4,
+        "etor" => 3,
+        "tl" => 2,
+        _ => 1,
     }
 }
 
@@ -496,221 +986,4 @@ struct QiandaoItem {
 fn mask_url_for_log(url: &str) -> String {
     url.replace("api.qiandao.com", "***")
         .replace("115.231.176.101", "***")
-}
-
-// ==================== 双源数据获取 ====================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LuosiHistoryPoint {
-    pub ts: i64,
-    pub price: f64,
-    #[serde(default)]
-    pub count: Option<i64>,
-    #[serde(default)]
-    pub filled: Option<bool>,
-    #[serde(default)]
-    pub realtime: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LuosiHistoryResponse {
-    pub status: String,
-    #[serde(default)]
-    pub points: Vec<LuosiHistoryPoint>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DualSourceItemData {
-    pub item_id: String,
-    pub name: String,
-    pub current_price: f64,
-    pub price_24h_ago: Option<f64>,
-    pub last_time: i64,
-    pub source: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DualSourceHistoryPoint {
-    pub ts: i64,
-    pub price: f64,
-    pub source: String,
-}
-
-pub struct DualSourceScraper;
-
-impl DualSourceScraper {
-    const LUOSI_SERVER: &'static str = "http://115.231.176.101:8080";
-    const ETOR_BASE: &'static str = "https://api.etor.com/etor-api/api";
-
-    pub async fn get_overview(season_id: i32) -> Result<HashMap<String, LuosiItem>, String> {
-        let url = format!("{}/get?season_id={}", Self::LUOSI_SERVER, season_id);
-        info!("[双源] 获取物品概览: {}", mask_url_for_log(&url));
-
-        let resp = http_client()?
-            .get(&url)
-            .timeout(Duration::from_secs(30))
-            .send()
-            .await
-            .map_err(|e| format!("刷图小助手请求失败: {}", e))?;
-
-        if !resp.status().is_success() {
-            return Err(format!("刷图小助手 API 返回错误: {}", resp.status()));
-        }
-
-        let map: HashMap<String, LuosiItem> = resp
-            .json()
-            .await
-            .map_err(|e| format!("JSON 解析失败: {}", e))?;
-
-        Ok(map)
-    }
-
-    pub async fn get_luosi_history(
-        season_id: i32,
-        item_id: &str,
-    ) -> Result<LuosiHistoryResponse, String> {
-        let url = format!(
-            "{}/price/history?season_id={}&item_id={}&range=season",
-            Self::LUOSI_SERVER,
-            season_id,
-            item_id
-        );
-
-        let resp = http_client()?
-            .get(&url)
-            .timeout(Duration::from_secs(15))
-            .send()
-            .await
-            .map_err(|e| format!("请求失败: {}", e))?;
-
-        if !resp.status().is_success() {
-            return Err(format!("API 返回错误: {}", resp.status()));
-        }
-
-        let history: LuosiHistoryResponse = resp
-            .json()
-            .await
-            .map_err(|e| format!("JSON 解析失败: {}", e))?;
-
-        Ok(history)
-    }
-
-    pub async fn get_etor_history(
-        season_id: i32,
-        item_id: &str,
-    ) -> Result<Vec<DualSourceHistoryPoint>, String> {
-        let url = format!(
-            "{}/chart/{}/{}?interval=1h",
-            Self::ETOR_BASE,
-            season_id,
-            item_id
-        );
-
-        let resp = http_client()?
-            .get(&url)
-            .header("accept", "application/json,text/plain,*/*")
-            .header("accept-language", "zh-CN,zh;q=0.9")
-            .header("x-frontend-version", "10.5.50")
-            .header("seasonid", season_id.to_string())
-            .header(
-                "user-agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            )
-            .timeout(Duration::from_secs(15))
-            .send()
-            .await
-            .map_err(|e| format!("易火请求失败: {}", e))?;
-
-        if !resp.status().is_success() {
-            return Err(format!("易火 API 返回错误: {}", resp.status()));
-        }
-
-        let bytes = resp
-            .bytes()
-            .await
-            .map_err(|e| format!("读取响应失败: {}", e))?;
-
-        let text = String::from_utf8_lossy(&bytes);
-
-        #[derive(Deserialize)]
-        struct EtorChartResponse {
-            #[serde(default)]
-            trend: Option<Vec<EtorTrendPoint>>,
-        }
-
-        #[derive(Deserialize)]
-        struct EtorTrendPoint {
-            timestamp: i64,
-            price: f64,
-        }
-
-        let chart_resp: EtorChartResponse =
-            serde_json::from_str(&text).map_err(|e| format!("易火 JSON 解析失败: {}", e))?;
-
-        let items = chart_resp
-            .trend
-            .unwrap_or_default()
-            .into_iter()
-            .map(|t| DualSourceHistoryPoint {
-                ts: t.timestamp / 1000,
-                price: t.price,
-                source: "etor".to_string(),
-            })
-            .collect();
-
-        Ok(items)
-    }
-
-    pub async fn fetch_dual_source_history(
-        season_id: i32,
-        item_id: &str,
-        _item_name: &str,
-    ) -> Vec<DualSourceHistoryPoint> {
-        let mut all_points: Vec<DualSourceHistoryPoint> = Vec::new();
-
-        if let Ok(history) = Self::get_luosi_history(season_id, item_id).await {
-            for pt in history.points {
-                all_points.push(DualSourceHistoryPoint {
-                    ts: pt.ts,
-                    price: pt.price,
-                    source: "luosi".to_string(),
-                });
-            }
-        }
-
-        if let Ok(history) = Self::get_etor_history(season_id, item_id).await {
-            for pt in history {
-                all_points.push(DualSourceHistoryPoint {
-                    ts: pt.ts,
-                    price: pt.price,
-                    source: "etor".to_string(),
-                });
-            }
-        }
-
-        all_points.sort_by_key(|p| p.ts);
-        all_points
-    }
-
-    pub async fn fetch_all_dual_source(season_id: i32) -> Result<Vec<DualSourceItemData>, String> {
-        info!("[双源] 开始获取所有物品数据 (赛季: {})", season_id);
-
-        let overview = Self::get_overview(season_id).await?;
-        let now = chrono::Utc::now().timestamp();
-
-        let items: Vec<DualSourceItemData> = overview
-            .into_iter()
-            .map(|(item_id, item)| DualSourceItemData {
-                item_id,
-                name: item.name.clone(),
-                current_price: item.item_price.unwrap_or(0.0),
-                price_24h_ago: None,
-                last_time: item.last_time.unwrap_or(now),
-                source: "luosi".to_string(),
-            })
-            .collect();
-
-        info!("[双源] 获取到 {} 个物品", items.len());
-        Ok(items)
-    }
 }

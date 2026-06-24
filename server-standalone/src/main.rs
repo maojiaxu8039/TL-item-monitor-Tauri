@@ -61,6 +61,13 @@ const RESPONSE_CACHE_MAX_SIZE: usize = 100;
 const RESPONSE_CACHE_TTL_SECS: u64 = 60;
 const RESPONSE_CACHE_MAX_ENTRY_BYTES: usize = 1_048_576;
 const MAX_REQUEST_BYTES: usize = 65_536;
+const JSON_CACHE_CONTROL: &str = "no-store";
+const ADMIN_HTML_CACHE_CONTROL: &str = "no-store";
+const ADMIN_JS_CACHE_CONTROL: &str = "public, max-age=3600";
+
+fn security_headers() -> &'static str {
+    "X-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\n"
+}
 
 struct LruCache {
     cache: std::collections::HashMap<String, (String, Instant)>,
@@ -707,16 +714,17 @@ async fn handle_request(
 
             (200, body)
         }
-        ("GET", "/api/info") => {
+        ("GET", "/api/info") | ("GET", "/api/version") => {
             let endpoints = serde_json::json!([
                 {"path": "/status", "method": "GET", "description": "服务器状态"},
+                {"path": "/api/version", "method": "GET", "description": "版本信息"},
                 {"path": "/api/info", "method": "GET", "description": "API 信息"},
                 {"path": "/items", "method": "GET", "description": "物品数据"},
                 {"path": "/fire", "method": "GET", "description": "火价数据"},
                 {"path": "/sync-fast", "method": "GET", "description": "快速数据同步(服务端聚合)"},
                 {"path": "/prices-latest", "method": "GET", "description": "最新价格同步"},
-                {"path": "/dual-source-overview", "method": "GET", "description": "刷图小助手物品概览（历史接口，非完整双源合并）"},
-                {"path": "/dual-source-history", "method": "GET", "description": "双源历史数据"},
+                {"path": "/dual-source-overview", "method": "GET", "description": "本地数据库中的双源合并最新物品概览"},
+                {"path": "/dual-source-history", "method": "GET", "description": "本地数据库中的物品历史数据"},
                 {"path": "/items-sync", "method": "GET", "description": "游标分页同步"},
                 {"path": "/items-sync-stats", "method": "GET", "description": "同步统计"}
             ]);
@@ -727,6 +735,7 @@ async fn handle_request(
                     "version": SERVER_VERSION,
                     "api_version": "v2",
                     "server": "TL Monitor Server",
+                    "built_for": std::env::consts::ARCH,
                     "endpoints": endpoints
                 })),
                 error: None,
@@ -738,7 +747,9 @@ async fn handle_request(
         ("GET", "/admin.html") | ("GET", "/admin") => {
             let html = include_str!("admin.html");
             let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}",
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: {}\r\n{}Content-Length: {}\r\n\r\n{}",
+                ADMIN_HTML_CACHE_CONTROL,
+                security_headers(),
                 html.len(),
                 html
             );
@@ -752,7 +763,9 @@ async fn handle_request(
         ("GET", "/admin.js") => {
             let js = include_str!("admin.js");
             let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/javascript; charset=utf-8\r\nCache-Control: public, max-age=3600\r\nContent-Length: {}\r\n\r\n{}",
+                "HTTP/1.1 200 OK\r\nContent-Type: application/javascript; charset=utf-8\r\nCache-Control: {}\r\n{}Content-Length: {}\r\n\r\n{}",
+                ADMIN_JS_CACHE_CONTROL,
+                security_headers(),
                 js.len(),
                 js
             );
@@ -2065,39 +2078,63 @@ async fn handle_request(
         }
 
         ("GET", "/dual-source-overview") => {
-            let season_id: i32 = get_query_param(query_string, "season")
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(1401);
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+            let mode =
+                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let market_mode = if mode == "expert" {
+                "season_expert"
+            } else {
+                "season_normal"
+            };
 
-            match scraper::DualSourceScraper::fetch_all_dual_source(season_id).await {
-                Ok(items) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse {
-                        success: true,
-                        data: Some(items),
-                        error: None,
-                    })
-                    .unwrap_or_default();
-                    (200, body)
-                }
-                Err(e) => {
-                    let body = serde_json::to_string_pretty(&ApiResponse::<()> {
-                        success: false,
-                        data: None,
-                        error: Some(e),
-                    })
-                    .unwrap_or_default();
-                    (500, body)
+            if let Err(e) = db::validate_season_id(&season_id) {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+                .unwrap_or_default();
+                (400, body)
+            } else {
+                match db::get_latest_prices(&state.db, &season_id, market_mode).await {
+                    Ok(result) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse {
+                            success: true,
+                            data: Some(result),
+                            error: None,
+                        })
+                        .unwrap_or_default();
+                        (200, body)
+                    }
+                    Err(e) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
+                        (500, body)
+                    }
                 }
             }
         }
 
         ("GET", "/dual-source-history") => {
-            let season_id: i32 = get_query_param(query_string, "season")
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(1401);
+            let season_id = get_query_param(query_string, "season")
+                .unwrap_or_else(|| state.config.season_id.clone());
+            let mode =
+                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+            let market_mode = if mode == "expert" {
+                "season_expert"
+            } else {
+                "season_normal"
+            };
             let item_id = get_query_param(query_string, "item_id").unwrap_or_default();
-            let item_name =
-                get_query_param(query_string, "name").unwrap_or_else(|| item_id.clone());
+            let limit: i32 = get_query_param(query_string, "limit")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(500)
+                .clamp(1, 10_000);
 
             if item_id.is_empty() {
                 let body = serde_json::to_string_pretty(&ApiResponse::<()> {
@@ -2107,19 +2144,37 @@ async fn handle_request(
                 })
                 .unwrap_or_default();
                 (400, body)
-            } else {
-                let history = scraper::DualSourceScraper::fetch_dual_source_history(
-                    season_id, &item_id, &item_name,
-                )
-                .await;
-
-                let body = serde_json::to_string_pretty(&ApiResponse {
-                    success: true,
-                    data: Some(history),
-                    error: None,
+            } else if let Err(e) = db::validate_season_id(&season_id) {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some(e),
                 })
                 .unwrap_or_default();
-                (200, body)
+                (400, body)
+            } else {
+                match db::get_items_history(&state.db, &item_id, &season_id, market_mode, limit)
+                    .await
+                {
+                    Ok(records) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse {
+                            success: true,
+                            data: Some(records),
+                            error: None,
+                        })
+                        .unwrap_or_default();
+                        (200, body)
+                    }
+                    Err(e) => {
+                        let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                            success: false,
+                            data: None,
+                            error: Some(e),
+                        })
+                        .unwrap_or_default();
+                        (500, body)
+                    }
+                }
             }
         }
 
@@ -2304,9 +2359,10 @@ fn get_origin_header(request: &str) -> Option<String> {
 
 fn plain_http_response(status: u16, reason: &str, body: &str) -> String {
     format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+        "HTTP/1.1 {} {}\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\n{}Content-Length: {}\r\n\r\n{}",
         status,
         reason,
+        security_headers(),
         body.len(),
         body
     )
@@ -2375,9 +2431,11 @@ async fn send_response(
     };
 
     let response = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n\r\n{}",
+        "HTTP/1.1 {} {}\r\nContent-Type: application/json; charset=utf-8\r\nCache-Control: {}\r\n{}Content-Length: {}\r\nAccess-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n\r\n{}",
         status,
         reason_phrase(status),
+        JSON_CACHE_CONTROL,
+        security_headers(),
         body.len(),
         cors_header,
         body
@@ -2410,9 +2468,10 @@ async fn send_response(
 
 async fn send_error_response(stream: tokio::net::TcpStream, status: u16, message: &str) {
     let response = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+        "HTTP/1.1 {} {}\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\n{}Content-Length: {}\r\n\r\n{}",
         status,
         reason_phrase(status),
+        security_headers(),
         message.len(),
         message
     );
@@ -2444,7 +2503,8 @@ async fn send_error_response(stream: tokio::net::TcpStream, status: u16, message
 
 async fn send_options_response(stream: tokio::net::TcpStream, message: &str) {
     let response = format!(
-        "HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+        "HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\n{}Content-Length: {}\r\n\r\n{}",
+        security_headers(),
         message.len(),
         message
     );
@@ -2455,7 +2515,8 @@ async fn send_options_response(stream: tokio::net::TcpStream, message: &str) {
 
 async fn send_options_response_with_cors(stream: tokio::net::TcpStream, cors_header: &str) {
     let response = format!(
-        "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nAccess-Control-Max-Age: 86400\r\n\r\n",
+        "HTTP/1.1 204 No Content\r\nCache-Control: no-store\r\n{}Access-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nAccess-Control-Max-Age: 86400\r\n\r\n",
+        security_headers(),
         cors_header
     );
     let mut buf_writer = tokio::io::BufWriter::new(stream);

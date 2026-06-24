@@ -9,6 +9,7 @@
 - WebSocket 实时推送
 - 管理员操作审计日志
 - 直接二进制部署到极空间等 Linux 环境
+- Docker / NAS 一键构建更新
 
 ## 本地检查
 
@@ -77,6 +78,46 @@ gh run download <run-id> --name linux-arm64-server --dir /tmp/tl-build
 ```
 
 其中 `tl-monitor-server` 是 Linux ARM64 架构，面向极空间/NAS 环境，不能用本机 macOS/Windows 构建产物替代。
+
+## Docker / NAS 部署
+
+如果 NAS 支持 Docker Compose，推荐直接使用仓库内置的 compose 文件。配置和数据库会挂载到 `server-standalone/config`、`server-standalone/data`，更新镜像不会覆盖数据。
+
+首次部署：
+
+```bash
+cd server-standalone
+cp .env.example .env
+# 修改 .env 里的 TL_ADMIN_PASSWORD
+bash scripts/nas-update.sh
+```
+
+日常更新：
+
+```bash
+git pull
+cd server-standalone
+bash scripts/nas-update.sh
+```
+
+默认映射端口：
+
+| 容器端口 | 宿主端口 | 说明 |
+| --- | --- | --- |
+| 8080 | 38457 | HTTP API / 管理页 |
+| 8081 | 38458 | WebSocket |
+
+更新后可以打开：
+
+```text
+http://NAS地址:38457/admin
+```
+
+也可以用版本接口确认新容器已生效：
+
+```bash
+curl http://NAS地址:38457/api/version
+```
 
 ## 极空间部署
 
@@ -148,7 +189,7 @@ curl -s http://100.124.122.65:38457/api/admin/status \
   -d '{"password":"你的管理员密码"}'
 
 # 审计日志查询
-curl -s http://100.124.122.65:38457/api/admin/audit-log \
+curl -s http://100.124.122.65:38457/admin/audit-log \
   -H 'Content-Type: application/json' \
   -d '{"password":"你的管理员密码"}'
 ```

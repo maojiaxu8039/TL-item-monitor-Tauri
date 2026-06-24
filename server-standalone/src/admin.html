@@ -12,49 +12,87 @@
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
-            color: #333;
+            background: #eef3f9;
+            color: #172033;
+            min-height: 100vh;
         }
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 24px;
         }
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #111827;
             color: white;
-            padding: 30px;
+            padding: 24px 28px;
             border-radius: 12px;
-            margin-bottom: 20px;
+            margin-bottom: 18px;
+            box-shadow: 0 18px 42px rgba(17, 24, 39, 0.16);
+            display: grid;
+            grid-template-columns: 1fr auto;
+            align-items: center;
+            gap: 16px;
         }
         .header h1 {
-            font-size: 24px;
+            font-size: 26px;
             margin-bottom: 5px;
+            letter-spacing: 0;
         }
         .header .version {
             opacity: 0.8;
             font-size: 14px;
         }
+        .header-meta {
+            text-align: right;
+            color: rgba(255,255,255,0.72);
+            font-size: 13px;
+            line-height: 1.8;
+        }
         .card {
             background: white;
-            border-radius: 12px;
+            border: 1px solid #e5eaf2;
+            border-radius: 10px;
             padding: 20px;
             margin-bottom: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            box-shadow: 0 10px 28px rgba(20, 33, 61, 0.06);
         }
         .card h2 {
             font-size: 18px;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
+            margin-bottom: 0;
+        }
+        .section-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid #e8edf5;
+        }
+        .section-head p {
+            color: #64748b;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+        .card-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
         }
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
         }
+        .grid-compact {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+        }
         .stat {
-            background: #f8f9fa;
+            background: #f8fafc;
+            border: 1px solid #e6ebf2;
             padding: 15px;
             border-radius: 8px;
         }
@@ -64,9 +102,9 @@
             margin-bottom: 5px;
         }
         .stat-value {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 600;
-            color: #333;
+            color: #172033;
         }
         .stat-value.success { color: #52c41a; }
         .stat-value.error { color: #ff4d4f; }
@@ -79,44 +117,56 @@
         .table th, .table td {
             padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid #edf1f7;
         }
         .table th {
-            background: #f8f9fa;
+            background: #f8fafc;
             font-weight: 600;
-            color: #666;
+            color: #5f6b7a;
         }
         .table tr:hover {
-            background: #f8f9fa;
+            background: #f8fafc;
         }
         .btn {
-            padding: 8px 16px;
+            padding: 9px 16px;
             border: none;
             border-radius: 6px;
             cursor: pointer;
             font-size: 14px;
             transition: all 0.2s;
+            font-weight: 600;
         }
         .btn-primary {
-            background: #667eea;
+            background: #2563eb;
             color: white;
         }
         .btn-primary:hover {
-            background: #5a6fd6;
+            background: #1d4ed8;
         }
         .btn-success {
-            background: #52c41a;
+            background: #16a34a;
             color: white;
         }
         .btn-success:hover {
-            background: #3d9a15;
+            background: #15803d;
+        }
+        .btn-secondary {
+            background: #eef2f7;
+            color: #334155;
+        }
+        .btn-secondary:hover {
+            background: #e2e8f0;
         }
         .btn-danger {
-            background: #ff4d4f;
+            background: #dc2626;
             color: white;
         }
         .btn-danger:hover {
-            background: #d93636;
+            background: #b91c1c;
+        }
+        .btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.62;
         }
         .form-group {
             margin-bottom: 15px;
@@ -130,29 +180,117 @@
         .form-group input, .form-group select, .form-group textarea {
             width: 100%;
             padding: 10px;
-            border: 1px solid #ddd;
+            border: 1px solid #d8dee8;
             border-radius: 6px;
             font-size: 14px;
+            background: #fff;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) auto;
+            gap: 10px;
+            align-items: end;
+        }
+        .auth-panel {
+            border-color: #bfdbfe;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        }
+        .auth-layout {
+            display: grid;
+            grid-template-columns: minmax(280px, 1fr) auto;
+            align-items: end;
+            gap: 16px;
+        }
+        .auth-status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 34px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            color: #64748b;
+            font-weight: 600;
+            font-size: 13px;
+        }
+        .auth-status-pill.success {
+            background: #ecfdf5;
+            border-color: #bbf7d0;
+            color: #15803d;
+        }
+        .auth-status-pill.error {
+            background: #fef2f2;
+            border-color: #fecaca;
+            color: #b91c1c;
+        }
+        .auth-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: currentColor;
+        }
+        .protected-area {
+            position: relative;
+        }
+        .protected-area.locked {
+            opacity: 0.58;
+        }
+        .protected-area.locked::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.44);
+            pointer-events: none;
+        }
+        .mode-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .mode-card-title {
+            font-weight: 700;
+            color: #334155;
+            margin-bottom: 10px;
+        }
+        .danger-card {
+            border-color: #fecaca;
+            background: #fff7f7;
+        }
+        .danger-note {
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 12px;
+            color: #991b1b;
+            font-size: 13px;
+            margin-bottom: 15px;
         }
         .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
         }
         .tabs {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             margin-bottom: 20px;
+            overflow-x: auto;
         }
         .tab {
             padding: 10px 20px;
-            background: #eee;
+            background: #e8eef7;
+            color: #334155;
             border: none;
             border-radius: 6px;
             cursor: pointer;
             font-size: 14px;
+            white-space: nowrap;
         }
         .tab.active {
-            background: #667eea;
+            background: #2563eb;
             color: white;
         }
         .tab-content {
@@ -165,6 +303,7 @@
             padding: 15px;
             border-radius: 6px;
             margin-bottom: 15px;
+            border: 1px solid transparent;
         }
         .alert-success {
             background: #f6ffed;
@@ -176,10 +315,20 @@
             border: 1px solid #ffccc7;
             color: #ff4d4f;
         }
+        .alert-info {
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            color: #1d4ed8;
+        }
+        .alert-warning {
+            background: #fffbeb;
+            border-color: #fde68a;
+            color: #b45309;
+        }
         .badge {
             display: inline-block;
             padding: 2px 8px;
-            border-radius: 4px;
+            border-radius: 999px;
             font-size: 12px;
         }
         .badge-success {
@@ -297,41 +446,47 @@
             font-size: 13px;
             color: #333;
         }
-        .ws-status {
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 13px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .ws-status.connected { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
-        .ws-status.connecting { background: #fffbe6; color: #faad14; border: 1px solid #ffe58f; }
-        .ws-status.disconnected { background: #fff2f0; color: #ff4d4f; border: 1px solid #ffccc7; }
-        .ws-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-        }
-        .ws-status.connected .ws-dot { background: #52c41a; }
-        .ws-status.connecting .ws-dot { background: #faad14; animation: pulse 1s infinite; }
-        .ws-status.disconnected .ws-dot { background: #ff4d4f; }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
         .audit-table { margin-top: 10px; }
         .audit-action { font-weight: 600; }
         .audit-success { color: #52c41a; }
         .audit-failed { color: #ff4d4f; }
+        @media (max-width: 720px) {
+            .container {
+                padding: 14px;
+            }
+            .header,
+            .auth-layout,
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            .header-meta {
+                text-align: left;
+            }
+            .section-head {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+            .switch-group,
+            .card-actions {
+                width: 100%;
+            }
+            .btn {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>TL Monitor Server</h1>
-            <div class="version">v<span id="version">-</span></div>
-            <div class="uptime">运行时间: <span id="uptime">-</span></div>
+            <div>
+                <h1>TL Monitor Server</h1>
+                <div class="version">v<span id="version">-</span></div>
+            </div>
+            <div class="header-meta">
+                <div>当前赛季 <span id="header-season">-</span></div>
+                <div>运行时间 <span id="uptime">-</span></div>
+            </div>
         </div>
 
         <div id="alert-container"></div>
@@ -345,7 +500,12 @@
 
         <div id="tab-status" class="tab-content active">
             <div class="card">
-                <h2>服务器状态</h2>
+                <div class="section-head">
+                    <div>
+                        <h2>服务器状态</h2>
+                        <p>采集状态、记录数量和下次任务时间</p>
+                    </div>
+                </div>
                 <div class="grid" id="stats-grid">
                     <div class="stat">
                         <div class="stat-label">赛季</div>
@@ -382,25 +542,13 @@
                 </div>
             </div>
 
-            <!--
             <div class="card">
-                <h2>WebSocket 实时连接</h2>
-                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
-                    <span id="ws-status" class="ws-status disconnected">
-                        <span class="ws-dot"></span>
-                        <span id="ws-status-text">未连接</span>
-                    </span>
-                    <button id="ws-connect-btn" class="btn btn-primary" onclick="connectWebSocket()">连接</button>
-                    <button id="ws-disconnect-btn" class="btn btn-danger" onclick="disconnectWebSocket()" style="display: none;">断开</button>
+                <div class="section-head">
+                    <div>
+                        <h2>采集详情</h2>
+                        <p>普通服和专家服最近一次采集结果</p>
+                    </div>
                 </div>
-                <div id="ws-messages" style="background: #f8f9fa; padding: 10px; border-radius: 6px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px;">
-                    <div style="color: #999;">等待连接...</div>
-                </div>
-            </div>
-            -->
-
-            <div class="card">
-                <h2>采集详情</h2>
                 <table class="table">
                     <thead>
                         <tr>
@@ -421,143 +569,179 @@
         </div>
 
         <div id="tab-config" class="tab-content">
-            <div class="card" style="border: 2px solid #4CAF50; background: #f9fff9;">
-                <h2>🔐 管理员认证</h2>
-                <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
-                    <input type="password" id="cfg-password" placeholder="输入管理员密码" style="width: 200px;">
-                    <button type="button" class="btn btn-success" onclick="authenticate()">认证</button>
+            <div class="card auth-panel">
+                <div class="section-head">
+                    <div>
+                        <h2>管理员认证</h2>
+                        <p>认证成功后才能修改服务器配置和 API 参数</p>
+                    </div>
+                    <div id="auth-status" class="auth-status-pill">
+                        <span class="auth-dot"></span>
+                        <span>未认证</span>
+                    </div>
                 </div>
-                <div id="auth-status" style="margin-top: 10px; font-size: 14px;"></div>
+                <div class="auth-layout">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>管理员密码</label>
+                        <input type="password" id="cfg-password" placeholder="输入管理员密码" autocomplete="current-password">
+                    </div>
+                    <div class="card-actions">
+                        <button type="button" class="btn btn-primary" id="btn-authenticate" onclick="authenticate()">认证并加载配置</button>
+                        <button type="button" class="btn btn-secondary" id="btn-lock-config" onclick="lockConfig()" disabled>锁定</button>
+                    </div>
+                </div>
             </div>
 
-            <div class="card">
-                <h2>服务器配置</h2>
+            <div class="card protected-area locked" data-protected-card>
+                <div class="section-head">
+                    <div>
+                        <h2>服务器配置</h2>
+                        <p>采集开关、CORS 和请求限流</p>
+                    </div>
+                    <div class="card-actions">
+                        <button type="button" class="btn btn-secondary" id="btn-load-config" onclick="loadConfig()" data-requires-auth disabled>重新加载</button>
+                        <button type="submit" form="config-form" class="btn btn-primary" id="btn-save-config" data-requires-auth disabled>保存配置</button>
+                    </div>
+                </div>
                 <div class="form-group">
                     <label>采集模式开关</label>
                     <div class="switch-group">
                         <label class="switch-item">
-                            <input type="checkbox" id="scrape-normal" checked>
+                            <input type="checkbox" id="scrape-normal" checked data-requires-auth disabled>
                             <span>普通服采集</span>
                         </label>
                         <label class="switch-item">
-                            <input type="checkbox" id="scrape-expert">
+                            <input type="checkbox" id="scrape-expert" data-requires-auth disabled>
                             <span>专家服采集</span>
                         </label>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label>season_id</label>
-                    <input type="text" id="cfg-season" readonly>
-                </div>
-                <div class="form-group">
-                    <label>HTTP 端口 (重启后生效)</label>
-                    <input type="number" id="cfg-port" min="1024" max="65535" readonly>
+                <div class="grid-compact">
+                    <div class="form-group">
+                        <label>season_id</label>
+                        <input type="text" id="cfg-season" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>HTTP 端口</label>
+                        <input type="number" id="cfg-port" min="1024" max="65535" readonly>
+                    </div>
                 </div>
                 <form id="config-form">
                     <div class="form-group">
                         <label>CORS 允许的源 (逗号分隔)</label>
-                        <input type="text" id="cfg-cors">
+                        <input type="text" id="cfg-cors" data-requires-auth disabled>
                     </div>
                     <div class="form-group">
                         <label>限流配置</label>
-                        <select id="cfg-rate-limit">
+                        <select id="cfg-rate-limit" data-requires-auth disabled>
                             <option value="true">启用</option>
                             <option value="false">禁用</option>
                         </select>
                     </div>
-                    <div style="margin-top: 15px;">
-                        <button type="button" class="btn btn-secondary" onclick="loadConfig()">加载当前配置</button>
-                        <button type="submit" class="btn btn-primary">保存配置</button>
-                    </div>
                 </form>
             </div>
 
-            <div class="card">
-                <h2>火价 API 配置</h2>
+            <div class="card protected-area locked" data-protected-card>
+                <div class="section-head">
+                    <div>
+                        <h2>API 参数配置</h2>
+                        <p>千岛火价、刷图小助手和易火赛季参数</p>
+                    </div>
+                    <div class="card-actions">
+                        <button type="submit" form="qiandao-config-form" class="btn btn-primary" id="btn-save-fire-api" data-requires-auth disabled>保存火价 API</button>
+                        <button type="submit" form="luosi-config-form" class="btn btn-primary" id="btn-save-item-api" data-requires-auth disabled>保存物品 API</button>
+                    </div>
+                </div>
                 <form id="qiandao-config-form">
                     <div class="grid">
-                        <div class="form-group">
-                            <label>普通服 Tag ID</label>
-                            <input type="text" id="api-qiandao-tag-normal">
+                        <div class="mode-card">
+                            <div class="mode-card-title">千岛火价 普通服</div>
+                            <div class="form-group">
+                                <label>Tag ID</label>
+                                <input type="text" id="api-qiandao-tag-normal" data-requires-auth disabled>
+                            </div>
+                            <div class="form-group">
+                                <label>Spec ID</label>
+                                <input type="text" id="api-qiandao-spec-normal" data-requires-auth disabled>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>普通服 Spec ID</label>
-                            <input type="text" id="api-qiandao-spec-normal">
-                        </div>
-                        <div class="form-group">
-                            <label>专家服 Tag ID</label>
-                            <input type="text" id="api-qiandao-tag-expert">
-                        </div>
-                        <div class="form-group">
-                            <label>专家服 Spec ID</label>
-                            <input type="text" id="api-qiandao-spec-expert">
+                        <div class="mode-card">
+                            <div class="mode-card-title">千岛火价 专家服</div>
+                            <div class="form-group">
+                                <label>Tag ID</label>
+                                <input type="text" id="api-qiandao-tag-expert" data-requires-auth disabled>
+                            </div>
+                            <div class="form-group">
+                                <label>Spec ID</label>
+                                <input type="text" id="api-qiandao-spec-expert" data-requires-auth disabled>
+                            </div>
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-primary">保存火价 API 配置</button>
                 </form>
-            </div>
-
-            <div class="card">
-                <h2>物品 API 配置</h2>
                 <form id="luosi-config-form">
-                    <div class="grid">
-                        <div class="form-group">
-                            <label>刷图小助手普通服 season_id</label>
-                            <input type="number" id="api-luosi-season-normal">
+                    <div class="grid" style="margin-top: 14px;">
+                        <div class="mode-card">
+                            <div class="mode-card-title">物品源 普通服</div>
+                            <div class="form-group">
+                                <label>刷图小助手 season_id</label>
+                                <input type="number" id="api-luosi-season-normal" data-requires-auth disabled>
+                            </div>
+                            <div class="form-group">
+                                <label>易火 season_id</label>
+                                <input type="number" id="api-etor-season-normal" data-requires-auth disabled>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>刷图小助手专家服 season_id</label>
-                            <input type="number" id="api-luosi-season-expert">
-                        </div>
-                        <div class="form-group">
-                            <label>易火普通服 season_id</label>
-                            <input type="number" id="api-etor-season-normal">
-                        </div>
-                        <div class="form-group">
-                            <label>易火专家服 season_id</label>
-                            <input type="number" id="api-etor-season-expert">
+                        <div class="mode-card">
+                            <div class="mode-card-title">物品源 专家服</div>
+                            <div class="form-group">
+                                <label>刷图小助手 season_id</label>
+                                <input type="number" id="api-luosi-season-expert" data-requires-auth disabled>
+                            </div>
+                            <div class="form-group">
+                                <label>易火 season_id</label>
+                                <input type="number" id="api-etor-season-expert" data-requires-auth disabled>
+                            </div>
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-primary">保存物品配置</button>
                 </form>
             </div>
 
-            <div class="card" style="border: 2px solid #dc2626; background: #fff5f5;">
-                <h2 style="color: #dc2626;">⚠️ 数据库危险操作</h2>
-                <div class="danger-warning" style="background: #fee2e2; border: 1px solid #fecaca; border-radius: 6px; padding: 12px; margin-bottom: 15px;">
-                    <p style="color: #991b1b; font-size: 13px; margin: 0;">
-                        <strong>⚠️ 警告：此操作不可逆！</strong><br>
-                        重置表将清空所有数据，但保留表结构。此操作主要用于清理错误数据或重新开始采集。
-                    </p>
+            <div class="card danger-card protected-area locked" data-protected-card>
+                <div class="section-head">
+                    <div>
+                        <h2 style="color: #b91c1c;">数据库危险操作</h2>
+                        <p>重置表会清空数据但保留表结构</p>
+                    </div>
+                    <button type="button" class="btn btn-danger" id="btn-reset-tables" onclick="resetTables()" data-requires-auth disabled>确认重置选中表</button>
+                </div>
+                <div class="danger-note">
+                    此操作不可逆，适合清理错误数据或重新开始采集。
                 </div>
                 <div class="form-group">
                     <label>选择赛季</label>
-                    <select id="reset-season" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                    <select id="reset-season" data-requires-auth disabled>
                     </select>
                 </div>
                 <div class="form-group">
                     <label>选择要重置的表（可多选）</label>
                     <div class="reset-table-grid">
                         <label class="reset-table-item">
-                            <input type="checkbox" id="reset-fire-normal" value="fire_price_snapshots">
-                            <span>🔥 火价-普通服</span>
+                            <input type="checkbox" id="reset-fire-normal" value="fire_price_snapshots" data-requires-auth disabled>
+                            <span>火价-普通服</span>
                         </label>
                         <label class="reset-table-item">
-                            <input type="checkbox" id="reset-fire-expert" value="fire_price_snapshots">
-                            <span>🔥 火价-专家服</span>
+                            <input type="checkbox" id="reset-fire-expert" value="fire_price_snapshots" data-requires-auth disabled>
+                            <span>火价-专家服</span>
                         </label>
                         <label class="reset-table-item">
-                            <input type="checkbox" id="reset-items-normal" value="item_snapshots">
-                            <span>📦 物品-普通服</span>
+                            <input type="checkbox" id="reset-items-normal" value="item_snapshots" data-requires-auth disabled>
+                            <span>物品-普通服</span>
                         </label>
                         <label class="reset-table-item">
-                            <input type="checkbox" id="reset-items-expert" value="item_snapshots">
-                            <span>📦 物品-专家服</span>
+                            <input type="checkbox" id="reset-items-expert" value="item_snapshots" data-requires-auth disabled>
+                            <span>物品-专家服</span>
                         </label>
                     </div>
-                </div>
-                <div style="margin-top: 15px;">
-                    <button type="button" class="btn btn-danger" onclick="resetTables()">⚠️ 确认重置选中表</button>
                 </div>
             </div>
         </div>
@@ -603,62 +787,64 @@
                         <button type="button" class="btn btn-primary" id="btn-export-csv">导出 CSV</button>
                     </div>
                 </form>
+            </div>
 
-                <div class="card">
-                    <h2>赛季管理</h2>
-                    <div class="form-group">
-                        <label>season_id</label>
-                        <input type="text" id="season-input" placeholder="例如: ss12">
-                    </div>
-                    <div class="form-group">
-                        <label>赛季名称 (可选)</label>
-                        <input type="text" id="season-name-input" placeholder="例如: SS12 赛季">
-                    </div>
-                    <div class="form-group">
-                        <label>开服日期 (必填)</label>
-                        <input type="datetime-local" id="season-started-at" placeholder="选择开服日期时间">
-                    </div>
-                    <div style="margin-top: 15px;">
-                        <button type="button" class="btn btn-primary" id="btn-init-season">初始化赛季</button>
-                    </div>
+            <div class="card">
+                <h2>赛季管理</h2>
+                <div class="form-group">
+                    <label>season_id</label>
+                    <input type="text" id="season-input" placeholder="例如: ss12">
                 </div>
-
-                <div class="card">
-                    <h2>归档赛季</h2>
-                    <div class="form-group">
-                        <label>选择赛季</label>
-                        <select id="archive-season-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                            <option value="">-- 选择赛季 --</option>
-                        </select>
-                    </div>
-                    <div style="margin-top: 15px;">
-                        <button type="button" class="btn btn-danger" id="btn-archive-season">归档赛季</button>
-                    </div>
+                <div class="form-group">
+                    <label>赛季名称 (可选)</label>
+                    <input type="text" id="season-name-input" placeholder="例如: SS12 赛季">
+                </div>
+                <div class="form-group">
+                    <label>开服日期 (必填)</label>
+                    <input type="datetime-local" id="season-started-at" placeholder="选择开服日期时间">
+                </div>
+                <div style="margin-top: 15px;">
+                    <button type="button" class="btn btn-primary" id="btn-init-season">初始化赛季</button>
                 </div>
             </div>
 
-            <div id="tab-audit" class="tab-content">
-                <div class="card">
-                    <h2>管理员操作审计日志</h2>
-                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                        <button class="btn btn-primary" onclick="loadAuditLog()">刷新</button>
-                    </div>
-                    <table class="table audit-table">
-                        <thead>
-                            <tr>
-                                <th>时间</th>
-                                <th>操作</th>
-                                <th>详情</th>
-                                <th>IP 地址</th>
-                                <th>状态</th>
-                            </tr>
-                        </thead>
-                        <tbody id="audit-tbody">
-                            <tr><td colspan="5" class="loading">加载中...</td></tr>
-                        </tbody>
-                    </table>
+            <div class="card">
+                <h2>归档赛季</h2>
+                <div class="form-group">
+                    <label>选择赛季</label>
+                    <select id="archive-season-select">
+                        <option value="">-- 选择赛季 --</option>
+                    </select>
+                </div>
+                <div style="margin-top: 15px;">
+                    <button type="button" class="btn btn-danger" id="btn-archive-season">归档赛季</button>
                 </div>
             </div>
+        </div>
+
+        <div id="tab-audit" class="tab-content">
+            <div class="card">
+                <h2>管理员操作审计日志</h2>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <button class="btn btn-primary" id="btn-refresh-audit" onclick="loadAuditLog()">刷新</button>
+                </div>
+                <table class="table audit-table">
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>操作</th>
+                            <th>详情</th>
+                            <th>IP 地址</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody id="audit-tbody">
+                        <tr><td colspan="5" class="loading">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 
     <script src="/admin.js"></script>
 </body>

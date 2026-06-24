@@ -8,7 +8,103 @@ use crate::db::table_resolver::TableResolver;
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 
+async fn ensure_arbitrage_schema(pool: &SqlitePool) -> Result<(), AppError> {
+    sqlx::query(
+        r#"CREATE TABLE IF NOT EXISTS arbitrage_recipes (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            recipe_type TEXT NOT NULL DEFAULT 'decompose',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            season_id TEXT NOT NULL DEFAULT '',
+            market_mode TEXT NOT NULL DEFAULT 'season_normal'
+        )"#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"CREATE TABLE IF NOT EXISTS arbitrage_ingredients (
+            id TEXT PRIMARY KEY,
+            recipe_id TEXT NOT NULL,
+            item_name TEXT NOT NULL,
+            count REAL NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY (recipe_id) REFERENCES arbitrage_recipes(id) ON DELETE CASCADE
+        )"#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"CREATE TABLE IF NOT EXISTS arbitrage_outputs (
+            id TEXT PRIMARY KEY,
+            recipe_id TEXT NOT NULL,
+            item_name TEXT NOT NULL,
+            count REAL NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY (recipe_id) REFERENCES arbitrage_recipes(id) ON DELETE CASCADE
+        )"#,
+    )
+    .execute(pool)
+    .await?;
+
+    add_column_if_missing(
+        pool,
+        "arbitrage_recipes",
+        "season_id",
+        "TEXT NOT NULL DEFAULT ''",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "arbitrage_recipes",
+        "market_mode",
+        "TEXT NOT NULL DEFAULT 'season_normal'",
+    )
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_arbitrage_recipes_season_mode ON arbitrage_recipes(season_id, market_mode)",
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn add_column_if_missing(
+    pool: &SqlitePool,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> Result<(), AppError> {
+    let exists: i64 = sqlx::query_scalar(&format!(
+        "SELECT COUNT(*) FROM pragma_table_info('{}') WHERE name = ?",
+        table
+    ))
+    .bind(column)
+    .fetch_one(pool)
+    .await?;
+
+    if exists == 0 {
+        sqlx::query(&format!(
+            "ALTER TABLE {} ADD COLUMN {} {}",
+            table, column, definition
+        ))
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
 pub async fn get_all_recipes(pool: &SqlitePool) -> Result<Vec<ArbitrageRecipe>, AppError> {
+    ensure_arbitrage_schema(pool).await?;
+
     let recipes: Vec<ArbitrageRecipe> = sqlx::query_as(
         "SELECT id, name, recipe_type, season_id, market_mode, enabled, created_at, updated_at
          FROM arbitrage_recipes
@@ -24,6 +120,8 @@ pub async fn get_recipes_by_season(
     season_id: &str,
     market_mode: &str,
 ) -> Result<Vec<ArbitrageRecipe>, AppError> {
+    ensure_arbitrage_schema(pool).await?;
+
     let recipes: Vec<ArbitrageRecipe> = sqlx::query_as(
         "SELECT id, name, recipe_type, season_id, market_mode, enabled, created_at, updated_at
          FROM arbitrage_recipes
@@ -41,6 +139,8 @@ pub async fn get_recipe_by_id(
     pool: &SqlitePool,
     recipe_id: &str,
 ) -> Result<Option<ArbitrageRecipe>, AppError> {
+    ensure_arbitrage_schema(pool).await?;
+
     let recipe: Option<ArbitrageRecipe> = sqlx::query_as(
         "SELECT id, name, recipe_type, season_id, market_mode, enabled, created_at, updated_at
          FROM arbitrage_recipes
@@ -89,6 +189,8 @@ pub async fn get_recipe_with_details(
 pub async fn get_all_recipes_with_details(
     pool: &SqlitePool,
 ) -> Result<HashMap<String, (Vec<ArbitrageIngredient>, Vec<ArbitrageOutput>)>, AppError> {
+    ensure_arbitrage_schema(pool).await?;
+
     let ingredients: Vec<ArbitrageIngredient> = sqlx::query_as(
         "SELECT id, recipe_id, item_name, count, created_at, updated_at 
          FROM arbitrage_ingredients",
@@ -135,6 +237,8 @@ pub async fn create_recipe(
     ingredients: &[CreateIngredientRequest],
     outputs: &[CreateOutputRequest],
 ) -> Result<String, AppError> {
+    ensure_arbitrage_schema(pool).await?;
+
     let recipe_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().timestamp();
 
@@ -199,6 +303,8 @@ pub async fn update_recipe(
     recipe_type: Option<&str>,
     enabled: Option<bool>,
 ) -> Result<(), AppError> {
+    ensure_arbitrage_schema(pool).await?;
+
     let now = chrono::Utc::now().timestamp();
     let mut updates = vec!["updated_at = ?".to_string()];
 
@@ -240,6 +346,8 @@ pub async fn update_ingredients(
     recipe_id: &str,
     ingredients: &[CreateIngredientRequest],
 ) -> Result<(), AppError> {
+    ensure_arbitrage_schema(pool).await?;
+
     let now = chrono::Utc::now().timestamp();
 
     let mut tx = pool.begin().await?;
@@ -274,6 +382,8 @@ pub async fn update_outputs(
     recipe_id: &str,
     outputs: &[CreateOutputRequest],
 ) -> Result<(), AppError> {
+    ensure_arbitrage_schema(pool).await?;
+
     let now = chrono::Utc::now().timestamp();
 
     let mut tx = pool.begin().await?;
@@ -304,6 +414,8 @@ pub async fn update_outputs(
 }
 
 pub async fn delete_recipe(pool: &SqlitePool, recipe_id: &str) -> Result<(), AppError> {
+    ensure_arbitrage_schema(pool).await?;
+
     let mut tx = pool.begin().await?;
 
     sqlx::query("DELETE FROM arbitrage_ingredients WHERE recipe_id = ?")
@@ -577,4 +689,84 @@ pub async fn count_profitable_arbitrage(
     let results =
         calculate_arbitrage_for_all_recipes(pool, season_id, market_mode).await?;
     Ok(results.iter().filter(|r| r.is_profitable && r.profit > 0.0).count() as i64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn legacy_arbitrage_pool() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("test sqlite pool should connect");
+
+        for sql in [
+            r#"
+            CREATE TABLE arbitrage_recipes (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                recipe_type TEXT NOT NULL DEFAULT 'decompose',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            "#,
+            r#"
+            CREATE TABLE arbitrage_ingredients (
+                id TEXT PRIMARY KEY,
+                recipe_id TEXT NOT NULL,
+                item_name TEXT NOT NULL,
+                count REAL NOT NULL DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            "#,
+            r#"
+            CREATE TABLE arbitrage_outputs (
+                id TEXT PRIMARY KEY,
+                recipe_id TEXT NOT NULL,
+                item_name TEXT NOT NULL,
+                count REAL NOT NULL DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            "#,
+        ] {
+            sqlx::query(sql)
+                .execute(&pool)
+                .await
+                .expect("legacy arbitrage table should be created");
+        }
+
+        pool
+    }
+
+    #[tokio::test]
+    async fn create_recipe_repairs_legacy_context_columns() {
+        let pool = legacy_arbitrage_pool().await;
+
+        let recipe_id = create_recipe(
+            &pool,
+            "测试配方",
+            "decompose",
+            "ss12",
+            "season_normal",
+            true,
+            &[],
+            &[],
+        )
+        .await
+        .expect("legacy arbitrage table should be repaired before insert");
+
+        let recipe = get_recipe_by_id(&pool, &recipe_id)
+            .await
+            .expect("recipe query should work after repair")
+            .expect("recipe should exist");
+
+        assert_eq!(recipe.season_id, "ss12");
+        assert_eq!(recipe.market_mode, "season_normal");
+    }
 }

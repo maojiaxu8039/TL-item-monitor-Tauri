@@ -13,17 +13,38 @@ function escapeHtml(text) {
 function updateAuthStatus(success, message) {
     const status = document.getElementById('auth-status');
     status.textContent = '';
+    status.className = 'auth-status-pill ' + (success ? 'success' : message ? 'error' : '');
+    const dot = document.createElement('span');
+    dot.className = 'auth-dot';
     const span = document.createElement('span');
     if (success) {
-        span.style.color = 'green';
-        span.textContent = '✓ 已认证';
+        span.textContent = '已认证';
         isAuthenticated = true;
     } else {
-        span.style.color = 'red';
-        span.textContent = '✗ ' + message;
+        span.textContent = message || '未认证';
         isAuthenticated = false;
     }
+    status.appendChild(dot);
     status.appendChild(span);
+    setAuthLocked(!success);
+}
+
+function setAuthLocked(locked) {
+    document.querySelectorAll('[data-requires-auth]').forEach(el => {
+        el.disabled = locked;
+    });
+    document.querySelectorAll('[data-protected-card]').forEach(card => {
+        card.classList.toggle('locked', locked);
+    });
+    const lockButton = document.getElementById('btn-lock-config');
+    if (lockButton) lockButton.disabled = locked;
+}
+
+function lockConfig() {
+    apiPassword = '';
+    isAuthenticated = false;
+    updateAuthStatus(false, '');
+    showAlert('info', '已锁定配置修改');
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
@@ -42,19 +63,46 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
     }
 }
 
+async function fetchJson(url, options = {}, timeoutMs = 30000) {
+    const resp = await fetchWithTimeout(url, options, timeoutMs);
+    const text = await resp.text();
+    const data = text ? JSON.parse(text) : {};
+    if (!resp.ok && data.success !== false) {
+        throw new Error('HTTP ' + resp.status);
+    }
+    return data;
+}
+
+function setBusy(buttonIds, busy, busyText) {
+    const ids = Array.isArray(buttonIds) ? buttonIds : [buttonIds];
+    ids.forEach(id => {
+        const button = document.getElementById(id);
+        if (!button) return;
+        if (busy) {
+            button.dataset.originalText = button.textContent;
+            button.textContent = busyText || '处理中...';
+            button.disabled = true;
+        } else {
+            button.textContent = button.dataset.originalText || button.textContent;
+            button.disabled = false;
+            delete button.dataset.originalText;
+        }
+    });
+}
+
 async function authenticate() {
     const password = document.getElementById('cfg-password').value;
     if (!password) {
         updateAuthStatus(false, '请输入密码');
         return;
     }
+    setBusy('btn-authenticate', true, '认证中...');
     try {
-        const resp = await fetch('/api/admin/config', {
+        const data = await fetchJson('/api/admin/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password })
         });
-        const data = await resp.json();
         
         if (data.success) {
             serverConfig = data.data;
@@ -62,6 +110,7 @@ async function authenticate() {
             updateAuthStatus(true, '');
             showAlert('success', '认证成功');
             loadConfigFields();
+            document.getElementById('cfg-password').blur();
         } else {
             updateAuthStatus(false, data.error || '认证失败');
             serverConfig = null;
@@ -71,12 +120,16 @@ async function authenticate() {
         updateAuthStatus(false, e.message);
         serverConfig = null;
         apiPassword = '';
+    } finally {
+        setBusy('btn-authenticate', false);
     }
 }
 
 function loadConfigFields() {
     if (!serverConfig) return;
     document.getElementById('cfg-season').value = serverConfig.season_id;
+    const headerSeason = document.getElementById('header-season');
+    if (headerSeason) headerSeason.textContent = serverConfig.season_id || '-';
     document.getElementById('cfg-port').value = serverConfig.http_port;
     document.getElementById('cfg-cors').value = (serverConfig.cors_allowed_origins || []).join(', ');
     document.getElementById('cfg-rate-limit').value = (serverConfig.rate_limit ? serverConfig.rate_limit.enabled : true).toString();
@@ -148,8 +201,8 @@ async function loadStatus() {
     statusLoadInFlight = true;
     try {
         const [statusResult, statsResult] = await Promise.allSettled([
-            fetch('/api/admin/status').then(resp => resp.json()),
-            fetch('/stats').then(resp => resp.json())
+            fetchJson('/api/admin/status', {}, 10000),
+            fetchJson('/stats', {}, 10000)
         ]);
 
         if (statusResult.status === 'rejected') {
@@ -167,6 +220,8 @@ async function loadStatus() {
             document.getElementById('version').textContent = info.version;
             document.getElementById('uptime').textContent = formatUptime(info.uptime_seconds);
             document.getElementById('stat-season').textContent = info.season_id;
+            const headerSeason = document.getElementById('header-season');
+            if (headerSeason) headerSeason.textContent = info.season_id || '-';
             document.getElementById('stat-next').textContent = info.next_collection ? formatTime(info.next_collection) : '-';
 
             const normal = info.last_collection.normal;
@@ -274,132 +329,17 @@ document.addEventListener('visibilitychange', () => {
 
 window.addEventListener('beforeunload', stopStatusPolling);
 
-let ws = null;
-let wsReconnectTimer = null;
-
-function updateWsStatus(status, text) {
-    const statusEl = document.getElementById('ws-status');
-    const statusText = document.getElementById('ws-status-text');
-    const connectBtn = document.getElementById('ws-connect-btn');
-    const disconnectBtn = document.getElementById('ws-disconnect-btn');
-
-    statusEl.className = 'ws-status ' + status;
-    statusText.textContent = text;
-
-    if (status === 'connected') {
-        connectBtn.style.display = 'none';
-        disconnectBtn.style.display = 'inline-block';
-    } else {
-        connectBtn.style.display = 'inline-block';
-        disconnectBtn.style.display = 'none';
-    }
-}
-
-function addWsMessage(msg, type = 'info') {
-    const container = document.getElementById('ws-messages');
-    const div = document.createElement('div');
-    const time = new Date().toLocaleTimeString('zh-CN');
-    const colors = {
-        'info': '#666',
-        'success': '#52c41a',
-        'error': '#ff4d4f',
-        'received': '#667eea'
-    };
-    div.style.color = colors[type] || colors.info;
-    div.style.marginBottom = '4px';
-    div.textContent = `[${time}] ${msg}`;
-    if (container.querySelector('div[style*="color: #999"]')) {
-        container.innerHTML = '';
-    }
-    container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
-}
-
-function connectWebSocket() {
-    const password = document.getElementById('cfg-password').value;
-    if (!password) {
-        showAlert('error', '请先输入管理员密码进行认证');
-        return;
-    }
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const hostname = window.location.hostname;
-    const port = window.location.port;
-    const wsPort = port ? parseInt(port) + 1 : 8081;
-    const wsUrl = `${protocol}//${hostname}:${wsPort}`;
-
-    updateWsStatus('connecting', '连接中...');
-    addWsMessage(`正在连接到 ${wsUrl}...`);
-
-    try {
-        ws = new WebSocket(wsUrl);
-
-        ws.onopen = () => {
-            addWsMessage('连接已建立，发送认证请求...');
-            ws.send(JSON.stringify({ type: 'auth', password: password }));
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'auth_success') {
-                    updateWsStatus('connected', '已连接');
-                    addWsMessage('认证成功！', 'success');
-                } else if (data.type === 'auth_failed') {
-                    updateWsStatus('disconnected', '认证失败');
-                    addWsMessage(`认证失败: ${data.error}`, 'error');
-                    ws.close();
-                } else if (data.type === 'collection_complete') {
-                    updateWsStatus('connected', '已连接 (收到新数据)');
-                    addWsMessage(`收到采集数据: ${JSON.stringify(data.data).substring(0, 50)}...`, 'received');
-                    setTimeout(() => updateWsStatus('connected', '已连接'), 2000);
-                } else {
-                    addWsMessage(`收到: ${JSON.stringify(data).substring(0, 100)}`, 'received');
-                }
-            } catch (e) {
-                addWsMessage(`收到原始消息: ${event.data.substring(0, 100)}`, 'received');
-            }
-        };
-
-        ws.onerror = (error) => {
-            addWsMessage('WebSocket 错误', 'error');
-            console.error('WebSocket error:', error);
-        };
-
-        ws.onclose = (event) => {
-            updateWsStatus('disconnected', '已断开');
-            addWsMessage(`连接已关闭 (code: ${event.code})`);
-            ws = null;
-        };
-    } catch (e) {
-        updateWsStatus('disconnected', '连接失败');
-        addWsMessage(`连接失败: ${e.message}`, 'error');
-    }
-}
-
-function disconnectWebSocket() {
-    if (ws) {
-        ws.close();
-        ws = null;
-    }
-    updateWsStatus('disconnected', '已断开');
-    addWsMessage('已主动断开连接');
-}
-
 async function loadAuditLog() {
-    const password = document.getElementById('cfg-password').value;
-    if (!password) {
-        showAlert('error', '请先输入管理员密码');
-        return;
-    }
+    const password = getPassword();
+    if (!password) return;
 
+    setBusy('btn-refresh-audit', true, '刷新中...');
     try {
-        const resp = await fetch('/admin/audit-log', {
+        const data = await fetchJson('/admin/audit-log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password, limit: 100 })
         });
-        const data = await resp.json();
 
         if (data.success) {
             const tbody = document.getElementById('audit-tbody');
@@ -443,53 +383,39 @@ async function loadAuditLog() {
         }
     } catch (e) {
         showAlert('error', '加载审计日志失败: ' + e.message);
+    } finally {
+        setBusy('btn-refresh-audit', false);
     }
 }
 
 async function loadConfig() {
-    const password = document.getElementById('cfg-password').value;
-    if (!password) {
-        showAlert('error', '请输入管理员密码');
-        return;
-    }
+    const password = getPassword();
+    if (!password) return;
+    setBusy('btn-load-config', true, '加载中...');
     try {
-        const resp = await fetch('/api/admin/config', {
+        const data = await fetchJson('/api/admin/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password })
         });
-        const data = await resp.json();
         
         if (data.success) {
             serverConfig = data.data;
-            document.getElementById('cfg-season').value = serverConfig.season_id;
-            document.getElementById('cfg-port').value = serverConfig.http_port;
-            document.getElementById('cfg-cors').value = (serverConfig.cors_allowed_origins || []).join(', ');
-            document.getElementById('cfg-rate-limit').value = (serverConfig.rate_limit ? serverConfig.rate_limit.enabled : true).toString();
-
-            if (serverConfig.api_config) {
-                document.getElementById('api-qiandao-tag-normal').value = serverConfig.api_config.qiandao_tag_id_normal || '';
-                document.getElementById('api-qiandao-spec-normal').value = serverConfig.api_config.qiandao_spec_id_normal || '';
-                document.getElementById('api-qiandao-tag-expert').value = serverConfig.api_config.qiandao_tag_id_expert || '';
-                document.getElementById('api-qiandao-spec-expert').value = serverConfig.api_config.qiandao_spec_id_expert || '';
-                document.getElementById('api-luosi-season-normal').value = serverConfig.api_config.luosi_season_id_normal || '';
-                document.getElementById('api-luosi-season-expert').value = serverConfig.api_config.luosi_season_id_expert || '';
-                document.getElementById('api-etor-season-normal').value = serverConfig.api_config.etor_season_id_normal || serverConfig.api_config.luosi_season_id_normal || '';
-                document.getElementById('api-etor-season-expert').value = serverConfig.api_config.etor_season_id_expert || serverConfig.api_config.luosi_season_id_expert || '';
-            }
+            loadConfigFields();
             showAlert('success', '配置已加载');
         } else {
             showAlert('error', data.error || '加载配置失败');
         }
     } catch (e) {
         showAlert('error', '加载配置失败: ' + e.message);
+    } finally {
+        setBusy('btn-load-config', false);
     }
 }
 
 async function loadSeasons() {
     try {
-        const resp = await fetch('/seasons');
-        const data = await resp.json();
+        const data = await fetchJson('/seasons', {}, 10000);
         if (data.success && data.data) {
             const exportSelect = document.getElementById('export-season');
             const resetSelect = document.getElementById('reset-season');
@@ -528,7 +454,9 @@ async function exportData(format = 'json') {
     const type = document.getElementById('export-type').value;
     const mode = document.getElementById('export-mode').value;
     const rangeSelect = document.getElementById('export-range').value;
+    const exportButtonIds = ['btn-export-json', 'btn-export-csv'];
 
+    setBusy(exportButtonIds, true, '导出中...');
     try {
         let min_day = null;
         let max_day = null;
@@ -582,8 +510,7 @@ async function exportData(format = 'json') {
                 ? `&before_timestamp=${beforeTimestamp}&before_id=${beforeId}`
                 : `&offset=${offset}`;
             const batchUrl = `${endpoint}?mode=${mode}&limit=${BATCH_SIZE}${cursorParams}${seasonParam}${dayParams}`;
-            const resp = await fetch(batchUrl);
-            const data = await resp.json();
+            const data = await fetchJson(batchUrl, {}, 60000);
 
             if (!data.success) {
                 showAlert('error', data.error || '导出失败');
@@ -669,6 +596,8 @@ async function exportData(format = 'json') {
         showAlert('success', `已导出 ${exportedCount} 条数据`);
     } catch (e) {
         showAlert('error', '导出失败: ' + e.message);
+    } finally {
+        setBusy(exportButtonIds, false);
     }
 }
 
@@ -725,33 +654,37 @@ async function resetTables() {
     }
 
     showAlert('warning', '正在重置表，请稍候...');
+    setBusy('btn-reset-tables', true, '重置中...');
     
     let successCount = 0;
     let failCount = 0;
     
-    for (const tt of tableTypes) {
-        try {
-            const resp = await fetchWithTimeout('/admin/reset-table', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    password,
-                    season_id,
-                    table_type: tt.type,
-                    market_mode: tt.mode
-                })
-            });
-            const data = await resp.json();
-            if (data.success) {
-                successCount++;
-            } else {
+    try {
+        for (const tt of tableTypes) {
+            try {
+                const data = await fetchJson('/admin/reset-table', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        password,
+                        season_id,
+                        table_type: tt.type,
+                        market_mode: tt.mode
+                    })
+                });
+                if (data.success) {
+                    successCount++;
+                } else {
+                    failCount++;
+                    showAlert('error', data.error || '重置失败');
+                }
+            } catch (e) {
                 failCount++;
-                showAlert('error', data.error || '重置失败');
+                showAlert('error', '重置失败: ' + e.message);
             }
-        } catch (e) {
-            failCount++;
-            showAlert('error', '重置失败: ' + e.message);
         }
+    } finally {
+        setBusy('btn-reset-tables', false);
     }
 
     if (failCount === 0) {
@@ -786,14 +719,14 @@ async function initSeason() {
     const started_at = Math.floor(new Date(started_at_input).getTime() / 1000);
 
     const requestBody = { password, season_id, started_at, season_name };
+    setBusy('btn-init-season', true, '初始化中...');
 
     try {
-        const resp = await fetch('/admin/init-season', {
+        const data = await fetchJson('/admin/init-season', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody)
-        });
-        const data = await resp.json();
+        }, 60000);
         if (data.success) {
             showAlert('success', `赛季 ${season_id} 初始化成功`);
             loadSeasons();
@@ -802,6 +735,8 @@ async function initSeason() {
         }
     } catch (e) {
         showAlert('error', '初始化失败: ' + e.message);
+    } finally {
+        setBusy('btn-init-season', false);
     }
 }
 
@@ -815,55 +750,64 @@ async function archiveSeason() {
     if (!password) return;
     if (!confirm(`确定要归档赛季 ${season_id} 吗？`)) return;
 
+    setBusy('btn-archive-season', true, '归档中...');
     try {
-        const resp = await fetch('/admin/archive-season', {
+        const data = await fetchJson('/admin/archive-season', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password, season_id })
-        });
-        const data = await resp.json();
+        }, 30000);
         if (data.success) {
             showAlert('success', `赛季 ${season_id} 已归档`);
+            loadSeasons();
         } else {
             showAlert('error', data.error || '归档失败');
         }
     } catch (e) {
         showAlert('error', '归档失败: ' + e.message);
+    } finally {
+        setBusy('btn-archive-season', false);
     }
 }
 
-async function saveApiConfig() {
+async function saveApiConfig(buttonId = 'btn-save-item-api') {
     const password = getPassword();
     if (!password) return;
+    const parseSeasonId = (id, fallback) => {
+        const value = parseInt(document.getElementById(id).value, 10);
+        return Number.isFinite(value) && value > 0 ? value : fallback;
+    };
+    const currentApiConfig = (serverConfig && serverConfig.api_config) || {};
     const api_config = {
         qiandao_tag_id_normal: document.getElementById('api-qiandao-tag-normal').value,
         qiandao_spec_id_normal: document.getElementById('api-qiandao-spec-normal').value,
         qiandao_tag_id_expert: document.getElementById('api-qiandao-tag-expert').value,
         qiandao_spec_id_expert: document.getElementById('api-qiandao-spec-expert').value,
-        luosi_season_id_normal: parseInt(document.getElementById('api-luosi-season-normal').value) || 0,
-        luosi_season_id_expert: parseInt(document.getElementById('api-luosi-season-expert').value) || 0,
-        etor_season_id_normal: parseInt(document.getElementById('api-etor-season-normal').value) || 0,
-        etor_season_id_expert: parseInt(document.getElementById('api-etor-season-expert').value) || 0
+        luosi_season_id_normal: parseSeasonId('api-luosi-season-normal', currentApiConfig.luosi_season_id_normal || 1401),
+        luosi_season_id_expert: parseSeasonId('api-luosi-season-expert', currentApiConfig.luosi_season_id_expert || 1431),
+        etor_season_id_normal: parseSeasonId('api-etor-season-normal', currentApiConfig.etor_season_id_normal || currentApiConfig.luosi_season_id_normal || 1401),
+        etor_season_id_expert: parseSeasonId('api-etor-season-expert', currentApiConfig.etor_season_id_expert || currentApiConfig.luosi_season_id_expert || 1431)
     };
 
+    setBusy(buttonId, true, '保存中...');
     try {
-        const resp = await fetch('/admin/update-api-config', {
+        const data = await fetchJson('/admin/update-api-config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password, api_config })
-        });
-        const data = await resp.json();
+        }, 30000);
 
         if (data.success) {
-            showAlert('success', '火价API配置已保存，重启后生效');
+            showAlert('success', 'API配置已保存，重启后生效');
         } else {
             showAlert('error', data.error || '保存失败');
         }
     } catch (e) {
         showAlert('error', '保存失败: ' + e.message);
+    } finally {
+        setBusy(buttonId, false);
     }
 }
-
 function addListeners() {
     document.getElementById('btn-export-json').addEventListener('click', () => exportData('json'));
     document.getElementById('btn-export-csv').addEventListener('click', () => exportData('csv'));
@@ -884,13 +828,13 @@ function addListeners() {
             ]
         };
 
+        setBusy('btn-save-config', true, '保存中...');
         try {
-            const resp = await fetch('/api/admin/update-config', {
+            const data = await fetchJson('/api/admin/update-config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(config)
-            });
-            const data = await resp.json();
+            }, 30000);
             
             if (data.success) {
                 showAlert('success', '配置已保存，重启后生效');
@@ -899,29 +843,39 @@ function addListeners() {
             }
         } catch (e) {
             showAlert('error', '保存失败: ' + e.message);
+        } finally {
+            setBusy('btn-save-config', false);
         }
     });
 
-document.getElementById('qiandao-config-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await saveApiConfig();
-});
+    document.getElementById('qiandao-config-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await saveApiConfig('btn-save-fire-api');
+    });
 
-document.getElementById('luosi-config-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await saveApiConfig();
-});
+    document.getElementById('luosi-config-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await saveApiConfig('btn-save-item-api');
+    });
+
+    document.getElementById('cfg-password').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            authenticate();
+        }
+    });
 }
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
+        setAuthLocked(true);
         startStatusPolling();
         loadSeasons();
         addListeners();
     });
 } else {
+    setAuthLocked(true);
     startStatusPolling();
     loadSeasons();
     addListeners();
 }
-    
