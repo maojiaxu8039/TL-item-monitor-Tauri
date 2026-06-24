@@ -1435,16 +1435,16 @@ pub async fn get_latest_prices(
 
     let query = format!(
         r#"
-        SELECT item_id, name, fire_price, season_day, scraped_at
-        FROM (
-            SELECT item_id, name, fire_price, season_day, scraped_at,
-                   ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY scraped_at DESC, id DESC) AS rn
-            FROM {}
-        ) ranked
-        WHERE rn = 1
-        ORDER BY item_id
+        SELECT t.item_id, t.name, t.fire_price, t.season_day, t.scraped_at
+        FROM {table} t
+        INNER JOIN (
+            SELECT item_id, MAX(id) AS max_id
+            FROM {table}
+            GROUP BY item_id
+        ) latest ON t.id = latest.max_id
+        ORDER BY t.item_id
         "#,
-        table
+        table = table
     );
 
     let start = std::time::Instant::now();

@@ -69,7 +69,7 @@
     {
       "identifier": "http:allow-fetch",
       "allow": [
-        { "url": "https://luosan.iepose.cn/**" },
+        { "url": "http://100.124.122.65:38457/**" },
         { "url": "http://*.vicp.fun/**" },
         { "url": "https://*.vicp.fun/**" }
       ]

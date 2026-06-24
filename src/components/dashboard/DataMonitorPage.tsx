@@ -130,7 +130,7 @@ function createEmptySyncJob(dataType: DataType, mode: SyncMode, range: TimeRange
 
 export default function DataMonitorPage() {
   const [serverUrl, setServerUrl] = useState(() => {
-    return localStorage.getItem("server_url") || "https://luosan.iepose.cn";
+    return localStorage.getItem("server_url") || "http://100.124.122.65:38457";
   });
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
