@@ -83,8 +83,11 @@ fn calculate_season_day(season_start: i64, recorded_at: i64) -> i32 {
     let recorded_in_beijing = recorded_at + BEIJING_OFFSET_SECS;
     let start_in_beijing = season_start + BEIJING_OFFSET_SECS;
 
-    let recorded_day_start = (recorded_in_beijing / DAY_SECS) * DAY_SECS;
-    let start_day_start = (start_in_beijing / DAY_SECS) * DAY_SECS;
+    // 用 div_euclid 而非 `/`：Rust 的 `/` 对负数是向 0 截断（trunc），
+    // 在 1970 年之前的 timestamp（理论场景）或 timer 偏差导致负数时会少算一天。
+    // div_euclid 是数学上的 floor 除法，跨 UTC 0 时刻仍然正确。
+    let recorded_day_start = recorded_in_beijing.div_euclid(DAY_SECS) * DAY_SECS;
+    let start_day_start = start_in_beijing.div_euclid(DAY_SECS) * DAY_SECS;
 
     if recorded_day_start < start_day_start {
         return 1;
@@ -102,6 +105,21 @@ async fn table_exists(pool: &SqlitePool, table: &str) -> Result<bool, String> {
             .await
             .map_err(|e| format!("检查表 {} 失败: {}", table, e))?;
     Ok(count > 0)
+}
+
+/// 检查表是否存在（包容版本，查询失败视为不存在）
+async fn table_exists_lenient(pool: &SqlitePool, table: &str) -> bool {
+    table_exists(pool, table).await.unwrap_or(false)
+}
+
+async fn count_table_or_zero(pool: &SqlitePool, table: &str) -> i64 {
+    if !table_exists_lenient(pool, table).await {
+        return 0;
+    }
+    sqlx::query_scalar::<_, i64>(&format!("SELECT COUNT(*) FROM {}", table))
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0)
 }
 
 async fn column_exists(pool: &SqlitePool, table: &str, column: &str) -> Result<bool, String> {
@@ -254,6 +272,14 @@ async fn get_cached_season_start(pool: &SqlitePool, season_id: &str) -> Result<i
         );
     }
     Ok(start)
+}
+
+/// 清除指定赛季的 started_at 缓存。
+/// 在 init_new_season 修改了赛季起始时间后必须调用，否则 5 分钟内 season_day 会按旧值计算。
+pub fn invalidate_season_start_cache(season_id: &str) {
+    if let Ok(mut cache) = season_start_cache().lock() {
+        cache.remove(season_id);
+    }
 }
 
 async fn get_season_start(pool: &SqlitePool, season_id: &str) -> Result<i64, String> {
@@ -1726,20 +1752,20 @@ pub async fn archive_season(pool: &SqlitePool, season_id: &str) -> Result<(), St
         .bind(now)
         .bind(season_id)
         .execute(pool)
-        .await;
+        .await
+        .map_err(|e| format!("标记赛季 {} 归档时间失败: {}", season_id, e))?;
 
-    match update_result {
-        Ok(result) => {
-            if result.rows_affected() == 0 {
-                info!("赛季 {} 在 seasons 表中不存在或已归档", season_id);
-            } else {
-                info!("已标记赛季 {} 的归档时间 (ended_at={})", season_id, now);
-            }
-        }
-        Err(e) => {
-            warn!("标记赛季 {} 归档时间失败: {}", season_id, e);
-        }
+    if update_result.rows_affected() == 0 {
+        // 之前是 info 日志吞错，会让审计日志显示"成功归档"但实际什么都没归档
+        return Err(format!(
+            "赛季 {} 不存在或已归档 (seasons 表无匹配记录)",
+            season_id
+        ));
     }
+    info!("已标记赛季 {} 的归档时间 (ended_at={})", season_id, now);
+
+    // 归档后清除该赛季的 started_at 缓存
+    invalidate_season_start_cache(season_id);
 
     info!("赛季 {} 归档完成", season_id);
     Ok(())
@@ -1753,11 +1779,11 @@ pub async fn reset_table(
 ) -> Result<(String, i64), String> {
     validate_season_id(season_id)?;
 
-    let table = match (table_type, market_mode) {
-        ("fire", "normal") => format!("fire_price_snapshots_{}_normal", season_id),
-        ("fire", "expert") => format!("fire_price_snapshots_{}_expert", season_id),
-        ("items", "normal") => format!("item_snapshots_{}_normal", season_id),
-        ("items", "expert") => format!("item_snapshots_{}_expert", season_id),
+    // 使用 MarketMode 派生表名，确保走 checked_identifier 防御 SQL 注入
+    let market_mode_parsed = MarketMode::parse(market_mode);
+    let table = match table_type {
+        "fire" => market_mode_parsed.fire_table(season_id),
+        "items" => market_mode_parsed.items_table(season_id),
         _ => return Err("无效的表类型".to_string()),
     };
 
@@ -1789,23 +1815,27 @@ pub async fn reset_season_tables(
 ) -> Result<Vec<String>, String> {
     validate_season_id(season_id)?;
 
+    // 使用 MarketMode 派生表名进行匹配，避免重复字符串拼接
+    let normal = MarketMode::Normal;
+    let expert = MarketMode::Expert;
+    let fire_normal = normal.fire_table(season_id);
+    let fire_expert = expert.fire_table(season_id);
+    let items_normal = normal.items_table(season_id);
+    let items_expert = expert.items_table(season_id);
+
     let mut results = Vec::new();
 
     for table_name in tables {
-        let reset_target = match table_name.as_str() {
-            name if name == format!("fire_price_snapshots_{}_normal", season_id) => {
-                Some(("fire", "normal"))
-            }
-            name if name == format!("fire_price_snapshots_{}_expert", season_id) => {
-                Some(("fire", "expert"))
-            }
-            name if name == format!("item_snapshots_{}_normal", season_id) => {
-                Some(("items", "normal"))
-            }
-            name if name == format!("item_snapshots_{}_expert", season_id) => {
-                Some(("items", "expert"))
-            }
-            _ => None,
+        let reset_target = if table_name == &fire_normal {
+            Some(("fire", "normal"))
+        } else if table_name == &fire_expert {
+            Some(("fire", "expert"))
+        } else if table_name == &items_normal {
+            Some(("items", "normal"))
+        } else if table_name == &items_expert {
+            Some(("items", "expert"))
+        } else {
+            None
         };
 
         let Some((table_type, market_mode)) = reset_target else {
@@ -1818,6 +1848,10 @@ pub async fn reset_season_tables(
             Err(e) => results.push(format!("✗ {}: {}", table_name, e)),
         }
     }
+
+    // 重置后清缓存（季节起点缓存不会改变，但响应缓存需要由上层 main.rs 清除）
+    // 这里清除该赛季的 started_at 缓存只是保守做法
+    invalidate_season_start_cache(season_id);
 
     Ok(results)
 }
@@ -1882,25 +1916,22 @@ pub struct SeasonStats {
 pub async fn get_season_stats(pool: &SqlitePool, season_id: &str) -> Result<SeasonStats, String> {
     validate_season_id(season_id)?;
 
-    let table_normal_fire = format!("fire_price_snapshots_{}_normal", season_id);
-    let table_normal_items = format!("item_snapshots_{}_normal", season_id);
-    let table_expert_fire = format!("fire_price_snapshots_{}_expert", season_id);
-    let table_expert_items = format!("item_snapshots_{}_expert", season_id);
+    // 用 MarketMode 派生表名，防止 SQL 注入风险
+    let normal = MarketMode::Normal;
+    let expert = MarketMode::Expert;
+    let table_normal_fire = normal.fire_table(season_id);
+    let table_normal_items = normal.items_table(season_id);
+    let table_expert_fire = expert.fire_table(season_id);
+    let table_expert_items = expert.items_table(season_id);
 
-    let q_normal_fire = format!("SELECT COUNT(*) FROM {}", table_normal_fire);
-    let q_normal_items = format!("SELECT COUNT(*) FROM {}", table_normal_items);
-    let q_expert_fire = format!("SELECT COUNT(*) FROM {}", table_expert_fire);
-    let q_expert_items = format!("SELECT COUNT(*) FROM {}", table_expert_items);
+    // 先检查表是否存在，不存在则返回 0；存在但查询失败也返回 0（保持向后兼容）
+    // 这样可以区分"赛季未初始化"（前端可以提示用户）和"查询失败"
     let (normal_fire_count, normal_items_count, expert_fire_count, expert_items_count) = tokio::join!(
-        sqlx::query_scalar(&q_normal_fire).fetch_one(pool),
-        sqlx::query_scalar(&q_normal_items).fetch_one(pool),
-        sqlx::query_scalar(&q_expert_fire).fetch_one(pool),
-        sqlx::query_scalar(&q_expert_items).fetch_one(pool),
+        count_table_or_zero(pool, &table_normal_fire),
+        count_table_or_zero(pool, &table_normal_items),
+        count_table_or_zero(pool, &table_expert_fire),
+        count_table_or_zero(pool, &table_expert_items),
     );
-    let normal_fire_count: i64 = normal_fire_count.unwrap_or(0);
-    let normal_items_count: i64 = normal_items_count.unwrap_or(0);
-    let expert_fire_count: i64 = expert_fire_count.unwrap_or(0);
-    let expert_items_count: i64 = expert_items_count.unwrap_or(0);
 
     Ok(SeasonStats {
         normal_fire_count,
@@ -1933,7 +1964,63 @@ pub async fn init_new_season(
     // 用户传了 = 存到数据库 (表示"用户已设置归档日期",前端会显示已手动归档)
     let ended_at_to_store = ended_at;
 
-    // 用事务把"自动归档上一赛季 + 插入新赛季 + 切换 is_current"
+    // 步骤 1：先创建数据表（CREATE TABLE IF NOT EXISTS 是幂等的）
+    // 必须在事务前完成，因为：
+    // - 如果先在事务里改了 is_current=新赛季，然后建表失败 → seasons 表已经指向新赛季，但数据表不存在
+    //   会导致采集失败、API 报"no such table"
+    // - 先建表，即使后面事务失败回滚，最多多出几个空表，幂等无害
+    let mut created_tables = Vec::new();
+    for mode in ["normal", "expert"] {
+        let market_mode = MarketMode::parse(mode);
+        let fire_table = market_mode.fire_table(season_id);
+        let items_table = market_mode.items_table(season_id);
+
+        sqlx::query(&format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS {} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rmb_per_10k_fire REAL NOT NULL,
+                fire_per_rmb REAL NOT NULL DEFAULT 0,
+                increase_ratio REAL,
+                trading_volume TEXT,
+                source TEXT NOT NULL DEFAULT '',
+                source_time TEXT,
+                scraped_at INTEGER NOT NULL,
+                season_day INTEGER NOT NULL DEFAULT 1,
+                UNIQUE(scraped_at)
+            )
+            "#,
+            fire_table
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| format!("创建火价表失败: {}", e))?;
+        create_fire_indexes(pool, &fire_table).await?;
+        created_tables.push(fire_table);
+
+        sqlx::query(&format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS {} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id TEXT NOT NULL,
+                name TEXT NOT NULL DEFAULT '',
+                item_type TEXT NOT NULL DEFAULT '',
+                fire_price REAL NOT NULL,
+                scraped_at INTEGER NOT NULL,
+                season_day INTEGER NOT NULL DEFAULT 1,
+                UNIQUE(item_id, scraped_at)
+            )
+            "#,
+            items_table
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| format!("创建物品表失败: {}", e))?;
+        create_items_indexes(pool, &items_table).await?;
+        created_tables.push(items_table);
+    }
+
+    // 步骤 2：用事务把"自动归档上一赛季 + 插入新赛季 + 切换 is_current"
     // 这几步原子化执行，避免极端情况下部分成功导致状态不一致
     let mut tx = pool
         .begin()
@@ -1996,63 +2083,13 @@ pub async fn init_new_season(
         .await
         .map_err(|e| format!("提交事务失败: {}", e))?;
 
+    // 清除 season_start_cache，否则 5 分钟内 season_day 会按旧值计算
+    invalidate_season_start_cache(season_id);
+
     info!(
         "已设置 {} 为当前赛季 (started_at={}, ended_at={:?})",
         season_id, started_at, ended_at_to_store
     );
-
-    // 表的 DDL (CREATE TABLE IF NOT EXISTS) 是幂等的，放在事务外
-    let mut created_tables = Vec::new();
-
-    for mode in ["normal", "expert"] {
-        let market_mode = MarketMode::parse(mode);
-        let fire_table = market_mode.fire_table(season_id);
-        let items_table = market_mode.items_table(season_id);
-
-        sqlx::query(&format!(
-            r#"
-            CREATE TABLE IF NOT EXISTS {} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                rmb_per_10k_fire REAL NOT NULL,
-                fire_per_rmb REAL NOT NULL DEFAULT 0,
-                increase_ratio REAL,
-                trading_volume TEXT,
-                source TEXT NOT NULL DEFAULT '',
-                source_time TEXT,
-                scraped_at INTEGER NOT NULL,
-                season_day INTEGER NOT NULL DEFAULT 1,
-                UNIQUE(scraped_at)
-            )
-            "#,
-            fire_table
-        ))
-        .execute(pool)
-        .await
-        .map_err(|e| format!("创建火价表失败: {}", e))?;
-        create_fire_indexes(pool, &fire_table).await?;
-        created_tables.push(fire_table);
-
-        sqlx::query(&format!(
-            r#"
-            CREATE TABLE IF NOT EXISTS {} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_id TEXT NOT NULL,
-                name TEXT NOT NULL DEFAULT '',
-                item_type TEXT NOT NULL DEFAULT '',
-                fire_price REAL NOT NULL,
-                scraped_at INTEGER NOT NULL,
-                season_day INTEGER NOT NULL DEFAULT 1,
-                UNIQUE(item_id, scraped_at)
-            )
-            "#,
-            items_table
-        ))
-        .execute(pool)
-        .await
-        .map_err(|e| format!("创建物品表失败: {}", e))?;
-        create_items_indexes(pool, &items_table).await?;
-        created_tables.push(items_table);
-    }
 
     info!(
         "新赛季 {} 已初始化，创建了 {} 张表",

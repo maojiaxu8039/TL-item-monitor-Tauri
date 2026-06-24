@@ -55,6 +55,11 @@ struct ServerState {
     dynamic_config: Arc<RwLock<DynamicConfig>>,
     ws_broadcaster: Arc<RwLock<WsBroadcaster>>,
     response_cache: Arc<RwLock<LruCache>>,
+    /// 全局赛季操作互斥锁：init_new_season / archive_season / reset_season 串行执行
+    /// 防止并发管理操作导致状态机不一致（新赛季被立刻归档等）
+    season_mutation_lock: Arc<tokio::sync::Mutex<()>>,
+    /// 采集任务 in-flight 锁：防止 init-season 触发的采集 与 整点 timer 触发的采集 并发执行
+    collection_in_flight: Arc<tokio::sync::Mutex<()>>,
 }
 
 const RESPONSE_CACHE_MAX_SIZE: usize = 100;
@@ -183,9 +188,13 @@ struct SeasonCache {
     cached_at: Instant,
 }
 
+/// 限流器最多保留多少个 client IP，超过则触发清理（防止恶意客户端用大量 IP 撑爆内存）
+const RATE_LIMITER_MAX_IPS: usize = 10_000;
+
 struct RateLimiter {
     requests: HashMap<String, Vec<Instant>>,
     config: RateLimitConfig,
+    last_gc_at: Instant,
 }
 
 impl RateLimiter {
@@ -193,6 +202,7 @@ impl RateLimiter {
         Self {
             requests: HashMap::new(),
             config,
+            last_gc_at: Instant::now(),
         }
     }
 
@@ -204,12 +214,13 @@ impl RateLimiter {
         let now = Instant::now();
         let window = Duration::from_secs(60);
 
-        let requests = self.requests.entry(client_ip.to_string()).or_default();
-
-        requests.retain(|t| now.duration_since(*t) < window);
-
-        if requests.is_empty() {
-            self.requests.remove(client_ip);
+        // 定期 GC：清理超过 5 分钟没有活动的 IP，限制 HashMap 不会无限增长
+        if now.duration_since(self.last_gc_at) > Duration::from_secs(60)
+            || self.requests.len() > RATE_LIMITER_MAX_IPS
+        {
+            self.requests
+                .retain(|_, v| v.iter().any(|t| now.duration_since(*t) < window));
+            self.last_gc_at = now;
         }
 
         let max_requests = self
@@ -217,14 +228,15 @@ impl RateLimiter {
             .requests_per_minute
             .saturating_add(self.config.burst_size) as usize;
 
-        if self.requests.get(client_ip).map(|r| r.len()).unwrap_or(0) >= max_requests {
+        let entry = self.requests.entry(client_ip.to_string()).or_default();
+        // 清掉当前 IP 的过期请求记录
+        entry.retain(|t| now.duration_since(*t) < window);
+
+        if entry.len() >= max_requests {
             return false;
         }
 
-        self.requests
-            .entry(client_ip.to_string())
-            .or_default()
-            .push(now);
+        entry.push(now);
         true
     }
 }
@@ -388,6 +400,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         dynamic_config: Arc::new(RwLock::new(dynamic_config)),
         ws_broadcaster: Arc::new(RwLock::new(WsBroadcaster::new())),
         response_cache: Arc::new(RwLock::new(LruCache::new())),
+        season_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
+        collection_in_flight: Arc::new(tokio::sync::Mutex::new(())),
     });
 
     let http_state = state.clone();
@@ -460,14 +474,20 @@ async fn start_http_server(state: Arc<ServerState>, port: u16, start_time: i64) 
     }
 }
 
-fn verify_admin(request_body: &str, password: &str) -> Result<(), String> {
-    if password.is_empty() {
-        return Err("管理员密码未设置".to_string());
-    }
-    if request_body.is_empty() {
-        return Err("缺少密码字段".to_string());
-    }
-    password_hash::verify_password(request_body, password)
+/// 校验管理员密码。
+///
+/// 参数：
+/// - `input_password`: 用户提交的密码明文（来自请求 body 里的 password 字段）
+/// - `stored_password`: 服务端存储的密码（bcrypt 哈希或明文兼容）
+///
+/// 注意：之前函数签名是 `verify_admin(request_body: &str, password: &str)`，
+/// 参数名容易让维护者写错调用顺序（实际第一个参数是用户密码，第二个是存储密码），
+/// 现在用明确的命名避免歧义。所有失败路径都返回统一错误信息（不暴露细节）。
+fn verify_admin(input_password: &str, stored_password: &str) -> Result<(), String> {
+    // 直接委托给 password_hash::verify_password 处理：
+    // - stored 为空 → 返回"密码错误" + 日志告警
+    // - input 为空 → constant_time_eq 会返回 false（与 stored 长度不一致）
+    password_hash::verify_password(input_password, stored_password)
 }
 
 async fn handle_request(
@@ -598,10 +618,17 @@ async fn handle_request(
 
     {
         let dynamic = state.dynamic_config.read().await;
-        if dynamic.rate_limit_enabled {
-            drop(dynamic);
-            let mut limiter = state.rate_limiter.write().await;
-            if !limiter.is_allowed(&client_ip) {
+        let rate_limit_enabled = dynamic.rate_limit_enabled;
+        drop(dynamic);
+
+        if rate_limit_enabled {
+            // 仅持锁判断 is_allowed，立即 drop 锁后再做网络 IO
+            // 避免慢客户端阻塞写响应时把 RateLimiter 整个锁住
+            let allowed = {
+                let mut limiter = state.rate_limiter.write().await;
+                limiter.is_allowed(&client_ip)
+            };
+            if !allowed {
                 warn!("客户端 {} 请求过于频繁，已限流", client_ip);
                 let response =
                     plain_http_response(429, "Too Many Requests", "Rate limit exceeded, try again");
@@ -1087,7 +1114,7 @@ async fn handle_request(
                 get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(99999)
+                .unwrap_or(10_000)
                 .clamp(1, 10_000);
 
             let min_day: Option<i32> =
@@ -1227,7 +1254,7 @@ async fn handle_request(
                 get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(99999)
+                .unwrap_or(10_000)
                 .clamp(1, 10_000);
             let offset: i32 = get_query_param(query_string, "offset")
                 .and_then(|s| s.parse().ok())
@@ -1316,7 +1343,7 @@ async fn handle_request(
                 get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(99999)
+                .unwrap_or(10_000)
                 .clamp(1, 10_000);
             let offset: i32 = get_query_param(query_string, "offset")
                 .and_then(|s| s.parse().ok())
@@ -1592,6 +1619,8 @@ async fn handle_request(
                         .unwrap_or_default();
                         (401, body)
                     } else {
+                        // 持锁串行：防止 init/archive/reset 并发导致状态机错乱
+                        let _guard = state.season_mutation_lock.lock().await;
                         match db::init_new_season(
                             &state.db,
                             &req.season_id,
@@ -1702,6 +1731,8 @@ async fn handle_request(
                         (401, body)
                     } else {
                         let season_id = req["season_id"].as_str().unwrap_or("");
+                        // 持锁串行：防止与 init / reset 并发
+                        let _guard = state.season_mutation_lock.lock().await;
                         match db::archive_season(&state.db, season_id).await {
                             Ok(_) => {
                                 {
@@ -1871,6 +1902,8 @@ async fn handle_request(
                         .unwrap_or_default();
                         (401, body)
                     } else {
+                        // 持锁串行：防止与 init / archive 并发
+                        let _guard = state.season_mutation_lock.lock().await;
                         match db::reset_table(
                             &state.db,
                             &req.season_id,
@@ -1968,6 +2001,8 @@ async fn handle_request(
                         .unwrap_or_default();
                         (401, body)
                     } else {
+                        // 持锁串行：防止与 init / archive 并发
+                        let _guard = state.season_mutation_lock.lock().await;
                         match db::reset_season_tables(&state.db, &req.season_id, &req.tables).await
                         {
                             Ok(results) => {
@@ -2599,26 +2634,32 @@ fn sanitize_query_string(query_string: &str) -> String {
 }
 
 fn urlencoding_decode(s: &str) -> String {
-    let mut result = String::new();
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '%' {
-            let hex: String = chars.by_ref().take(2).collect();
-            if hex.len() == 2 {
-                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                    result.push(byte as char);
-                    continue;
-                }
+    // 修复 Unicode 解码 bug：之前 `result.push(byte as char)` 会把单字节当作 char，
+    // UTF-8 多字节序列（如中文 %E5%88%80）会被拆成多个 latin-1 字符。
+    // 正确做法：先把所有 %XX 字节累积到 Vec<u8>，最后再用 from_utf8_lossy 重组为 String。
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == b'%' && i + 2 < bytes.len() {
+            let hex_str = std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("");
+            if let Ok(byte) = u8::from_str_radix(hex_str, 16) {
+                out.push(byte);
+                i += 3;
+                continue;
             }
-            result.push('%');
-            result.push_str(&hex);
-        } else if c == '+' {
-            result.push(' ');
+            out.push(b'%');
+            i += 1;
+        } else if b == b'+' {
+            out.push(b' ');
+            i += 1;
         } else {
-            result.push(c);
+            out.push(b);
+            i += 1;
         }
     }
-    result
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 fn get_next_collection_time() -> Option<i64> {
@@ -2828,7 +2869,13 @@ async fn run_test_collection(state: &Arc<ServerState>) {
         Some(season) => {
             info!("测试采集当前赛季: {}", season);
 
-            for mode_config in state.config.scrape_modes.iter() {
+            // 修复：测试采集与生产采集都使用 dynamic_config.scrape_modes，
+            // 避免"测试 OK 但生产关掉 mode"或反之的不一致
+            let dynamic = state.dynamic_config.read().await;
+            let scrape_modes = dynamic.scrape_modes.clone();
+            drop(dynamic);
+
+            for mode_config in scrape_modes.iter() {
                 if !mode_config.enabled {
                     info!("[{}] 已禁用，跳过测试采集", mode_config.mode);
                     continue;
@@ -2892,6 +2939,17 @@ async fn run_test_collection(state: &Arc<ServerState>) {
 }
 
 async fn collect_all_modes(state: &Arc<ServerState>) {
+    // 用 try_lock 防止采集任务并发执行
+    // 场景：整点 timer 触发的 collect 还没跑完，用户 init 新赛季又触发了一次
+    // 此处只让一次执行，第二次直接跳过并记录日志
+    let _guard = match state.collection_in_flight.try_lock() {
+        Ok(g) => g,
+        Err(_) => {
+            warn!("采集任务正在进行中，跳过本次重复触发");
+            return;
+        }
+    };
+
     let current_season = get_cached_season(state).await;
 
     match current_season {
