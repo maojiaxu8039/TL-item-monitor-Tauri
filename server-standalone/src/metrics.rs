@@ -39,6 +39,7 @@ pub struct Metrics {
 }
 
 impl Metrics {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             http_requests: Mutex::new(HashMap::new()),
