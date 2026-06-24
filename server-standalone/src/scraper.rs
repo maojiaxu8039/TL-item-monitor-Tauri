@@ -24,14 +24,14 @@ const QIANDAO_ECHO_REGION: &str = "CN";
 const QIANDAO_DEFAULT_TOKEN: &str = "Bearer undefined";
 
 fn safe_truncate(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
+    // 按字符数（chars）而非字节数截断，避免：
+    // 1. 中文场景下 max_len=10 字节最多容纳 3 个汉字，体验差
+    // 2. 极端情况下 char_boundary 回退到 0 导致输出只剩 "..."
+    if s.chars().count() <= max_len {
         s.to_string()
     } else {
-        let mut end = max_len;
-        while end > 0 && !s.is_char_boundary(end) {
-            end -= 1;
-        }
-        format!("{}...", &s[..end])
+        let truncated: String = s.chars().take(max_len).collect();
+        format!("{}...", truncated)
     }
 }
 

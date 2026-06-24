@@ -54,7 +54,7 @@ struct ServerState {
     season_cache: Arc<RwLock<Option<SeasonCache>>>,
     dynamic_config: Arc<RwLock<DynamicConfig>>,
     ws_broadcaster: Arc<RwLock<WsBroadcaster>>,
-    response_cache: Arc<RwLock<LruCache>>,
+    response_cache: Arc<tokio::sync::Mutex<LruCache>>,
     /// 全局赛季操作互斥锁：init_new_season / archive_season / reset_season 串行执行
     /// 防止并发管理操作导致状态机不一致（新赛季被立刻归档等）
     season_mutation_lock: Arc<tokio::sync::Mutex<()>>,
@@ -66,6 +66,11 @@ const RESPONSE_CACHE_MAX_SIZE: usize = 100;
 const RESPONSE_CACHE_TTL_SECS: u64 = 60;
 const RESPONSE_CACHE_MAX_ENTRY_BYTES: usize = 1_048_576;
 const MAX_REQUEST_BYTES: usize = 65_536;
+
+/// 赛季自动归档天数：每个赛季开服 90 天后自动结束
+/// 业务规则常量，调整时只需改这一处
+const SEASON_AUTO_ARCHIVE_DAYS: i64 = 90;
+const SEASON_AUTO_ARCHIVE_SECS: i64 = SEASON_AUTO_ARCHIVE_DAYS * 24 * 3600;
 const JSON_CACHE_CONTROL: &str = "no-store";
 const ADMIN_HTML_CACHE_CONTROL: &str = "no-store";
 const ADMIN_JS_CACHE_CONTROL: &str = "public, max-age=3600";
@@ -141,7 +146,7 @@ impl LruCache {
 }
 
 async fn clear_response_cache(state: &ServerState) {
-    state.response_cache.write().await.clear();
+    state.response_cache.lock().await.clear();
 }
 
 struct WsBroadcaster {
@@ -399,7 +404,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         season_cache: Arc::new(RwLock::new(None)),
         dynamic_config: Arc::new(RwLock::new(dynamic_config)),
         ws_broadcaster: Arc::new(RwLock::new(WsBroadcaster::new())),
-        response_cache: Arc::new(RwLock::new(LruCache::new())),
+        response_cache: Arc::new(tokio::sync::Mutex::new(LruCache::new())),
         season_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
         collection_in_flight: Arc::new(tokio::sync::Mutex::new(())),
     });
@@ -740,7 +745,7 @@ async fn handle_request(
                     None => (None, None),
                 };
             // 自动归档日期 = 开服日期 + 90 天 (90 * 86400 = 7_776_000 秒)
-            let season_auto_archive_at = season_started_at.map(|s| s + 7_776_000);
+            let season_auto_archive_at = season_started_at.map(|s| s + SEASON_AUTO_ARCHIVE_SECS);
 
             let status = ApiStatus {
                 server: "TL Monitor Server".to_string(),
@@ -1144,7 +1149,7 @@ async fn handle_request(
             } else {
                 let cache_key = format!("/fire-history?{}", query_string);
                 let cached = {
-                    let mut cache = state.response_cache.write().await;
+                    let mut cache = state.response_cache.lock().await;
                     cache.get(&cache_key)
                 };
                 if let Some(body) = cached {
@@ -1170,7 +1175,7 @@ async fn handle_request(
                             .unwrap_or_default();
                             state
                                 .response_cache
-                                .write()
+                                .lock()
                                 .await
                                 .insert(cache_key, body.clone());
                             (200, body)
@@ -1291,7 +1296,7 @@ async fn handle_request(
             } else {
                 let cache_key = format!("/items-history-all?{}", query_string);
                 let cached = {
-                    let mut cache = state.response_cache.write().await;
+                    let mut cache = state.response_cache.lock().await;
                     cache.get(&cache_key)
                 };
                 if let Some(body) = cached {
@@ -1320,7 +1325,7 @@ async fn handle_request(
                             .unwrap_or_default();
                             state
                                 .response_cache
-                                .write()
+                                .lock()
                                 .await
                                 .insert(cache_key, body.clone());
                             (200, body)
@@ -1470,7 +1475,7 @@ async fn handle_request(
                 .unwrap_or_else(|| state.config.season_id.clone());
             let cache_key = format!("/stats?{}", query_string);
             let cached = {
-                let mut cache = state.response_cache.write().await;
+                let mut cache = state.response_cache.lock().await;
                 cache.get(&cache_key)
             };
             if let Some(body) = cached {
@@ -1486,8 +1491,8 @@ async fn handle_request(
                         .unwrap_or_default();
                         state
                             .response_cache
-                            .write()
-                            .await
+                                .lock()
+                                .await
                             .insert(cache_key, body.clone());
                         (200, body)
                     }
@@ -2290,16 +2295,39 @@ async fn handle_request(
                 .clamp(100, 10000);
 
             let before_cursor = get_query_param(query_string, "before");
-            let (before_scraped_at, before_id) = if let Some(ref cursor) = before_cursor {
-                let parts: Vec<&str> = cursor.split(',').collect();
-                if parts.len() == 2 {
-                    (parts[0].parse().ok(), parts[1].parse().ok())
+            // 严格解析 cursor：解析失败直接返回 400，避免静默忽略导致无限重复返回第一页
+            let cursor_parse_result: Result<(Option<i64>, Option<i64>), String> =
+                if let Some(ref cursor) = before_cursor {
+                    let parts: Vec<&str> = cursor.split(',').collect();
+                    if parts.len() == 2 {
+                        match (parts[0].parse::<i64>(), parts[1].parse::<i64>()) {
+                            (Ok(ts), Ok(id)) => Ok((Some(ts), Some(id))),
+                            _ => Err(format!(
+                                "before cursor 格式错误（应为 'scraped_at,id'）: {}",
+                                cursor
+                            )),
+                        }
+                    } else {
+                        Err(format!(
+                            "before cursor 格式错误（应为 'scraped_at,id'）: {}",
+                            cursor
+                        ))
+                    }
                 } else {
-                    (None, None)
-                }
+                    Ok((None, None))
+                };
+
+            // 在 match arm 内必须用 tuple 返回，不能 `return`
+            if let Err(e) = &cursor_parse_result {
+                let body = serde_json::to_string_pretty(&ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some(e.clone()),
+                })
+                .unwrap_or_default();
+                (400, body)
             } else {
-                (None, None)
-            };
+                let (before_scraped_at, before_id) = cursor_parse_result.unwrap();
 
             let min_day: Option<i32> =
                 get_query_param(query_string, "min_day").and_then(|s| s.parse().ok());
@@ -2338,6 +2366,7 @@ async fn handle_request(
                     .unwrap_or_default();
                     (500, body)
                 }
+            }
             }
         }
 
@@ -3219,21 +3248,31 @@ async fn handle_ws_connection(
     };
 
     let write_clone = write.clone();
-    let send_task = tokio::spawn(async move {
+    let mut send_task = tokio::spawn(async move {
         let mut rx = rx;
-        while let Ok(msg) = rx.recv().await {
-            let send_result = {
-                let mut w = write_clone.lock().await;
-                w.send(Message::Text(msg.into())).await
-            };
-            if send_result.is_err() {
-                break;
+        loop {
+            match rx.recv().await {
+                Ok(msg) => {
+                    let send_result = {
+                        let mut w = write_clone.lock().await;
+                        w.send(Message::Text(msg.into())).await
+                    };
+                    if send_result.is_err() {
+                        break;
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    // 客户端消费太慢，丢弃后继续；但要记日志方便排查
+                    warn!("WebSocket 客户端消费缓慢，丢弃 {} 条消息", n);
+                    continue;
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
         }
     });
 
     let write_clone = write.clone();
-    let recv_task = tokio::spawn(async move {
+    let mut recv_task = tokio::spawn(async move {
         let mut read = read;
         while let Some(msg) = read.next().await {
             match msg {
@@ -3256,7 +3295,17 @@ async fn handle_ws_connection(
         }
     });
 
-    let _ = tokio::join!(send_task, recv_task);
+    // 用 select! 而非 join!：任意一端结束就 abort 另一端。
+    // 之前用 join! 会导致 send_task 因 Lagged 退出后，recv_task 还可能挂起，
+    // 客户端计数不会立刻减少。
+    tokio::select! {
+        _ = &mut send_task => {
+            recv_task.abort();
+        }
+        _ = &mut recv_task => {
+            send_task.abort();
+        }
+    }
 
     {
         let mut broadcaster = state.ws_broadcaster.write().await;
@@ -3269,8 +3318,32 @@ async fn handle_ws_connection(
 async fn graceful_shutdown(state: Arc<ServerState>) {
     info!("开始优雅关闭...");
 
-    info!("等待现有请求完成...");
-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    // 等待采集任务完成（最长 30 秒）
+    // 之前只 sleep 3 秒，正在写库的任务可能被中断导致事务未提交
+    info!("等待正在进行的采集任务完成（最长 30 秒）...");
+    let collection_wait_start = Instant::now();
+    loop {
+        // 用 try_lock 探测采集是否在进行中；若拿到说明无采集
+        if state.collection_in_flight.try_lock().is_ok() {
+            info!("采集任务已结束");
+            break;
+        }
+        if collection_wait_start.elapsed() > std::time::Duration::from_secs(30) {
+            warn!("采集任务超过 30 秒未结束，强制继续关闭流程");
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+
+    // 再给 in-flight HTTP 请求一点时间排出（连接级超时已经是 30 秒）
+    info!("等待 HTTP 请求排空（2 秒）...");
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+    // 触发一次 WAL checkpoint，把 WAL 数据合并回主 db 文件
+    info!("执行最后一次 WAL checkpoint...");
+    if let Err(e) = db::wal_checkpoint(&state.db).await {
+        warn!("最后一次 WAL checkpoint 失败: {}", e);
+    }
 
     info!("关闭数据库连接池...");
     state.db.close().await;
