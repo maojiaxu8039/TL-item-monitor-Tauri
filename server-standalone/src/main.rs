@@ -1455,7 +1455,11 @@ async fn handle_request(
             }
         }
         ("GET", "/seasons") => {
-            let seasons = db::get_all_seasons_list(&state.db).await;
+            let seasons = db::get_all_seasons_list(&state.db)
+                .await
+                .into_iter()
+                .filter(|s| s != "ss11")
+                .collect::<Vec<_>>();
             let body = serde_json::to_string_pretty(&ApiResponse {
                 success: true,
                 data: Some(seasons),
