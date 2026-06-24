@@ -127,10 +127,10 @@ async function authenticate() {
 
 function loadConfigFields() {
     if (!serverConfig) return;
-    document.getElementById('cfg-season').value = serverConfig.season_id;
+    document.getElementById('cfg-season-display').textContent = serverConfig.season_id || '-';
     const headerSeason = document.getElementById('header-season');
     if (headerSeason) headerSeason.textContent = serverConfig.season_id || '-';
-    document.getElementById('cfg-port').value = serverConfig.http_port;
+    document.getElementById('cfg-port-display').textContent = serverConfig.http_port || '-';
     document.getElementById('cfg-cors').value = (serverConfig.cors_allowed_origins || []).join(', ');
     document.getElementById('cfg-rate-limit').value = (serverConfig.rate_limit ? serverConfig.rate_limit.enabled : true).toString();
 
@@ -702,7 +702,7 @@ async function resetTables() {
 async function initSeason() {
     const season_id = document.getElementById('season-input').value.trim();
     if (!season_id) {
-        showAlert('error', '请输入 season_id');
+        showAlert('error', '请输入赛季 ID');
         return;
     }
     const season_name = document.getElementById('season-name-input').value.trim();
