@@ -359,33 +359,6 @@ pub async fn get_season_archive_info(
     row
 }
 
-pub async fn get_current_season_archive_info(
-    pool: &SqlitePool,
-) -> Option<(i64, Option<i64>)> {
-    // 优先查 is_current=1 的活跃赛季
-    let active: Option<(i64, Option<i64>)> = sqlx::query_as(
-        "SELECT started_at, ended_at FROM seasons WHERE is_current = 1 ORDER BY started_at DESC LIMIT 1",
-    )
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten();
-
-    if active.is_some() {
-        return active;
-    }
-
-    // 兜底：如果没有活跃赛季（刚归档完），返回"最近归档的赛季"
-    let recent: Option<(i64, Option<i64>)> = sqlx::query_as(
-        "SELECT started_at, ended_at FROM seasons WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT 1",
-    )
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten();
-    recent
-}
-
 fn get_migration_started_at(season_id: &str) -> i64 {
     match season_id {
         "ss12" => 1776384000,
@@ -1449,6 +1422,7 @@ pub async fn get_items_sync_stats(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn get_items_by_cursor(
     pool: &SqlitePool,
     season_id: &str,
@@ -1546,11 +1520,9 @@ pub async fn get_items_by_cursor(
         .collect();
 
     let next_cursor = if has_more {
-        if let Some(last) = records.last() {
-            Some(format!("{},{}", last.scraped_at, last.cursor_id))
-        } else {
-            None
-        }
+        records
+            .last()
+            .map(|last| format!("{},{}", last.scraped_at, last.cursor_id))
     } else {
         None
     };
@@ -1661,7 +1633,7 @@ pub async fn get_items_daily_aggregate(
         };
         day_map
             .entry(season_day)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(item);
     }
 
@@ -1957,34 +1929,39 @@ pub async fn init_new_season(
         ));
     }
 
+    // ended_at 处理：用户没传 = NULL (表示"未手动归档",前端会显示自动归档日期)
+    // 用户传了 = 存到数据库 (表示"用户已设置归档日期",前端会显示已手动归档)
+    let ended_at_to_store = ended_at;
+
+    // 用事务把"自动归档上一赛季 + 插入新赛季 + 切换 is_current"
+    // 这几步原子化执行，避免极端情况下部分成功导致状态不一致
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("开启事务失败: {}", e))?;
+
     // 自动归档当前赛季：仅当当前赛季尚未手动归档时
     // (如果 ended_at 已经被手动设置过，说明用户已经手动归档，跳过自动归档)
     let now_ts = chrono::Utc::now().timestamp();
-    let auto_archive_result = sqlx::query(
+    let auto_archived = sqlx::query(
         "UPDATE seasons SET ended_at = ?, is_current = 0
          WHERE is_current = 1 AND id != ? AND ended_at IS NULL",
     )
     .bind(now_ts)
     .bind(season_id)
-    .execute(pool)
-    .await;
-    match auto_archive_result {
-        Ok(r) if r.rows_affected() > 0 => {
-            info!(
-                "已自动归档当前赛季（因为尚未手动归档），新赛季 {} 将生效",
-                season_id
-            );
-        }
-        _ => {
-            info!(
-                "当前赛季已被手动归档过（或无活跃赛季），跳过自动归档步骤"
-            );
-        }
-    }
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("自动归档当前赛季失败: {}", e))?
+    .rows_affected();
 
-    // ended_at 处理：用户没传 = NULL (表示"未手动归档",前端会显示自动归档日期)
-    // 用户传了 = 存到数据库 (表示"用户已设置归档日期",前端会显示已手动归档)
-    let ended_at_to_store = ended_at;
+    if auto_archived > 0 {
+        info!(
+            "已自动归档当前赛季（因为尚未手动归档），新赛季 {} 将生效",
+            season_id
+        );
+    } else {
+        info!("当前赛季已被手动归档过（或无活跃赛季），跳过自动归档步骤");
+    }
 
     sqlx::query(
         r#"
@@ -2000,25 +1977,31 @@ pub async fn init_new_season(
     .bind(season_name)
     .bind(started_at)
     .bind(ended_at_to_store)
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .map_err(|e| format!("插入赛季记录失败: {}", e))?;
 
     sqlx::query("UPDATE seasons SET is_current = 0")
-        .execute(pool)
+        .execute(&mut *tx)
         .await
-        .ok();
+        .map_err(|e| format!("重置 is_current 失败: {}", e))?;
+
     sqlx::query("UPDATE seasons SET is_current = 1 WHERE id = ?")
         .bind(season_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| format!("设置当前赛季失败: {}", e))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| format!("提交事务失败: {}", e))?;
 
     info!(
         "已设置 {} 为当前赛季 (started_at={}, ended_at={:?})",
         season_id, started_at, ended_at_to_store
     );
 
+    // 表的 DDL (CREATE TABLE IF NOT EXISTS) 是幂等的，放在事务外
     let mut created_tables = Vec::new();
 
     for mode in ["normal", "expert"] {

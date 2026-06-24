@@ -222,6 +222,18 @@ async function loadStatus() {
             if (headerSeason) headerSeason.textContent = info.season_id || '-';
             document.getElementById('stat-next').textContent = info.next_collection ? formatTime(info.next_collection) : '-';
 
+            // 赛季归档日期：已手动归档显示"已手动归档"，未手动归档显示"自动:开服+90天"
+            const archiveEl = document.getElementById('stat-archive');
+            if (archiveEl) {
+                if (info.season_ended_at) {
+                    archiveEl.innerHTML = `<span style="font-size:13px;color:#52c41a;">已手动归档</span><br><span style="font-size:14px;color:#172033;">${formatTime(info.season_ended_at)}</span>`;
+                } else if (info.season_auto_archive_at) {
+                    archiveEl.innerHTML = `<span style="font-size:13px;color:#faad14;">自动 (开服+90天)</span><br><span style="font-size:14px;color:#172033;">${formatTime(info.season_auto_archive_at)}</span>`;
+                } else {
+                    archiveEl.textContent = '-';
+                }
+            }
+
             const normal = info.last_collection.normal;
             const expert = info.last_collection.expert;
 
@@ -369,7 +381,7 @@ async function loadAuditLog() {
 
                 row.innerHTML = `
                     <td>${log.timestamp ? new Date(log.timestamp * 1000).toLocaleString('zh-CN') : '-'}</td>
-                    <td class="audit-action">${actionNames[log.action] || log.action || '-'}</td>
+                    <td class="audit-action">${escapeHtml(actionNames[log.action] || log.action || '-')}</td>
                     <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(log.details)}">${escapeHtml(log.details)}</td>
                     <td>${escapeHtml(log.ip_address)}</td>
                     <td><span class="${log.success ? 'audit-success' : 'audit-failed'}">${log.success ? '✓ 成功' : '✗ 失败'}</span></td>
