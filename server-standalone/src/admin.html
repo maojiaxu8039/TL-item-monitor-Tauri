@@ -90,6 +90,29 @@
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 14px;
         }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+        }
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+        }
+        .stat-group {
+            margin-top: 18px;
+        }
+        .stat-group-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e3e8f0;
+        }
         .stat {
             background: #f8fafc;
             border: 1px solid #e6ebf2;
@@ -530,7 +553,7 @@
                         <p>采集状态、记录数量和下次任务时间</p>
                     </div>
                 </div>
-                <div class="grid" id="stats-grid">
+                <div class="grid-2" id="stats-grid-top">
                     <div class="stat">
                         <div class="stat-label">赛季</div>
                         <div class="stat-value" id="stat-season">-</div>
@@ -539,29 +562,41 @@
                         <div class="stat-label">下次采集</div>
                         <div class="stat-value" id="stat-next">-</div>
                     </div>
-                    <div class="stat">
-                        <div class="stat-label">普通服状态</div>
-                        <div class="stat-value" id="stat-normal">-</div>
+                </div>
+
+                <div class="stat-group">
+                    <div class="stat-group-title">普通服</div>
+                    <div class="grid-3" id="stats-grid-normal">
+                        <div class="stat">
+                            <div class="stat-label">状态</div>
+                            <div class="stat-value" id="stat-normal">-</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">火价记录</div>
+                            <div class="stat-value" id="stat-normal-fire">-</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">物品记录</div>
+                            <div class="stat-value" id="stat-normal-items">-</div>
+                        </div>
                     </div>
-                    <div class="stat">
-                        <div class="stat-label">专家服状态</div>
-                        <div class="stat-value" id="stat-expert">-</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-label">普通服火价记录</div>
-                        <div class="stat-value" id="stat-normal-fire">-</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-label">普通服物品记录</div>
-                        <div class="stat-value" id="stat-normal-items">-</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-label">专家服火价记录</div>
-                        <div class="stat-value" id="stat-expert-fire">-</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-label">专家服物品记录</div>
-                        <div class="stat-value" id="stat-expert-items">-</div>
+                </div>
+
+                <div class="stat-group">
+                    <div class="stat-group-title">专家服</div>
+                    <div class="grid-3" id="stats-grid-expert">
+                        <div class="stat">
+                            <div class="stat-label">状态</div>
+                            <div class="stat-value" id="stat-expert">-</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">火价记录</div>
+                            <div class="stat-value" id="stat-expert-fire">-</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">物品记录</div>
+                            <div class="stat-value" id="stat-expert-items">-</div>
+                        </div>
                     </div>
                 </div>
             </div>
