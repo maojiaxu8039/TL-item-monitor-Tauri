@@ -179,28 +179,26 @@
         }
         .form-group input, .form-group select, .form-group textarea {
             width: 100%;
-            padding: 10px;
+            padding: 10px 12px;
             border: 1px solid #d8dee8;
             border-radius: 6px;
             font-size: 14px;
             background: #fff;
-        }
-        .form-group input[readonly] {
-            background: #f6f8fb;
-            color: #6b7280;
-            cursor: not-allowed;
-        }
-        .readonly-display {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #e3e8f0;
-            border-radius: 6px;
-            font-size: 14px;
-            background: #f6f8fb;
             color: #172033;
-            font-weight: 500;
-            min-height: 20px;
-            line-height: 1.4;
+            font-family: inherit;
+            box-sizing: border-box;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .form-group select {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            padding-right: 36px;
+            cursor: pointer;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 16px 16px;
         }
         .form-row {
             display: grid;
@@ -289,6 +287,15 @@
             outline: none;
             border-color: #2563eb;
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        }
+        .form-group input:disabled, .form-group select:disabled, .form-group textarea:disabled {
+            background-color: #f6f8fb;
+            color: #6b7280;
+            cursor: not-allowed;
+            border-color: #e3e8f0;
+        }
+        .form-group select:disabled {
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e");
         }
         .tabs {
             display: flex;
@@ -635,12 +642,12 @@
                 </div>
                 <div class="grid-compact">
                     <div class="form-group">
-                        <label>当前赛季</label>
-                        <div class="readonly-display" id="cfg-season-display">-</div>
+                        <label>season_id</label>
+                        <input type="text" id="cfg-season" readonly>
                     </div>
                     <div class="form-group">
                         <label>HTTP 端口</label>
-                        <div class="readonly-display" id="cfg-port-display">-</div>
+                        <input type="number" id="cfg-port" min="1024" max="65535" readonly>
                     </div>
                 </div>
                 <form id="config-form">
@@ -700,22 +707,22 @@
                         <div class="mode-card">
                             <div class="mode-card-title">物品源 普通服</div>
                             <div class="form-group">
-                                <label>刷图小助手 赛季 ID</label>
+                                <label>刷图小助手 season_id</label>
                                 <input type="number" id="api-luosi-season-normal" data-requires-auth disabled>
                             </div>
                             <div class="form-group">
-                                <label>易火 赛季 ID</label>
+                                <label>易火 season_id</label>
                                 <input type="number" id="api-etor-season-normal" data-requires-auth disabled>
                             </div>
                         </div>
                         <div class="mode-card">
                             <div class="mode-card-title">物品源 专家服</div>
                             <div class="form-group">
-                                <label>刷图小助手 赛季 ID</label>
+                                <label>刷图小助手 season_id</label>
                                 <input type="number" id="api-luosi-season-expert" data-requires-auth disabled>
                             </div>
                             <div class="form-group">
-                                <label>易火 赛季 ID</label>
+                                <label>易火 season_id</label>
                                 <input type="number" id="api-etor-season-expert" data-requires-auth disabled>
                             </div>
                         </div>
@@ -769,7 +776,7 @@
                 <form id="export-form">
                     <div class="grid">
                         <div class="form-group">
-                            <label>赛季</label>
+                            <label>season_id</label>
                             <select id="export-season">
                                 <option value="">当前赛季</option>
                             </select>
@@ -809,7 +816,7 @@
             <div class="card">
                 <h2>赛季管理</h2>
                 <div class="form-group">
-                    <label>赛季 ID</label>
+                    <label>season_id</label>
                     <input type="text" id="season-input" placeholder="例如: ss12">
                 </div>
                 <div class="form-group">
