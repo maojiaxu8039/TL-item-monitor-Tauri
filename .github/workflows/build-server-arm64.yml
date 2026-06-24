@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     if: |
       !contains(github.event.head_commit.message, '[skip ci]') &&
       !contains(github.event.head_commit.message, '[ci skip]') &&
@@ -29,12 +29,15 @@ jobs:
         with:
           target: aarch64-unknown-linux-gnu
 
-      - name: Install ARM64 交叉编译工具链
+      - name: Install ARM64 target
+        run: rustup target add aarch64-unknown-linux-gnu
+
+      - name: Install cross compilation toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
 
-      - name: 交叉编译 ARM64 二进制
+      - name: Build server binary (ARM64)
         env:
           CARGO_INCREMENTAL: 0
           CARGO_PROFILE_RELEASE_LTO: "false"
@@ -43,16 +46,16 @@ jobs:
           CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
         run: |
           cd server-standalone
-          cargo build --release --target aarch64-unknown-linux-gnu
+          cargo build --release --target aarch64-unknown-linux-gnu --no-default-features
 
-      - name: 验证二进制
+      - name: Verify build output
         run: |
           cd server-standalone
           file target/aarch64-unknown-linux-gnu/release/tl-monitor-server
           ls -lh target/aarch64-unknown-linux-gnu/release/tl-monitor-server
           aarch64-linux-gnu-readelf -h target/aarch64-unknown-linux-gnu/release/tl-monitor-server | grep -E '(Machine|Class|OS/ABI)'
 
-      - name: 打包部署文件
+      - name: Package deploy files
         run: |
           rm -rf server-standalone/dist
           mkdir -p server-standalone/dist/linux-arm64-server/resources
@@ -64,7 +67,7 @@ jobs:
           cd server-standalone/dist
           tar -czf linux-arm64-server.tar.gz linux-arm64-server
 
-      - name: 上传构建产物
+      - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: linux-arm64-server
@@ -73,7 +76,7 @@ jobs:
             server-standalone/dist/linux-arm64-server/**
           retention-days: 30
 
-      - name: 构建摘要
+      - name: Build summary
         if: github.ref == 'refs/heads/main'
         run: |
           echo "## ARM64 Server Build Complete" >> $GITHUB_STEP_SUMMARY
