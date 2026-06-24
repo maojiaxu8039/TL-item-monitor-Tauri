@@ -1,26 +1,56 @@
+version: "3.8"
+
+# docker-compose up -d
+# - 启动服务在 8080
+# - 数据持久化到宿主机 ./data
+# - logs 持久化到 ./logs
+# - resources 挂载 item mapping（容器化时避免 include_str! 跨项目耦合）
+#
+# 注: 首次启动前需把 src-tauri/resources/item_id_mapping.json 复制到 ./resources/
+#      或者构建镜像时通过 build arg 传入
+
 services:
-  torchscan-server:
+  tl-monitor:
     build:
       context: ..
       dockerfile: server-standalone/Dockerfile
-    image: torchscan-server:latest
-    container_name: torchscan-server
+    image: tl-monitor-server:latest
+    container_name: tl-monitor-server
     restart: unless-stopped
-    environment:
-      TL_ADMIN_PASSWORD: ${TL_ADMIN_PASSWORD:?请在 server-standalone/.env 中设置 TL_ADMIN_PASSWORD}
-      TL_CONFIG_PATH: /config/server_config.yaml
-      TL_DB_PATH: /data/tl_monitor.db
-      TL_RESOURCES_DIR: /app/resources
-      RUST_LOG: ${RUST_LOG:-info}
     ports:
-      - "${TL_HTTP_PORT:-38457}:8080"
-      - "${TL_WS_PORT:-38458}:8081"
+      - "8080:8080"
     volumes:
-      - ./config:/config
-      - ./data:/data
+      # 数据持久化
+      - ./data:/app/data
+      # 日志（可选, 方便宿主机直接查看）
+      - ./logs:/app/logs
+      # 资源映射（推荐:挂载而非 bake into 镜像,更新资源无需重新构建）
+      - ./resources:/app/resources:ro
+    environment:
+      # 环境变量覆盖配置文件
+      - TL_CONFIG_PATH=/app/data/server_config.yaml
+      - TL_DB_PATH=/app/data/tl-monitor.db
+      - TL_RESOURCES_DIR=/app/resources
+      - TL_LOG_LEVEL=info
+      - RUST_LOG=info
+      # 时区
+      - TZ=Asia/Shanghai
+    # 健康检查: 30s 一次,失败 3 次重启
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/live"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      start_period: 30s
+    # 资源限制: 防止资源耗尽
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    # 优雅关闭: 给 graceful_shutdown 30s 完成
+    stop_grace_period: 30s
+    stop_signal: SIGTERM

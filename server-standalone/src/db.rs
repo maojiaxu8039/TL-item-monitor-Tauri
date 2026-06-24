@@ -3,7 +3,7 @@ use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::scraper::{FirePriceSnapshot, Item};
 
@@ -1380,6 +1380,23 @@ pub async fn get_fast_sync_all(
         start.elapsed()
     );
 
+    // 慢查询检测：>500ms 升级 warn!,便于排查性能问题
+    let elapsed = start.elapsed();
+    let total_rows = rows_processed;
+    if elapsed > Duration::from_millis(500) {
+        warn!(
+            duration_ms = elapsed.as_millis() as u64,
+            rows = total_rows,
+            "get_fast_sync_all 慢查询"
+        );
+    } else {
+        debug!(
+            duration_ms = elapsed.as_millis() as u64,
+            rows = total_rows,
+            "get_fast_sync_all 完成"
+        );
+    }
+
     let mut items: Vec<FastItemData> = item_map.into_values().collect();
     items.sort_by(|a, b| a.item_id.cmp(&b.item_id));
 
@@ -1398,6 +1415,7 @@ pub async fn get_fast_sync_all(
     })
 }
 
+#[instrument(skip(pool), fields(season_id = %season_id, market_mode = %market_mode))]
 pub async fn get_latest_prices(
     pool: &SqlitePool,
     season_id: &str,
@@ -1575,6 +1593,7 @@ pub async fn get_items_sync_stats(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip(pool), fields(season_id = %season_id, market_mode = %market_mode, min_day, max_day))]
 pub async fn get_items_by_cursor(
     pool: &SqlitePool,
     season_id: &str,
@@ -1701,6 +1720,7 @@ pub async fn get_items_by_cursor(
     Ok(ItemsSyncResponse::new(records, next_cursor, remaining))
 }
 
+#[instrument(skip(pool), fields(season_id = %season_id, market_mode = %market_mode, min_day, max_day))]
 pub async fn get_items_daily_aggregate(
     pool: &SqlitePool,
     season_id: &str,

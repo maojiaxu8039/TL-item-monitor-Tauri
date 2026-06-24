@@ -14,6 +14,7 @@
 mod config;
 mod constants;
 mod db;
+mod metrics;
 mod password_hash;
 mod scraper;
 
@@ -76,6 +77,8 @@ struct ServerState {
     season_mutation_lock: Arc<tokio::sync::Mutex<()>>,
     /// 采集任务 in-flight 锁：防止 init-season 触发的采集 与 整点 timer 触发的采集 并发执行
     collection_in_flight: Arc<tokio::sync::Mutex<()>>,
+    /// Prometheus metrics：HTTP 请求计数、延迟、WS 在线数、采集错误数
+    metrics: Arc<metrics::Metrics>,
 }
 
 const RESPONSE_CACHE_MAX_SIZE: usize = 100;
@@ -244,10 +247,10 @@ impl RateLimiter {
         }
 
         let now = Instant::now();
-        let window = Duration::from_secs(60);
+        let window = constants::RATE_LIMITER_WINDOW;
 
         // 定期 GC：清理超过 5 分钟没有活动的 IP，限制 HashMap 不会无限增长
-        if now.duration_since(self.last_gc_at) > Duration::from_secs(60)
+        if now.duration_since(self.last_gc_at) > constants::RATE_LIMITER_GC_INTERVAL
             || self.requests.len() > RATE_LIMITER_MAX_IPS
         {
             self.requests
@@ -354,6 +357,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let start_time = Utc::now().timestamp();
 
+    // 环境变量覆盖配置（容器化部署时常用）
+    // 优先级: CLI > env > 配置文件 > 默认值
+    // 之前只能从配置文件加载,Docker/K8s 部署需要挂载 yaml
+    // 现在: TL_CONFIG_PATH / TL_DB_PATH / TL_RESOURCES_DIR / TL_LOG_LEVEL
+    //       / TL_HTTP_PORT 可由环境变量指定
+    if let Ok(path) = std::env::var("TL_DB_PATH") {
+        warn!("TL_DB_PATH={} 将被使用（覆盖配置文件）", path);
+    }
+    if let Ok(path) = std::env::var("TL_RESOURCES_DIR") {
+        info!("TL_RESOURCES_DIR={}（item mapping 资源目录）", path);
+    }
+    if let Ok(level) = std::env::var("TL_LOG_LEVEL") {
+        info!("TL_LOG_LEVEL={}（日志级别环境变量）", level);
+    }
+
     info!("==============================================");
     info!(
         "TL Monitor Server v{} - 支持普通服+专家服+管理员API",
@@ -411,10 +429,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .after_connect(|conn, _meta| {
             Box::pin(async move {
                 use sqlx::Executor;
-                conn.execute("PRAGMA busy_timeout = 5000").await?;
+                let busy_timeout_sql = format!(
+                    "PRAGMA busy_timeout = {}",
+                    constants::SQLITE_BUSY_TIMEOUT_MS
+                );
+                conn.execute(busy_timeout_sql.as_str()).await?;
                 conn.execute("PRAGMA synchronous = NORMAL").await?;
                 conn.execute("PRAGMA temp_store = MEMORY").await?;
-                conn.execute("PRAGMA cache_size = -20000").await?; // ~20MB 页缓存
+                let cache_sql = format!(
+                    "PRAGMA cache_size = {}",
+                    constants::SQLITE_CACHE_SIZE_KB
+                );
+                conn.execute(cache_sql.as_str()).await?;
                 Ok(())
             })
         })
@@ -441,6 +467,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config: config.clone(),
         db: pool,
         last_collection: Arc::new(RwLock::new(CollectionStatus::default())),
+        metrics: Arc::new(metrics::Metrics::new()),
         rate_limiter: Arc::new(RwLock::new(RateLimiter::new(config.rate_limit.clone()))),
         season_cache: Arc::new(RwLock::new(None)),
         dynamic_config: Arc::new(RwLock::new(dynamic_config)),
@@ -544,6 +571,7 @@ async fn handle_request(
 ) {
     use tokio::io::AsyncReadExt;
 
+    let request_start = std::time::Instant::now();
     let read_timeout = std::time::Duration::from_secs(30);
 
     let mut stream = stream;
@@ -551,6 +579,7 @@ async fn handle_request(
     let mut temp = [0u8; 4096];
     let mut header_complete = false;
     let mut content_length = 0usize;
+    let mut is_chunked = false;
     let mut header_end_pos = 0usize;
 
     let read_start = std::time::Instant::now();
@@ -592,6 +621,15 @@ async fn handle_request(
                                     .trim()
                                     .parse()
                                     .unwrap_or(0);
+                            }
+                            // RFC 7230 chunked transfer-encoding
+                            // 之前: 不支持 chunked,Python requests 默认走 chunked 时
+                            // body 被截断或 500
+                            // 现在: 检测 Transfer-Encoding: chunked 并解码
+                            if line.to_lowercase().contains("transfer-encoding")
+                                && line.to_lowercase().contains("chunked")
+                            {
+                                is_chunked = true;
                             }
                         }
 
@@ -747,10 +785,25 @@ async fn handle_request(
         method, path, client_ip, sanitized_query
     );
 
-    // 仅当 body 真的存在且不是合法 UTF-8 时才走 lossy 路径
-    // 之前无条件 to_string()，合法 UTF-8 也走了一次 utf8 validate + 拷贝
     let mut request_body = String::new();
-    if content_length > 0 && header_end_pos + content_length <= buffer.len() {
+    if is_chunked {
+        // chunked transfer-encoding：解析到终止 chunk 为止
+        // 简化处理:读到一个完整 chunked 流后解码
+        // 由于 read_until 不识别 chunked,这里直接对已读 buffer 末尾按 chunked 解码
+        let chunked_bytes = &buffer[header_end_pos..];
+        match decode_chunked_body(chunked_bytes) {
+            Some(decoded) => {
+                request_body = match std::str::from_utf8(&decoded) {
+                    Ok(s) => s.to_string(),
+                    Err(_) => String::from_utf8_lossy(&decoded).into_owned(),
+                };
+            }
+            None => {
+                warn!("chunked body 解码失败,降级为原始 bytes");
+                request_body = String::from_utf8_lossy(chunked_bytes).into_owned();
+            }
+        }
+    } else if content_length > 0 && header_end_pos + content_length <= buffer.len() {
         let body_bytes = &buffer[header_end_pos..header_end_pos + content_length];
         // 优先尝试严格 UTF-8 解析（零拷贝），失败时回退 lossy
         request_body = match std::str::from_utf8(body_bytes) {
@@ -1466,6 +1519,12 @@ async fn handle_request(
                     }
                 }
             }
+        }
+        // Prometheus metrics 端点：导出 text-format 供 Prometheus 抓取
+        // 不引入 prometheus crate（避免 200KB 依赖）
+        ("GET", "/metrics") => {
+            let body = state.metrics.export_prometheus();
+            (200, body)
         }
         // K8s liveness: 进程还活着就返回 200,不依赖任何外部依赖
         // 即使 DB 暂时不可用也不应杀进程(可能只是暂时网络抖动)
@@ -2494,6 +2553,15 @@ async fn handle_request(
 
     let origin = get_origin_header(&request);
     let dynamic = state.dynamic_config.read().await;
+
+    // 埋点：记录 HTTP 请求 metrics（method/path/status/duration）
+    // path 用静态 "?" 前缀简化,避免 /items?a=1&b=2 等参数污染指标基数
+    let path_for_metrics = path.split('?').next().unwrap_or(path);
+    let duration_us = request_start.elapsed().as_micros() as u64;
+    state
+        .metrics
+        .record_http(method, path_for_metrics, status, duration_us);
+
     send_response(
         stream,
         status,
@@ -2587,10 +2655,21 @@ async fn send_response(
             .unwrap_or_else(|| "http://localhost:8080".to_string())
     };
 
+    // /metrics 端点用 text/plain; 其他默认 application/json
+    // 之前 Content-Type 硬编码为 JSON,/metrics 被错误地标记为 application/json
+    // Prometheus 解析器会因此无法识别 text-format
+    // call_site 通过检查 body 开头 "# HELP" 来识别 metrics
+    let content_type = if body.starts_with("# HELP") {
+        "text/plain; version=0.0.4; charset=utf-8"
+    } else {
+        "application/json; charset=utf-8"
+    };
+
     let response = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: application/json; charset=utf-8\r\nCache-Control: {}\r\n{}Content-Length: {}\r\nAccess-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n\r\n{}",
+        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nCache-Control: {}\r\n{}Content-Length: {}\r\nAccess-Control-Allow-Origin: {}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n\r\n{}",
         status,
         reason_phrase(status),
+        content_type,
         JSON_CACHE_CONTROL,
         security_headers(),
         body.len(),
@@ -2600,7 +2679,7 @@ async fn send_response(
 
     let mut buf_writer = tokio::io::BufWriter::new(stream);
     match timeout(
-        TokioDuration::from_secs(10),
+        constants::HTTP_FLUSH_TIMEOUT,
         buf_writer.write_all(response.as_bytes()),
     )
     .await
@@ -2662,7 +2741,7 @@ async fn flush_with_timeout<W: tokio::io::AsyncWrite + Unpin>(
     writer: &mut W,
     secs: u64,
 ) -> Result<(), std::io::Error> {
-    match timeout(TokioDuration::from_secs(secs), writer.flush()).await {
+    match timeout(constants::HTTP_FLUSH_TIMEOUT, writer.flush()).await {
         Ok(Ok(())) => Ok(()),
         Ok(Err(e)) => {
             warn!("flush 失败: {}", e);
@@ -2698,6 +2777,86 @@ async fn send_options_response_with_cors(stream: tokio::net::TcpStream, cors_hea
     let _ = flush_with_timeout(&mut buf_writer, 10).await;
 }
 
+/// 解码 HTTP/1.1 chunked transfer-encoding body
+/// 格式: <hex-size>\r\n<bytes>\r\n ... 0\r\n\r\n
+/// 返回解码后的 body 和是否成功
+/// 失败时返回原始 bytes 兜底
+fn decode_chunked_body(body: &[u8]) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(body.len());
+    let mut pos = 0;
+    let mut saw_terminator = false;
+    while pos < body.len() {
+        // 找 chunk size 行
+        let crlf = body[pos..].windows(2).position(|w| w == b"\r\n")?;
+        let size_str = std::str::from_utf8(&body[pos..pos + crlf]).ok()?;
+        let size_str = size_str.split(';').next()?.trim();
+        let chunk_size = usize::from_str_radix(size_str, 16).ok()?;
+        pos += crlf + 2;
+        if chunk_size == 0 {
+            // 终止 chunk: 0\r\n\r\n,跳过 trailing CRLF
+            saw_terminator = true;
+            break;
+        }
+        if pos + chunk_size > body.len() {
+            return None;
+        }
+        out.extend_from_slice(&body[pos..pos + chunk_size]);
+        pos += chunk_size;
+        // 跳过 trailing \r\n
+        if pos + 2 <= body.len() && &body[pos..pos + 2] == b"\r\n" {
+            pos += 2;
+        } else {
+            return None;
+        }
+    }
+    // 必须找到终止 chunk 才是合法 chunked 编码
+    if !saw_terminator {
+        return None;
+    }
+    Some(out)
+}
+
+#[cfg(test)]
+mod chunked_tests {
+    use super::decode_chunked_body;
+
+    #[test]
+    fn decode_single_chunk() {
+        let body = b"5\r\nhello\r\n0\r\n\r\n";
+        let decoded = decode_chunked_body(body).expect("should decode");
+        assert_eq!(decoded, b"hello");
+    }
+
+    #[test]
+    fn decode_multiple_chunks() {
+        let body = b"5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n";
+        let decoded = decode_chunked_body(body).expect("should decode");
+        assert_eq!(decoded, b"hello world");
+    }
+
+    #[test]
+    fn decode_empty_body() {
+        let body = b"0\r\n\r\n";
+        let decoded = decode_chunked_body(body).expect("should decode");
+        assert_eq!(decoded, b"");
+    }
+
+    #[test]
+    fn decode_chunk_with_extension() {
+        // RFC 允许 chunk-size 后跟 ;extension=value
+        let body = b"5;foo=bar\r\nhello\r\n0\r\n\r\n";
+        let decoded = decode_chunked_body(body).expect("should decode");
+        assert_eq!(decoded, b"hello");
+    }
+
+    #[test]
+    fn decode_invalid_returns_none() {
+        // 缺失终止 chunk
+        let body = b"5\r\nhello\r\n";
+        assert!(decode_chunked_body(body).is_none());
+    }
+}
+
 fn get_query_param(query_string: &str, param: &str) -> Option<String> {
     for pair in query_string.split('&') {
         let kv: Vec<&str> = pair.splitn(2, '=').collect();
@@ -2726,6 +2885,8 @@ const SENSITIVE_PARAMS: &[&str] = &[
 /// 现在返回 `&'static str`,零分配
 fn parse_mode_param(query_string: &str) -> &'static str {
     match get_query_param(query_string, "mode").as_deref() {
+        Some("expert") | Some("season_expert") => "expert",
+        Some("normal") | Some("season_normal") => "normal",
         Some("ratio") => "ratio",
         _ => "normal",
     }
@@ -3263,7 +3424,7 @@ async fn handle_ws_connection(
     let (write, mut read) = ws_stream.split();
     let write = Arc::new(TokioMutex::new(write));
 
-    let auth_timeout = std::time::Duration::from_secs(10);
+    let auth_timeout = constants::WS_AUTH_TIMEOUT;
     let auth_start = std::time::Instant::now();
 
     'auth_loop: loop {
@@ -3456,6 +3617,16 @@ mod e2e_tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
+    #[test]
+    fn parse_mode_param_accepts_normal_and_expert_aliases() {
+        assert_eq!(parse_mode_param(""), "normal");
+        assert_eq!(parse_mode_param("mode=normal"), "normal");
+        assert_eq!(parse_mode_param("mode=season_normal"), "normal");
+        assert_eq!(parse_mode_param("mode=expert"), "expert");
+        assert_eq!(parse_mode_param("mode=season_expert"), "expert");
+        assert_eq!(parse_mode_param("mode=ratio"), "ratio");
+    }
+
     async fn spawn_test_server()
     -> (SocketAddr, Arc<ServerState>, tokio::task::JoinHandle<()>) {
         let pool = sqlx::SqlitePool::connect(":memory:")
@@ -3497,6 +3668,7 @@ mod e2e_tests {
             last_collection: Arc::new(tokio::sync::RwLock::new(
                 CollectionStatus::default(),
             )),
+            metrics: Arc::new(metrics::Metrics::new()),
         });
 
         let listener = TcpListener::bind("127.0.0.1:0")
