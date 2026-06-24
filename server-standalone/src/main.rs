@@ -400,12 +400,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let pool = SqlitePoolOptions::new()
-        .max_connections(16) // 从 4 提升到 16，避免并发读时锁竞争
+        .max_connections(20) // 20 平衡并发与系统资源
         .min_connections(2)
-        .acquire_timeout(std::time::Duration::from_secs(10)) // 拿不到连接 10s 后失败，避免请求无限挂起
-        .idle_timeout(Some(std::time::Duration::from_secs(600))) // 空闲 10 分钟回收
-        .max_lifetime(Some(std::time::Duration::from_secs(3600))) // 连接最多存活 1 小时
-        .test_before_acquire(true) // 拿出前 ping 一下，自动剔除死连接
+        .acquire_timeout(std::time::Duration::from_secs(3)) // 3s 快速失败,避免 HTTP 协程堆压
+        .idle_timeout(Some(std::time::Duration::from_secs(300))) // 空闲 5 分钟回收
+        .max_lifetime(Some(std::time::Duration::from_secs(1800))) // 连接最多 30 分钟
+        .test_before_acquire(false) // SQLite 本地访问极快,每次 ping 浪费
         // after_connect 钩子：每条新连接创建后立即设置 PRAGMA
         // 之前只对 pool 上 execute 的那条连接生效，新连接默认 synchronous=FULL 等
         .after_connect(|conn, _meta| {
@@ -414,6 +414,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 conn.execute("PRAGMA busy_timeout = 5000").await?;
                 conn.execute("PRAGMA synchronous = NORMAL").await?;
                 conn.execute("PRAGMA temp_store = MEMORY").await?;
+                conn.execute("PRAGMA cache_size = -20000").await?; // ~20MB 页缓存
                 Ok(())
             })
         })
@@ -674,7 +675,10 @@ async fn handle_request(
                 limiter.is_allowed(&client_ip)
             };
             if !allowed {
-                warn!("客户端 {} 请求过于频繁，已限流", client_ip);
+                // 用 info! 而非 warn!：限流是被攻击者/扫描器很容易触发的可预期事件
+                // warn! 在被盯上时会瞬间产生大量日志(>10k 条/分钟),淹没真实告警
+                // 高频触发的可预期事件应该用 info! 级别
+                info!(client_ip = %client_ip, "客户端请求过于频繁，已限流");
                 let response =
                     plain_http_response(429, "Too Many Requests", "Rate limit exceeded, try again");
                 let _ = tokio::io::AsyncWriteExt::write_all(
@@ -764,7 +768,8 @@ async fn handle_request(
                 if cors_list.iter().any(|o| o == orig) {
                     orig.clone()
                 } else {
-                    warn!("CORS origin rejected: {}", orig);
+                    // 用 info! 而非 warn!：CORS reject 是被扫描器很容易触发的可预期事件
+                    info!(origin = %orig, "CORS origin rejected");
                     return send_options_response(stream, "CORS origin not allowed").await;
                 }
             } else {
@@ -1161,7 +1166,7 @@ async fn handle_request(
         }
         ("GET", "/fire-history") => {
             let mode =
-                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+                parse_mode_param(query_string);
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(10_000)
@@ -1240,7 +1245,7 @@ async fn handle_request(
         }
         ("GET", "/items-history") => {
             let mode =
-                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+                parse_mode_param(query_string);
             let item_id = get_query_param(query_string, "item_id");
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
@@ -1301,7 +1306,7 @@ async fn handle_request(
         }
         ("GET", "/items-history-all") => {
             let mode =
-                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+                parse_mode_param(query_string);
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(10_000)
@@ -1390,7 +1395,7 @@ async fn handle_request(
         }
         ("GET", "/fire-history-all") => {
             let mode =
-                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+                parse_mode_param(query_string);
             let limit: i32 = get_query_param(query_string, "limit")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(10_000)
@@ -1462,7 +1467,22 @@ async fn handle_request(
                 }
             }
         }
-        ("GET", "/health") => {
+        // K8s liveness: 进程还活着就返回 200,不依赖任何外部依赖
+        // 即使 DB 暂时不可用也不应杀进程(可能只是暂时网络抖动)
+        ("GET", "/health/live") | ("GET", "/health") => {
+            let body = serde_json::to_string_pretty(&ApiResponse {
+                success: true,
+                data: Some(serde_json::json!({
+                    "status": "alive"
+                })),
+                error: None,
+            })
+            .unwrap_or_default();
+            (200, body)
+        }
+        // K8s readiness: 真正准备好服务流量
+        // 检查 DB 可用性 + 采集器最近活跃度
+        ("GET", "/health/ready") => {
             let health_start = std::time::Instant::now();
             match sqlx::query("SELECT 1").execute(&state.db).await {
                 Ok(_) => {
@@ -2122,7 +2142,7 @@ async fn handle_request(
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
             let mode =
-                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+                parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
                 "season_expert"
             } else {
@@ -2160,7 +2180,7 @@ async fn handle_request(
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
             let mode =
-                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+                parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
                 "season_expert"
             } else {
@@ -2193,7 +2213,7 @@ async fn handle_request(
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
             let mode =
-                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+                parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
                 "season_expert"
             } else {
@@ -2236,7 +2256,7 @@ async fn handle_request(
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
             let mode =
-                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+                parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
                 "season_expert"
             } else {
@@ -2294,7 +2314,7 @@ async fn handle_request(
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
             let mode =
-                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+                parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
                 "season_expert"
             } else {
@@ -2327,7 +2347,7 @@ async fn handle_request(
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
             let mode =
-                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+                parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
                 "season_expert"
             } else {
@@ -2419,7 +2439,7 @@ async fn handle_request(
             let season_id = get_query_param(query_string, "season")
                 .unwrap_or_else(|| state.config.season_id.clone());
             let mode =
-                get_query_param(query_string, "mode").unwrap_or_else(|| "normal".to_string());
+                parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
                 "season_expert"
             } else {
@@ -2556,7 +2576,8 @@ async fn send_response(
         if allowed_origins.iter().any(|o| o == orig) {
             orig.clone()
         } else {
-            warn!("CORS origin rejected: {}", orig);
+            // 用 info! 而非 warn!：CORS reject 是被扫描器很容易触发的可预期事件
+            info!(origin = %orig, "CORS origin rejected");
             return send_error_response(stream, 403, "CORS origin not allowed").await;
         }
     } else {
@@ -2637,6 +2658,23 @@ async fn send_error_response(stream: tokio::net::TcpStream, status: u16, message
     }
 }
 
+async fn flush_with_timeout<W: tokio::io::AsyncWrite + Unpin>(
+    writer: &mut W,
+    secs: u64,
+) -> Result<(), std::io::Error> {
+    match timeout(TokioDuration::from_secs(secs), writer.flush()).await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => {
+            warn!("flush 失败: {}", e);
+            Err(e)
+        }
+        Err(_) => {
+            warn!("flush 超时 ({s}s)", s = secs);
+            Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "flush timeout"))
+        }
+    }
+}
+
 async fn send_options_response(stream: tokio::net::TcpStream, message: &str) {
     let response = format!(
         "HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\n{}Content-Length: {}\r\n\r\n{}",
@@ -2646,7 +2684,7 @@ async fn send_options_response(stream: tokio::net::TcpStream, message: &str) {
     );
     let mut buf_writer = tokio::io::BufWriter::new(stream);
     let _ = buf_writer.write_all(response.as_bytes()).await;
-    let _ = buf_writer.flush().await;
+    let _ = flush_with_timeout(&mut buf_writer, 10).await;
 }
 
 async fn send_options_response_with_cors(stream: tokio::net::TcpStream, cors_header: &str) {
@@ -2657,7 +2695,7 @@ async fn send_options_response_with_cors(stream: tokio::net::TcpStream, cors_hea
     );
     let mut buf_writer = tokio::io::BufWriter::new(stream);
     let _ = buf_writer.write_all(response.as_bytes()).await;
-    let _ = buf_writer.flush().await;
+    let _ = flush_with_timeout(&mut buf_writer, 10).await;
 }
 
 fn get_query_param(query_string: &str, param: &str) -> Option<String> {
@@ -2682,6 +2720,16 @@ const SENSITIVE_PARAMS: &[&str] = &[
     "authorization",
     "auth",
 ];
+
+/// 解析 market mode query 参数，返回静态字符串避免重复分配
+/// 之前 11 处都 `unwrap_or_else(|| "normal".to_string())`,每次请求都触发 String 分配
+/// 现在返回 `&'static str`,零分配
+fn parse_mode_param(query_string: &str) -> &'static str {
+    match get_query_param(query_string, "mode").as_deref() {
+        Some("ratio") => "ratio",
+        _ => "normal",
+    }
+}
 
 fn sanitize_query_string(query_string: &str) -> String {
     if query_string.is_empty() {
@@ -3238,22 +3286,24 @@ async fn handle_ws_connection(
                         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
                             if json["type"].as_str() == Some("auth") {
                                 let password = json["password"].as_str().unwrap_or("");
+                                // 缓存 client_ip 字符串,避免 ws 认证分支里 1~2 次重复分配
+                                let client_ip_str = client_addr.ip().to_string();
                                 if password_hash::verify_password(password, &state.config.admin_password).is_ok() {
                                     info!("WebSocket {} 认证成功", client_addr);
                                     let mut w = write.lock().await;
                                     let _ = w.send(Message::Text(r#"{"type":"auth_success"}"#.into())).await;
-                                    db::insert_audit_log(&state.db, "ws-connect", &format!("WebSocket连接认证成功 from {}", client_addr), &client_addr.ip().to_string(), true).await;
+                                    db::insert_audit_log(&state.db, "ws-connect", &format!("WebSocket连接认证成功 from {}", client_addr), &client_ip_str, true).await;
                                     break 'auth_loop;
                                 } else {
-                                    warn!("WebSocket {} 认证失败: 密码错误", client_addr);
-                                    db::insert_audit_log(&state.db, "ws-connect", &format!("WebSocket连接认证失败 from {}: 密码错误", client_addr), &client_addr.ip().to_string(), false).await;
+                                    warn!(client_ip = %client_addr.ip(), "WebSocket 认证失败: 密码错误");
+                                    db::insert_audit_log(&state.db, "ws-connect", &format!("WebSocket连接认证失败 from {}: 密码错误", client_addr), &client_ip_str, false).await;
                                     let mut w = write.lock().await;
                                     let _ = w.send(Message::Text(r#"{"type":"auth_failed","error":"密码错误"}"#.into())).await;
                                     let _ = w.send(Message::Close(None)).await;
                                     return;
                                 }
                             } else {
-                                warn!("WebSocket {} 第一条消息不是认证消息", client_addr);
+                                warn!(client_ip = %client_addr.ip(), "WebSocket 第一条消息不是认证消息");
                                 let mut w = write.lock().await;
                                 let _ = w.send(Message::Text(r#"{"type":"auth_failed","error":"请先发送认证消息"}"#.into())).await;
                                 let _ = w.send(Message::Close(None)).await;
@@ -3590,8 +3640,23 @@ mod e2e_tests {
     #[tokio::test]
     async fn e2e_health_endpoint() {
         let (addr, _state, _handle) = spawn_test_server().await;
+        // /health 现在是 K8s liveness,只返回 alive,不做 DB 检查
         let (status, body) = http_get(addr, "/health", None).await;
         assert_eq!(status, 200, "/health should return 200, body: {}", body);
+        assert!(body.contains("alive"), "liveness should report alive");
+    }
+
+    #[tokio::test]
+    async fn e2e_health_ready_endpoint() {
+        let (addr, _state, _handle) = spawn_test_server().await;
+        // /health/ready 是 K8s readiness,检查 DB
+        let (status, body) = http_get(addr, "/health/ready", None).await;
+        assert_eq!(status, 200, "/health/ready should return 200, body: {}", body);
+        assert!(
+            body.contains("db_check") || body.contains("healthy"),
+            "readiness should include db_check, body: {}",
+            body
+        );
     }
 
     #[tokio::test]

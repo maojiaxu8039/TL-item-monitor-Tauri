@@ -719,6 +719,14 @@ pub async fn init_audit_log(pool: &SqlitePool) -> Result<(), String> {
     .await
     .ok();
 
+    // ip_address 索引：按 IP 检索审计（溯源/封禁 IP 用）
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_audit_ip ON admin_audit_log(ip_address)",
+    )
+    .execute(pool)
+    .await
+    .ok();
+
     Ok(())
 }
 

@@ -913,6 +913,16 @@ async fn scrape_via_node_script(mode: &str) -> Result<FirePriceSnapshot, String>
     let now = chrono::Utc::now();
     let now_timestamp = now.timestamp();
 
+    // 时间字段约定（双时区统一规范）：
+    // - scraped_at (DB INTEGER) = UTC milliseconds/seconds 抓取瞬间
+    //   用于: 增量同步查询、ORDER BY 排序、时间范围过滤
+    //   特点: 时区无关, 适合做算术运算
+    // - source_time (DB TEXT) = RFC3339 带 +08:00 时区后缀的北京时间字符串
+    //   用于: 用户展示、客户端"上次更新时间"显示
+    //   特点: 人类可读, 跨时区用户能理解
+    // 之前 source_time 不带时区, 跨时区用户看到错乱 1 小时
+    // 现在统一约定"DB 内 UTC, 展示层 BJT", 避免混用导致的 bug
+    //
     // source_time 显式标注 +08:00 时区后缀（RFC3339 风格）
     // 之前格式 "%Y/%m/%d %H:%M:%S" 没有时区信息，下游消费方会误以为是 UTC 或本地时间
     // 业务影响：客户端显示"游戏 16:00 更新"实际是抓取瞬间北京时间，
@@ -985,6 +995,57 @@ fn parse_qiandao_response(data: QiandaoResponse, mode: &str) -> Result<FirePrice
 
 fn round_to_4(value: f64) -> f64 {
     (value * 10000.0).round() / 10000.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn round_to_4_basic() {
+        assert_eq!(round_to_4(1.23456), 1.2346);
+        assert_eq!(round_to_4(1.23444), 1.2344);
+        assert_eq!(round_to_4(0.0), 0.0);
+        assert_eq!(round_to_4(100.0), 100.0);
+    }
+
+    #[test]
+    fn round_to_4_negative() {
+        assert_eq!(round_to_4(-1.23456), -1.2346);
+        assert_eq!(round_to_4(-0.00001), 0.0);
+    }
+
+    #[test]
+    fn round_to_4_huge() {
+        // 确保大数无溢出
+        let v = round_to_4(1.23456789012345e10);
+        assert!((v - 1.23456789012345e10).abs() < 1.0);
+    }
+
+    #[test]
+    fn round_to_4_ratio_price_calculation() {
+        // 业务场景：10000 / 3.0 = 3333.3333...
+        // 应该被 round_to_4 截到 4 位小数
+        let ratio_price = 3.0_f64;
+        let rmb_per_10k_fire = if ratio_price > 0.0 {
+            round_to_4(10000.0 / ratio_price)
+        } else {
+            0.0
+        };
+        assert_eq!(rmb_per_10k_fire, 3333.3333);
+    }
+
+    #[test]
+    fn round_to_4_zero_ratio_returns_zero() {
+        // ratio_price=0 时按 0 处理
+        let ratio_price = 0.0_f64;
+        let rmb_per_10k_fire = if ratio_price > 0.0 {
+            round_to_4(10000.0 / ratio_price)
+        } else {
+            0.0
+        };
+        assert_eq!(rmb_per_10k_fire, 0.0);
+    }
 }
 
 #[derive(Debug, Deserialize)]
