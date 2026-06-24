@@ -1,48 +1,37 @@
 version: "3.8"
 
-# docker-compose up -d
-# - 启动服务在 8080
-# - 数据持久化到宿主机 ./data
-# - logs 持久化到 ./logs
-# - resources 挂载 item mapping（容器化时避免 include_str! 跨项目耦合）
-#
-# 注: 首次启动前需把 src-tauri/resources/item_id_mapping.json 复制到 ./resources/
-#      或者构建镜像时通过 build arg 传入
+# 极空间部署：使用已有镜像 + volume 挂载
+# - 镜像: ghcr.io/maojiaxu8039/tl-monitor-server:latest (容器内 glibc 2.41)
+# - 二进制: 通过 volume 挂载覆盖容器内版本
+# - 数据持久化到宿主机
 
 services:
   tl-monitor:
-    build:
-      context: ..
-      dockerfile: server-standalone/Dockerfile
-    image: tl-monitor-server:latest
+    image: ghcr.io/maojiaxu8039/tl-monitor-server:latest
     container_name: tl-monitor-server
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "38457:8080"
     volumes:
-      # 数据持久化
-      - ./data:/app/data
-      # 日志（可选, 方便宿主机直接查看）
-      - ./logs:/app/logs
-      # 资源映射（推荐:挂载而非 bake into 镜像,更新资源无需重新构建）
-      - ./resources:/app/resources:ro
+      # 数据持久化（与部署文档一致）
+      - ./data:/data
+      - ./config:/config
+      # 覆盖容器内二进制（关键：volume 挂载新版本）
+      - ./tl-monitor-server:/tmp/tl-monitor-server
+      - ./resources:/resources
+    working_dir: /data
     environment:
-      # 环境变量覆盖配置文件
-      - TL_CONFIG_PATH=/app/data/server_config.yaml
-      - TL_DB_PATH=/app/data/tl-monitor.db
-      - TL_RESOURCES_DIR=/app/resources
-      - TL_LOG_LEVEL=info
       - RUST_LOG=info
-      # 时区
-      - TZ=Asia/Shanghai
-    # 健康检查: 30s 一次,失败 3 次重启
+      - TL_DB_PATH=/data/tl_monitor.db
+      - TL_CONFIG_PATH=/config/server_config.yaml
+      - TL_RESOURCES_DIR=/resources
+      - TL_ADMIN_PASSWORD=${TL_ADMIN_PASSWORD:-}
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/live"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s
-    # 资源限制: 防止资源耗尽
     deploy:
       resources:
         limits:
@@ -51,6 +40,6 @@ services:
         reservations:
           cpus: "0.5"
           memory: 256M
-    # 优雅关闭: 给 graceful_shutdown 30s 完成
     stop_grace_period: 30s
     stop_signal: SIGTERM
+    command: /tmp/tl-monitor-server

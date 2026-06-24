@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-mkdir -p config data
+mkdir -p data logs resources
 
 if [ ! -f .env ]; then
   cp .env.example .env
@@ -12,7 +12,18 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-docker compose --env-file .env -f docker-compose.yml build --pull
+# 拉取最新镜像
+echo "拉取最新镜像..."
+docker compose --env-file .env -f docker-compose.yml pull
+
+# 启动服务
+echo "启动服务..."
 docker compose --env-file .env -f docker-compose.yml up -d --remove-orphans
+
+# 查看状态
+echo "服务状态:"
 docker compose --env-file .env -f docker-compose.yml ps
-docker compose --env-file .env -f docker-compose.yml logs --tail=80 torchscan-server
+
+echo ""
+echo "最新日志:"
+docker compose --env-file .env -f docker-compose.yml logs --tail=50 tl-monitor

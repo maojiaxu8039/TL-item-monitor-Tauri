@@ -15,9 +15,6 @@ concurrency:
 
 jobs:
   build:
-    # ubuntu-20.04 (GLIBC 2.31) 确保与极空间 Debian 11 兼容
-    # 注意: free tier ubuntu-20.04 高峰期排队 1-8 小时, 无法绕过
-    # 解决方案: concurrency 已配置, 每次 push 只保留最新一次构建
     runs-on: ubuntu-20.04
     if: |
       !contains(github.event.head_commit.message, '[skip ci]') &&
@@ -32,15 +29,12 @@ jobs:
         with:
           target: aarch64-unknown-linux-gnu
 
-      - name: Install ARM64 target
-        run: rustup target add aarch64-unknown-linux-gnu
-
-      - name: Install cross compilation toolchain
+      - name: Install ARM64 交叉编译工具链
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
 
-      - name: Build server binary (ARM64)
+      - name: 交叉编译 ARM64 二进制
         env:
           CARGO_INCREMENTAL: 0
           CARGO_PROFILE_RELEASE_LTO: "false"
@@ -49,27 +43,28 @@ jobs:
           CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
         run: |
           cd server-standalone
-          cargo build --release --target aarch64-unknown-linux-gnu --no-default-features
+          cargo build --release --target aarch64-unknown-linux-gnu
 
-      - name: Verify build output
+      - name: 验证二进制
         run: |
           cd server-standalone
           file target/aarch64-unknown-linux-gnu/release/tl-monitor-server
           ls -lh target/aarch64-unknown-linux-gnu/release/tl-monitor-server
-          aarch64-linux-gnu-readelf -h target/aarch64-unknown-linux-gnu/release/tl-monitor-server
+          aarch64-linux-gnu-readelf -h target/aarch64-unknown-linux-gnu/release/tl-monitor-server | grep -E '(Machine|Class|OS/ABI)'
 
-      - name: Package deploy files
+      - name: 打包部署文件
         run: |
           rm -rf server-standalone/dist
           mkdir -p server-standalone/dist/linux-arm64-server/resources
           cp server-standalone/target/aarch64-unknown-linux-gnu/release/tl-monitor-server server-standalone/dist/linux-arm64-server/
           cp server-standalone/server_config.example.yaml server-standalone/dist/linux-arm64-server/server_config.example.yaml
+          cp src-tauri/resources/item_id_mapping.json server-standalone/dist/linux-arm64-server/resources/
           cp src-tauri/resources/qiandao_fire.cjs server-standalone/dist/linux-arm64-server/resources/
           cp src-tauri/resources/qiandao_fire.mjs server-standalone/dist/linux-arm64-server/resources/
           cd server-standalone/dist
           tar -czf linux-arm64-server.tar.gz linux-arm64-server
 
-      - name: Upload artifact
+      - name: 上传构建产物
         uses: actions/upload-artifact@v7
         with:
           name: linux-arm64-server
@@ -78,32 +73,18 @@ jobs:
             server-standalone/dist/linux-arm64-server/**
           retention-days: 30
 
-      - name: Build Docker image
-        run: |
-          cd server-standalone
-          docker buildx build \
-            --platform linux/arm64 \
-            -t ghcr.io/maojiaxu8039/tl-monitor-server:arm64 \
-            -t ghcr.io/maojiaxu8039/tl-monitor-server:latest-arm64 \
-            --load \
-            -f Dockerfile .
-
-      - name: Push Docker image to ghcr.io
-        if: github.event_name != 'pull_request'
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          docker push ghcr.io/maojiaxu8039/tl-monitor-server:arm64
-          docker push ghcr.io/maojiaxu8039/tl-monitor-server:latest-arm64
-
-      - name: Deployment summary
+      - name: 构建摘要
         if: github.ref == 'refs/heads/main'
         run: |
           echo "## ARM64 Server Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Artifact:** linux-arm64-server" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Docker Image:** ghcr.io/maojiaxu8039/tl-monitor-server:arm64" >> $GITHUB_STEP_SUMMARY
+          echo "**包含文件:**" >> $GITHUB_STEP_SUMMARY
+          echo "- `tl-monitor-server` - ARM64 二进制" >> $GITHUB_STEP_SUMMARY
+          echo "- `server_config.example.yaml` - 配置示例" >> $GITHUB_STEP_SUMMARY
+          echo "- `resources/` - 资源脚本" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**兼容性:** GLIBC 2.31 (ubuntu-20.04)" >> $GITHUB_STEP_SUMMARY
+          echo "**部署方式:** 下载 artifact → 上传到极空间 → volume 挂载覆盖容器内二进制 → 重启容器" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build ID: ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
