@@ -319,6 +319,73 @@ pub async fn get_current_season(pool: &SqlitePool) -> Option<String> {
     .flatten()
 }
 
+pub async fn get_current_or_recent_season_id(pool: &SqlitePool) -> Option<String> {
+    // 优先：is_current=1 的活跃赛季
+    let active: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM seasons WHERE is_current = 1 ORDER BY started_at DESC LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+
+    if active.is_some() {
+        return active;
+    }
+
+    // 兜底：最近归档的赛季
+    let recent: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM seasons WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+    recent
+}
+
+pub async fn get_season_archive_info(
+    pool: &SqlitePool,
+    season_id: &str,
+) -> Option<(i64, Option<i64>)> {
+    let row: Option<(i64, Option<i64>)> = sqlx::query_as(
+        "SELECT started_at, ended_at FROM seasons WHERE id = ? ORDER BY started_at DESC LIMIT 1",
+    )
+    .bind(season_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+    row
+}
+
+pub async fn get_current_season_archive_info(
+    pool: &SqlitePool,
+) -> Option<(i64, Option<i64>)> {
+    // 优先查 is_current=1 的活跃赛季
+    let active: Option<(i64, Option<i64>)> = sqlx::query_as(
+        "SELECT started_at, ended_at FROM seasons WHERE is_current = 1 ORDER BY started_at DESC LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+
+    if active.is_some() {
+        return active;
+    }
+
+    // 兜底：如果没有活跃赛季（刚归档完），返回"最近归档的赛季"
+    let recent: Option<(i64, Option<i64>)> = sqlx::query_as(
+        "SELECT started_at, ended_at FROM seasons WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+    recent
+}
+
 fn get_migration_started_at(season_id: &str) -> i64 {
     match season_id {
         "ss12" => 1776384000,
@@ -387,14 +454,15 @@ pub async fn run_migrations(pool: &SqlitePool, default_season: &str) -> Result<(
     }
 
     let active_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM seasons WHERE is_current = 1 AND ended_at IS NULL",
+        "SELECT COUNT(*) FROM seasons WHERE is_current = 1",
     )
     .fetch_one(pool)
     .await
     .unwrap_or(0);
 
     if active_count == 0 {
-        sqlx::query("UPDATE seasons SET is_current = 1, ended_at = NULL WHERE id = ?")
+        // 只把 is_current 设为 1；如果 ended_at 已经被手动设置过，保留（不强制重置为 NULL）
+        sqlx::query("UPDATE seasons SET is_current = 1 WHERE id = ?")
             .bind(default_season)
             .execute(pool)
             .await
@@ -1889,9 +1957,6 @@ pub async fn init_new_season(
         ));
     }
 
-    // 归档日期默认 = 开服日期 + 90 天 (90 * 86400 = 7776000 秒)
-    let ended_at = ended_at.unwrap_or(started_at + 7_776_000);
-
     // 自动归档当前赛季：仅当当前赛季尚未手动归档时
     // (如果 ended_at 已经被手动设置过，说明用户已经手动归档，跳过自动归档)
     let now_ts = chrono::Utc::now().timestamp();
@@ -1917,6 +1982,10 @@ pub async fn init_new_season(
         }
     }
 
+    // ended_at 处理：用户没传 = NULL (表示"未手动归档",前端会显示自动归档日期)
+    // 用户传了 = 存到数据库 (表示"用户已设置归档日期",前端会显示已手动归档)
+    let ended_at_to_store = ended_at;
+
     sqlx::query(
         r#"
         INSERT INTO seasons (id, name, started_at, ended_at, is_current)
@@ -1930,7 +1999,7 @@ pub async fn init_new_season(
     .bind(season_id)
     .bind(season_name)
     .bind(started_at)
-    .bind(ended_at)
+    .bind(ended_at_to_store)
     .execute(pool)
     .await
     .map_err(|e| format!("插入赛季记录失败: {}", e))?;
@@ -1946,8 +2015,8 @@ pub async fn init_new_season(
         .map_err(|e| format!("设置当前赛季失败: {}", e))?;
 
     info!(
-        "已设置 {} 为当前赛季 (started_at={}, ended_at={})",
-        season_id, started_at, ended_at
+        "已设置 {} 为当前赛季 (started_at={}, ended_at={:?})",
+        season_id, started_at, ended_at_to_store
     );
 
     let mut created_tables = Vec::new();

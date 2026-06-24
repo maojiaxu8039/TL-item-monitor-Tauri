@@ -553,10 +553,14 @@
                         <p>采集状态、记录数量和下次任务时间</p>
                     </div>
                 </div>
-                <div class="grid-2" id="stats-grid-top">
+                <div class="grid-3" id="stats-grid-top">
                     <div class="stat">
                         <div class="stat-label">赛季</div>
                         <div class="stat-value" id="stat-season">-</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">赛季归档日期</div>
+                        <div class="stat-value" id="stat-archive">-</div>
                     </div>
                     <div class="stat">
                         <div class="stat-label">下次采集</div>
@@ -887,10 +891,10 @@
 
         <div id="tab-audit" class="tab-content">
             <div class="card">
-                <h2>管理员操作审计日志</h2>
-                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <h2 style="display: flex; align-items: center; justify-content: space-between;">
+                    <span>管理员操作审计日志</span>
                     <button class="btn btn-primary" id="btn-refresh-audit" onclick="loadAuditLog()">刷新</button>
-                </div>
+                </h2>
                 <table class="table audit-table">
                     <thead>
                         <tr>

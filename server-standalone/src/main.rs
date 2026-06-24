@@ -258,6 +258,9 @@ struct ApiStatus {
     version: String,
     uptime_seconds: i64,
     season_id: String,
+    season_started_at: Option<i64>,
+    season_ended_at: Option<i64>,
+    season_auto_archive_at: Option<i64>,
     last_collection: CollectionStatus,
     next_collection: Option<i64>,
 }
@@ -698,11 +701,28 @@ async fn handle_request(
         ("GET", "/") | ("GET", "/status") => {
             let last_collection = state.last_collection.read().await.clone();
 
+            // 优先用数据库里 is_current=1 的赛季（fallback 到 config 默认值）
+            let display_season_id = db::get_current_or_recent_season_id(&state.db)
+                .await
+                .unwrap_or_else(|| state.config.season_id.clone());
+
+            // 查询该赛季的开服/归档时间
+            let (season_started_at, season_ended_at) =
+                match db::get_season_archive_info(&state.db, &display_season_id).await {
+                    Some((s, e)) => (Some(s), e),
+                    None => (None, None),
+                };
+            // 自动归档日期 = 开服日期 + 90 天 (90 * 86400 = 7_776_000 秒)
+            let season_auto_archive_at = season_started_at.map(|s| s + 7_776_000);
+
             let status = ApiStatus {
                 server: "TL Monitor Server".to_string(),
                 version: SERVER_VERSION.to_string(),
                 uptime_seconds: Utc::now().timestamp() - start_time,
-                season_id: state.config.season_id.clone(),
+                season_id: display_season_id,
+                season_started_at,
+                season_ended_at,
+                season_auto_archive_at,
                 last_collection,
                 next_collection: get_next_collection_time(),
             };
