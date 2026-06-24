@@ -4,7 +4,31 @@
 >
 > **适用版本**：TL Monitor Server v1.0.1+
 >
-> **最近更新**：2026-06-24
+> **最近更新**：2026-06-24（已实测通过：容器启动 + 健康检查通过 + 数据抓取正常）
+
+## ⚡ 30 秒速览（实测流程）
+
+如果你已经熟悉 Docker，最快的部署方式：
+
+```bash
+# 1. 上传新文件到 NAS 的 compose 目录
+rsync -avz -e "ssh -p 10039" \
+  tl-monitor-server \
+  15510607744@100.124.122.65:/zspace/zsrp/zdocker/compose_config/tl-monitor-server/
+
+rsync -avz -e "ssh -p 10039" \
+  resources/ \
+  15510607744@100.124.122.65:/zspace/zsrp/zdocker/compose_config/tl-monitor-server/resources/
+
+# 2. SSH 到 NAS，重启容器
+ssh -p 10039 15510607744@100.124.122.65
+sudo docker restart tl-monitor-server
+
+# 3. 验证
+curl http://localhost:38457/health
+```
+
+详细步骤见下文。
 
 ---
 
@@ -99,86 +123,212 @@ ldd (GNU libc) 2.31
 
 ## 3. 首次部署
 
-### 3.1 准备工作
+> ⚠️ **极空间 Z2Pro/Z4Pro 部署位置**（实测路径）：
+> 用户的 Z2Pro 用的是 `/zspace/zsrp/zdocker/compose_config/tl-monitor-server/`
+> 而不是 `/volume1/tl-monitor/`。极空间 Z2/Z2Pro 系列用 `/zspace`，部分 Z4+/Z5 用 `/volume1`。
+> 下面的命令按实测路径写，请根据你的设备调整。
 
-#### 3.1.1 在极空间创建部署目录
+### 3.1 准备部署目录
 
-通过 SSH 登录到极空间：
-
-```bash
-ssh -p 10039 your_user@100.124.122.65
-```
-
-创建目录结构：
+#### 3.1.1 SSH 登录极空间
 
 ```bash
-sudo mkdir -p /volume1/tl-monitor/{config,data,resources,logs}
-sudo chown -R $(whoami):$(id -gn) /volume1/tl-monitor
+ssh -p 10039 15510607744@100.124.122.65
 ```
 
-> 💡 **路径选择**：极空间用户主目录一般在 `/volume1/users/your_name/` 或共享文件夹下。生产环境推荐用 `/volume1/` 下的独立目录。
-
-#### 3.1.2 设置管理员密码（环境变量方式）
+#### 3.1.2 创建/确认部署目录结构
 
 ```bash
-# 在极空间 shell 中设置
-export TL_ADMIN_PASSWORD='YourStrongPassword123!'
+# 极空间 Z2Pro（实测）
+COMPOSE_DIR=/zspace/zsrp/zdocker/compose_config/tl-monitor-server
+sudo mkdir -p $COMPOSE_DIR/{data,config,resources,backups}
+
+# 或极空间 Z4+/Z5（如果有 /volume1）
+# COMPOSE_DIR=/volume1/tl-monitor
+# sudo mkdir -p $COMPOSE_DIR/{data,config,resources,backups}
+
+# 把目录所有者改为当前用户（避免 sudo 写入）
+sudo chown -R $(whoami):$(id -gn) $COMPOSE_DIR
+ls -la $COMPOSE_DIR/
 ```
 
-⚠️ **安全建议**：
-- 密码长度 ≥ 16 位
-- 包含大小写字母、数字、特殊字符
-- 不要用 `123456`、`admin` 等弱密码
+### 3.2 准备文件（从本地 macOS 上传到 NAS）
 
-#### 3.1.3 准备配置文件
+#### 3.2.1 下载 ARM64 部署包
+
+**方式 A：从 GitHub Actions 下载（推荐）**
 
 ```bash
-cd /volume1/tl-monitor/config
-# 通过 SFTP/控制台上传 server_config.example.yaml
-# 修改 admin_password 字段或留空使用环境变量
-nano server_config.yaml
+mkdir -p /tmp/tl-build
+gh run list --workflow=build-server-arm64.yml --limit 1
+gh run download <RUN_ID> --name linux-arm64-server --dir /tmp/tl-build
 ```
 
-**最小配置示例**：
+**方式 B：从 GitHub 网页下载**
+
+1. 访问 https://github.com/maojiaxu8039/TL-item-monitor-Tauri/actions/workflows/build-server-arm64.yml
+2. 点击最新成功的 build
+3. 滚动到底部 → Artifacts → 下载 `linux-arm64-server`
+
+#### 3.2.2 上传到 NAS
+
+```bash
+# 上传主二进制（关键：替代容器内旧版本）
+SSHPASS='你的密码' sshpass -e rsync -avz -e "ssh -p 10039" \
+  /tmp/tl-build/linux-arm64-server/tl-monitor-server \
+  15510607744@100.124.122.65:$COMPOSE_DIR/
+
+# 上传资源脚本
+SSHPASS='你的密码' sshpass -e rsync -avz -e "ssh -p 10039" \
+  /tmp/tl-build/linux-arm64-server/resources/ \
+  15510607744@100.124.122.65:$COMPOSE_DIR/resources/
+
+# 设置可执行权限
+ssh -p 10039 15510607744@100.124.122.65 "chmod +x $COMPOSE_DIR/tl-monitor-server"
+```
+
+### 3.3 准备 docker-compose.yml（实测配置）
+
+> 💡 **核心思路**：
+> - 用现有 `ghcr.io/maojiaxu8039/tl-monitor-server:latest` 镜像（已有 GLIBC 2.36+）
+> - **不重建镜像**，把新二进制和资源用 volume 挂载到容器内
+> - 数据库和配置用 volume 挂载实现持久化
+> - 这样部署只换文件，**不依赖 GitHub Actions 重新构建**
+
+将下面的内容保存到 `$COMPOSE_DIR/docker-compose.yml`：
 
 ```yaml
-admin_password: ""  # 生产环境留空，用 TL_ADMIN_PASSWORD 环境变量
+version: '3.8'
+services:
+  tl-monitor-server:
+    image: ghcr.io/maojiaxu8039/tl-monitor-server:latest
+    container_name: tl-monitor-server
+    restart: unless-stopped
+    ports:
+      - "38457:8080"
+    volumes:
+      # 数据卷：宿主机 ./data -> 容器 /data
+      - ./data:/data
+      # 配置卷：宿主机 ./config -> 容器 /config
+      - ./config:/config
+      # 用新二进制覆盖镜像里旧的 /tmp/tl-monitor-server
+      - ./tl-monitor-server:/tmp/tl-monitor-server
+      # 资源脚本
+      - ./resources:/resources
+    working_dir: /data
+    environment:
+      - RUST_LOG=info
+      - TL_DB_PATH=/data/tl_monitor.db
+      - TL_CONFIG_PATH=/config/server_config.yaml
+      - TL_RESOURCES_DIR=/resources
+      - TL_ADMIN_PASSWORD=452212889   # 你的管理员密码
+    command: ["/tmp/tl-monitor-server"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+```
+
+> 💡 **极空间 Docker Compose 兼容性提示**：
+> 部分极空间 Docker 版本 `docker compose` 子命令不可用，需用 `docker run` 直接启动（见 3.5 节）。
+
+### 3.4 准备配置文件
+
+```bash
+cd $COMPOSE_DIR
+# 如果没有现成配置，用 example 模板
+cp server_config.example.yaml config/server_config.yaml
+# 或从旧容器里 COPY 出来
+# sudo docker cp tl-monitor-server:/app/config/server_config.yaml config/
+```
+
+编辑 `config/server_config.yaml`（参考 `server_config.example.yaml`），重点字段：
+
+```yaml
 season_id: "ss12"
 http_port: 8080
+admin_password: ""  # 推荐留空，用 TL_ADMIN_PASSWORD 环境变量
 trust_proxy_headers: false
-
-scrape_modes:
-  - mode: "normal"
-    enabled: true
-  - mode: "expert"
-    enabled: true
-
-api_config:
-  qiandao_tag_id_normal: "1560053"
-  qiandao_spec_id_normal: "267416"
-  qiandao_tag_id_expert: "1560053"
-  qiandao_spec_id_expert: "267417"
-  luosi_season_id_normal: 1401
-  luosi_season_id_expert: 1431
-  etor_season_id_normal: 1401
-  etor_season_id_expert: 1431
-
-api_endpoints:
-  luosi: "http://115.231.176.101:8080"
-  qiandao: "https://api.qiandao.com"
-  qiandao_fire_endpoint: "/c2c-web/v1/common/currency-spu-price-list"
-
-rate_limit:
-  enabled: true
-  requests_per_minute: 60
-  burst_size: 10
-
-cors_allowed_origins:
-  - "http://localhost:5173"
-  - "http://localhost:8080"
-  - "http://100.124.122.65:38457"
-  - "tauri://localhost"
+# ...
 ```
+
+### 3.5 启动容器
+
+#### 3.5.1 先停掉旧容器
+
+```bash
+sudo docker stop tl-monitor-server
+sudo docker rm tl-monitor-server
+```
+
+#### 3.5.2 启动新容器（实测命令）
+
+**方式 A：`docker compose up -d`（如果支持）**
+
+```bash
+cd $COMPOSE_DIR
+sudo docker compose up -d
+```
+
+**方式 B：`docker run` 直接启动（极空间 Docker 部分版本必须用）**
+
+```bash
+cd $COMPOSE_DIR
+sudo docker run -d \
+  --name tl-monitor-server \
+  --restart unless-stopped \
+  -p 38457:8080 \
+  -v $(pwd)/data:/data \
+  -v $(pwd)/config:/config \
+  -v $(pwd)/tl-monitor-server:/tmp/tl-monitor-server \
+  -v $(pwd)/resources:/resources \
+  -w /data \
+  -e RUST_LOG=info \
+  -e TL_DB_PATH=/data/tl_monitor.db \
+  -e TL_CONFIG_PATH=/config/server_config.yaml \
+  -e TL_RESOURCES_DIR=/resources \
+  -e TL_ADMIN_PASSWORD=452212889 \
+  --health-cmd='curl -fsS http://localhost:8080/health' \
+  --health-interval=30s \
+  --health-timeout=5s \
+  --health-retries=3 \
+  --health-start-period=30s \
+  ghcr.io/maojiaxu8039/tl-monitor-server:latest \
+  /tmp/tl-monitor-server
+```
+
+#### 3.5.3 验证启动
+
+```bash
+# 查看容器状态
+sudo docker ps --filter 'name=tl-monitor' --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}'
+# 预期输出：Up X minutes (healthy)
+
+# 健康检查（容器内）
+sudo docker exec tl-monitor-server curl -s http://localhost:8080/health
+
+# 容器内日志
+sudo docker logs tl-monitor-server --tail 20
+# 预期看到：HTTP API 服务器监听中: http://0.0.0.0:8080
+#           [普通服] 测试采集完成: 火价=9.0692, 物品=2824, 成功=true
+```
+
+> ⚠️ **重要提示**：极空间宿主机**不**用 `curl http://localhost:38457/health` 检查（curl 工具被极空间限制），用 `docker exec` 进入容器检查。
+
+### 3.6 已实测通过的关键点
+
+| 检查项 | 实测结果 |
+|--------|----------|
+| 容器启动 | ✅ Up 47 seconds (healthy) |
+| 端口映射 | ✅ 0.0.0.0:38457->8080 |
+| 数据库持久化 | ✅ 387 MB SQLite 正常挂载 |
+| 健康检查 | ✅ HTTP 200 |
+| API 版本响应 | ✅ v2 + aarch64 |
+| 普通服抓取 | ✅ 2824 个物品，火价 9.0692 |
+| 专家服抓取 | ✅ 2718 个物品，火价 13.2308 |
+| 数据采集调度 | ✅ 整点抓取（2573 秒后）|
 
 ### 3.2 下载 ARM64 部署包
 
@@ -391,26 +541,92 @@ sudo systemctl status tl-monitor-server
 
 ## 4. 更新部署
 
-### 4.1 自动触发 GitHub Actions 构建
+> ⚠️ **核心原则：直接替换文件，不重新构建镜像**
+> 由于我们用 `ghcr.io/maojiaxu8039/tl-monitor-server:latest` 镜像 + volume 挂载新文件，
+> 每次更新只需要替换 `./tl-monitor-server` 和 `./resources/*` 然后重启容器。
+> 整个过程**不需要重新拉镜像**，**不需要重新构建**。
 
-每次 `main` 分支有 `server-standalone/**` 变更时，GitHub Actions 会自动构建 ARM64 产物。
+### 4.1 简化流程（实测最快方案）
 
-查看最新构建：
-
-```bash
-gh run list --workflow=build-server-arm64.yml --limit 5
-```
-
-### 4.2 手动触发构建
-
-如果 commit message 包含 `[skip ci]` 或以 `docs:` 开头，需要手动触发：
+#### 步骤 1：下载最新构建产物
 
 ```bash
-gh workflow run build-server-arm64.yml
-gh run list --workflow=build-server-arm64.yml --limit 1
+# 获取最新成功的 build
+RUN_ID=$(gh run list --workflow=build-server-arm64.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+echo "Build ID: $RUN_ID"
+
+# 下载到本地
+rm -rf /tmp/tl-build
+mkdir -p /tmp/tl-build
+gh run download $RUN_ID --name linux-arm64-server --dir /tmp/tl-build
+ls -lh /tmp/tl-build/linux-arm64-server/
 ```
 
-### 4.3 更新流程（蓝绿部署 - 零停机）
+#### 步骤 2：上传到 NAS
+
+```bash
+# 上传新二进制（覆盖旧版本）
+SSHPASS='你的密码' sshpass -e rsync -avz -e "ssh -p 10039" \
+  /tmp/tl-build/linux-arm64-server/tl-monitor-server \
+  15510607744@100.124.122.65:/zspace/zsrp/zdocker/compose_config/tl-monitor-server/
+
+# 上传新资源脚本
+SSHPASS='你的密码' sshpass -e rsync -avz -e "ssh -p 10039" \
+  /tmp/tl-build/linux-arm64-server/resources/ \
+  15510607744@100.124.122.65:/zspace/zsrp/zdocker/compose_config/tl-monitor-server/resources/
+```
+
+#### 步骤 3：重启容器
+
+```bash
+# 方式 A：SSH + docker restart
+ssh -p 10039 15510607744@100.124.122.65 "
+  cd /zspace/zsrp/zdocker/compose_config/tl-monitor-server
+  sudo docker restart tl-monitor-server
+"
+
+# 方式 B：完全重建（如果 mount 改了）
+ssh -p 10039 15510607744@100.124.122.65 "
+  cd /zspace/zsrp/zdocker/compose_config/tl-monitor-server
+  sudo docker stop tl-monitor-server
+  sudo docker rm tl-monitor-server
+  sudo docker run -d \\
+    --name tl-monitor-server \\
+    --restart unless-stopped \\
+    -p 38457:8080 \\
+    -v \$(pwd)/data:/data \\
+    -v \$(pwd)/config:/config \\
+    -v \$(pwd)/tl-monitor-server:/tmp/tl-monitor-server \\
+    -v \$(pwd)/resources:/resources \\
+    -w /data \\
+    -e RUST_LOG=info \\
+    -e TL_DB_PATH=/data/tl_monitor.db \\
+    -e TL_CONFIG_PATH=/config/server_config.yaml \\
+    -e TL_RESOURCES_DIR=/resources \\
+    -e TL_ADMIN_PASSWORD=452212889 \\
+    ghcr.io/maojiaxu8039/tl-monitor-server:latest \\
+    /tmp/tl-monitor-server
+"
+```
+
+#### 步骤 4：验证
+
+```bash
+# SSH 进去检查
+ssh -p 10039 15510607744@100.124.122.65 "
+  sudo docker ps --filter 'name=tl-monitor' --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+  sudo docker logs tl-monitor-server --tail 10
+"
+```
+
+预期输出：
+
+```
+NAMES               STATUS                    PORTS
+tl-monitor-server   Up X seconds (healthy)   0.0.0.0:38457->8080/tcp, :::38457->8080/tcp
+```
+
+### 4.2 蓝绿部署（零停机）
 
 #### 步骤 1：下载新版本到本地
 
@@ -425,101 +641,72 @@ gh run download <NEW_RUN_ID> --name linux-arm64-server --dir /tmp/tl-build
 # 上传新版本到 .new 文件（不停机）
 rsync -avz -e "ssh -p 10039" \
   /tmp/tl-build/linux-arm64-server/tl-monitor-server \
-  your_user@100.124.122.65:/volume1/tl-monitor/tl-monitor-server.new
+  15510607744@100.124.122.65:/zspace/zsrp/zdocker/compose_config/tl-monitor-server/tl-monitor-server.new
 
 # 上传新资源文件
 rsync -avz -e "ssh -p 10039" \
   /tmp/tl-build/linux-arm64-server/resources/ \
-  your_user@100.124.122.65:/tmp/tl-monitor-resources-new/
+  15510607744@100.124.122.65:/zspace/zsrp/zdocker/compose_config/tl-monitor-server/resources.new/
 ```
 
 #### 步骤 3：SSH 到极空间
 
 ```bash
-ssh -p 10039 your_user@100.124.122.65
+ssh -p 10039 15510607744@100.124.122.65
 ```
 
-#### 步骤 4：停止服务
+#### 步骤 4：备份当前版本
 
 ```bash
-# systemd 方式
-sudo systemctl stop tl-monitor-server
-
-# 或任务计划方式（极空间控制台停止）
+COMPOSE_DIR=/zspace/zsrp/zdocker/compose_config/tl-monitor-server
+cd $COMPOSE_DIR
+[ -f tl-monitor-server ] && mv tl-monitor-server tl-monitor-server.bak
+[ -d resources ] && cp -r resources resources.bak
 ```
 
-#### 步骤 5：备份当前版本
-
-```bash
-# 备份当前可执行文件
-mv /volume1/tl-monitor/tl-monitor-server \
-   /volume1/tl-monitor/tl-monitor-server.bak
-
-# 备份当前资源文件
-cp -r /volume1/tl-monitor/resources \
-      /volume1/tl-monitor/resources.bak
-```
-
-#### 步骤 6：部署新版本
+#### 步骤 5：部署新版本
 
 ```bash
 # 替换主程序
-mv /volume1/tl-monitor/tl-monitor-server.new \
-   /volume1/tl-monitor/tl-monitor-server
+mv tl-monitor-server.new tl-monitor-server
+chmod +x tl-monitor-server
 
-# 设置可执行权限
-chmod +x /volume1/tl-monitor/tl-monitor-server
-
-# 替换资源文件
-cp /tmp/tl-monitor-resources-new/qiandao_fire.* \
-   /volume1/tl-monitor/resources/
-
-# 清理临时文件
-rm -rf /tmp/tl-monitor-resources-new
+# 替换资源
+cp resources.new/qiandao_fire.* resources/
+rm -rf resources.new
 ```
 
-#### 步骤 7：启动服务
+#### 步骤 6：重启服务
 
 ```bash
-# systemd 方式
-sudo systemctl start tl-monitor-server
-sudo systemctl status tl-monitor-server
-
-# 或极空间控制台启动任务
+sudo docker restart tl-monitor-server
+# 或重新创建
+sudo docker stop tl-monitor-server
+sudo docker rm tl-monitor-server
+sudo docker run -d --name tl-monitor-server ... (见 3.5.2)
 ```
 
-#### 步骤 8：验证部署
+#### 步骤 7：验证部署
 
 ```bash
-# 健康检查
-curl http://localhost:8080/health
-
-# 版本检查
-curl http://localhost:8080/api/version
-
-# 远程访问（使用映射端口）
-curl http://100.124.122.65:38457/health
+sudo docker exec tl-monitor-server curl -s http://localhost:8080/health
 ```
 
-#### 步骤 9：回滚（如果新版本有问题）
+#### 步骤 8：回滚（如果新版本有问题）
 
 ```bash
-# 停止服务
-sudo systemctl stop tl-monitor-server
+cd $COMPOSE_DIR
+sudo docker stop tl-monitor-server
 
-# 恢复备份
-mv /volume1/tl-monitor/tl-monitor-server \
-   /volume1/tl-monitor/tl-monitor-server.failed
-mv /volume1/tl-monitor/tl-monitor-server.bak \
-   /volume1/tl-monitor/tl-monitor-server
+# 恢复二进制
+mv tl-monitor-server tl-monitor-server.failed
+mv tl-monitor-server.bak tl-monitor-server
 
 # 恢复资源
-rm -rf /volume1/tl-monitor/resources
-mv /volume1/tl-monitor/resources.bak \
-   /volume1/tl-monitor/resources
+rm -rf resources
+mv resources.bak resources
 
-# 启动服务
-sudo systemctl start tl-monitor-server
+sudo docker start tl-monitor-server
 ```
 
 ### 4.4 一键更新脚本（推荐保存到本地）
