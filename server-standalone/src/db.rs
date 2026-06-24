@@ -1875,6 +1875,7 @@ pub async fn init_new_season(
     season_id: &str,
     season_name: Option<&str>,
     started_at: Option<i64>,
+    ended_at: Option<i64>,
 ) -> Result<Vec<String>, String> {
     validate_season_id(season_id)?;
 
@@ -1888,19 +1889,48 @@ pub async fn init_new_season(
         ));
     }
 
+    // 归档日期默认 = 开服日期 + 90 天 (90 * 86400 = 7776000 秒)
+    let ended_at = ended_at.unwrap_or(started_at + 7_776_000);
+
+    // 自动归档当前赛季：仅当当前赛季尚未手动归档时
+    // (如果 ended_at 已经被手动设置过，说明用户已经手动归档，跳过自动归档)
+    let now_ts = chrono::Utc::now().timestamp();
+    let auto_archive_result = sqlx::query(
+        "UPDATE seasons SET ended_at = ?, is_current = 0
+         WHERE is_current = 1 AND id != ? AND ended_at IS NULL",
+    )
+    .bind(now_ts)
+    .bind(season_id)
+    .execute(pool)
+    .await;
+    match auto_archive_result {
+        Ok(r) if r.rows_affected() > 0 => {
+            info!(
+                "已自动归档当前赛季（因为尚未手动归档），新赛季 {} 将生效",
+                season_id
+            );
+        }
+        _ => {
+            info!(
+                "当前赛季已被手动归档过（或无活跃赛季），跳过自动归档步骤"
+            );
+        }
+    }
+
     sqlx::query(
         r#"
         INSERT INTO seasons (id, name, started_at, ended_at, is_current)
-        VALUES (?, ?, ?, NULL, 0)
+        VALUES (?, ?, ?, ?, 0)
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             started_at = excluded.started_at,
-            ended_at = NULL
+            ended_at = excluded.ended_at
         "#,
     )
     .bind(season_id)
     .bind(season_name)
     .bind(started_at)
+    .bind(ended_at)
     .execute(pool)
     .await
     .map_err(|e| format!("插入赛季记录失败: {}", e))?;
@@ -1909,13 +1939,16 @@ pub async fn init_new_season(
         .execute(pool)
         .await
         .ok();
-    sqlx::query("UPDATE seasons SET is_current = 1, ended_at = NULL WHERE id = ?")
+    sqlx::query("UPDATE seasons SET is_current = 1 WHERE id = ?")
         .bind(season_id)
         .execute(pool)
         .await
         .map_err(|e| format!("设置当前赛季失败: {}", e))?;
 
-    info!("已设置 {} 为当前赛季", season_id);
+    info!(
+        "已设置 {} 为当前赛季 (started_at={}, ended_at={})",
+        season_id, started_at, ended_at
+    );
 
     let mut created_tables = Vec::new();
 

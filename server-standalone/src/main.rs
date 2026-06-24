@@ -277,6 +277,8 @@ struct InitSeasonRequest {
     season_name: Option<String>,
     #[serde(default)]
     started_at: Option<i64>,
+    #[serde(default)]
+    ended_at: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1575,6 +1577,7 @@ async fn handle_request(
                             &req.season_id,
                             req.season_name.as_deref(),
                             req.started_at,
+                            req.ended_at,
                         )
                         .await
                         {

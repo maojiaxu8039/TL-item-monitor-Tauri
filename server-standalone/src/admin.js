@@ -127,10 +127,8 @@ async function authenticate() {
 
 function loadConfigFields() {
     if (!serverConfig) return;
-    document.getElementById('cfg-season-display').textContent = serverConfig.season_id || '-';
-    const headerSeason = document.getElementById('header-season');
-    if (headerSeason) headerSeason.textContent = serverConfig.season_id || '-';
-    document.getElementById('cfg-port-display').textContent = serverConfig.http_port || '-';
+    document.getElementById('cfg-season').value = serverConfig.season_id;
+    document.getElementById('cfg-port').value = serverConfig.http_port;
     document.getElementById('cfg-cors').value = (serverConfig.cors_allowed_origins || []).join(', ');
     document.getElementById('cfg-rate-limit').value = (serverConfig.rate_limit ? serverConfig.rate_limit.enabled : true).toString();
 
@@ -708,17 +706,24 @@ async function initSeason() {
     const season_name = document.getElementById('season-name-input').value.trim();
     const password = getPassword();
     if (!password) return;
-    
+
     const started_at_input = document.getElementById('season-started-at').value;
-    
+
     if (!started_at_input) {
         showAlert('error', '请选择开服日期（必填）');
         return;
     }
-    
+
     const started_at = Math.floor(new Date(started_at_input).getTime() / 1000);
 
-    const requestBody = { password, season_id, started_at, season_name };
+    // 归档日期：如果用户没填，默认 = 开服日期 + 90 天
+    const ended_at_input = document.getElementById('season-ended-at').value;
+    let ended_at = null;
+    if (ended_at_input) {
+        ended_at = Math.floor(new Date(ended_at_input).getTime() / 1000);
+    }
+
+    const requestBody = { password, season_id, started_at, ended_at, season_name };
     setBusy('btn-init-season', true, '初始化中...');
 
     try {
@@ -813,6 +818,22 @@ function addListeners() {
     document.getElementById('btn-export-csv').addEventListener('click', () => exportData('csv'));
     document.getElementById('btn-init-season').addEventListener('click', initSeason);
     document.getElementById('btn-archive-season').addEventListener('click', archiveSeason);
+
+    // 开服日期变化时，自动更新归档日期 = 开服日期 + 90 天（仅当归档日期为空时）
+    document.getElementById('season-started-at').addEventListener('change', (e) => {
+        const startedAtInput = e.target.value;
+        const endedAtInput = document.getElementById('season-ended-at');
+        if (startedAtInput && !endedAtInput.value) {
+            const d = new Date(startedAtInput);
+            d.setDate(d.getDate() + 90);
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            const hh = String(d.getHours()).padStart(2, '0');
+            const min = String(d.getMinutes()).padStart(2, '0');
+            endedAtInput.value = `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+        }
+    });
 
     document.getElementById('config-form').addEventListener('submit', async (e) => {
         e.preventDefault();
