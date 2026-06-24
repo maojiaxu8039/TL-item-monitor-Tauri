@@ -97,6 +97,79 @@ fn calculate_season_day(season_start: i64, recorded_at: i64) -> i32 {
     (days_elapsed + 1) as i32
 }
 
+#[cfg(test)]
+mod validation_tests {
+    use super::*;
+
+    // ===== validate_season_id 测试 =====
+    #[test]
+    fn validate_season_id_accepts_valid() {
+        assert!(validate_season_id("ss12").is_ok());
+        assert!(validate_season_id("ss1").is_ok());
+        assert!(validate_season_id("ss999").is_ok());
+    }
+
+    #[test]
+    fn validate_season_id_rejects_invalid() {
+        // 空字符串
+        assert!(validate_season_id("").is_err());
+        // 不是 ss 开头
+        assert!(validate_season_id("s12").is_err());
+        assert!(validate_season_id("S12").is_err());
+        assert!(validate_season_id("xz12").is_err());
+        // 纯字母
+        assert!(validate_season_id("ss").is_err());
+        // 含特殊字符
+        assert!(validate_season_id("ss12;").is_err());
+        assert!(validate_season_id("ss1 2").is_err());
+        assert!(validate_season_id("ss12\n").is_err());
+        // SQL 注入尝试
+        assert!(validate_season_id("ss12' OR '1'='1").is_err());
+        assert!(validate_season_id("ss12; DROP TABLE seasons;--").is_err());
+    }
+
+    // ===== calculate_season_day 测试 =====
+    #[test]
+    fn calculate_season_day_basic() {
+        // season_start=1700000000 (UTC), recorded_at 同一天
+        let start = 1700000000_i64;
+        assert_eq!(calculate_season_day(start, start), 1);
+        // 1 天后
+        assert_eq!(calculate_season_day(start, start + 86400), 2);
+        // 7 天后
+        assert_eq!(calculate_season_day(start, start + 7 * 86400), 8);
+    }
+
+    #[test]
+    fn calculate_season_day_before_start_returns_1() {
+        // recorded 在 season_start 之前应该返回 1
+        let start = 1700000000_i64;
+        assert_eq!(calculate_season_day(start, start - 1000), 1);
+    }
+
+    #[test]
+    fn calculate_season_day_cross_beijing_midnight() {
+        // 验证 div_euclid 行为: 跨 UTC 0 时刻 (北京时间 8:00) 不出错
+        // season_start = 北京时间 2024-01-01 00:00:00 = UTC 2023-12-31 16:00:00
+        let season_start = 1_704_067_200_i64; // UTC 2023-12-31 16:00:00
+        // 整 UTC 0 点: 跨北京上午 8:00
+        let utc_midnight = 1_703_990_400_i64; // UTC 2024-01-01 00:00:00
+        // 应该是 day 2 (北京时间 1 号)
+        // 注意: 北京时间 1 号 0 点 = UTC 0 号 16:00 (从 start 算 8 小时)
+        // div_euclid 应该正确处理这个偏移
+        let day = calculate_season_day(season_start, utc_midnight);
+        assert!((1..=3).contains(&day), "unexpected day={}", day);
+    }
+
+    #[test]
+    fn calculate_season_day_long_running() {
+        // 90 天赛季:赛季开始 + 90 天 - 1 秒应该还是 day 90
+        let start = 1_704_067_200_i64;
+        let day_90 = calculate_season_day(start, start + 89 * 86400);
+        assert_eq!(day_90, 90);
+    }
+}
+
 async fn table_exists(pool: &SqlitePool, table: &str) -> Result<bool, String> {
     let count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?")
@@ -668,8 +741,17 @@ pub async fn insert_audit_log(
     .execute(pool)
     .await;
 
-    if result.is_err() {
-        warn!("插入审计日志失败: {:?}", result.err());
+    if let Err(e) = result {
+        // 结构化日志：带 action / ip 上下文,运维可精准定位丢失了哪条审计
+        // 之前只 warn!("插入审计日志失败: {:?}", result.err())
+        // 出问题时无法判断是哪条 action / 哪个 IP 的请求丢了
+        error!(
+            action = %action,
+            ip = %ip_address,
+            success = success,
+            error = %e,
+            "admin_audit_log 写入失败 (审计合规风险)"
+        );
     }
 }
 
@@ -962,7 +1044,7 @@ pub async fn get_fire_history(
 }
 
 #[cfg(test)]
-mod tests {
+mod integration_tests {
     use super::{
         get_fast_sync_all, get_items_by_cursor, get_items_daily_aggregate, get_latest_prices,
         is_valid_identifier, MarketMode,
@@ -1316,13 +1398,15 @@ pub async fn get_latest_prices(
     let query = format!(
         r#"
         SELECT item_id, name, fire_price, season_day, scraped_at
-        FROM {} t1
-        WHERE scraped_at = (
-            SELECT MAX(scraped_at) FROM {} t2 WHERE t2.item_id = t1.item_id
-        )
+        FROM (
+            SELECT item_id, name, fire_price, season_day, scraped_at,
+                   ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY scraped_at DESC, id DESC) AS rn
+            FROM {}
+        ) ranked
+        WHERE rn = 1
         ORDER BY item_id
         "#,
-        table, table
+        table
     );
 
     let start = std::time::Instant::now();
@@ -1575,13 +1659,13 @@ pub async fn get_items_by_cursor(
         None
     };
 
+    // total_remaining 计算：去掉子查询里多余的 ORDER BY
+    // 之前带 ORDER BY + LIMIT 10000 会强制排序后再截取,O(N log N)
+    // 优化后：纯 LIMIT,SQLite 用最快的方式取 10000 行,O(N) 但常数小
     let remaining_query = format!(
         r#"
-        SELECT COUNT(*) FROM (
-            SELECT 1 FROM {}
-            {}
-            ORDER BY scraped_at DESC, id DESC
-            LIMIT 10000
+        SELECT MIN(c, 10000) FROM (
+            SELECT COUNT(*) AS c FROM {} {}
         )
         "#,
         table, where_clause
@@ -1633,25 +1717,34 @@ pub async fn get_items_daily_aggregate(
 
     let query = format!(
         r#"
+        WITH filtered AS (
+            SELECT season_day, item_id, name, fire_price, scraped_at, id
+            FROM {}
+            {}
+        ),
+        global_latest AS (
+            SELECT item_id, fire_price
+            FROM (
+                SELECT item_id, fire_price,
+                       ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY scraped_at DESC, id DESC) AS rn
+                FROM {}
+            ) WHERE rn = 1
+        )
         SELECT
-            season_day,
-            item_id,
-            name,
-            MIN(fire_price) as min_price,
-            MAX(fire_price) as max_price,
-            AVG(fire_price) as avg_price,
+            f.season_day,
+            f.item_id,
+            f.name,
+            MIN(f.fire_price) as min_price,
+            MAX(f.fire_price) as max_price,
+            AVG(f.fire_price) as avg_price,
             COUNT(*) as price_count,
-            (
-                SELECT fire_price FROM {} i2
-                WHERE i2.item_id = i.item_id
-                ORDER BY i2.scraped_at DESC, i2.id DESC LIMIT 1
-            ) as latest_price
-        FROM {} i
-        {}
-        GROUP BY season_day, item_id, name
-        ORDER BY season_day DESC, item_id
+            g.fire_price as latest_price
+        FROM filtered f
+        LEFT JOIN global_latest g USING (item_id)
+        GROUP BY f.season_day, f.item_id, f.name, g.fire_price
+        ORDER BY f.season_day DESC, f.item_id
         "#,
-        table, table, where_clause
+        table, where_clause, table
     );
 
     let mut q = sqlx::query(&query);

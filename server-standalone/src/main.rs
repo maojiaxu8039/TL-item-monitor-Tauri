@@ -95,7 +95,15 @@ fn security_headers() -> &'static str {
     "X-Content-Type-Options: nosniff\r\n\
      X-Frame-Options: DENY\r\n\
      Referrer-Policy: no-referrer\r\n\
-     Vary: Origin\r\n"
+     Vary: Origin\r\n\
+     Content-Security-Policy: default-src 'self'; \
+     script-src 'self' 'unsafe-inline'; \
+     style-src 'self' 'unsafe-inline'; \
+     img-src 'self' data: https:; \
+     connect-src 'self' ws: wss: http: https:; \
+     base-uri 'self'; \
+     form-action 'self'\r\n\
+     Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=()\r\n"
 }
 
 struct LruCache {

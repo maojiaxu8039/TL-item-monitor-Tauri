@@ -56,3 +56,73 @@ pub fn verify_password(input: &str, stored: &str) -> Result<(), String> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_hashed_detects_bcrypt_prefix() {
+        assert!(is_hashed(r"$2a$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJK"));
+        assert!(!is_hashed("plain_password"));
+        assert!(!is_hashed(""));
+    }
+
+    #[test]
+    fn constant_time_eq_basic() {
+        assert!(constant_time_eq(b"hello", b"hello"));
+        assert!(!constant_time_eq(b"hello", b"world"));
+        assert!(!constant_time_eq(b"hello", b"hell"));
+        assert!(!constant_time_eq(b"hello", b"helloo"));
+        assert!(!constant_time_eq(b"", b"x"));
+    }
+
+    #[test]
+    fn empty_stored_password_always_rejects() {
+        // 即使 input 也不为空,stored 为空时永远拒绝
+        let result = verify_password("any_password", "");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "密码错误");
+    }
+
+    #[test]
+    fn wrong_password_with_bcrypt_rejected() {
+        let stored = hash_password("correct_password").unwrap();
+        let result = verify_password("wrong_password", &stored);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "密码错误");
+    }
+
+    #[test]
+    fn correct_password_with_bcrypt_accepted() {
+        let stored = hash_password("correct_password").unwrap();
+        let result = verify_password("correct_password", &stored);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn plaintext_compat_correct_accepted() {
+        let result = verify_password("plain123", "plain123");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn plaintext_compat_wrong_rejected() {
+        let result = verify_password("plain123", "plain456");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn plaintext_compat_empty_input_rejected() {
+        let result = verify_password("", "plain");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn corrupted_hash_treated_as_error_not_panic() {
+        // is_hashed 会以 $2 开头但不是合法 bcrypt 哈希
+        // 预期:verify_password 返回 Err 而非 panic
+        let result = verify_password("any", r"$2x$99$invalid_hash");
+        assert!(result.is_err());
+    }
+}

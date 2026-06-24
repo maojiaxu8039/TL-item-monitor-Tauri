@@ -200,7 +200,55 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig, String> {
     }
     config.scrape_modes = normalize_scrape_modes(config.scrape_modes);
 
+    validate_config(&config);
+
     Ok(config)
+}
+
+/// 启动期配置校验：打印告警日志，但不阻塞启动（让运维有纠错机会）
+fn validate_config(config: &ServerConfig) {
+    use tracing::{error, warn};
+
+    if config.http_port == 0 {
+        error!("http_port=0 会导致服务绑定失败,请在 server_config.yaml 修改");
+    } else if config.http_port < 1024 && cfg!(unix) {
+        warn!("http_port={} 是特权端口(Linux),需要 root 权限", config.http_port);
+    }
+
+    if config.rate_limit.enabled && config.rate_limit.requests_per_minute == 0 {
+        error!(
+            "rate_limit.enabled=true 但 requests_per_minute=0,所有请求将被拒绝"
+        );
+    }
+
+    if config.admin_password.is_empty() {
+        warn!(
+            "admin_password 为空,所有管理 API 都会被拒绝 (verify_password 错误)"
+        );
+    }
+
+    if config.cors_allowed_origins.is_empty() {
+        warn!("cors_allowed_origins 为空,所有非白名单 origin 都会被拒绝");
+    }
+
+    // 检测占位/不可达 API
+    if config.api_endpoints.qiandao.contains("example.com")
+        || config.api_endpoints.qiandao.contains("placeholder")
+    {
+        warn!(
+            "qiandao api 端点仍是占位值 '{}',请修改为真实 API 地址",
+            config.api_endpoints.qiandao
+        );
+    }
+
+    if config.api_endpoints.luosi.contains("example.com")
+        || config.api_endpoints.luosi.contains("placeholder")
+    {
+        warn!(
+            "luosi api 端点仍是占位值 '{}',请修改为真实 API 地址",
+            config.api_endpoints.luosi
+        );
+    }
 }
 
 pub fn save_config<P: AsRef<Path>>(path: P, config: &ServerConfig) -> Result<(), String> {
