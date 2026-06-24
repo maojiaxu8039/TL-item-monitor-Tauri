@@ -78,6 +78,7 @@ impl Metrics {
             .fetch_add(1, Ordering::Relaxed);
     }
 
+    #[allow(dead_code)]
     pub fn inc_ws_clients(&self) {
         self.ws_clients.fetch_add(1, Ordering::Relaxed);
     }
@@ -86,6 +87,7 @@ impl Metrics {
         self.ws_clients.fetch_sub(1, Ordering::Relaxed);
     }
 
+    #[allow(dead_code)]
     pub fn inc_scrape_errors(&self) {
         self.scrape_errors.fetch_add(1, Ordering::Relaxed);
     }
