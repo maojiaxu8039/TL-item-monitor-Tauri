@@ -5,7 +5,6 @@ export function publicAssetPath(path: string) {
 export const iconAssetMap = {
   "market-monitor": publicAssetPath("torchscan/icons/original/market-monitor.png"),
   "item-tracking": publicAssetPath("torchscan/icons/original/item-tracking.png"),
-  "price-analysis": publicAssetPath("torchscan/icons/original/price-analysis.png"),
   alerts: publicAssetPath("torchscan/icons/original/alerts.png"),
   settings: publicAssetPath("torchscan/icons/original/settings.png"),
   "window-minimize": publicAssetPath("torchscan/icons/original/window-minimize.png"),

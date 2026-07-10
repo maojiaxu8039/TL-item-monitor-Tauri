@@ -2251,8 +2251,21 @@ async fn handle_request(
             let max_day: Option<i32> =
                 get_query_param(query_string, "max_day").and_then(|s| s.parse().ok());
 
-            match db::get_fast_sync_all(&state.db, &season_id, market_mode, min_day, max_day).await
-            {
+            let compact = get_query_param(query_string, "compact").as_deref() == Some("1");
+            let range_days: Option<i32> =
+                get_query_param(query_string, "days").and_then(|s| s.parse().ok());
+
+            let result = if compact {
+                db::get_fast_sync_compact(&state.db, &season_id, market_mode, range_days)
+                    .await
+                    .and_then(|data| serde_json::to_value(data).map_err(|e| e.to_string()))
+            } else {
+                db::get_fast_sync_all(&state.db, &season_id, market_mode, min_day, max_day)
+                    .await
+                    .and_then(|data| serde_json::to_value(data).map_err(|e| e.to_string()))
+            };
+
+            match result {
                 Ok(result) => {
                     let body = serde_json::to_string(&ApiResponse {
                         success: true,

@@ -109,6 +109,7 @@ export interface ItemHistoryRecord {
   market_mode: string;
   fire_price: number;
   scraped_at: number;
+  season_day?: number | null;
 }
 
 export interface ImportResp {
@@ -196,20 +197,6 @@ export interface FirePriceInsight {
   fire_trend_percent: number;
   best_buy_time: string;
   best_sell_time: string;
-}
-
-export interface ItemPriceInsight {
-  item_id: string;
-  item_name: string;
-  current_price: number;
-  avg_price: number;
-  min_price: number;
-  max_price: number;
-  price_trend: string;
-  trend_percent: number;
-  recommendation: string;
-  confidence: number;
-  reason: string;
 }
 
 export interface DbStats {
@@ -650,6 +637,24 @@ export const cmd = {
     }>;
   }) => invoke<{ success: boolean; message?: string }>("sync_items_batch", { params }),
 
+  fastSyncItems: (params: {
+    server_url: string;
+    season_id: string;
+    market_mode: string;
+    range_days: number;
+  }) => invoke<{
+    total_items: number;
+    total_days: number;
+    total_records: number;
+    inserted: number;
+    elapsed_ms: number;
+  }>("fast_sync_items", {
+    serverUrl: params.server_url,
+    seasonId: params.season_id,
+    marketMode: params.market_mode,
+    rangeDays: params.range_days,
+  }),
+
   getFirePriceCompare: (historySeason: string) =>
     invoke<FirePriceCompareResult>("get_fire_price_compare", { historySeason }),
 
@@ -682,8 +687,6 @@ export const cmd = {
     invoke<FirePriceChangeItem[]>("get_realtime_fire_changes", { seasonId, marketMode }),
   getFirePriceInsight: () =>
     invoke<FirePriceInsight>("get_fire_price_insight"),
-  getItemPriceInsights: () =>
-    invoke<ItemPriceInsight[]>("get_item_price_insights"),
   getSeasonSummary: () => invoke<SeasonSummary>("get_season_summary"),
   getSeasonTrends: (hours?: number) =>
     invoke<SeasonTrendHour[]>("get_season_trends", { hours }),
@@ -1080,6 +1083,10 @@ export interface StrategyDetail {
   difficulty: string;
   output_value: number;
   defense_value: number;
+  estimated_cost: number;
+  estimated_revenue_min: number;
+  estimated_revenue_max: number;
+  runs_per_hour: number;
   remark: string | null;
   created_at: number;
   updated_at: number;
@@ -1119,6 +1126,10 @@ export interface StrategyWithCosts {
   difficulty: string;
   output_value: number;
   defense_value: number;
+  estimated_cost: number;
+  estimated_revenue_min: number;
+  estimated_revenue_max: number;
+  runs_per_hour: number;
   remark: string | null;
   image_url: string | null;
   created_at: number;
@@ -1127,6 +1138,7 @@ export interface StrategyWithCosts {
   outputs: StrategyOutput[];
   total_cost_fire: number;
   total_output_value: number;
+  hourly_cost_fire: number;
   profit_ratio: number;
 }
 
@@ -1136,6 +1148,10 @@ export interface CreateStrategyRequest {
   difficulty: string;
   output_value: number;
   defense_value: number;
+  estimated_cost: number;
+  estimated_revenue_min: number;
+  estimated_revenue_max: number;
+  runs_per_hour: number;
   remark: string | null;
   image_url: string | null;
 }
@@ -1147,6 +1163,10 @@ export interface UpdateStrategyRequest {
   difficulty: string;
   output_value: number;
   defense_value: number;
+  estimated_cost: number;
+  estimated_revenue_min: number;
+  estimated_revenue_max: number;
+  runs_per_hour: number;
   remark: string | null;
   image_url: string | null;
 }

@@ -21,7 +21,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-const LATEST_SCHEMA_VERSION: i64 = 22;
+const LATEST_SCHEMA_VERSION: i64 = 24;
 const MAX_MIGRATION_BACKUPS: usize = 3;
 
 pub fn full_table_json_path() -> std::path::PathBuf {
@@ -322,6 +322,14 @@ async fn run_migrations(pool: &SqlitePool, db_path: &Path, db_existed: bool) -> 
     validate_database(pool).await?;
     optimize_database(pool).await?;
 
+    if let Err(e) = crate::db::repo_items::fix_corrupted_item_types(pool).await {
+        tracing::warn!("[STARTUP] Failed to fix corrupted item types: {}", e);
+    }
+
+    if let Err(e) = crate::db::repo_history::fix_bad_scraped_at_and_season_day(pool).await {
+        tracing::warn!("[STARTUP] Failed to fix bad scraped_at/season_day: {}", e);
+    }
+
     tracing::info!("Database migrations complete");
     Ok(())
 }
@@ -588,6 +596,26 @@ async fn run_legacy_migrations(pool: &SqlitePool, current_version: i64) -> Resul
             pool,
             22,
             include_str!("db/migrations/022_backfill_inventory_context.sql"),
+        )
+        .await?;
+    }
+
+    if current_version < 23 {
+        tracing::info!("Applying migration v23: add estimated cost/revenue to strategy_details");
+        apply_sql_migration(
+            pool,
+            23,
+            include_str!("db/migrations/023_add_estimated_cost_revenue.sql"),
+        )
+        .await?;
+    }
+
+    if current_version < 24 {
+        tracing::info!("Applying migration v24: add runs_per_hour to strategy_details");
+        apply_sql_migration(
+            pool,
+            24,
+            include_str!("db/migrations/024_add_runs_per_hour.sql"),
         )
         .await?;
     }
@@ -1307,6 +1335,10 @@ async fn ensure_strategy_detail_schema(pool: &SqlitePool) -> Result<(), String> 
     .map_err(|e| format!("Failed to ensure strategy_details table: {}", e))?;
 
     add_column_if_missing(pool, "strategy_details", "image_url", "TEXT DEFAULT ''").await?;
+    add_column_if_missing(pool, "strategy_details", "estimated_cost", "REAL NOT NULL DEFAULT 0").await?;
+    add_column_if_missing(pool, "strategy_details", "estimated_revenue_min", "REAL NOT NULL DEFAULT 0").await?;
+    add_column_if_missing(pool, "strategy_details", "estimated_revenue_max", "REAL NOT NULL DEFAULT 0").await?;
+    add_column_if_missing(pool, "strategy_details", "runs_per_hour", "REAL NOT NULL DEFAULT 0").await?;
 
     ensure_strategy_detail_child_tables(pool).await
 }

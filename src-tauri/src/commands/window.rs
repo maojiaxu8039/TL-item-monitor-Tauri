@@ -12,6 +12,8 @@ const MINI_DEFAULT_WIDTH: i32 = 360;
 const MINI_DEFAULT_HEIGHT: i32 = 540;
 const MINI_MIN_WIDTH: i32 = 320;
 const MINI_MIN_HEIGHT: i32 = 400;
+const MINI_MAX_WIDTH: i32 = 800;
+const MINI_MAX_HEIGHT: i32 = 1200;
 const MAIN_DEFAULT_WIDTH: i32 = 1280;
 const MAIN_DEFAULT_HEIGHT: i32 = 720;
 const MAIN_MIN_WIDTH: i32 = 900;
@@ -90,8 +92,33 @@ pub async fn set_mini_window_mode(
         if enabled {
             let desktop = state.config.read().desktop.clone();
             let opacity = desktop.mini_opacity;
-            let width = desktop.mini_width.max(MINI_MIN_WIDTH);
-            let height = desktop.mini_height.max(MINI_MIN_HEIGHT);
+            let raw_width = desktop.mini_width;
+            let raw_height = desktop.mini_height;
+            let width = if raw_width < MINI_MIN_WIDTH || raw_width > MINI_MAX_WIDTH {
+                tracing::warn!(
+                    "[WINDOW] mini_width {} out of range [{}, {}], using default {}",
+                    raw_width, MINI_MIN_WIDTH, MINI_MAX_WIDTH, MINI_DEFAULT_WIDTH
+                );
+                MINI_DEFAULT_WIDTH
+            } else {
+                raw_width
+            };
+            let height = if raw_height < MINI_MIN_HEIGHT || raw_height > MINI_MAX_HEIGHT {
+                tracing::warn!(
+                    "[WINDOW] mini_height {} out of range [{}, {}], using default {}",
+                    raw_height, MINI_MIN_HEIGHT, MINI_MAX_HEIGHT, MINI_DEFAULT_HEIGHT
+                );
+                MINI_DEFAULT_HEIGHT
+            } else {
+                raw_height
+            };
+            if width != raw_width || height != raw_height {
+                drop(desktop);
+                let mut config = state.config.write();
+                config.desktop.mini_width = width;
+                config.desktop.mini_height = height;
+                let _ = crate::core::config::save_config(&config);
+            }
             let _ = window.set_min_size(Some(tauri::Size::Logical(tauri::LogicalSize {
                 width: MINI_MIN_WIDTH as f64,
                 height: MINI_MIN_HEIGHT as f64,
@@ -174,10 +201,10 @@ pub async fn save_window_layout(
         config.desktop.mini_y = Some(v);
     }
     if let Some(v) = width {
-        config.desktop.mini_width = v.max(MINI_MIN_WIDTH);
+        config.desktop.mini_width = v.clamp(MINI_MIN_WIDTH, MINI_MAX_WIDTH);
     }
     if let Some(v) = height {
-        config.desktop.mini_height = v.max(MINI_MIN_HEIGHT);
+        config.desktop.mini_height = v.clamp(MINI_MIN_HEIGHT, MINI_MAX_HEIGHT);
     }
 
     if let Err(e) = crate::core::config::save_config(config) {

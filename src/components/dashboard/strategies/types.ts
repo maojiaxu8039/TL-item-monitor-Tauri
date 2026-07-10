@@ -8,6 +8,10 @@ export interface EditStrategyForm {
   difficulty: string;
   output_value: number;
   defense_value: number;
+  estimated_cost: number;
+  estimated_revenue_min: number;
+  estimated_revenue_max: number;
+  runs_per_hour: number;
   remark: string;
   image_url: string;
 }

@@ -439,7 +439,7 @@ export default function ImportExportPage() {
       />
 
       {backupInfo && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-4 gap-3">
           <MetricCard
             label="数据库大小"
             value={formatBytes(backupInfo.db_size_kb)}
@@ -506,7 +506,7 @@ export default function ImportExportPage() {
         </div>
       </Surface>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-2 gap-5">
         <Surface padding="none">
           <div className="px-5 py-4 border-b border-[var(--color-border-soft)] bg-[var(--color-panel-soft)]">
             <div className="flex items-center gap-2">

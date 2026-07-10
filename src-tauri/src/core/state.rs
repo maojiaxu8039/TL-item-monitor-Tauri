@@ -155,8 +155,8 @@ impl Default for DesktopSettings {
             free_layout: false,
             mini_opacity: 0.92,
             mini_always_on_top: true,
-            mini_width: 420,
-            mini_height: 620,
+            mini_width: 360,
+            mini_height: 540,
             mini_x: None,
             mini_y: None,
         }

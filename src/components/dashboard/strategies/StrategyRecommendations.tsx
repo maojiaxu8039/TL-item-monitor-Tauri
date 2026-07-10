@@ -129,10 +129,19 @@ export function StrategyRecommendations({
                 )}
                 {strategy && (
                   <div className="mt-3 pt-3 border-t border-[var(--color-border-soft)] space-y-3">
-                    <div className="flex items-center gap-4 text-xs text-[var(--color-text-subtle)]">
-                      <span>成本: <span className="text-[var(--color-danger)]">{strategy.total_cost_fire.toFixed(0)}火</span></span>
-                      <span>产出: <span className="text-[var(--color-success)]">{strategy.total_output_value.toFixed(0)}火</span></span>
+                    <div className="flex items-center gap-4 text-xs text-[var(--color-text-subtle)] flex-wrap">
+                      <span>单次成本: <span className="text-[var(--color-danger)]">{strategy.total_cost_fire.toFixed(0)}火</span></span>
+                      <span>核心受益参考: <span className="text-[var(--color-success)]">{strategy.total_output_value.toFixed(0)}火</span></span>
+                      {strategy.runs_per_hour > 0 && (
+                        <span>时薪成本: <span className="text-[var(--color-danger)]">{strategy.hourly_cost_fire.toFixed(0)}火/时</span></span>
+                      )}
+                      {strategy.estimated_revenue_max > 0 && (
+                        <span>预计收入: <span className="text-[var(--color-success)]">{strategy.estimated_revenue_min.toFixed(0)} ~ {strategy.estimated_revenue_max.toFixed(0)}火/时</span></span>
+                      )}
                       <span>难度: {strategy.difficulty}</span>
+                      {strategy.estimated_cost > 0 && strategy.total_cost_fire <= strategy.estimated_cost && (
+                        <span className="px-2 py-0.5 text-xs bg-[rgba(34,197,94,0.15)] text-[var(--color-success)] rounded-full font-medium">可刷</span>
+                      )}
                     </div>
                     {strategy.costs.length > 0 && (
                       <div>
@@ -156,7 +165,7 @@ export function StrategyRecommendations({
                       <div>
                         <div className="text-xs font-medium text-[var(--color-text)] mb-1.5 flex items-center gap-1">
                           <TrendingUp className="w-3 h-3 text-[var(--color-success)]" />
-                          产出收益
+                          核心受益参考
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {strategy.outputs.map((output) => (

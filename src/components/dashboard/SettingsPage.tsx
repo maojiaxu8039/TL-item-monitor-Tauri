@@ -979,8 +979,28 @@ export default function SettingsPage() {
               <div className="text-sm font-medium text-[var(--color-text)]">小窗口尺寸</div>
               <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">默认 360 x 540，最小 320 x 400</div>
             </div>
-            <div className="text-sm text-[var(--color-text)]">
-              360 × 540
+            <div className="flex items-center gap-3">
+              <div className="text-sm text-[var(--color-text)]">
+                {desktopSettings?.mini_width ?? 360} × {desktopSettings?.mini_height ?? 540}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  const resetWidth = 360;
+                  const resetHeight = 540;
+                  setDesktopSettings((prev) => prev ? { ...prev, mini_width: resetWidth, mini_height: resetHeight } : prev);
+                  cmd.saveWindowLayout(undefined, undefined, resetWidth, resetHeight).then(() => {
+                    toast.success("小窗口尺寸已重置为默认值", { position: 'bottom-right' });
+                    queryClient.invalidateQueries({ queryKey: ["config"] });
+                  }).catch((err) => {
+                    toast.error(`重置失败: ${err.message || err}`, { position: 'bottom-right' });
+                  });
+                }}
+              >
+                重置
+              </Button>
             </div>
           </div>
 

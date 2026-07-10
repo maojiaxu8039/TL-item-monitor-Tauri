@@ -17,6 +17,7 @@ pub struct ItemHistoryRecord {
     pub market_mode: String,
     pub fire_price: f64,
     pub scraped_at: i64,
+    pub season_day: Option<i32>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -230,7 +231,7 @@ pub async fn get_item_history(
         market_mode
     );
     let records = sqlx::query_as::<_, ItemHistoryRecord>(&format!(
-        "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at \
+        "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at, season_day \
              FROM {} \
              WHERE item_id = ? \
              ORDER BY scraped_at DESC LIMIT ?",
@@ -255,7 +256,7 @@ pub async fn get_all_item_history(
     TableResolver::validate(season_id, market_mode)?;
     let table = TableResolver::item_snapshots_table(season_id, market_mode);
     let records = sqlx::query_as::<_, ItemHistoryRecord>(&format!(
-        "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at \
+        "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at, season_day \
              FROM {} \
              WHERE scraped_at > ? \
              ORDER BY scraped_at DESC",
@@ -300,7 +301,7 @@ pub async fn get_item_history_by_day(
     );
 
     let records = sqlx::query_as::<_, ItemHistoryRecord>(&format!(
-        "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at \
+        "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at, season_day \
              FROM {} \
              WHERE item_id = ? AND scraped_at >= ? AND scraped_at < ? \
              ORDER BY scraped_at ASC",
@@ -730,6 +731,8 @@ pub struct ItemSnapshotBatchItem {
     pub item_type: Option<String>,
     pub fire_price: f64,
     pub scraped_at: i64,
+    /// 同步接口已经提供赛季日时直接采用，避免因两端赛季配置差异而错位。
+    pub season_day: Option<i32>,
 }
 
 pub async fn insert_item_snapshots_batch(
@@ -757,7 +760,9 @@ pub async fn insert_item_snapshots_batch(
             ));
 
         qb.push_values(chunk, |mut b, item| {
-            let season_day = calculate_season_day(item.scraped_at, season_start);
+            let season_day = item
+                .season_day
+                .unwrap_or_else(|| calculate_season_day(item.scraped_at, season_start));
             b.push_bind(&item.item_id)
                 .push_bind(&item.name)
                 .push_bind(item.item_type.clone().unwrap_or_default())
@@ -844,4 +849,102 @@ pub async fn get_season_trends(
     .await?;
 
     Ok(records)
+}
+
+/// Fix bad scraped_at values and NULL season_day in item_snapshots tables.
+/// - Records with scraped_at in milliseconds (> 1e12) get converted to seconds.
+/// - Records with scraped_at in 1970 range (< 1e9) get recalculated from season_day.
+/// - Records with NULL season_day get it calculated from scraped_at.
+pub async fn fix_bad_scraped_at_and_season_day(
+    pool: &SqlitePool,
+) -> Result<u64, AppError> {
+    let seasons: Vec<(String,)> = sqlx::query_as("SELECT id FROM seasons ORDER BY started_at DESC")
+        .fetch_all(pool)
+        .await?;
+    let modes = ["season_normal", "season_expert"];
+    let mut total_fixed = 0u64;
+
+    for (season_id,) in &seasons {
+        let season_start = match get_season_start_from_db(pool, season_id).await {
+            Ok(ts) => ts,
+            Err(_) => continue,
+        };
+
+        for mode in &modes {
+            if TableResolver::validate(season_id, mode).is_err() {
+                continue;
+            }
+            let table = TableResolver::item_snapshots_table(season_id, mode);
+
+            let rows: Vec<(i64, i64, Option<i32>)> = sqlx::query_as(&format!(
+                "SELECT rowid, scraped_at, season_day FROM {}",
+                table
+            ))
+            .fetch_all(pool)
+            .await?;
+
+            for (rowid, scraped_at, season_day) in &rows {
+                let mut new_scraped_at = *scraped_at;
+                let mut changed = false;
+
+                if *scraped_at > 1_000_000_000_000 {
+                    new_scraped_at = *scraped_at / 1000;
+                    changed = true;
+                } else if *scraped_at < 1_000_000_000 {
+                    if let Some(sd) = season_day {
+                        if *sd > 0 {
+                            new_scraped_at = season_start + (*sd as i64 - 1) * SECONDS_PER_DAY;
+                            changed = true;
+                        }
+                    }
+                }
+
+                let new_season_day = if changed {
+                    calculate_season_day(new_scraped_at, season_start)
+                } else {
+                    match season_day {
+                        Some(sd) if *sd > 0 && *sd < 100000 => *sd,
+                        _ => calculate_season_day(new_scraped_at, season_start),
+                    }
+                };
+
+                let day_changed = *season_day != Some(new_season_day);
+                if changed || day_changed {
+                    let result = sqlx::query(&format!(
+                        "UPDATE {} SET scraped_at = ?, season_day = ? WHERE rowid = ?",
+                        table
+                    ))
+                    .bind(new_scraped_at)
+                    .bind(new_season_day)
+                    .bind(rowid)
+                    .execute(pool)
+                    .await;
+
+                    match result {
+                        Ok(_) => { total_fixed += 1; }
+                        Err(e) => {
+                            let err_str = e.to_string();
+                            if err_str.contains("UNIQUE constraint") {
+                                sqlx::query(&format!(
+                                    "DELETE FROM {} WHERE rowid = ?",
+                                    table
+                                ))
+                                .bind(rowid)
+                                .execute(pool)
+                                .await?;
+                                total_fixed += 1;
+                            } else {
+                                return Err(AppError::Db(e.to_string()));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if total_fixed > 0 {
+        tracing::info!("[HISTORY-FIX] Fixed {} records with bad scraped_at/season_day", total_fixed);
+    }
+    Ok(total_fixed)
 }

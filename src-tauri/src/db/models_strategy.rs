@@ -9,6 +9,10 @@ pub struct StrategyDetail {
     pub difficulty: String,
     pub output_value: f64,
     pub defense_value: f64,
+    pub estimated_cost: f64,
+    pub estimated_revenue_min: f64,
+    pub estimated_revenue_max: f64,
+    pub runs_per_hour: f64,
     pub remark: Option<String>,
     pub image_url: Option<String>,
     pub created_at: i64,
@@ -52,6 +56,7 @@ pub struct StrategyWithCosts {
     pub outputs: Vec<StrategyOutput>,
     pub total_cost_fire: f64,
     pub total_output_value: f64,
+    pub hourly_cost_fire: f64,
     pub profit_ratio: f64,
 }
 
@@ -62,6 +67,10 @@ pub struct CreateStrategyRequest {
     pub difficulty: String,
     pub output_value: f64,
     pub defense_value: f64,
+    pub estimated_cost: f64,
+    pub estimated_revenue_min: f64,
+    pub estimated_revenue_max: f64,
+    pub runs_per_hour: f64,
     pub remark: Option<String>,
     pub image_url: Option<String>,
 }
@@ -74,6 +83,10 @@ pub struct UpdateStrategyRequest {
     pub difficulty: String,
     pub output_value: f64,
     pub defense_value: f64,
+    pub estimated_cost: f64,
+    pub estimated_revenue_min: f64,
+    pub estimated_revenue_max: f64,
+    pub runs_per_hour: f64,
     pub remark: Option<String>,
     pub image_url: Option<String>,
 }

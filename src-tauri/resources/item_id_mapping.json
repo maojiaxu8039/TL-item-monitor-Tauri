@@ -1911,7 +1911,7 @@
   },
   "7450": {
     "name": "坠星射击",
-    "type": "���助技能",
+    "type": "精密技能",
     "source": "etor"
   },
   "7451": {
@@ -3936,7 +3936,7 @@
   },
   "8604": {
     "name": "精密 律己",
-    "type": "精密���能",
+    "type": "精密技能",
     "source": "both"
   },
   "8605": {
@@ -9036,7 +9036,7 @@
   },
   "382218": {
     "name": "器官：灵魄之应",
-    "type": "核��器官-腰带",
+    "type": "核心器官-腰带",
     "source": "etor"
   },
   "382219": {
@@ -10811,7 +10811,7 @@
   },
   "support_skill:7735:magnificent:t0": {
     "name": "灰烬之锤：复燃（华贵）(T0)",
-    "type": "崇��华贵",
+    "type": "崇高华贵",
     "source": "tl"
   },
   "support_skill:7735:magnificent:t1": {
@@ -12766,7 +12766,7 @@
   },
   "support_skill:7873:sublime:t1": {
     "name": "召唤幽浮魅影：暗涌（崇高）(T1)",
-    "type": "崇��华贵",
+    "type": "崇高华贵",
     "source": "tl"
   },
   "support_skill:7873:sublime:t2": {
@@ -13091,7 +13091,7 @@
   },
   "support_skill:7895:magnificent:t0": {
     "name": "摄念夺识：凝神（华贵）(T0)",
-    "type": "崇高华���",
+    "type": "崇高华贵",
     "source": "tl"
   },
   "support_skill:7895:magnificent:t1": {
@@ -13941,7 +13941,7 @@
   },
   "support_skill:7956:magnificent:t2": {
     "name": "熔火贯注：传火（华贵）(T2)",
-    "type": "崇高华���",
+    "type": "崇高华贵",
     "source": "tl"
   },
   "support_skill:7957:magnificent:t0": {

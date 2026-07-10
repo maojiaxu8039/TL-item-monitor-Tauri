@@ -1,5 +1,6 @@
 use crate::commands::types::{DbStats, ItemsStats, OkResponse, SearchResult};
 use crate::core::state::AppState;
+use crate::db::repo_fire;
 use crate::db::repo_history;
 use crate::db::repo_item_realtime_prices;
 use crate::db::repo_items;
@@ -9,6 +10,7 @@ use crate::services::{
     desktop_notifications_enabled, format_worth_alert_notification, send_notification,
     WorthAlertNotificationItem,
 };
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 use tauri_plugin_notification::{NotificationExt, PermissionState};
@@ -450,6 +452,7 @@ pub async fn sync_items_batch(
             item_type: item.item_type.clone(),
             fire_price: item.price,
             scraped_at: item.recorded_at,
+            season_day: None,
         })
         .collect();
 
@@ -467,6 +470,161 @@ pub async fn sync_items_batch(
         ))),
         Err(e) => Err(e.to_string()),
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct FastSyncResult {
+    pub total_items: usize,
+    pub total_days: usize,
+    pub total_records: usize,
+    pub inserted: usize,
+    pub elapsed_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct FastSyncResponseData {
+    items: Vec<FastItemData>,
+    total_items: usize,
+    total_days: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct FastItemData {
+    item_id: String,
+    name: String,
+    daily_prices: Vec<DayPriceData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DayPriceData {
+    day: i32,
+    close: f64,
+    // 兼容尚未升级的独立服务器；新服务端会返回真实采集时间。
+    scraped_at: Option<i64>,
+}
+
+#[tauri::command]
+pub async fn fast_sync_items(
+    state: State<'_, Arc<AppState>>,
+    server_url: String,
+    season_id: String,
+    market_mode: String,
+    range_days: i64,
+) -> Result<FastSyncResult, String> {
+    let start = std::time::Instant::now();
+    let season_start = repo_fire::get_season_start_from_db(&state.db, &season_id)
+        .await
+        .map_err(|e| format!("读取赛季开始时间失败: {e}"))?;
+    let legacy_max_day = crate::core::constants::calculate_season_day(
+        chrono::Utc::now().timestamp(),
+        season_start,
+    ) as i64;
+    let legacy_min_day = if range_days > 0 {
+        (legacy_max_day - range_days + 1).max(1)
+    } else {
+        1
+    };
+
+    let mode = match market_mode.as_str() {
+        "season_expert" => "expert",
+        _ => "normal",
+    };
+
+    let url = format!(
+        "{}/sync-fast?season={}&mode={}&compact=1&days={}&min_day={}&max_day={}",
+        server_url.trim_end_matches('/'),
+        season_id,
+        mode,
+        range_days.max(0),
+        legacy_min_day,
+        legacy_max_day
+    );
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        // 整赛季响应仍可能较大；连接超时单独限制，避免把正常的数据传输误判为失败。
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| format!("创建HTTP客户端失败: {e}"))?;
+
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("连接服务器失败: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("服务器返回 HTTP {}", response.status()));
+    }
+
+    #[derive(Deserialize)]
+    struct ServerResponse {
+        success: bool,
+        data: Option<FastSyncResponseData>,
+        error: Option<String>,
+    }
+
+    let server_resp: ServerResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("解析服务器响应失败: {e}"))?;
+
+    if !server_resp.success {
+        return Err(server_resp.error.unwrap_or_else(|| "服务器返回失败".to_string()));
+    }
+
+    let sync_data = server_resp.data.ok_or("服务器返回数据为空")?;
+
+    let total_items = sync_data.total_items;
+    let total_days = sync_data.total_days;
+    let mut all_batch_items: Vec<repo_history::ItemSnapshotBatchItem> = Vec::new();
+
+    for item in &sync_data.items {
+        for dp in &item.daily_prices {
+            if dp.day <= 0 || !dp.close.is_finite() {
+                tracing::warn!(item_id = %item.item_id, day = dp.day, "忽略无效的快速同步记录");
+                continue;
+            }
+            let raw_ts = dp.scraped_at.filter(|t| *t > 0).unwrap_or(0);
+            let scraped_at = if raw_ts > 1_000_000_000_000 {
+                raw_ts / 1000
+            } else if raw_ts > 0 {
+                raw_ts
+            } else {
+                season_start
+                    + (dp.day as i64 - 1) * crate::core::constants::SECONDS_PER_DAY
+            };
+            all_batch_items.push(repo_history::ItemSnapshotBatchItem {
+                item_id: item.item_id.clone(),
+                name: item.name.clone(),
+                item_type: None,
+                fire_price: dp.close,
+                // 旧实现把 day * 86400 当时间戳，记录会落到 1970 年。
+                // 精简接口直接返回当天最后一次采集的真实时间戳和赛季日。
+                scraped_at,
+                season_day: Some(dp.day),
+            });
+        }
+    }
+
+    let total_records = all_batch_items.len();
+
+    let inserted = repo_history::insert_item_snapshots_batch(
+        &state.db,
+        &season_id,
+        &market_mode,
+        all_batch_items,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(FastSyncResult {
+        total_items,
+        total_days,
+        total_records,
+        inserted,
+        elapsed_ms: start.elapsed().as_millis() as u64,
+    })
 }
 
 #[tauri::command]

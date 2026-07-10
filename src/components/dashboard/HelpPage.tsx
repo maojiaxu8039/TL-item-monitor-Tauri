@@ -72,7 +72,7 @@ export default function HelpPage() {
           <Keyboard className="h-4 w-4 text-[var(--color-brand)]" />
           <h2 className="text-sm font-semibold text-[var(--color-text)]">键盘快捷键</h2>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           {shortcuts.map((shortcut, index) => (
             <div key={index} className="flex items-center justify-between p-2 rounded-lg bg-[var(--color-panel-soft)]">
               <div className="flex gap-1">

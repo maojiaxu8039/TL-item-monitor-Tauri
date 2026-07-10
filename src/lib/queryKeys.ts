@@ -22,7 +22,6 @@ export const queryKeys = {
   backupInfo: ["backup-info"] as const,
   config: ["config"] as const,
   dbStats: ["db-stats"] as const,
-  itemPriceInsights: ["item-price-insights"] as const,
   marketContext: ["market-context"] as const,
   miniWindowFeed: ["mini-window-feed"] as const,
   seasons: ["seasons"] as const,

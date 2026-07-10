@@ -12,7 +12,7 @@ fn parse_server_url(url: &str) -> Result<reqwest::Url, String> {
 // 全局复用 HTTP 客户端，避免每次请求重建 TCP/TLS 连接（连接池复用）
 static SERVER_CLIENT: LazyLock<Result<reqwest::Client, String>> = LazyLock::new(|| {
     reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(120))
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))
 });

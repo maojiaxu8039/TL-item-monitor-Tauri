@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
@@ -124,7 +125,9 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
       const dataMap = new Map<number, DayData>();
 
       currentData.forEach((record) => {
-        const day = Math.floor((record.scraped_at - currentSeasonStart) / 86400) + 1;
+        const day = record.season_day != null && record.season_day > 0
+          ? record.season_day
+          : Math.floor((record.scraped_at - currentSeasonStart) / 86400) + 1;
         if (!dataMap.has(day)) {
           dataMap.set(day, { day, current: null, history: null });
         }
@@ -132,7 +135,9 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
       });
 
       historyData.forEach((record) => {
-        const day = Math.floor((record.scraped_at - historySeasonStart) / 86400) + 1;
+        const day = record.season_day != null && record.season_day > 0
+          ? record.season_day
+          : Math.floor((record.scraped_at - historySeasonStart) / 86400) + 1;
         if (!dataMap.has(day)) {
           dataMap.set(day, { day, current: null, history: null });
         }
@@ -175,8 +180,8 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
     };
   }, [currentData, historyData]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
       <div className="flex max-h-[85vh] w-full max-w-[950px] flex-col overflow-hidden rounded-lg border border-[rgba(255,184,0,0.24)] bg-[var(--color-panel)] shadow-[var(--shadow-lg)]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border-soft)] px-6 py-4">
@@ -225,7 +230,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
 
         {/* Stats */}
         {stats && (
-          <div className="grid grid-cols-1 gap-3 bg-[rgba(255,255,255,0.018)] px-6 py-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-4 gap-3 bg-[rgba(255,255,255,0.018)] px-6 py-4">
             <div className="rounded-lg border border-[rgba(255,184,0,0.14)] bg-[var(--color-panel-soft)] p-3">
               <div className="mb-1 text-xs text-[var(--color-text-subtle)]">当前均价</div>
               <div className="text-lg font-bold text-[var(--color-brand-gold)]">
@@ -353,6 +358,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
             : `对比两个赛季全周期的每日均价走势`}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -294,6 +294,16 @@ async fn create_items_indexes(pool: &SqlitePool, table: &str) -> Result<(), Stri
     .await
     .map_err(|e| format!("创建 {} season_day/scraped_at 索引失败: {}", table, e))?;
 
+    // 快速同步先按赛季日过滤，再按物品/日期取最后一条记录。
+    // 这个索引避免在赛季后期为同步最近几天而扫描并排序整张快照表。
+    sqlx::query(&format!(
+        "CREATE INDEX IF NOT EXISTS idx_{}_day_item_scraped ON {}(season_day, item_id, scraped_at DESC)",
+        table, table
+    ))
+    .execute(pool)
+    .await
+    .map_err(|e| format!("创建 {} 快速同步索引失败: {}", table, e))?;
+
     Ok(())
 }
 
@@ -1054,8 +1064,8 @@ pub async fn get_fire_history(
 #[cfg(test)]
 mod integration_tests {
     use super::{
-        get_fast_sync_all, get_items_by_cursor, get_items_daily_aggregate, get_latest_prices,
-        is_valid_identifier, MarketMode,
+        get_fast_sync_all, get_fast_sync_compact, get_items_by_cursor,
+        get_items_daily_aggregate, get_latest_prices, is_valid_identifier, MarketMode,
     };
     use sqlx::sqlite::SqlitePoolOptions;
     use sqlx::SqlitePool;
@@ -1197,6 +1207,32 @@ mod integration_tests {
     }
 
     #[tokio::test]
+    async fn compact_fast_sync_uses_latest_server_day_and_close_price() {
+        let pool = test_pool_with_items().await;
+
+        let response = get_fast_sync_compact(&pool, "ss12", "normal", Some(2))
+            .await
+            .expect("compact fast sync should load the latest server days");
+
+        assert_eq!(response.total_days, 2);
+        assert_eq!(response.total_items, 2);
+        let item_a = response
+            .items
+            .iter()
+            .find(|item| item.item_id == "item_a")
+            .expect("item_a should exist");
+        assert_eq!(
+            item_a.daily_prices.iter().map(|price| price.day).collect::<Vec<_>>(),
+            vec![2, 3]
+        );
+        assert_eq!(item_a.daily_prices.last().map(|price| price.close), Some(300.0));
+        assert_eq!(
+            item_a.daily_prices.last().map(|price| price.scraped_at),
+            Some(3000)
+        );
+    }
+
+    #[tokio::test]
     async fn latest_prices_returns_latest_scraped_timestamp() {
         let pool = test_pool_with_items().await;
 
@@ -1235,6 +1271,146 @@ pub struct DayPrice {
     pub max: f64,
     pub avg: f64,
     pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FastSyncCompactResponse {
+    pub items: Vec<FastCompactItemData>,
+    pub total_items: i64,
+    pub total_days: i32,
+    pub generated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FastCompactItemData {
+    pub item_id: String,
+    pub name: String,
+    pub daily_prices: Vec<CompactDayPrice>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CompactDayPrice {
+    pub day: i32,
+    pub close: f64,
+    pub scraped_at: i64,
+}
+
+/// 快速同步专用的精简查询：每个物品每天只返回最后一条价格。
+/// 相比 get_fast_sync_all，不再把当天所有采样点读入 Rust 后聚合，能显著减少
+/// SQLite 扫描后的行传输、服务端内存和响应 JSON 体积。
+pub async fn get_fast_sync_compact(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    range_days: Option<i32>,
+) -> Result<FastSyncCompactResponse, String> {
+    validate_season_id(season_id)?;
+
+    let mode = MarketMode::parse(market_mode);
+    let table = mode.items_table(season_id);
+    if !table_exists(pool, &table).await? {
+        return Ok(FastSyncCompactResponse {
+            items: vec![],
+            total_items: 0,
+            total_days: 0,
+            generated_at: chrono::Utc::now().timestamp(),
+        });
+    }
+
+    let latest_day: i32 = sqlx::query_scalar(&format!(
+        "SELECT COALESCE(MAX(season_day), 0) FROM {}",
+        table
+    ))
+    .fetch_one(pool)
+    .await
+    .map_err(|e| format!("读取最新赛季日失败: {}", e))?;
+
+    if latest_day <= 0 {
+        return Ok(FastSyncCompactResponse {
+            items: vec![],
+            total_items: 0,
+            total_days: 0,
+            generated_at: chrono::Utc::now().timestamp(),
+        });
+    }
+
+    // None/0 表示整赛季；其他值从服务器实际拥有的最新一天向前计算。
+    let min_day = range_days
+        .filter(|days| *days > 0)
+        .map(|days| (latest_day - days + 1).max(1))
+        .unwrap_or(1);
+
+    let query = format!(
+        r#"
+        WITH latest AS (
+            SELECT item_id, season_day, MAX(scraped_at) AS scraped_at
+            FROM {table}
+            WHERE season_day BETWEEN ? AND ?
+            GROUP BY item_id, season_day
+        )
+        SELECT snapshots.item_id, snapshots.name, snapshots.season_day,
+               snapshots.fire_price, snapshots.scraped_at
+        FROM latest
+        INNER JOIN {table} AS snapshots
+            ON snapshots.item_id = latest.item_id
+           AND snapshots.season_day = latest.season_day
+           AND snapshots.scraped_at = latest.scraped_at
+        ORDER BY snapshots.item_id, snapshots.season_day
+        "#
+    );
+
+    let start = std::time::Instant::now();
+    let rows = sqlx::query(&query)
+        .bind(min_day)
+        .bind(latest_day)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("读取快速同步数据失败: {}", e))?;
+
+    let mut items: Vec<FastCompactItemData> = Vec::new();
+    for row in rows {
+        let item_id: String = row.get("item_id");
+        let name: String = row.get("name");
+        let day: i32 = row.get("season_day");
+        let close: f64 = row.get("fire_price");
+        let scraped_at: i64 = row.get("scraped_at");
+
+        if let Some(last) = items.last_mut().filter(|item| item.item_id == item_id) {
+            last.name = name;
+            last.daily_prices.push(CompactDayPrice {
+                day,
+                close,
+                scraped_at,
+            });
+        } else {
+            items.push(FastCompactItemData {
+                item_id,
+                name,
+                daily_prices: vec![CompactDayPrice {
+                    day,
+                    close,
+                    scraped_at,
+                }],
+            });
+        }
+    }
+
+    let total_items = items.len() as i64;
+    let total_days = latest_day - min_day + 1;
+    info!(
+        duration_ms = start.elapsed().as_millis() as u64,
+        records = items.iter().map(|item| item.daily_prices.len()).sum::<usize>(),
+        min_day,
+        max_day = latest_day,
+        "快速同步精简聚合完成"
+    );
+
+    Ok(FastSyncCompactResponse {
+        items,
+        total_items,
+        total_days,
+        generated_at: chrono::Utc::now().timestamp(),
+    })
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1343,6 +1519,7 @@ pub async fn get_fast_sync_all(
 
         if let Some(last) = item.daily_prices.last_mut() {
             if last.day == day {
+                last.avg = (last.avg * last.count as f64 + price) / (last.count + 1) as f64;
                 last.max = last.max.max(price);
                 last.min = last.min.min(price);
                 last.close = price;

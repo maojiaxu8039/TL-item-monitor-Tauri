@@ -8,7 +8,7 @@ pub async fn get_strategy_details(
     pool: &SqlitePool,
 ) -> Result<Vec<StrategyDetail>, crate::core::errors::AppError> {
     let strategies = sqlx::query_as::<_, StrategyDetail>(
-        "SELECT id, name, label, difficulty, output_value, defense_value, remark, COALESCE(image_url, '') as image_url, created_at, updated_at 
+        "SELECT id, name, label, difficulty, output_value, defense_value, estimated_cost, estimated_revenue_min, estimated_revenue_max, runs_per_hour, remark, COALESCE(image_url, '') as image_url, created_at, updated_at
          FROM strategy_details ORDER BY created_at DESC"
     )
     .fetch_all(pool)
@@ -21,7 +21,7 @@ pub async fn get_strategy_detail(
     id: &str,
 ) -> Result<Option<StrategyDetail>, crate::core::errors::AppError> {
     let strategy = sqlx::query_as::<_, StrategyDetail>(
-        "SELECT id, name, label, difficulty, output_value, defense_value, remark, COALESCE(image_url, '') as image_url, created_at, updated_at 
+        "SELECT id, name, label, difficulty, output_value, defense_value, estimated_cost, estimated_revenue_min, estimated_revenue_max, runs_per_hour, remark, COALESCE(image_url, '') as image_url, created_at, updated_at
          FROM strategy_details WHERE id = ?"
     )
     .bind(id)
@@ -38,8 +38,8 @@ pub async fn create_strategy_detail(
     let now = Utc::now().timestamp();
 
     sqlx::query(
-        "INSERT INTO strategy_details (id, name, label, difficulty, output_value, defense_value, remark, image_url, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO strategy_details (id, name, label, difficulty, output_value, defense_value, estimated_cost, estimated_revenue_min, estimated_revenue_max, runs_per_hour, remark, image_url, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&id)
     .bind(&req.name)
@@ -47,6 +47,10 @@ pub async fn create_strategy_detail(
     .bind(&req.difficulty)
     .bind(req.output_value)
     .bind(req.defense_value)
+    .bind(req.estimated_cost)
+    .bind(req.estimated_revenue_min)
+    .bind(req.estimated_revenue_max)
+    .bind(req.runs_per_hour)
     .bind(&req.remark)
     .bind(&req.image_url)
     .bind(now)
@@ -64,13 +68,17 @@ pub async fn update_strategy_detail(
     let now = Utc::now().timestamp();
 
     sqlx::query(
-        "UPDATE strategy_details SET name=?, label=?, difficulty=?, output_value=?, defense_value=?, remark=?, image_url=?, updated_at=? WHERE id=?"
+        "UPDATE strategy_details SET name=?, label=?, difficulty=?, output_value=?, defense_value=?, estimated_cost=?, estimated_revenue_min=?, estimated_revenue_max=?, runs_per_hour=?, remark=?, image_url=?, updated_at=? WHERE id=?"
     )
     .bind(&req.name)
     .bind(&req.label)
     .bind(&req.difficulty)
     .bind(req.output_value)
     .bind(req.defense_value)
+    .bind(req.estimated_cost)
+    .bind(req.estimated_revenue_min)
+    .bind(req.estimated_revenue_max)
+    .bind(req.runs_per_hour)
     .bind(&req.remark)
     .bind(&req.image_url)
     .bind(now)
@@ -428,11 +436,21 @@ pub async fn get_strategy_with_costs(
         total_output_value += current_price * output.count;
     }
 
-    let profit_ratio = if total_cost_fire > 0.0 {
+    let profit_ratio = if strategy.runs_per_hour > 0.0 && strategy.estimated_revenue_max > 0.0 {
+        let hourly_cost = total_cost_fire * strategy.runs_per_hour;
+        let avg_revenue = (strategy.estimated_revenue_min + strategy.estimated_revenue_max) / 2.0;
+        if hourly_cost > 0.0 {
+            (avg_revenue - hourly_cost) / hourly_cost * 100.0
+        } else {
+            0.0
+        }
+    } else if total_cost_fire > 0.0 {
         (total_output_value - total_cost_fire) / total_cost_fire * 100.0
     } else {
         0.0
     };
+
+    let hourly_cost_fire = total_cost_fire * strategy.runs_per_hour;
 
     Ok(Some(StrategyWithCosts {
         strategy,
@@ -440,6 +458,7 @@ pub async fn get_strategy_with_costs(
         outputs,
         total_cost_fire,
         total_output_value,
+        hourly_cost_fire,
         profit_ratio,
     }))
 }
@@ -488,11 +507,21 @@ pub async fn get_all_strategies_with_costs(
             total_output_value += current_price * output.count;
         }
 
-        let profit_ratio = if total_cost_fire > 0.0 {
+        let profit_ratio = if strategy.runs_per_hour > 0.0 && strategy.estimated_revenue_max > 0.0 {
+            let hourly_cost = total_cost_fire * strategy.runs_per_hour;
+            let avg_revenue = (strategy.estimated_revenue_min + strategy.estimated_revenue_max) / 2.0;
+            if hourly_cost > 0.0 {
+                (avg_revenue - hourly_cost) / hourly_cost * 100.0
+            } else {
+                0.0
+            }
+        } else if total_cost_fire > 0.0 {
             (total_output_value - total_cost_fire) / total_cost_fire * 100.0
         } else {
             0.0
         };
+
+        let hourly_cost_fire = total_cost_fire * strategy.runs_per_hour;
 
         result.push(StrategyWithCosts {
             strategy,
@@ -500,6 +529,7 @@ pub async fn get_all_strategies_with_costs(
             outputs,
             total_cost_fire,
             total_output_value,
+            hourly_cost_fire,
             profit_ratio,
         });
     }

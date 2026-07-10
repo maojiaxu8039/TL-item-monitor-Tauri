@@ -284,7 +284,7 @@ export default function DealsPage() {
   }), [fireChanges, settings.fall_threshold, settings.max_price]);
 
   return (
-    <PageShell size="xl" className="h-full flex flex-col">
+    <PageShell size="xl" className="space-y-5">
       <PageHeader
         title="捡漏出货"
         description={`实时监控物品价格变化，自动检测涨跌机会 | 出货≥${settings.rise_threshold}% 捡漏≥${settings.fall_threshold}%`}
@@ -303,9 +303,8 @@ export default function DealsPage() {
         }
       />
 
-      <div className="flex-1 overflow-hidden">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-full">
+      {isLoading ? (
+          <div className="flex items-center justify-center h-64">
             <div className="flex flex-col items-center gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-[var(--color-text-subtle)]" />
               <span className="text-[var(--color-text-subtle)]">加载中...</span>
@@ -318,14 +317,14 @@ export default function DealsPage() {
             icon={Package}
           />
         ) : (
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 xl:gap-6 xl:h-full">
-            <div className="flex flex-col overflow-hidden">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col">
               <div className="flex items-center gap-2 px-1 mb-3">
                 <TrendingUp className="w-5 h-5 text-[var(--color-danger)]" />
                 <h2 className="text-sm font-semibold text-[var(--color-text)]">出货机会</h2>
                 <StatusBadge variant="danger">涨幅≥{settings.rise_threshold}%</StatusBadge>
               </div>
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+              <div className="max-h-[calc(100vh-220px)] overflow-y-auto space-y-2 pr-1 scrollbar-thin">
                 {riseItems.length === 0 ? (
                   <EmptyState
                     title="暂无符合条件的上涨物品"
@@ -339,13 +338,13 @@ export default function DealsPage() {
               </div>
             </div>
 
-            <div className="flex flex-col overflow-hidden">
+            <div className="flex flex-col">
               <div className="flex items-center gap-2 px-1 mb-3">
                 <TrendingDown className="w-5 h-5 text-[var(--color-success)]" />
                 <h2 className="text-sm font-semibold text-[var(--color-text)]">捡漏机会</h2>
                 <StatusBadge variant="success">跌幅≥{settings.fall_threshold}%</StatusBadge>
               </div>
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+              <div className="max-h-[calc(100vh-220px)] overflow-y-auto space-y-2 pr-1 scrollbar-thin">
                 {fallItems.length === 0 ? (
                   <EmptyState
                     title="暂无符合条件的下跌物品"
@@ -360,7 +359,6 @@ export default function DealsPage() {
             </div>
           </div>
         )}
-      </div>
 
       {showSettings && (
         <SettingsModal

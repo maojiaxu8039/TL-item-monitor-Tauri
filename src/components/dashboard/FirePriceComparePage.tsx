@@ -325,7 +325,7 @@ export default function FirePriceComparePage() {
 
         <div className="mt-4 p-3 bg-[var(--color-panel-soft)] rounded-lg">
           <div className="text-xs text-[var(--color-text-subtle)] mb-2">赛季统计</div>
-          <div className="grid grid-cols-1 gap-3 text-center sm:grid-cols-3">
+          <div className="grid grid-cols-3 gap-3 text-center">
             <div>
               <div className="text-xs text-[var(--color-text-subtle)]">均价</div>
               <div className="text-sm font-medium text-[var(--color-text)]">¥{avgPrice.toFixed(2)}</div>
@@ -419,7 +419,7 @@ export default function FirePriceComparePage() {
         </div>
       </Surface>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-4 gap-3">
         <MetricCard
           label={`${currentSeason.toUpperCase()} 均价`}
           value={currentAvg > 0 ? (

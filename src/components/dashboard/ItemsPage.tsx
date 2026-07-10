@@ -475,7 +475,7 @@ export default function ItemsPage() {
       />
 
       {stats && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-4 gap-3">
           <MetricCard
             label="平均价格"
             value={stats.avgPrice.toFixed(2)}
@@ -515,7 +515,7 @@ export default function ItemsPage() {
         </div>
       )}
 
-      <Surface padding="md">
+      <Surface padding="sm">
         <Toolbar>
           <div className="flex flex-1 flex-wrap items-center gap-3">
             <DayRangeInput value={dayFilter} onChange={setDayFilter} />

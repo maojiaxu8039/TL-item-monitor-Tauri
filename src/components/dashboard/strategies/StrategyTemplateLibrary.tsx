@@ -14,7 +14,7 @@ export function StrategyTemplateLibrary({
   return (
     <div className="space-y-4">
       <p className="text-xs text-[var(--color-text-subtle)]">选择模板快速创建策略，降低录入成本</p>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         {strategyTemplates.map((template) => (
           <div
             key={template.id}

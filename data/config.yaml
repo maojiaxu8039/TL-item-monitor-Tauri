@@ -18,8 +18,8 @@ desktop:
   free_layout: false
   mini_opacity: 1.0
   mini_always_on_top: true
-  mini_width: 1680
-  mini_height: 2480
+  mini_width: 360
+  mini_height: 540
   mini_x: 270
   mini_y: 66
 notification:

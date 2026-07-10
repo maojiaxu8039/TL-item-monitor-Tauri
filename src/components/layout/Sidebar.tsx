@@ -24,7 +24,6 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "分析与策略",
     items: [
-      { id: "priceanalysis", label: "价格分析", icon: "price-analysis" },
       { id: "firecompare", label: "火价分析", icon: "fire-price" },
       { id: "strategies", label: "策略管理", icon: "strategies" },
       { id: "aianalysis", label: "AI分析", icon: "ai-analysis" },

@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react"
+import { useState, useEffect, useRef, type ReactNode } from "react"
 import { cmd, type InventoryPositionView, type InventoryBuyWatchView, type CreatePositionRequest, type CreateBuyWatchRequest, type UpdatePositionRequest, type UpdateBuyWatchRequest } from "@/lib/commands"
 
 interface ItemSuggestion {
@@ -154,7 +154,7 @@ export default function InventoryPage() {
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-4 gap-3">
           <Surface padding="md" className="bg-[var(--color-panel-soft)]">
             <div className="flex items-center gap-2 mb-2">
               <DollarSign className="w-4 h-4 text-[var(--color-text-subtle)]" />
@@ -505,6 +505,7 @@ function AddPositionDialog({
   const [loading, setLoading] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [suggestions, setSuggestions] = useState<ItemSuggestion[]>([])
+  const selectingRef = useRef(false)
 
   const searchQuery = useQuery({
     queryKey: queryKeys.inventory.itemSearch(itemName),
@@ -513,6 +514,10 @@ function AddPositionDialog({
   })
 
   useEffect(() => {
+    if (selectingRef.current) {
+      selectingRef.current = false
+      return
+    }
     if (searchQuery.data?.items && itemName.length >= 1) {
       const items = searchQuery.data.items.slice(0, 8).map(item => ({
         item_id: item.item_id,
@@ -527,8 +532,10 @@ function AddPositionDialog({
   }, [searchQuery.data, itemName])
 
   const handleSelectItem = (item: ItemSuggestion) => {
+    selectingRef.current = true
     setItemName(item.item_name)
     setItemId(item.item_id)
+    setSuggestions([])
     setShowSuggestions(false)
   }
 
@@ -903,6 +910,7 @@ function AddWatchDialog({
   const [loading, setLoading] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [suggestions, setSuggestions] = useState<ItemSuggestion[]>([])
+  const selectingRef = useRef(false)
 
   const searchQuery = useQuery({
     queryKey: queryKeys.inventory.buyWatchSearch(itemName),
@@ -911,6 +919,10 @@ function AddWatchDialog({
   })
 
   useEffect(() => {
+    if (selectingRef.current) {
+      selectingRef.current = false
+      return
+    }
     if (searchQuery.data?.items && itemName.length >= 1) {
       const items = searchQuery.data.items.slice(0, 8).map(item => ({
         item_id: item.item_id,
@@ -925,8 +937,10 @@ function AddWatchDialog({
   }, [searchQuery.data, itemName])
 
   const handleSelectItem = (item: ItemSuggestion) => {
+    selectingRef.current = true
     setItemName(item.item_name)
     setItemId(item.item_id)
+    setSuggestions([])
     setShowSuggestions(false)
   }
 

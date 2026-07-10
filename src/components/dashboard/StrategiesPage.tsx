@@ -61,6 +61,10 @@ export default function StrategiesPage() {
     difficulty: "普通",
     output_value: 0,
     defense_value: 0,
+    estimated_cost: 0,
+    estimated_revenue_min: 0,
+    estimated_revenue_max: 0,
+    runs_per_hour: 0,
     remark: "",
     image_url: "",
   });
@@ -155,6 +159,10 @@ export default function StrategiesPage() {
       difficulty: "普通",
       output_value: 0,
       defense_value: 0,
+      estimated_cost: 0,
+      estimated_revenue_min: 0,
+      estimated_revenue_max: 0,
+      runs_per_hour: 0,
       remark: "",
       image_url: "",
     });
@@ -194,6 +202,10 @@ export default function StrategiesPage() {
         difficulty: editForm.difficulty,
         output_value: editForm.output_value,
         defense_value: editForm.defense_value,
+        estimated_cost: editForm.estimated_cost,
+        estimated_revenue_min: editForm.estimated_revenue_min,
+        estimated_revenue_max: editForm.estimated_revenue_max,
+        runs_per_hour: editForm.runs_per_hour,
         remark: editForm.remark || null,
         image_url: editForm.image_url || null,
       });
@@ -214,6 +226,10 @@ export default function StrategiesPage() {
       difficulty: strategy.difficulty,
       output_value: strategy.output_value,
       defense_value: strategy.defense_value,
+      estimated_cost: strategy.estimated_cost,
+      estimated_revenue_min: strategy.estimated_revenue_min,
+      estimated_revenue_max: strategy.estimated_revenue_max,
+      runs_per_hour: strategy.runs_per_hour,
       remark: strategy.remark || "",
       image_url: strategy.image_url || "",
     });
@@ -233,6 +249,10 @@ export default function StrategiesPage() {
         difficulty: editForm.difficulty,
         output_value: editForm.output_value,
         defense_value: editForm.defense_value,
+        estimated_cost: editForm.estimated_cost,
+        estimated_revenue_min: editForm.estimated_revenue_min,
+        estimated_revenue_max: editForm.estimated_revenue_max,
+        runs_per_hour: editForm.runs_per_hour,
         remark: editForm.remark || null,
         image_url: editForm.image_url || null,
       });
@@ -377,6 +397,10 @@ export default function StrategiesPage() {
         difficulty: template.difficulty,
         output_value: template.output_value,
         defense_value: template.defense_value,
+        estimated_cost: 0,
+        estimated_revenue_min: 0,
+        estimated_revenue_max: 0,
+        runs_per_hour: 0,
         remark: template.remark,
         image_url: null,
       });
@@ -504,7 +528,7 @@ export default function StrategiesPage() {
         }
       />
 
-      <Surface padding="none">
+      <Surface padding="sm" className="!pb-0">
         <button
           onClick={() => setActiveTab("strategies")}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
@@ -596,31 +620,62 @@ export default function StrategiesPage() {
                           {strategy.profit_ratio >= 0 ? "+" : ""}{strategy.profit_ratio.toFixed(1)}%
                         </span>
                       </div>
-                      <div className={`flex items-center gap-1 text-sm font-medium ${getProfitColor(strategy.profit_ratio)}`}>
-                        {strategy.profit_ratio >= 0 ? (
-                          <TrendingUp className="w-4 h-4" />
-                        ) : (
-                          <TrendingDown className="w-4 h-4" />
-                        )}
-                        <span>
-                          {strategy.total_output_value - strategy.total_cost_fire >= 0 ? "+" : ""}
-                          {(strategy.total_output_value - strategy.total_cost_fire).toFixed(0)} 火
+                      {strategy.runs_per_hour > 0 && strategy.estimated_revenue_max > 0 ? (
+                        <div className={`flex items-center gap-1 text-sm font-medium ${getProfitColor(strategy.profit_ratio)}`}>
+                          {strategy.profit_ratio >= 0 ? (
+                            <TrendingUp className="w-4 h-4" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4" />
+                          )}
+                          <span>
+                            {(() => {
+                              const avgRev = (strategy.estimated_revenue_min + strategy.estimated_revenue_max) / 2;
+                              const net = avgRev - strategy.hourly_cost_fire;
+                              return `${net >= 0 ? "+" : ""}${net.toFixed(0)} 火/时`;
+                            })()}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className={`flex items-center gap-1 text-sm font-medium ${getProfitColor(strategy.profit_ratio)}`}>
+                          {strategy.profit_ratio >= 0 ? (
+                            <TrendingUp className="w-4 h-4" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4" />
+                          )}
+                          <span>
+                            {strategy.total_output_value - strategy.total_cost_fire >= 0 ? "+" : ""}
+                            {(strategy.total_output_value - strategy.total_cost_fire).toFixed(0)} 火
+                          </span>
+                        </div>
+                      )}
+                      {strategy.estimated_cost > 0 && strategy.total_cost_fire <= strategy.estimated_cost && (
+                        <span className="px-2 py-0.5 text-xs bg-[rgba(34,197,94,0.15)] text-[var(--color-success)] rounded-full font-medium">
+                          可刷
                         </span>
-                      </div>
+                      )}
                     </div>
                   </div>
                   {strategy.remark && (
                     <div className="mt-2 text-sm text-[var(--color-text-subtle)] ml-7">{strategy.remark}</div>
                   )}
-                  <div className="mt-2 flex items-center gap-6 ml-7 text-xs text-[var(--color-text-subtle)]">
-                    <span>成本: <span className="text-[var(--color-danger)]">{strategy.total_cost_fire.toFixed(0)} 火</span></span>
-                    <span>产出: <span className="text-[var(--color-success)]">{strategy.total_output_value.toFixed(0)} 火</span></span>
+                  <div className="mt-2 flex items-center gap-6 ml-7 text-xs text-[var(--color-text-subtle)] flex-wrap">
+                    <span>单次成本: <span className="text-[var(--color-danger)]">{strategy.total_cost_fire.toFixed(0)} 火</span></span>
+                    <span>核心受益参考: <span className="text-[var(--color-success)]">{strategy.total_output_value.toFixed(0)} 火</span></span>
+                    {strategy.runs_per_hour > 0 && (
+                      <span>时薪成本: <span className="text-[var(--color-danger)]">{strategy.hourly_cost_fire.toFixed(0)} 火/时</span> (×{strategy.runs_per_hour})</span>
+                    )}
+                    {strategy.estimated_cost > 0 && (
+                      <span>预计成本: <span className="text-[var(--color-danger)]">{strategy.estimated_cost.toFixed(0)} 火/次</span></span>
+                    )}
+                    {strategy.estimated_revenue_max > 0 && (
+                      <span>预计收入: <span className="text-[var(--color-success)]">{strategy.estimated_revenue_min.toFixed(0)} ~ {strategy.estimated_revenue_max.toFixed(0)} 火/时</span></span>
+                    )}
                   </div>
                 </div>
 
                 {isExpanded && (
                   <div className="border-t border-[var(--color-border-soft)]">
-                    <div className="grid grid-cols-1 gap-5 p-4 xl:grid-cols-2 xl:gap-6">
+                    <div className="grid grid-cols-2 gap-5 p-4 gap-6">
                       <div>
                         <div className="flex items-center justify-between mb-3">
                           <div className="text-sm font-medium text-[var(--color-text)] flex items-center gap-1.5">
@@ -675,7 +730,7 @@ export default function StrategiesPage() {
                         <div className="flex items-center justify-between mb-3">
                           <div className="text-sm font-medium text-[var(--color-text)] flex items-center gap-1.5">
                             <TrendingUp className="w-4 h-4 text-[var(--color-success)]" />
-                            产出收益
+                            核心受益参考
                           </div>
                           <button
                             onClick={(e) => { e.stopPropagation(); openOutputDialog(strategy.id); }}

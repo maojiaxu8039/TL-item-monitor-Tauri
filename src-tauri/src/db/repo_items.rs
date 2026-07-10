@@ -3,6 +3,87 @@ use crate::db::models::Item;
 use crate::db::table_resolver::TableResolver;
 use sqlx::SqlitePool;
 
+/// Normalize item_type: fix corrupted UTF-8 and merge similar types.
+/// Returns the normalized type string.
+pub fn normalize_item_type(raw: &str) -> String {
+    if raw.contains('\u{FFFD}') || raw.chars().any(|c| c as u32 > 0xFFFD) {
+        if raw.contains("崇高") || raw.contains("华贵") {
+            return "崇高华贵".to_string();
+        }
+        if raw.contains("精密") || raw.contains("技能") {
+            return "精密技能".to_string();
+        }
+        if raw.contains("核心") || raw.contains("器官") || raw.contains("腰带") {
+            return "核心器官".to_string();
+        }
+        if raw.contains("辅助") {
+            return "辅助技能".to_string();
+        }
+        return "其他".to_string();
+    }
+
+    if raw.starts_with("核心器官") {
+        return "核心器官".to_string();
+    }
+
+    match raw {
+        "命运相关" => "命运".to_string(),
+        "特殊器官-其它" => "特殊器官".to_string(),
+        "完美心脏-增益" => "特殊器官".to_string(),
+        "狩猎之神" | "欺诈之神" | "知识之神" | "征战之神" | "机械之神" | "巨力之神" => {
+            "石板".to_string()
+        }
+        _ => raw.to_string(),
+    }
+}
+
+/// One-time fix: update corrupted item_type values in DB tables.
+pub async fn fix_corrupted_item_types(pool: &SqlitePool) -> Result<u64, crate::core::errors::AppError> {
+    let seasons = get_all_season_ids(pool).await?;
+    let modes = ["season_normal", "season_expert"];
+    let mut total_fixed = 0u64;
+
+    for season_id in &seasons {
+        for mode in &modes {
+            if TableResolver::validate(season_id, mode).is_err() {
+                continue;
+            }
+            let table = TableResolver::items_table(season_id, mode);
+            let rows: Vec<(String, String)> = sqlx::query_as(&format!(
+                "SELECT item_id, item_type FROM {} WHERE item_type IS NOT NULL AND item_type != ''",
+                table
+            ))
+            .fetch_all(pool)
+            .await?;
+
+            let mut updates: Vec<(String, String)> = Vec::new();
+            for (item_id, raw_type) in &rows {
+                let normalized = normalize_item_type(raw_type);
+                if normalized != *raw_type {
+                    updates.push((normalized, item_id.clone()));
+                }
+            }
+
+            for (new_type, item_id) in &updates {
+                sqlx::query(&format!(
+                    "UPDATE {} SET item_type = ? WHERE item_id = ?",
+                    table
+                ))
+                .bind(new_type)
+                .bind(item_id)
+                .execute(pool)
+                .await?;
+                total_fixed += 1;
+            }
+        }
+    }
+
+    if total_fixed > 0 {
+        tracing::info!("[ITEM-TYPES] Fixed {} corrupted item_type values", total_fixed);
+    }
+    Ok(total_fixed)
+}
+
 async fn get_all_season_ids(
     pool: &SqlitePool,
 ) -> Result<Vec<String>, crate::core::errors::AppError> {
@@ -208,7 +289,17 @@ pub async fn get_distinct_item_types(
     )
     .fetch_all(pool)
     .await?;
-    Ok(types.into_iter().map(|(t,)| t).collect())
+
+    let mut seen = std::collections::HashSet::new();
+    let mut result = Vec::new();
+    for (t,) in types {
+        let normalized = normalize_item_type(&t);
+        if seen.insert(normalized.clone()) {
+            result.push(normalized);
+        }
+    }
+    result.sort();
+    Ok(result)
 }
 
 /// Get latest items from snapshot table for a season.

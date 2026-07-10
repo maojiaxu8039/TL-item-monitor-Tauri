@@ -21,7 +21,6 @@ const SettingsPage = lazy(() => import("@/components/dashboard/SettingsPage"))
 const ImportExportPage = lazy(() => import("@/components/dashboard/ImportExportPage"))
 const ItemsPage = lazy(() => import("@/components/dashboard/ItemsPage"))
 const DealsPage = lazy(() => import("@/components/dashboard/DealsPage"))
-const PriceAnalysisPage = lazy(() => import("@/components/dashboard/PriceAnalysisPage"))
 const AIAnalysisPage = lazy(() => import("@/components/dashboard/AIAnalysisPage"))
 const DataMonitorPage = lazy(() => import("@/components/dashboard/DataMonitorPage"))
 const FirePriceComparePage = lazy(() => import("@/components/dashboard/FirePriceComparePage"))
@@ -155,11 +154,6 @@ export default function App() {
                 {page === "deals" && (
                   <LazyPage>
                     <DealsPage />
-                  </LazyPage>
-                )}
-                {page === "priceanalysis" && (
-                  <LazyPage>
-                    <PriceAnalysisPage />
                   </LazyPage>
                 )}
                 {page === "aianalysis" && (

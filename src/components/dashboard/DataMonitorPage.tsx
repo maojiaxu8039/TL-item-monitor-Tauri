@@ -8,7 +8,7 @@ import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { useSyncContext } from "@/contexts/SyncContext";
 import { toast } from "sonner";
 import ServerAdminPanel from "./ServerAdminPanel";
-import type { SyncJobState, SyncFailure, FastSyncResponse, LatestPricesResponse } from "@/lib/commands";
+import type { SyncJobState, SyncFailure, LatestPricesResponse } from "@/lib/commands";
 import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
@@ -529,103 +529,38 @@ export default function DataMonitorPage() {
     setSyncJob(jobState);
 
     try {
-      const startTime = Date.now();
       const baseUrl = serverUrl.replace(/\/$/, "");
+      const rangeDays = timeRange === "season" ? 0 :
+        timeRange === "30d" ? 30 :
+        timeRange === "7d" ? 7 :
+        timeRange === "3d" ? 3 : 1;
 
-      const params = new URLSearchParams({
-        season: marketContext.seasonId,
-        mode,
+      toast.info("正在快速同步数据...");
+
+      const result = await cmd.fastSyncItems({
+        server_url: baseUrl,
+        season_id: marketContext.seasonId,
+        market_mode: marketMode,
+        range_days: rangeDays,
       });
 
-      if (timeRange === "season") {
-        params.set("min_day", "1");
-        params.set("max_day", "70");
-      } else if (timeRange === "30d") {
-        const day = Math.max(1, 70 - 30);
-        params.set("min_day", day.toString());
-        params.set("max_day", "70");
-      } else if (timeRange === "7d") {
-        params.set("min_day", "64");
-        params.set("max_day", "70");
-      } else if (timeRange === "3d") {
-        params.set("min_day", "68");
-        params.set("max_day", "70");
-      } else {
-        params.set("min_day", "69");
-        params.set("max_day", "70");
-      }
-
-      toast.info("正在获取高效同步数据...");
-
-      const response = await fetch(`${baseUrl}/sync-fast?${params.toString()}`);
-      const data = await response.json();
-
-      if (!data.success || !data.data) {
-        throw new Error(data.error || "获取数据失败");
-      }
-
-      const result: FastSyncResponse = data.data;
       setFastSyncStats({ items: result.total_items, days: result.total_days });
 
-      const allItems: Array<{
-        season_id: string;
-        market_mode: string;
-        item_id: string;
-        name: string;
-        item_type: string | null;
-        price: number;
-        last_time: number | null;
-        recorded_at: number;
-      }> = [];
-
-      for (const item of result.items) {
-        for (const dayPrice of item.daily_prices) {
-          allItems.push({
-            season_id: marketContext.seasonId,
-            market_mode: marketMode,
-            item_id: item.item_id,
-            name: item.name,
-            item_type: null,
-            price: dayPrice.close,
-            last_time: null,
-            recorded_at: dayPrice.day * 86400,
-          });
-        }
-      }
-
-      const BATCH_SIZE = 500;
-      let successCount = 0;
-      for (let i = 0; i < allItems.length; i += BATCH_SIZE) {
-        const batch = allItems.slice(i, i + BATCH_SIZE);
-        try {
-          const result = await cmd.syncItemsBatch({
-            season_id: marketContext.seasonId,
-            market_mode: marketMode,
-            items: batch,
-          });
-          if (result.success) {
-            successCount += batch.length;
-          }
-        } catch {
-          // 批次失败，继续下一个
-        }
-      }
-
-      const elapsed = Date.now() - startTime;
+      const elapsed = (result.elapsed_ms / 1000).toFixed(1);
 
       const finalState: SyncJobState = {
         ...jobState,
         status: "success",
-        total: result.total_items,
-        success: successCount,
-        failed: allItems.length - successCount,
-        skipped: 0,
+        total: result.total_records,
+        success: result.inserted,
+        failed: 0,
+        skipped: result.total_records - result.inserted,
         finishedAt: Date.now(),
       };
       setSyncJob(finalState);
 
       toast.success(
-        `快速同步完成: ${result.total_items} 个物品, ${result.total_days} 天, ${successCount} 条记录, 耗时 ${(elapsed / 1000).toFixed(1)}s`
+        `快速同步完成: ${result.total_items} 个物品, ${result.total_days} 天, 新增 ${result.inserted} 条, 已存在 ${result.total_records - result.inserted} 条, 耗时 ${elapsed}s`
       );
 
       queryClient.invalidateQueries({ queryKey: queryKeys.marketContext });
@@ -671,8 +606,9 @@ export default function DataMonitorPage() {
 
       toast.info("正在获取最新价格数据...");
 
-      const response = await fetch(`${baseUrl}/prices-latest?season=${marketContext.seasonId}&mode=${mode}`);
-      const data = await response.json();
+      const data = await cmd.fetchServerJson<{ success: boolean; data?: LatestPricesResponse; error?: string }>(
+        `${baseUrl}/prices-latest?season=${marketContext.seasonId}&mode=${mode}`
+      );
 
       if (!data.success || !data.data) {
         throw new Error(data.error || "获取数据失败");
@@ -740,6 +676,12 @@ export default function DataMonitorPage() {
     }
   }, [syncMethod, syncPaginated, syncFast, syncLatest]);
 
+  useEffect(() => {
+    if (dataType === "fire" && syncMethod !== "normal") {
+      setSyncMethod("normal");
+    }
+  }, [dataType, syncMethod]);
+
   const isSyncing = syncJob?.status === "running";
 
   return (
@@ -804,7 +746,7 @@ export default function DataMonitorPage() {
           </div>
 
           {serverStatus && (
-            <div className="grid grid-cols-1 gap-3 mt-4 pt-4 border-t border-[var(--color-border-soft)] sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-4 gap-3 mt-4 pt-4 border-t border-[var(--color-border-soft)]">
               <MetricCard
                 label="版本"
                 value={serverStatus.version}
@@ -838,7 +780,7 @@ export default function DataMonitorPage() {
         </div>
       </Surface>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-2 gap-4">
         <Surface padding="md">
           <div className="flex items-center gap-2 mb-4">
             <StatusBadge variant="info">普通服</StatusBadge>
@@ -1034,7 +976,7 @@ export default function DataMonitorPage() {
               </button>
               <button
                 onClick={() => setSyncMethod("fast")}
-                disabled={isSyncing}
+                disabled={isSyncing || dataType === "fire"}
                 className={`px-3 py-1.5 text-xs flex items-center gap-1 ${
                   syncMethod === "fast"
                     ? "bg-[var(--color-brand)] text-black"
@@ -1046,7 +988,7 @@ export default function DataMonitorPage() {
               </button>
               <button
                 onClick={() => setSyncMethod("latest")}
-                disabled={isSyncing}
+                disabled={isSyncing || dataType === "fire"}
                 className={`px-3 py-1.5 text-xs flex items-center gap-1 ${
                   syncMethod === "latest"
                     ? "bg-[var(--color-success)] text-black"
@@ -1061,6 +1003,7 @@ export default function DataMonitorPage() {
               {syncMethod === "normal" && "（串行分页，较慢）"}
               {syncMethod === "fast" && "（服务端聚合，推荐）"}
               {syncMethod === "latest" && "（仅最新价格）"}
+              {dataType === "fire" && "（火价使用普通同步）"}
             </span>
           </div>
 
@@ -1110,6 +1053,7 @@ export default function DataMonitorPage() {
               <div className="flex gap-4 text-xs">
                 <span className="text-[var(--color-success)]">成功: {syncJob.success.toLocaleString()}</span>
                 <span className="text-[var(--color-danger)]">失败: {syncJob.failed.toLocaleString()}</span>
+                <span className="text-[var(--color-text-subtle)]">已存在: {syncJob.skipped.toLocaleString()}</span>
                 <span className="text-[var(--color-text-subtle)]">总计: {syncJob.total.toLocaleString()}</span>
               </div>
             </div>
@@ -1132,7 +1076,7 @@ export default function DataMonitorPage() {
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                 <div className="text-center">
                   <div className="text-lg font-semibold text-[var(--color-success)]">{syncJob.success}</div>
                   <div className="text-xs text-[var(--color-text-subtle)]">成功</div>
@@ -1140,6 +1084,10 @@ export default function DataMonitorPage() {
                 <div className="text-center">
                   <div className="text-lg font-semibold text-[var(--color-danger)]">{syncJob.failed}</div>
                   <div className="text-xs text-[var(--color-text-subtle)]">失败</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-semibold text-[var(--color-text-muted)]">{syncJob.skipped}</div>
+                  <div className="text-xs text-[var(--color-text-subtle)]">已存在</div>
                 </div>
                 <div className="text-center">
                   <div className="text-lg font-semibold text-[var(--color-text-muted)]">{syncJob.total}</div>

@@ -142,7 +142,7 @@ export default function ArbitragePage() {
   const refreshPrices = async () => {
     setRefreshingPrice(true);
     try {
-      await calculateAll();
+      await calculateAll(undefined, true);
       toast.success("价格已刷新");
     } catch (err) {
       toast.error(`刷新失败: ${errorMessage(err)}`);
@@ -420,7 +420,7 @@ export default function ArbitragePage() {
 
   useEffect(() => {
     if (!marketContextReady) return;
-    loadRecipes().then(() => calculateAll());
+    loadRecipes().then(() => calculateAll(undefined, true));
   }, [marketContextReady, loadRecipes, calculateAll]);
 
   // 监听物品价格更新事件，自动静默重算套利（与后端物品同步间隔一致）
@@ -472,7 +472,7 @@ export default function ArbitragePage() {
       />
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:gap-4">
+      <div className="grid grid-cols-3 gap-3 gap-4">
         <MetricCard
           label="可套利配方"
           value={totalProfitable}

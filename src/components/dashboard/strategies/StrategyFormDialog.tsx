@@ -101,6 +101,42 @@ export function StrategyFormDialog({
             </div>
           </div>
           <div>
+            <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">预计成本</label>
+            <Input
+              type="number"
+              value={form.estimated_cost}
+              onChange={(e) => onFormChange({ ...form, estimated_cost: parseFloat(e.target.value) || 0 })}
+              placeholder="预计花费的总成本（火）"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">预计收入区间</label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                value={form.estimated_revenue_min}
+                onChange={(e) => onFormChange({ ...form, estimated_revenue_min: parseFloat(e.target.value) || 0 })}
+                placeholder="最低收入"
+              />
+              <span className="text-[var(--color-text-subtle)] text-sm">~</span>
+              <Input
+                type="number"
+                value={form.estimated_revenue_max}
+                onChange={(e) => onFormChange({ ...form, estimated_revenue_max: parseFloat(e.target.value) || 0 })}
+                placeholder="最高收入"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">1小时刷图次数</label>
+            <Input
+              type="number"
+              value={form.runs_per_hour}
+              onChange={(e) => onFormChange({ ...form, runs_per_hour: parseFloat(e.target.value) || 0 })}
+              placeholder="每小时可刷图的次数"
+            />
+          </div>
+          <div>
             <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">备注</label>
             <Input
               value={form.remark}
