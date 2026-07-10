@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, type ReactNode } from "react"
 import { cmd, type InventoryPositionView, type InventoryBuyWatchView, type CreatePositionRequest, type CreateBuyWatchRequest, type UpdatePositionRequest, type UpdateBuyWatchRequest } from "@/lib/commands"
 
 interface ItemSuggestion {
@@ -16,6 +16,7 @@ import { Surface } from "@/components/ui/Surface"
 import { Button } from "@/components/ui/button"
 import { queryKeys } from "@/lib/queryKeys"
 import { useVisiblePolling } from "@/hooks/useVisiblePolling"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 
 type Tab = "positions" | "buy-watches"
 
@@ -474,6 +475,16 @@ function TrashIcon({ className }: { className?: string }) {
   )
 }
 
+function InventoryDialog({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent aria-label={label} className="w-full max-w-md p-6">
+        {children}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function AddPositionDialog({
   seasonId,
   marketMode,
@@ -558,8 +569,7 @@ function AddPositionDialog({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-[var(--color-panel)] rounded-lg p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+    <InventoryDialog label="添加持仓记录" onClose={onClose}>
         <h3 className="text-lg font-medium text-[var(--color-text)] mb-4">添加持仓记录</h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -645,8 +655,7 @@ function AddPositionDialog({
             </Button>
           </div>
         </form>
-      </div>
-    </div>
+    </InventoryDialog>
   )
 }
 
@@ -695,8 +704,7 @@ function EditPositionDialog({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-[var(--color-panel)] rounded-lg p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+    <InventoryDialog label="编辑持仓记录" onClose={onClose}>
         <h3 className="text-lg font-medium text-[var(--color-text)] mb-4">编辑持仓记录</h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -767,8 +775,7 @@ function EditPositionDialog({
             </Button>
           </div>
         </form>
-      </div>
-    </div>
+    </InventoryDialog>
   )
 }
 
@@ -815,8 +822,7 @@ function EditWatchDialog({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-[var(--color-panel)] rounded-lg p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+    <InventoryDialog label="编辑买入监控" onClose={onClose}>
         <h3 className="text-lg font-medium text-[var(--color-text)] mb-4">编辑买入监控</h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -874,8 +880,7 @@ function EditWatchDialog({
             </Button>
           </div>
         </form>
-      </div>
-    </div>
+    </InventoryDialog>
   )
 }
 
@@ -960,8 +965,7 @@ function AddWatchDialog({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-[var(--color-panel)] rounded-lg p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+    <InventoryDialog label="添加买入监控" onClose={onClose}>
         <h3 className="text-lg font-medium text-[var(--color-text)] mb-4">添加买入监控</h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -1034,7 +1038,6 @@ function AddWatchDialog({
             </Button>
           </div>
         </form>
-      </div>
-    </div>
+    </InventoryDialog>
   )
 }

@@ -247,6 +247,7 @@ export function TopBar({ page, onPageChange, isMiniMode: externalIsMiniMode, set
           className="relative z-[1] flex min-w-0 flex-1 items-center gap-2 rounded px-1.5 py-1 text-left"
           onClick={() => onPageChange("dashboard")}
           title="TorchScan 小窗口"
+          aria-label="返回市场监控"
         >
           <img src={publicAssetPath("torchscan/logo-mark.png")} alt="TorchScan" className="h-7 w-auto" draggable={false} />
           <div className="min-w-0">
@@ -266,6 +267,7 @@ export function TopBar({ page, onPageChange, isMiniMode: externalIsMiniMode, set
             disabled={refreshMutation.isPending}
             className="torch-icon-button h-8 w-8"
             title="刷新数据"
+            aria-label="刷新数据"
           >
             <RefreshCw className={cn("h-4 w-4", refreshMutation.isPending && "animate-spin")} />
           </Button>
@@ -276,13 +278,14 @@ export function TopBar({ page, onPageChange, isMiniMode: externalIsMiniMode, set
             disabled={miniModeLoading}
             className="torch-icon-button h-8 w-8 bg-[var(--color-brand-gold)]/20"
             title="恢复主窗口"
+            aria-label="恢复主窗口"
           >
             <Maximize2 className="h-4 w-4" />
           </Button>
-          <button className="torch-window-button" onClick={() => withWindow("minimize")} title="最小化">
+          <button className="torch-window-button" onClick={() => withWindow("minimize")} title="最小化" aria-label="最小化窗口">
             <AssetIcon name="window-minimize" className="h-[18px] w-[18px]" />
           </button>
-          <button className="torch-window-button torch-window-close" onClick={() => withWindow("close")} title="关闭">
+          <button className="torch-window-button torch-window-close" onClick={() => withWindow("close")} title="关闭" aria-label="关闭窗口">
             <AssetIcon name="window-close" className="h-[18px] w-[18px]" />
           </button>
         </div>
@@ -300,7 +303,7 @@ export function TopBar({ page, onPageChange, isMiniMode: externalIsMiniMode, set
       onMouseDown={startDrag}
     >
       <div className="torch-topbar-drag-region" data-tauri-drag-region />
-      <button className="torch-brand" onClick={() => onPageChange("dashboard")} title="TorchScan">
+      <button className="torch-brand" onClick={() => onPageChange("dashboard")} title="TorchScan" aria-label="返回市场监控">
         <img src={publicAssetPath("torchscan/logo-mark.png")} alt="TorchScan" className="torch-brand-logo" draggable={false} />
       </button>
 
@@ -316,6 +319,7 @@ export function TopBar({ page, onPageChange, isMiniMode: externalIsMiniMode, set
           value={marketMode}
           onChange={handleModeChange}
           title="赛季模式"
+          aria-label="赛季模式"
         >
           <option value="season_normal">赛季普通</option>
           <option value="season_expert">赛季专家</option>
@@ -332,24 +336,26 @@ export function TopBar({ page, onPageChange, isMiniMode: externalIsMiniMode, set
           )}
         </div>
 
-        <Button
+          <Button
           variant="ghost"
           size="icon"
           onClick={() => refreshMutation.mutate()}
           disabled={refreshMutation.isPending}
           className="torch-icon-button h-8 w-8"
           title="获取最新数据"
+          aria-label="获取最新数据"
         >
           <RefreshCw className={cn("h-4 w-4", refreshMutation.isPending && "animate-spin")} />
         </Button>
 
-        <Button
+          <Button
           variant="ghost"
           size="icon"
           onClick={handleToggleMiniMode}
           disabled={miniModeLoading}
           className={cn("torch-icon-button h-8 w-8", isMiniMode && "bg-[var(--color-brand-gold)]/20")}
           title={isMiniMode ? "切换到主窗口" : "切换到小窗口"}
+          aria-label={isMiniMode ? "切换到主窗口" : "切换到小窗口"}
         >
           {isMiniMode ? (
             <Maximize2 className="h-4 w-4" />
@@ -370,16 +376,16 @@ export function TopBar({ page, onPageChange, isMiniMode: externalIsMiniMode, set
       </div>
 
       <div className="torch-window-controls">
-        <button className={cn("torch-window-button", page === "settings" && "torch-window-button-active")} onClick={() => onPageChange("settings")} title="设置">
+        <button className={cn("torch-window-button torch-topbar-settings", page === "settings" && "torch-window-button-active")} onClick={() => onPageChange("settings")} title="设置" aria-label="打开设置">
           <AssetIcon name="settings" className="h-5 w-5" />
         </button>
-        <button className="torch-window-button" onClick={() => withWindow("minimize")} title="最小化">
+        <button className="torch-window-button" onClick={() => withWindow("minimize")} title="最小化" aria-label="最小化窗口">
           <AssetIcon name="window-minimize" className="h-[18px] w-[18px]" />
         </button>
-        <button className="torch-window-button" onClick={() => withWindow("toggleMaximize")} title="最大化">
+        <button className="torch-window-button" onClick={() => withWindow("toggleMaximize")} title="最大化" aria-label="切换最大化窗口">
           <AssetIcon name="window-maximize" className="h-[18px] w-[18px]" />
         </button>
-        <button className="torch-window-button torch-window-close" onClick={() => withWindow("close")} title="关闭">
+        <button className="torch-window-button torch-window-close" onClick={() => withWindow("close")} title="关闭" aria-label="关闭窗口">
           <AssetIcon name="window-close" className="h-[18px] w-[18px]" />
         </button>
       </div>

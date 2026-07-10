@@ -13,6 +13,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
+import { ErrorState, LoadingState } from "@/components/ui/LoadingState";
 import { invalidateItemsData, queryKeys } from "@/lib/queryKeys";
 
 
@@ -74,6 +75,8 @@ export default function SettingsPage() {
   const [seasonId, setSeasonId] = useState("ss12");
   const [itemCount, setItemCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [priceAlertEnabled, setPriceAlertEnabled] = useState(true);
   const [priceAlertCooldown, setPriceAlertCooldown] = useState(600);
   const [systemNotifications, setSystemNotifications] = useState(true);
@@ -286,6 +289,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     let mounted = true;
+    setLoaded(false);
+    setLoadError(null);
     const initPaths = async () => {
       try {
         const appDataDir = await cmd.getAppDataDir();
@@ -325,7 +330,10 @@ export default function SettingsPage() {
             if (mounted) setJsonPathValidation(v);
           }).catch((e) => devLog.warn("validateJsonFile failed", e));
         }
-      }).catch((e) => devLog.warn("getConfig failed", e));
+      }).catch((e) => {
+        devLog.warn("getConfig failed", e);
+        if (mounted) setLoadError(errorMessage(e));
+      });
     });
 
     cmd.getDashboardSummary().then((summary) => {
@@ -343,7 +351,7 @@ export default function SettingsPage() {
       setNotificationPermission(status);
     }).catch((e) => devLog.warn("getNotificationPermissionStatus failed", e));
     return () => { mounted = false; };
-  }, []);
+  }, [loadAttempt]);
 
   const validateJsonPath = async (path: string) => {
     const result = await cmd.validateJsonFile(path);
@@ -375,13 +383,20 @@ export default function SettingsPage() {
     refreshMutation.mutate();
   };
 
-  if (!loaded) {
+  if (loadError) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-5 h-5 text-[var(--color-text-subtle)] animate-spin" />
-      </div>
+      <PageShell size="lg">
+        <ErrorState
+          title="设置加载失败"
+          message="加载本地配置时发生错误，请重试；如持续失败，请检查配置文件。"
+          onRetry={() => setLoadAttempt((attempt) => attempt + 1)}
+          className="surface min-h-64"
+        />
+      </PageShell>
     );
   }
+
+  if (!loaded) return <LoadingState message="正在加载系统设置..." className="min-h-64" />;
 
   return (
     <PageShell size="lg" className="space-y-5">

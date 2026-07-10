@@ -307,6 +307,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
     >
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[rgba(255,184,0,0.16)] bg-[var(--color-panel)] p-3 shadow-[var(--shadow-sm)]">
         <Select
+          aria-label="物品类型"
           value={typeFilter}
           onChange={(e) => {
             setTypeFilter(e.target.value)
@@ -325,6 +326,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
         <div className="relative min-w-[240px] flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-subtle)]" />
           <Input
+            aria-label="搜索物品名称"
             ref={inputRef}
             value={searchValue}
             onChange={handleSearchChange}

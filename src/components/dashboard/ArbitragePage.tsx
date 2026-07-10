@@ -514,6 +514,7 @@ export default function ArbitragePage() {
         onToggleExpand={toggleExpanded}
         onEdit={openEditDialog}
         onDelete={deleteRecipe}
+        onRefresh={() => void refreshPrices()}
       />
 
       {/* Create Dialog */}

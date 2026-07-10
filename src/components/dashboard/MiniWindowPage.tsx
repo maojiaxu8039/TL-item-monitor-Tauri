@@ -17,6 +17,7 @@ import { invalidateInventoryData, queryKeys } from "@/lib/queryKeys"
 import { errorMessage } from "@/lib/utils"
 import { toast } from "sonner"
 import { ItemSearchDialog } from "./ItemSearchDialog"
+import { EmptyState } from "@/components/ui/EmptyState"
 
 type Tab = "worth" | "buy" | "sell" | "arbitrage"
 
@@ -289,7 +290,7 @@ function WorthItemsList({ items, onCopy, copiedId }: { items: MiniWorthItem[]; o
   const visible = items.slice(0, visibleCount)
 
   if (items.length === 0) {
-    return <EmptyState message="暂无值得买的物品" />
+    return <EmptyState title="暂无值得买的物品" compact className="h-full" />
   }
 
   return (
@@ -358,7 +359,7 @@ function BuyWatchesList({ watches, onCopy, copiedId }: { watches: InventoryBuyWa
   const visible = watches.slice(0, visibleCount)
 
   if (watches.length === 0) {
-    return <EmptyState message="暂无买入监控" />
+    return <EmptyState title="暂无买入监控" compact className="h-full" />
   }
 
   return (
@@ -405,7 +406,7 @@ function SellPositionsList({ positions, onCopy, copiedId }: { positions: Invento
   const visible = positions.slice(0, visibleCount)
 
   if (positions.length === 0) {
-    return <EmptyState message="暂无可出货的持仓" />
+    return <EmptyState title="暂无可出货的持仓" compact className="h-full" />
   }
 
   return (
@@ -461,7 +462,7 @@ function ArbitrageList({ recipes, onCopy, copiedId }: { recipes: ArbitrageCalcul
   const visible = recipes.slice(0, visibleCount)
 
   if (recipes.length === 0) {
-    return <EmptyState message="暂无盈利套利" />
+    return <EmptyState title="暂无盈利套利" compact className="h-full" />
   }
 
   return (
@@ -494,14 +495,6 @@ function ArbitrageList({ recipes, onCopy, copiedId }: { recipes: ArbitrageCalcul
         </div>
       ))}
       <ShowMoreFooter hasMore={hasMore} remaining={remaining} onShowMore={showMore} onCollapse={collapse} />
-    </div>
-  )
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="flex items-center justify-center h-full text-[var(--color-text-subtle)]">
-      <span className="text-sm">{message}</span>
     </div>
   )
 }

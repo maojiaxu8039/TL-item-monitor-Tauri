@@ -785,8 +785,9 @@ export default function DataMonitorPage() {
         <div className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1">
-              <label className="block text-xs text-[var(--color-text-subtle)] mb-1">服务器地址</label>
+              <label htmlFor="data-monitor-server-url" className="block text-xs text-[var(--color-text-subtle)] mb-1">服务器地址</label>
               <input
+                id="data-monitor-server-url"
                 type="text"
                 value={serverUrl}
                 onChange={(e) => setServerUrl(e.target.value)}
@@ -876,7 +877,7 @@ export default function DataMonitorPage() {
               </div>
             </div>
           ) : (
-            <EmptyState description="暂无数据" />
+            <EmptyState title="暂无普通服数据" description="连接服务器并执行同步后，这里会显示最新采集状态。" compact />
           )}
         </Surface>
 
@@ -918,7 +919,7 @@ export default function DataMonitorPage() {
               </div>
             </div>
           ) : (
-            <EmptyState description="暂无数据" />
+            <EmptyState title="暂无专家服数据" description="连接服务器并执行同步后，这里会显示最新采集状态。" compact />
           )}
         </Surface>
       </div>

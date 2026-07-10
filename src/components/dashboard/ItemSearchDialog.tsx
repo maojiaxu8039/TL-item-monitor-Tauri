@@ -127,13 +127,14 @@ export function ItemSearchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="p-0 overflow-hidden" data-mini-no-drag>
+      <DialogContent className="p-0 overflow-hidden" aria-labelledby="item-search-dialog-title" data-mini-no-drag>
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border-soft)]">
-          <h3 className="text-sm font-medium text-[var(--color-text)]">
+          <h3 id="item-search-dialog-title" className="text-sm font-medium text-[var(--color-text)]">
             {title}
           </h3>
           <button
             type="button"
+            aria-label="关闭物品搜索对话框"
             onClick={() => onOpenChange(false)}
             className="text-[var(--color-text-subtle)] hover:text-[var(--color-text)]"
           >
@@ -143,12 +144,13 @@ export function ItemSearchDialog({
 
         <div className="p-4 space-y-4">
           <div>
-            <label className="block text-xs text-[var(--color-text-subtle)] mb-1">
+            <label htmlFor="item-search-input" className="block text-xs text-[var(--color-text-subtle)] mb-1">
               搜索物品
             </label>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--color-text-subtle)]" />
               <input
+                id="item-search-input"
                 type="text"
                 autoFocus
                 value={keyword}
@@ -173,22 +175,23 @@ export function ItemSearchDialog({
                 {results.map((item) => {
                   const isSelected = selected?.item_id === item.item_id
                   return (
-                    <li
-                      key={item.item_id}
-                      data-mini-no-drag
-                      className={`px-3 py-1.5 text-xs cursor-pointer transition-colors ${
-                        isSelected
-                          ? "bg-[rgba(255,184,0,0.16)] text-[var(--color-text)]"
-                          : "hover:bg-[var(--color-panel-soft)] text-[var(--color-text)]"
-                      }`}
-                      onClick={() => {
-                        setSelected(item)
-                        if (!price.trim() && item.price > 0) {
-                          setPrice(item.price.toFixed(1))
-                        }
-                      }}
-                    >
-                      <div className="flex items-center justify-between gap-2">
+                    <li key={item.item_id}>
+                      <button
+                        type="button"
+                        data-mini-no-drag
+                        className={`w-full px-3 py-1.5 text-left text-xs cursor-pointer transition-colors ${
+                          isSelected
+                            ? "bg-[rgba(255,184,0,0.16)] text-[var(--color-text)]"
+                            : "hover:bg-[var(--color-panel-soft)] text-[var(--color-text)]"
+                        }`}
+                        onClick={() => {
+                          setSelected(item)
+                          if (!price.trim() && item.price > 0) {
+                            setPrice(item.price.toFixed(1))
+                          }
+                        }}
+                      >
+                        <div className="flex items-center justify-between gap-2">
                         <span className="font-medium truncate flex items-center gap-1.5">
                           <Package className="w-3 h-3 text-[var(--color-text-subtle)]" />
                           {item.name}
@@ -196,10 +199,11 @@ export function ItemSearchDialog({
                         <span className="text-[var(--color-text-subtle)] tabular-nums">
                           {item.price > 0 ? item.price.toFixed(1) : "—"}
                         </span>
-                      </div>
-                      <div className="text-[10px] text-[var(--color-text-subtle)] mt-0.5">
-                        {item.item_type || "未分类"} · ID: {item.item_id}
-                      </div>
+                        </div>
+                        <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">
+                          {item.item_type || "未分类"} · ID: {item.item_id}
+                        </div>
+                      </button>
                     </li>
                   )
                 })}
@@ -209,10 +213,11 @@ export function ItemSearchDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-[var(--color-text-subtle)] mb-1">
+              <label htmlFor="item-search-price" className="block text-xs text-[var(--color-text-subtle)] mb-1">
                 {priceLabel}
               </label>
               <input
+                id="item-search-price"
                 type="number"
                 inputMode="decimal"
                 min={MIN_PRICE}
@@ -231,10 +236,11 @@ export function ItemSearchDialog({
             </div>
             {!isWatch && (
               <div>
-                <label className="block text-xs text-[var(--color-text-subtle)] mb-1">
+                <label htmlFor="item-search-quantity" className="block text-xs text-[var(--color-text-subtle)] mb-1">
                   数量
                 </label>
                 <input
+                  id="item-search-quantity"
                   type="number"
                   inputMode="numeric"
                   min={1}

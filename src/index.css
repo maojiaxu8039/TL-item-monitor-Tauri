@@ -12,7 +12,7 @@
     /* Text */
     --color-text: #e6e6e6;
     --color-text-muted: #9ca3af;
-    --color-text-subtle: #6f7782;
+    --color-text-subtle: #858d98;
 
     /* Semantic Colors */
     --color-primary: #ff6a00;
@@ -68,7 +68,7 @@
     --color-border-soft: #ebedf0;
     --color-text: #1a1d21;
     --color-text-muted: #5c6370;
-    --color-text-subtle: #9ca3af;
+    --color-text-subtle: #6b7280;
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.08);
     --shadow-md: 0 10px 30px -18px rgb(0 0 0 / 0.15);
     --shadow-lg: 0 28px 80px -38px rgb(0 0 0 / 0.2);
@@ -457,7 +457,9 @@
     }
 
     .torch-topbar-context {
-      display: none;
+      max-width: 112px;
+      padding-left: 0.55rem;
+      font-size: 0.75rem;
     }
 
     .torch-price-chip .torch-price-unit {
@@ -516,6 +518,36 @@
     scrollbar-color: rgba(255, 184, 0, 0.28) transparent;
   }
 
+  .torch-sidebar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+  }
+
+  .torch-sidebar-group + .torch-sidebar-group {
+    margin-top: 0.35rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid rgba(255, 184, 0, 0.1);
+  }
+
+  .torch-sidebar-group-label {
+    padding: 0.1rem 0.65rem;
+    color: var(--color-text-subtle);
+    font-size: 0.68rem;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+  }
+
+  .torch-sidebar-utility {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    flex: 0 0 auto;
+    margin: 0 0.75rem 0.45rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid rgba(255, 184, 0, 0.14);
+  }
+
   .torch-sidebar-nav::-webkit-scrollbar {
     width: 5px;
   }
@@ -564,6 +596,13 @@
 
   .torch-sidebar-item:hover {
     transform: translateX(2px);
+  }
+
+  .torch-sidebar-item:focus-visible,
+  .torch-window-button:focus-visible,
+  .torch-brand:focus-visible {
+    outline: 2px solid var(--color-brand-gold);
+    outline-offset: 2px;
   }
 
   .torch-sidebar-active-glow {
@@ -864,6 +903,39 @@
     font-size: 0.75rem;
     color: var(--color-text-muted);
     max-width: 320px;
+  }
+
+  .empty-state-compact {
+    padding: 1.75rem 1rem;
+  }
+
+  .empty-state-compact .empty-state-icon {
+    width: 36px;
+    height: 36px;
+    margin-bottom: 0.65rem;
+  }
+
+  .group-table-scroll {
+    position: relative;
+    scrollbar-gutter: stable;
+  }
+
+  .group-table-scroll th:first-child,
+  .group-table-scroll td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--color-panel);
+    box-shadow: 8px 0 14px -12px rgba(0, 0, 0, 0.95);
+  }
+
+  .group-table-scroll thead th:first-child {
+    z-index: 3;
+    background: var(--color-panel-soft);
+  }
+
+  .group-table-scroll-hint {
+    display: none;
   }
 
   /* Inline Alert */
@@ -1472,6 +1544,18 @@
       gap: 0.3rem;
     }
 
+    .torch-topbar-context {
+      display: inline-flex;
+      max-width: 84px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .torch-topbar-settings {
+      display: none;
+    }
+
     .torch-price-chip {
       padding: 0 0.42rem;
     }
@@ -1482,7 +1566,7 @@
     }
 
     .torch-sidebar-header span:first-child,
-    .torch-sidebar-footer div,
+    .torch-sidebar-group-label,
     .torch-sidebar-item span:last-child {
       display: none;
     }
@@ -1499,17 +1583,27 @@
       padding-right: 0.55rem;
     }
 
+    .torch-sidebar-group {
+      width: 100%;
+    }
+
+    .torch-sidebar-group + .torch-sidebar-group {
+      margin-top: 0.2rem;
+      padding-top: 0.3rem;
+    }
+
+    .torch-sidebar-utility {
+      align-items: center;
+      margin: 0 0.55rem 0.45rem;
+    }
+
     .torch-sidebar-item {
       justify-content: center;
       padding: 0;
     }
 
     .torch-sidebar-footer {
-      justify-content: center;
-      margin-left: 0.55rem;
-      margin-right: 0.55rem;
-      padding: 0.3rem;
-      min-height: 52px;
+      display: none;
     }
 
     .torch-sidebar-footer-logo {
@@ -1518,6 +1612,15 @@
 
     .torch-sidebar-footer-emblem {
       display: block;
+    }
+
+    .group-table-scroll-hint {
+      display: block;
+      padding: 0.4rem 0.75rem;
+      border-bottom: 1px solid var(--color-border-soft);
+      color: var(--color-text-subtle);
+      font-size: 0.75rem;
+      text-align: right;
     }
   }
 
@@ -1537,5 +1640,16 @@
   @keyframes slideUp {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }

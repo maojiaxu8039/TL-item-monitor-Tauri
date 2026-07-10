@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react"
+import { useEffect, useCallback, useId, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { AlertTriangle, Info, XCircle, X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -54,6 +54,9 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const config = variantConfig[variant]
   const Icon = config.icon
+  const titleId = useId()
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
 
   const handleConfirm = useCallback(() => {
     onConfirm?.()
@@ -65,13 +68,37 @@ export function ConfirmDialog({
   }, [onOpenChange, onCancel])
 
   useEffect(() => {
+    if (!open) return
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    const focusTimer = window.requestAnimationFrame(() => cancelButtonRef.current?.focus())
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && open) {
+      if (e.key === "Escape") {
         handleCancel()
+      }
+      if (e.key !== "Tab" || !dialogRef.current) return
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      )).filter((element) => element.offsetParent !== null)
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
       }
     }
     window.addEventListener("keydown", handleEscape)
-    return () => window.removeEventListener("keydown", handleEscape)
+    return () => {
+      window.cancelAnimationFrame(focusTimer)
+      window.removeEventListener("keydown", handleEscape)
+      document.body.style.overflow = previousOverflow
+      previousFocus?.focus()
+    }
   }, [open, handleCancel])
 
   return (
@@ -89,6 +116,11 @@ export function ConfirmDialog({
             onClick={handleCancel}
           />
           <motion.div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            tabIndex={-1}
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -103,12 +135,14 @@ export function ConfirmDialog({
                 <Icon className={cn("w-6 h-6", config.iconClass)} />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-semibold text-[var(--color-text)] mb-2">{title}</h3>
+                <h3 id={titleId} className="text-lg font-semibold text-[var(--color-text)] mb-2">{title}</h3>
                 <div className="text-sm text-[var(--color-text-muted)] leading-relaxed">
                   {message}
                 </div>
               </div>
               <button
+                type="button"
+                aria-label="关闭对话框"
                 onClick={handleCancel}
                 className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[rgba(255,184,0,0.1)] transition-colors text-[var(--color-text-subtle)] hover:text-[var(--color-brand-gold)]"
               >
@@ -118,6 +152,8 @@ export function ConfirmDialog({
 
             <div className="flex gap-3 mt-6">
               <button
+                ref={cancelButtonRef}
+                type="button"
                 onClick={handleCancel}
                 disabled={loading}
                 className="flex-1 px-4 py-2.5 text-sm font-medium text-[var(--color-text)] bg-[var(--color-panel-soft)] hover:bg-[rgba(255,184,0,0.1)] rounded-lg transition-colors disabled:opacity-50"
@@ -125,6 +161,7 @@ export function ConfirmDialog({
                 {cancelText}
               </button>
               <button
+                type="button"
                 onClick={handleConfirm}
                 disabled={loading}
                 className={cn(

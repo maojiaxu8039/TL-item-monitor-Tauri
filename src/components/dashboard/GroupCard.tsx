@@ -296,13 +296,15 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
         </div>
 
         {!collapsed && (
-          <div className="overflow-x-auto">
+          <div className="group-table-scroll overflow-x-auto">
             {items.length === 0 && !isFetching && (
               <div className="py-8 text-center text-[13px] text-[var(--color-text-subtle)]">
                 暂无物品，点击上方搜索框添加
               </div>
             )}
             {items.length > 0 && (
+              <>
+              <div className="group-table-scroll-hint" aria-hidden="true">左右滚动查看完整指标 →</div>
               <table className="w-full min-w-[980px] text-[12px]">
                 <thead>
                   <tr className="border-b border-[var(--color-border-soft)] bg-[rgba(255,255,255,0.025)] text-[var(--color-text-muted)]">
@@ -378,6 +380,7 @@ export function GroupCard({ section, index = 0, onDelete, onRefetch, isDragging 
                   </tr>
                 </tfoot>
               </table>
+              </>
             )}
           </div>
         )}

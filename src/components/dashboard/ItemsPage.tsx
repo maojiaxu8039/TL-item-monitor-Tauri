@@ -155,6 +155,7 @@ const DayRangeInput = memo(function DayRangeInput({
       <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
       <input
         type="number"
+        aria-label="赛季天数筛选"
         min={1}
         max={90}
         placeholder="第几天"
@@ -521,6 +522,7 @@ export default function ItemsPage() {
             <div className="relative min-w-[150px] flex-1 sm:flex-none">
               <GitCompare className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
               <select
+                aria-label="对比赛季"
                 value={historySeason}
                 onChange={(e) => setHistorySeason(e.target.value)}
                 className="w-full pl-9 pr-8 py-2 border border-[var(--color-border)] rounded-lg text-sm bg-[var(--color-panel)] outline-none cursor-pointer appearance-none hover:border-[var(--color-border)] transition-colors focus:ring-2 focus:ring-[var(--color-brand)]/30"
@@ -531,6 +533,7 @@ export default function ItemsPage() {
             <div className="relative min-w-[130px] flex-1 sm:flex-none">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
               <select
+                aria-label="物品类型"
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
                 className="w-full pl-9 pr-8 py-2 border border-[var(--color-border)] rounded-lg text-sm bg-[var(--color-panel)] outline-none cursor-pointer appearance-none hover:border-[var(--color-border)] transition-colors focus:ring-2 focus:ring-[var(--color-brand)]/30"
@@ -547,6 +550,7 @@ export default function ItemsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
               <input
                 type="text"
+                aria-label="搜索物品名称"
                 placeholder="搜索物品名称..."
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}

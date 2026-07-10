@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - 'server-standalone/**'
+      - 'src-tauri/resources/item_id_mapping.json'
+      - 'src-tauri/resources/qiandao_fire.cjs'
+      - 'src-tauri/resources/qiandao_fire.mjs'
       - '.github/workflows/build-server-arm64.yml'
   workflow_dispatch:
 

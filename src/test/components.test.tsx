@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { vi } from "vitest";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/Surface";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 describe("Button Component", () => {
   it("renders with default variant", () => {
@@ -46,5 +48,23 @@ describe("Surface Component", () => {
   it("renders with custom className", () => {
     render(<Surface className="custom-class">Custom</Surface>);
     expect(screen.getByText("Custom")).toBeInTheDocument();
+  });
+});
+
+describe("Dialog Component", () => {
+  it("exposes dialog semantics and closes with Escape", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Dialog open onOpenChange={onOpenChange}>
+        <DialogContent aria-label="测试对话框">
+          <button type="button">确定</button>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "测试对话框" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

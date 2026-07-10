@@ -13,6 +13,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary"
 import type { PageId } from "@/lib/commands"
 import { publicAssetPath } from "@/lib/icons"
 import { cmd } from "@/lib/commands"
+import { MotionConfig } from "framer-motion"
 
 const DashboardContent = lazy(() => import("@/components/dashboard/DashboardContent"))
 const StrategiesPage = lazy(() => import("@/components/dashboard/StrategiesPage"))
@@ -97,6 +98,7 @@ export default function App() {
 
   if (isMiniMode) {
     return (
+      <MotionConfig reducedMotion="user">
       <QueryClientProvider client={queryClient}>
         <SectionRefreshProvider>
           <SyncProvider>
@@ -110,10 +112,12 @@ export default function App() {
         </SectionRefreshProvider>
         <AppToaster />
       </QueryClientProvider>
+      </MotionConfig>
     )
   }
 
   return (
+    <MotionConfig reducedMotion="user">
     <QueryClientProvider client={queryClient}>
       <SectionRefreshProvider>
         <SyncProvider>
@@ -200,5 +204,6 @@ export default function App() {
       </SectionRefreshProvider>
       <AppToaster />
     </QueryClientProvider>
+    </MotionConfig>
   )
 }

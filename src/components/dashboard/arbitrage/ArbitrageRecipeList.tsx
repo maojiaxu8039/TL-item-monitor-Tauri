@@ -2,6 +2,7 @@ import { Calculator } from "lucide-react";
 import { type ArbitrageRecipe, type ArbitrageCalculationResult } from "@/lib/commands";
 import { Surface } from "@/components/ui/Surface";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Button } from "@/components/ui/button";
 import { ArbitrageResultRow } from "./ArbitrageCalculationResult";
 import { getRecipeTypeLabel, formatTime } from "./utils";
 
@@ -16,6 +17,7 @@ interface ArbitrageRecipeListProps {
   onToggleExpand: (id: string) => void;
   onEdit: (recipe: ArbitrageRecipe) => void;
   onDelete: (recipeId: string) => void;
+  onRefresh: () => void;
 }
 
 export function ArbitrageRecipeList({
@@ -29,6 +31,7 @@ export function ArbitrageRecipeList({
   onToggleExpand,
   onEdit,
   onDelete,
+  onRefresh,
 }: ArbitrageRecipeListProps) {
   return (
     <Surface padding="none">
@@ -67,6 +70,8 @@ export function ArbitrageRecipeList({
                 title="暂无套利数据"
                 description="点击刷新价格获取最新结果"
                 icon={Calculator}
+                compact
+                action={<Button size="sm" variant="outline" onClick={onRefresh}>刷新价格</Button>}
               />
             )}
           </div>

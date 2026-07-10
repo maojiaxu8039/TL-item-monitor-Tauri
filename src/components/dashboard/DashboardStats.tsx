@@ -8,6 +8,7 @@ import { cmd } from "@/lib/commands"
 import type { DashboardSummary, StrategyWithCosts, FirePriceUI } from "@/lib/commands"
 import { queryKeys } from "@/lib/queryKeys"
 import { calculateRecommendations } from "@/lib/strategyRecommend"
+import { ErrorState } from "@/components/ui/LoadingState"
 
 function formatFirePriceCompact(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "0";
@@ -41,7 +42,7 @@ const FirePriceHelper = memo(function FirePriceHelper({ fire }: { fire: FirePric
 export function DashboardStats() {
   const { marketContext, marketContextReady } = useSectionRefresh()
 
-  const { data: summary, isLoading: summaryLoading } = useQuery<DashboardSummary>({
+  const { data: summary, isLoading: summaryLoading, isError: summaryError, refetch: refetchSummary } = useQuery<DashboardSummary>({
     queryKey: [...queryKeys.dashboardSummary, marketContext.seasonId, marketContext.marketMode],
     queryFn: () => cmd.getDashboardSummary(),
     enabled: marketContextReady,
@@ -83,6 +84,7 @@ export function DashboardStats() {
 
   useEffect(() => {
     if (top3.length === 0) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const interval = setInterval(() => {
       setCurrentIndex(prev => (prev + 1) % top3.length);
     }, 3000);
@@ -125,6 +127,18 @@ export function DashboardStats() {
     )
   }
 
+  if (summaryError) {
+    return (
+      <div className="surface">
+        <ErrorState
+          title="市场概览加载失败"
+          message="无法读取本地市场数据，请确认应用服务已正常启动。"
+          onRetry={() => void refetchSummary()}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -138,7 +152,7 @@ export function DashboardStats() {
         />
         <MetricCard
           label="当前火价"
-          value={hasFirePrice ? stats.currentFire!.toFixed(2) : "获取中..."}
+          value={hasFirePrice ? stats.currentFire!.toFixed(2) : "暂无数据"}
           icon={Flame}
           iconBg="bg-[rgba(239,68,68,0.1)]"
           iconColor="text-[var(--color-danger)]"
@@ -200,6 +214,7 @@ export function DashboardStats() {
             <div className="flex items-center gap-1">
               <button
                 onClick={handlePrevSlide}
+                aria-label="上一条策略推荐"
                 className="rounded-lg p-1 text-[var(--color-text-subtle)] transition-colors hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-brand-gold)]"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -209,6 +224,7 @@ export function DashboardStats() {
               </span>
               <button
                 onClick={handleNextSlide}
+                aria-label="下一条策略推荐"
                 className="rounded-lg p-1 text-[var(--color-text-subtle)] transition-colors hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-brand-gold)]"
               >
                 <ChevronRight className="w-4 h-4" />

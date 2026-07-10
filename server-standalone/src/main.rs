@@ -652,22 +652,46 @@ async fn handle_request(
                 }
 
                 if header_complete {
-                    match header_end_pos.checked_add(content_length) {
-                        Some(total_expected) => {
-                            if buffer.len() >= total_expected {
-                                break;
+                    if is_chunked {
+                        match chunked_body_complete(&buffer[header_end_pos..]) {
+                            Ok(true) => break,
+                            Ok(false) => {}
+                            Err(()) => {
+                                warn!("chunked 请求体格式错误");
+                                let response = plain_http_response(
+                                    400,
+                                    "Bad Request",
+                                    "Malformed chunked request body",
+                                );
+                                let _ = tokio::io::AsyncWriteExt::write_all(
+                                    &mut tokio::io::BufWriter::new(&mut stream),
+                                    response.as_bytes(),
+                                )
+                                .await;
+                                return;
                             }
                         }
-                        None => {
-                            warn!("请求 Content-Length 溢出");
-                            let response =
-                                plain_http_response(413, "Payload Too Large", "Payload too large");
-                            let _ = tokio::io::AsyncWriteExt::write_all(
-                                &mut tokio::io::BufWriter::new(&mut stream),
-                                response.as_bytes(),
-                            )
-                            .await;
-                            return;
+                    } else {
+                        match header_end_pos.checked_add(content_length) {
+                            Some(total_expected) => {
+                                if buffer.len() >= total_expected {
+                                    break;
+                                }
+                            }
+                            None => {
+                                warn!("请求 Content-Length 溢出");
+                                let response = plain_http_response(
+                                    413,
+                                    "Payload Too Large",
+                                    "Payload too large",
+                                );
+                                let _ = tokio::io::AsyncWriteExt::write_all(
+                                    &mut tokio::io::BufWriter::new(&mut stream),
+                                    response.as_bytes(),
+                                )
+                                .await;
+                                return;
+                            }
                         }
                     }
                 }
@@ -733,7 +757,18 @@ async fn handle_request(
         }
     }
 
-    if header_complete && content_length > 0 {
+    if header_complete && is_chunked {
+        if chunked_body_complete(&buffer[header_end_pos..]) != Ok(true) {
+            warn!("chunked 请求 body 不完整");
+            let response = plain_http_response(400, "Bad Request", "Incomplete chunked body");
+            let _ = tokio::io::AsyncWriteExt::write_all(
+                &mut tokio::io::BufWriter::new(stream),
+                response.as_bytes(),
+            )
+            .await;
+            return;
+        }
+    } else if header_complete && content_length > 0 {
         match header_end_pos.checked_add(content_length) {
             Some(expected_body_len) => {
                 if buffer.len() < expected_body_len {
@@ -2805,7 +2840,13 @@ fn decode_chunked_body(body: &[u8]) -> Option<Vec<u8>> {
         let chunk_size = usize::from_str_radix(size_str, 16).ok()?;
         pos += crlf + 2;
         if chunk_size == 0 {
-            // 终止 chunk: 0\r\n\r\n,跳过 trailing CRLF
+            // last-chunk 后还必须有完整 trailer section；无 trailer 时即一个 CRLF。
+            let trailer = &body[pos..];
+            if !trailer.starts_with(b"\r\n")
+                && !trailer.windows(4).any(|window| window == b"\r\n\r\n")
+            {
+                return None;
+            }
             saw_terminator = true;
             break;
         }
@@ -2828,9 +2869,43 @@ fn decode_chunked_body(body: &[u8]) -> Option<Vec<u8>> {
     Some(out)
 }
 
+/// 检查 chunked body 是否已收到完整的 last-chunk 和 trailer section。
+/// `Ok(false)` 表示还需要继续读取，`Err(())` 表示已经可以确定格式非法。
+fn chunked_body_complete(body: &[u8]) -> Result<bool, ()> {
+    let mut pos = 0;
+
+    loop {
+        let Some(crlf) = body[pos..].windows(2).position(|window| window == b"\r\n") else {
+            return Ok(false);
+        };
+        let size_line = std::str::from_utf8(&body[pos..pos + crlf]).map_err(|_| ())?;
+        let size = usize::from_str_radix(size_line.split(';').next().unwrap_or("").trim(), 16)
+            .map_err(|_| ())?;
+        pos += crlf + 2;
+
+        if size == 0 {
+            let trailer = &body[pos..];
+            return Ok(trailer.starts_with(b"\r\n")
+                || trailer.windows(4).any(|window| window == b"\r\n\r\n"));
+        }
+
+        let chunk_end = pos.checked_add(size).ok_or(())?;
+        if chunk_end > body.len() {
+            return Ok(false);
+        }
+        if chunk_end + 2 > body.len() {
+            return Ok(false);
+        }
+        if &body[chunk_end..chunk_end + 2] != b"\r\n" {
+            return Err(());
+        }
+        pos = chunk_end + 2;
+    }
+}
+
 #[cfg(test)]
 mod chunked_tests {
-    use super::decode_chunked_body;
+    use super::{chunked_body_complete, decode_chunked_body};
 
     #[test]
     fn decode_single_chunk() {
@@ -2866,6 +2941,19 @@ mod chunked_tests {
         // 缺失终止 chunk
         let body = b"5\r\nhello\r\n";
         assert!(decode_chunked_body(body).is_none());
+    }
+
+    #[test]
+    fn incomplete_last_chunk_is_not_complete() {
+        assert_eq!(chunked_body_complete(b"5\r\nhello\r\n0\r\n"), Ok(false));
+        assert!(decode_chunked_body(b"5\r\nhello\r\n0\r\n").is_none());
+    }
+
+    #[test]
+    fn complete_body_with_trailer_is_accepted() {
+        let body = b"5\r\nhello\r\n0\r\nX-Trace: test\r\n\r\n";
+        assert_eq!(chunked_body_complete(body), Ok(true));
+        assert_eq!(decode_chunked_body(body).as_deref(), Some(b"hello".as_slice()));
     }
 }
 
@@ -3781,6 +3869,56 @@ mod e2e_tests {
         (status, body)
     }
 
+    async fn http_post_chunked_in_separate_writes(
+        addr: SocketAddr,
+        path: &str,
+        chunks: &[&str],
+    ) -> (u16, String) {
+        let mut stream = tokio::net::TcpStream::connect(addr)
+            .await
+            .expect("connect should succeed");
+        let header = format!(
+            "POST {} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
+            path
+        );
+        stream
+            .write_all(header.as_bytes())
+            .await
+            .expect("header write should succeed");
+
+        // 确保 server 先单独收到 header，复现正文未与 header 同包到达的情况。
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        for chunk in chunks {
+            let encoded = format!("{:X}\r\n{}\r\n", chunk.len(), chunk);
+            stream
+                .write_all(encoded.as_bytes())
+                .await
+                .expect("chunk write should succeed");
+            tokio::task::yield_now().await;
+        }
+        stream
+            .write_all(b"0\r\n\r\n")
+            .await
+            .expect("last chunk write should succeed");
+
+        let mut buf = Vec::new();
+        stream
+            .read_to_end(&mut buf)
+            .await
+            .expect("read should succeed");
+        let text = String::from_utf8_lossy(&buf);
+        let mut parts = text.splitn(2, "\r\n\r\n");
+        let head = parts.next().unwrap_or("");
+        let body = parts.next().unwrap_or("").to_string();
+        let status = head
+            .lines()
+            .next()
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|value| value.parse::<u16>().ok())
+            .unwrap_or(0);
+        (status, body)
+    }
+
     async fn http_options(
         addr: SocketAddr,
         path: &str,
@@ -3933,6 +4071,20 @@ mod e2e_tests {
             None,
         )
         .await;
+        assert_eq!(status, 200, "body: {}", body);
+        assert!(body.contains("\"success\": true"), "body: {}", body);
+    }
+
+    #[tokio::test]
+    async fn e2e_chunked_post_waits_for_body_sent_after_headers() {
+        let (addr, _state, _handle) = spawn_test_server().await;
+        let (status, body) = http_post_chunked_in_separate_writes(
+            addr,
+            "/api/admin/config",
+            &["{\"password\":\"", "test123\"}"],
+        )
+        .await;
+
         assert_eq!(status, 200, "body: {}", body);
         assert!(body.contains("\"success\": true"), "body: {}", body);
     }
