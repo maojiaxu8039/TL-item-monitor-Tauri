@@ -305,7 +305,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
       className="relative"
       ref={containerRef}
     >
-      <div className="flex items-center gap-3 rounded-lg border border-[rgba(255,184,0,0.16)] bg-[var(--color-panel)] p-3 shadow-[var(--shadow-sm)]">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[rgba(255,184,0,0.16)] bg-[var(--color-panel)] p-3 shadow-[var(--shadow-sm)]">
         <Select
           value={typeFilter}
           onChange={(e) => {
@@ -322,7 +322,7 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
           ))}
         </Select>
 
-        <div className="relative flex-1 min-w-0">
+        <div className="relative min-w-[240px] flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-subtle)]" />
           <Input
             ref={inputRef}
@@ -334,14 +334,16 @@ export function SearchBar({ sections = [] }: SearchBarProps) {
           />
         </div>
 
-        <Button onClick={handleImportList} variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-[13px]">
-          <Upload className="h-3.5 w-3.5" />
-          导入列表
-        </Button>
-        <Button onClick={handleExportList} variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-[13px]">
-          <Download className="h-3.5 w-3.5" />
-          导出列表
-        </Button>
+        <div className="flex flex-shrink-0 items-center gap-2">
+          <Button onClick={handleImportList} variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-[13px]">
+            <Upload className="h-3.5 w-3.5" />
+            导入列表
+          </Button>
+          <Button onClick={handleExportList} variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-[13px]">
+            <Download className="h-3.5 w-3.5" />
+            导出列表
+          </Button>
+        </div>
       </div>
 
       <AnimatePresence>

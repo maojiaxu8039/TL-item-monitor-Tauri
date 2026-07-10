@@ -14,14 +14,14 @@ scrape:
 desktop:
   auto_start: false
   tray_on_close: false
-  mini_mode: true
+  mini_mode: false
   free_layout: false
   mini_opacity: 1.0
   mini_always_on_top: true
   mini_width: 1680
   mini_height: 2480
-  mini_x: 228
-  mini_y: 100
+  mini_x: 270
+  mini_y: 66
 notification:
   system_notifications: true
   mac_desktop_notifications: true

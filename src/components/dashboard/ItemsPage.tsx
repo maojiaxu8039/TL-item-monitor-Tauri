@@ -474,7 +474,7 @@ export default function ItemsPage() {
       />
 
       {stats && (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             label="平均价格"
             value={stats.avgPrice.toFixed(2)}
@@ -516,24 +516,24 @@ export default function ItemsPage() {
 
       <Surface padding="md">
         <Toolbar>
-          <div className="flex items-center gap-3 flex-wrap flex-1">
+          <div className="flex flex-1 flex-wrap items-center gap-3">
             <DayRangeInput value={dayFilter} onChange={setDayFilter} />
-            <div className="relative">
+            <div className="relative min-w-[150px] flex-1 sm:flex-none">
               <GitCompare className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
               <select
                 value={historySeason}
                 onChange={(e) => setHistorySeason(e.target.value)}
-                className="pl-9 pr-8 py-2 border border-[var(--color-border)] rounded-lg text-sm bg-[var(--color-panel)] outline-none cursor-pointer appearance-none min-w-[160px] hover:border-[var(--color-border)] transition-colors focus:ring-2 focus:ring-[var(--color-brand)]/30"
+                className="w-full pl-9 pr-8 py-2 border border-[var(--color-border)] rounded-lg text-sm bg-[var(--color-panel)] outline-none cursor-pointer appearance-none hover:border-[var(--color-border)] transition-colors focus:ring-2 focus:ring-[var(--color-brand)]/30"
               >
                 <option value="ss11">对比赛季 SS11</option>
               </select>
             </div>
-            <div className="relative">
+            <div className="relative min-w-[130px] flex-1 sm:flex-none">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-                className="pl-9 pr-8 py-2 border border-[var(--color-border)] rounded-lg text-sm bg-[var(--color-panel)] outline-none cursor-pointer appearance-none min-w-[140px] hover:border-[var(--color-border)] transition-colors focus:ring-2 focus:ring-[var(--color-brand)]/30"
+                className="w-full pl-9 pr-8 py-2 border border-[var(--color-border)] rounded-lg text-sm bg-[var(--color-panel)] outline-none cursor-pointer appearance-none hover:border-[var(--color-border)] transition-colors focus:ring-2 focus:ring-[var(--color-brand)]/30"
               >
                 <option value="all">全部类型</option>
                 {itemTypes.map((type) => (
@@ -543,7 +543,7 @@ export default function ItemsPage() {
                 ))}
               </select>
             </div>
-            <div className="relative min-w-[200px]">
+            <div className="relative min-w-[200px] flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
               <input
                 type="text"

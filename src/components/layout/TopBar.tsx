@@ -326,7 +326,7 @@ export function TopBar({ page, onPageChange, isMiniMode: externalIsMiniMode, set
           <span className="font-bold text-[var(--color-brand-gold)]">
             {summary?.fire?.rmb_per_10k_fire?.toFixed(2) || "—"}
           </span>
-          <span className="text-[var(--color-text-subtle)]">元/万火</span>
+          <span className="torch-price-unit text-[var(--color-text-subtle)]">元/万火</span>
           {summary?.fire && (
             <FireStaleTag scrapedAt={summary.fire.scraped_at} />
           )}
@@ -358,14 +358,14 @@ export function TopBar({ page, onPageChange, isMiniMode: externalIsMiniMode, set
           )}
         </Button>
 
-        <div className="torch-status-chip" title={sourceTitle(dataSource)}>
+        <div
+          className="torch-status-chip torch-status-chip-compact"
+          title={`${sourceTitle(dataSource)} · ${notificationEnabled ? "通知已开启" : "通知已关闭"}`}
+        >
           <span className={cn("torch-status-dot", sourceDotClass(dataSource))} />
-          {sourceLabel(dataSource)}
-        </div>
-
-        <div className="torch-status-chip" title={notificationEnabled ? "通知已开启" : "通知已关闭"}>
+          <span>{sourceLabel(dataSource)}</span>
           <span className={cn("torch-status-dot", notificationEnabled ? "bg-[var(--color-success)]" : "bg-[var(--color-danger)]")} />
-          通知
+          <span>通知</span>
         </div>
       </div>
 

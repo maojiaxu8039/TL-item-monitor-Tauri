@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { cmd } from "@/lib/commands";
 import { formatTimestamp } from "@/lib/format";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Button } from "@/components/ui/button";
-import { queryKeys } from "@/lib/queryKeys";
+import { invalidateInventoryData, invalidateSectionData, queryKeys } from "@/lib/queryKeys";
 import { parseCsv, rowsToCsv, findColumnIndex } from "@/lib/csv";
 
 function formatBytes(kb: number): string {
@@ -21,7 +21,7 @@ function formatBytes(kb: number): string {
 }
 
 // 一个列的规范：用于把用户上传的 CSV 重整为后端期望的列顺序
-export interface ColumnSpec {
+interface ColumnSpec {
   // 后端期望的字段名（输出列名）
   key: string;
   // 可识别的别名（用于在用户文件表头中查找列，大小写无关）
@@ -39,7 +39,7 @@ export interface ColumnSpec {
 // 2. 根据列名别名匹配每一列，缺失必填列直接返回错误
 // 3. 按 spec 的列顺序重新序列化，发给后端
 // 4. 收集行级别校验失败，作为 preErrors 返回（不会发往后端）
-export function preprocessCsv(
+function preprocessCsv(
   content: string,
   spec: ColumnSpec[],
 ): { csv: string | null; preErrors: string[]; rowCount: number } {
@@ -125,6 +125,7 @@ const validateNonEmpty = (label: string) => (raw: string): string | null => {
 };
 
 export default function ImportExportPage() {
+  const queryClient = useQueryClient();
   const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
   const [showImportDetails, setShowImportDetails] = useState(false);
   const { marketContext, marketContextReady } = useSectionRefresh();
@@ -134,6 +135,30 @@ export default function ImportExportPage() {
     queryFn: cmd.getBackupInfo,
     enabled: marketContextReady,
   });
+
+  const invalidateAfterImport = (kind: "watchlist" | "inventory" | "buyWatches" | "arbitrage") => {
+    if (kind === "watchlist") {
+      invalidateSectionData(queryClient, {
+        seasonId: marketContext.seasonId,
+        marketMode: marketContext.marketMode,
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.miniWindowFeed });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboardSummary });
+      return;
+    }
+
+    if (kind === "inventory" || kind === "buyWatches") {
+      invalidateInventoryData(queryClient);
+      queryClient.invalidateQueries({ queryKey: queryKeys.miniWindowFeed });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboardSummary });
+      return;
+    }
+
+    queryClient.invalidateQueries({ queryKey: queryKeys.arbitrageRecipes });
+    queryClient.invalidateQueries({ queryKey: queryKeys.arbitrageCalculation });
+    queryClient.invalidateQueries({ queryKey: queryKeys.miniWindowFeed });
+    queryClient.invalidateQueries({ queryKey: queryKeys.dashboardSummary });
+  };
 
   // ===== 各导入入口的列规范 =====
   // 关注列表：兼容导出后重导入，也支持用户用“分组名称 + 物品ID”导入。
@@ -223,6 +248,7 @@ export default function ImportExportPage() {
       if (!data) return;
       setImportResult(data.result);
       setShowImportDetails(false);
+      invalidateAfterImport("watchlist");
     },
     onError: (err) => {
       toast.error(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
@@ -235,6 +261,7 @@ export default function ImportExportPage() {
       if (!data) return;
       setImportResult(data.result);
       setShowImportDetails(false);
+      invalidateAfterImport("inventory");
     },
     onError: (err) => {
       toast.error(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
@@ -247,6 +274,7 @@ export default function ImportExportPage() {
       if (!data) return;
       setImportResult(data.result);
       setShowImportDetails(false);
+      invalidateAfterImport("buyWatches");
     },
     onError: (err) => {
       toast.error(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
@@ -259,6 +287,7 @@ export default function ImportExportPage() {
       if (!data) return;
       setImportResult(data.result);
       setShowImportDetails(false);
+      invalidateAfterImport("arbitrage");
     },
     onError: (err) => {
       toast.error(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
@@ -410,7 +439,7 @@ export default function ImportExportPage() {
       />
 
       {backupInfo && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             label="数据库大小"
             value={formatBytes(backupInfo.db_size_kb)}
@@ -462,7 +491,6 @@ export default function ImportExportPage() {
               <Button
                 onClick={() => handleExport(backupMutation)}
                 disabled={backupMutation.isPending}
-                className="bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] hover:opacity-90 text-black"
               >
                 <Download className="w-4 h-4 mr-1.5" />
                 {backupMutation.isPending ? "备份中..." : "备份"}
@@ -498,7 +526,7 @@ export default function ImportExportPage() {
               <Button
                 onClick={() => importCsvMutation.mutate()}
                 disabled={importCsvMutation.isPending}
-                className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
+                variant="warning"
               >
                 <Upload className="w-4 h-4 mr-1.5" />
                 {importCsvMutation.isPending ? "导入中..." : "导入 CSV"}
@@ -515,7 +543,7 @@ export default function ImportExportPage() {
               <Button
                 onClick={() => importInventoryMutation.mutate()}
                 disabled={importInventoryMutation.isPending}
-                className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
+                variant="warning"
               >
                 <Upload className="w-4 h-4 mr-1.5" />
                 {importInventoryMutation.isPending ? "导入中..." : "导入 CSV"}
@@ -532,7 +560,7 @@ export default function ImportExportPage() {
               <Button
                 onClick={() => importBuyWatchesMutation.mutate()}
                 disabled={importBuyWatchesMutation.isPending}
-                className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
+                variant="warning"
               >
                 <Upload className="w-4 h-4 mr-1.5" />
                 {importBuyWatchesMutation.isPending ? "导入中..." : "导入 CSV"}
@@ -549,7 +577,7 @@ export default function ImportExportPage() {
               <Button
                 onClick={() => importArbitrageMutation.mutate()}
                 disabled={importArbitrageMutation.isPending}
-                className="bg-[var(--color-brand-gold)] hover:opacity-90 text-black"
+                variant="warning"
               >
                 <Upload className="w-4 h-4 mr-1.5" />
                 {importArbitrageMutation.isPending ? "导入中..." : "导入 CSV"}
@@ -616,7 +644,7 @@ export default function ImportExportPage() {
               <Button
                 onClick={() => handleExport(exportCsvMutation)}
                 disabled={exportCsvMutation.isPending}
-                className="bg-[var(--color-success)] hover:opacity-90 text-black"
+                variant="success"
               >
                 <Download className="w-4 h-4 mr-1.5" />
                 {exportCsvMutation.isPending ? "导出中..." : "导出"}
@@ -633,7 +661,7 @@ export default function ImportExportPage() {
               <Button
                 onClick={() => handleExport(exportFireMutation)}
                 disabled={exportFireMutation.isPending}
-                className="bg-[var(--color-success)] hover:opacity-90 text-black"
+                variant="success"
               >
                 <Download className="w-4 h-4 mr-1.5" />
                 {exportFireMutation.isPending ? "导出中..." : "导出"}
@@ -650,7 +678,7 @@ export default function ImportExportPage() {
               <Button
                 onClick={() => handleExport(exportInventoryMutation)}
                 disabled={exportInventoryMutation.isPending}
-                className="bg-[var(--color-success)] hover:opacity-90 text-black"
+                variant="success"
               >
                 <Download className="w-4 h-4 mr-1.5" />
                 {exportInventoryMutation.isPending ? "导出中..." : "导出"}
@@ -667,7 +695,7 @@ export default function ImportExportPage() {
               <Button
                 onClick={() => handleExport(exportBuyWatchesMutation)}
                 disabled={exportBuyWatchesMutation.isPending}
-                className="bg-[var(--color-success)] hover:opacity-90 text-black"
+                variant="success"
               >
                 <Download className="w-4 h-4 mr-1.5" />
                 {exportBuyWatchesMutation.isPending ? "导出中..." : "导出"}
@@ -684,7 +712,7 @@ export default function ImportExportPage() {
               <Button
                 onClick={() => handleExport(exportArbitrageMutation)}
                 disabled={exportArbitrageMutation.isPending}
-                className="bg-[var(--color-success)] hover:opacity-90 text-black"
+                variant="success"
               >
                 <Download className="w-4 h-4 mr-1.5" />
                 {exportArbitrageMutation.isPending ? "导出中..." : "导出"}

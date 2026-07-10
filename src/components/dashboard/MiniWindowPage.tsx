@@ -6,14 +6,14 @@ import {
   type InventoryPositionView,
   type MiniWorthItem,
 } from "@/lib/commands"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { RefreshCw, Copy, Check, Settings2, Plus, Minus, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { useVisiblePolling } from "@/hooks/useVisiblePolling"
 import { useShowMore } from "@/hooks/useShowMore"
-import { queryKeys } from "@/lib/queryKeys"
+import { invalidateInventoryData, queryKeys } from "@/lib/queryKeys"
 import { errorMessage } from "@/lib/utils"
 import { toast } from "sonner"
 import { ItemSearchDialog } from "./ItemSearchDialog"
@@ -32,6 +32,7 @@ function formatPercent(value: number | null | undefined): string {
 
 export default function MiniWindowPage() {
   const { marketContext, marketContextReady } = useSectionRefresh()
+  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<Tab>("worth")
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -269,6 +270,9 @@ export default function MiniWindowPage() {
               })
               toast.success("持仓添加成功")
             }
+            invalidateInventoryData(queryClient)
+            queryClient.invalidateQueries({ queryKey: queryKeys.miniWindowFeed })
+            queryClient.invalidateQueries({ queryKey: queryKeys.dashboardSummary })
             feedQuery.refetch()
           } catch (error) {
             toast.error(`添加失败: ${errorMessage(error)}`)

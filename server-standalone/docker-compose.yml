@@ -27,7 +27,7 @@ services:
       - TL_RESOURCES_DIR=/resources
       - TL_ADMIN_PASSWORD=${TL_ADMIN_PASSWORD:-}
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/ready"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -176,8 +176,8 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
   }, [currentData, historyData]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="flex max-h-[85vh] w-[950px] flex-col overflow-hidden rounded-lg border border-[rgba(255,184,0,0.24)] bg-[var(--color-panel)] shadow-[var(--shadow-lg)]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[85vh] w-full max-w-[950px] flex-col overflow-hidden rounded-lg border border-[rgba(255,184,0,0.24)] bg-[var(--color-panel)] shadow-[var(--shadow-lg)]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border-soft)] px-6 py-4">
           <div>
@@ -225,7 +225,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
 
         {/* Stats */}
         {stats && (
-          <div className="grid grid-cols-4 gap-4 bg-[rgba(255,255,255,0.018)] px-6 py-4">
+          <div className="grid grid-cols-1 gap-3 bg-[rgba(255,255,255,0.018)] px-6 py-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-lg border border-[rgba(255,184,0,0.14)] bg-[var(--color-panel-soft)] p-3">
               <div className="mb-1 text-xs text-[var(--color-text-subtle)]">当前均价</div>
               <div className="text-lg font-bold text-[var(--color-brand-gold)]">

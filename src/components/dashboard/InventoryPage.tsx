@@ -153,7 +153,7 @@ export default function InventoryPage() {
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Surface padding="md" className="bg-[var(--color-panel-soft)]">
             <div className="flex items-center gap-2 mb-2">
               <DollarSign className="w-4 h-4 text-[var(--color-text-subtle)]" />

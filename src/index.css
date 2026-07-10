@@ -392,6 +392,10 @@
     white-space: nowrap;
   }
 
+  .torch-status-chip-compact {
+    gap: 0.32rem;
+  }
+
   .torch-status-dot {
     display: inline-block;
     width: 0.45rem;
@@ -434,6 +438,50 @@
   .torch-window-close:hover {
     border-color: rgba(239, 68, 68, 0.5);
     background: rgba(239, 68, 68, 0.14);
+  }
+
+  @media (max-width: 1120px) {
+    .torch-topbar {
+      gap: 0.45rem;
+      padding-left: 0.7rem;
+      padding-right: 0.65rem;
+    }
+
+    .torch-brand {
+      min-width: 116px;
+    }
+
+    .torch-brand-logo {
+      width: 112px;
+      height: 42px;
+    }
+
+    .torch-topbar-context {
+      display: none;
+    }
+
+    .torch-price-chip .torch-price-unit {
+      display: none;
+    }
+
+    .torch-status-chip-compact span:nth-of-type(2),
+    .torch-status-chip-compact span:nth-of-type(4) {
+      display: none;
+    }
+  }
+
+  @media (max-width: 940px) {
+    .torch-price-chip {
+      padding: 0 0.42rem;
+    }
+
+    .torch-status-chip-compact {
+      padding: 0 0.42rem;
+    }
+
+    .torch-select {
+      width: 96px !important;
+    }
   }
 
   .torch-sidebar {

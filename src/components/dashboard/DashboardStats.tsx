@@ -109,7 +109,7 @@ export function DashboardStats() {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="metric-card animate-pulse">
             <div className="flex items-center gap-2 mb-2">
@@ -127,7 +127,7 @@ export function DashboardStats() {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="监控物品"
           value={stats.itemCount.toString()}

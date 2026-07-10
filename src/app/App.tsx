@@ -54,6 +54,23 @@ function LazyPage({ children }: { children: React.ReactNode }) {
   )
 }
 
+function AppToaster() {
+  return (
+    <Toaster
+      position="bottom-right"
+      toastOptions={{
+        style: {
+          background: '#111418',
+          color: '#e6e6e6',
+          border: '1px solid rgba(255, 184, 0, 0.24)',
+          borderRadius: '8px',
+          boxShadow: '0 28px 80px -38px rgb(0 0 0 / 0.95)',
+        },
+      }}
+    />
+  )
+}
+
 export default function App() {
   const [page, setPage] = useState<PageId>("dashboard")
   const [isMiniMode, setIsMiniMode] = useState(false)
@@ -91,6 +108,7 @@ export default function App() {
             </div>
           </SyncProvider>
         </SectionRefreshProvider>
+        <AppToaster />
       </QueryClientProvider>
     )
   }
@@ -180,18 +198,7 @@ export default function App() {
           </div>
         </SyncProvider>
       </SectionRefreshProvider>
-      <Toaster
-        position="bottom-right"
-        toastOptions={{
-          style: {
-            background: '#111418',
-            color: '#e6e6e6',
-            border: '1px solid rgba(255, 184, 0, 0.24)',
-            borderRadius: '8px',
-            boxShadow: '0 28px 80px -38px rgb(0 0 0 / 0.95)',
-          },
-        }}
-      />
+      <AppToaster />
     </QueryClientProvider>
   )
 }

@@ -88,22 +88,21 @@ pub async fn set_mini_window_mode(
 
     if let Some(window) = app.get_webview_window("main") {
         if enabled {
-            let opacity = state.config.read().desktop.mini_opacity;
+            let desktop = state.config.read().desktop.clone();
+            let opacity = desktop.mini_opacity;
+            let width = desktop.mini_width.max(MINI_MIN_WIDTH);
+            let height = desktop.mini_height.max(MINI_MIN_HEIGHT);
             let _ = window.set_min_size(Some(tauri::Size::Logical(tauri::LogicalSize {
                 width: MINI_MIN_WIDTH as f64,
                 height: MINI_MIN_HEIGHT as f64,
             })));
             let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
-                width: MINI_DEFAULT_WIDTH as f64,
-                height: MINI_DEFAULT_HEIGHT as f64,
+                width: width as f64,
+                height: height as f64,
             }));
             let _ = window.set_always_on_top(true);
             let _ = apply_opacity(&window, opacity);
-            tracing::info!(
-                "[WINDOW] Switched to mini mode: {}x{}",
-                MINI_DEFAULT_WIDTH,
-                MINI_DEFAULT_HEIGHT
-            );
+            tracing::info!("[WINDOW] Switched to mini mode: {}x{}", width, height);
         } else {
             let _ = window.set_min_size(Some(tauri::Size::Logical(tauri::LogicalSize {
                 width: MAIN_MIN_WIDTH as f64,

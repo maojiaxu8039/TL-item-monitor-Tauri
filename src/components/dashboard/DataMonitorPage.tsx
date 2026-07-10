@@ -783,7 +783,7 @@ export default function DataMonitorPage() {
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1">
               <label className="block text-xs text-[var(--color-text-subtle)] mb-1">服务器地址</label>
               <input
@@ -794,16 +794,16 @@ export default function DataMonitorPage() {
                 className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
               />
             </div>
-            <button
+            <Button
               onClick={handleSaveUrl}
-              className="mt-5 px-4 py-2 bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black text-sm rounded-lg hover:opacity-90 transition-opacity"
+              size="sm"
             >
               保存
-            </button>
+            </Button>
           </div>
 
           {serverStatus && (
-            <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-[var(--color-border-soft)]">
+            <div className="grid grid-cols-1 gap-3 mt-4 pt-4 border-t border-[var(--color-border-soft)] sm:grid-cols-2 xl:grid-cols-4">
               <MetricCard
                 label="版本"
                 value={serverStatus.version}
@@ -837,7 +837,7 @@ export default function DataMonitorPage() {
         </div>
       </Surface>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Surface padding="md">
           <div className="flex items-center gap-2 mb-4">
             <StatusBadge variant="info">普通服</StatusBadge>
@@ -931,7 +931,7 @@ export default function DataMonitorPage() {
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <label className="text-xs text-[var(--color-text-subtle)]">数据类型</label>
             <div className="flex rounded-lg border border-[var(--color-border)] overflow-hidden">
               <button
@@ -959,7 +959,7 @@ export default function DataMonitorPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <label className="text-xs text-[var(--color-text-subtle)]">服务器模式</label>
             <div className="flex rounded-lg border border-[var(--color-border)] overflow-hidden">
               <button
@@ -987,7 +987,7 @@ export default function DataMonitorPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <label className="text-xs text-[var(--color-text-subtle)]">时间范围</label>
             <select
               value={timeRange}
@@ -1003,7 +1003,7 @@ export default function DataMonitorPage() {
             </select>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-2 text-xs text-[var(--color-text-subtle)]">
               <input
                 type="checkbox"
@@ -1016,7 +1016,7 @@ export default function DataMonitorPage() {
             </label>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <label className="text-xs text-[var(--color-text-subtle)]">同步方式</label>
             <div className="flex rounded-lg border border-[var(--color-border)] overflow-hidden">
               <button
@@ -1069,11 +1069,12 @@ export default function DataMonitorPage() {
             </div>
           )}
 
-          <div className="flex items-center gap-4 pt-2">
-            <button
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <Button
               onClick={handleSync}
               disabled={isSyncing || connectionStatus !== "connected"}
-              className="flex items-center gap-2 px-4 py-2 bg-[var(--color-success)] text-black text-sm rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+              variant="success"
+              size="sm"
             >
               {isSyncing ? (
                 <>
@@ -1086,7 +1087,7 @@ export default function DataMonitorPage() {
                   {syncMethod === "fast" ? "快速同步" : syncMethod === "latest" ? "获取最新" : "同步数据"}
                 </>
               )}
-            </button>
+            </Button>
 
             <span className="text-xs text-[var(--color-text-subtle)]">
               同步 {dataType === "fire" ? "火价" : "物品价格"} / {syncMode === "normal" ? "普通服" : "专家服"} / {timeRange === "season" ? "整赛季" : timeRange}
@@ -1130,7 +1131,7 @@ export default function DataMonitorPage() {
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                 <div className="text-center">
                   <div className="text-lg font-semibold text-[var(--color-success)]">{syncJob.success}</div>
                   <div className="text-xs text-[var(--color-text-subtle)]">成功</div>

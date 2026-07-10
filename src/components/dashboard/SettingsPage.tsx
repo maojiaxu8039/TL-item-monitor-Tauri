@@ -962,10 +962,10 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium text-[var(--color-text)]">小窗口尺寸</div>
-              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">默认 420 x 620，最小 340 x 420</div>
+              <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">默认 360 x 540，最小 320 x 400</div>
             </div>
             <div className="text-sm text-[var(--color-text)]">
-              420 × 620
+              360 × 540
             </div>
           </div>
 

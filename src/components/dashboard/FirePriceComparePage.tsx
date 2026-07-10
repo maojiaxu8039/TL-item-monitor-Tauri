@@ -325,7 +325,7 @@ export default function FirePriceComparePage() {
 
         <div className="mt-4 p-3 bg-[var(--color-panel-soft)] rounded-lg">
           <div className="text-xs text-[var(--color-text-subtle)] mb-2">赛季统计</div>
-          <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="grid grid-cols-1 gap-3 text-center sm:grid-cols-3">
             <div>
               <div className="text-xs text-[var(--color-text-subtle)]">均价</div>
               <div className="text-sm font-medium text-[var(--color-text)]">¥{avgPrice.toFixed(2)}</div>
@@ -354,7 +354,7 @@ export default function FirePriceComparePage() {
 
       <Surface padding="sm">
         <div className="space-y-3">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-[var(--color-text-subtle)] shrink-0">对比赛季</span>
             <select
               value={historySeason}
@@ -388,7 +388,7 @@ export default function FirePriceComparePage() {
               ))}
             </div>
 
-            <div className="flex items-center gap-2 ml-2">
+            <div className="flex flex-wrap items-center gap-2 md:ml-2">
               <CalendarDays className="w-4 h-4 text-[var(--color-text-subtle)]" />
               <span className="text-xs text-[var(--color-text-subtle)]">自定义</span>
               <input
@@ -419,7 +419,7 @@ export default function FirePriceComparePage() {
         </div>
       </Surface>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label={`${currentSeason.toUpperCase()} 均价`}
           value={currentAvg > 0 ? (

@@ -118,8 +118,8 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="bg-[var(--color-panel)] rounded-2xl shadow-2xl w-[480px] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <div className="max-h-[92vh] w-full max-w-[480px] overflow-hidden rounded-2xl bg-[var(--color-panel)] shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border-soft)]">
           <div className="flex items-center gap-2">
             <Settings className="w-5 h-5 text-[var(--color-text-subtle)]" />
@@ -217,8 +217,8 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-border-soft)]">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)] rounded-lg transition-colors">取消</button>
-          <button onClick={handleSave} className="px-4 py-2 text-sm bg-[linear-gradient(135deg,var(--color-brand),var(--color-brand-gold))] text-black rounded-lg hover:opacity-90 transition-opacity">保存设置</button>
+          <Button variant="ghost" size="sm" onClick={onClose}>取消</Button>
+          <Button size="sm" onClick={handleSave}>保存设置</Button>
         </div>
       </div>
     </div>
@@ -318,7 +318,7 @@ export default function DealsPage() {
             icon={Package}
           />
         ) : (
-          <div className="grid grid-cols-2 gap-6 h-full">
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 xl:gap-6 xl:h-full">
             <div className="flex flex-col overflow-hidden">
               <div className="flex items-center gap-2 px-1 mb-3">
                 <TrendingUp className="w-5 h-5 text-[var(--color-danger)]" />

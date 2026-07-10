@@ -620,7 +620,7 @@ export default function StrategiesPage() {
 
                 {isExpanded && (
                   <div className="border-t border-[var(--color-border-soft)]">
-                    <div className="p-4 grid grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 gap-5 p-4 xl:grid-cols-2 xl:gap-6">
                       <div>
                         <div className="flex items-center justify-between mb-3">
                           <div className="text-sm font-medium text-[var(--color-text)] flex items-center gap-1.5">
@@ -641,12 +641,12 @@ export default function StrategiesPage() {
                         ) : (
                           <div className="space-y-2">
                             {strategy.costs.map((cost) => (
-                              <div key={cost.id} className="flex items-center justify-between p-2 bg-[var(--color-panel-soft)] rounded-lg text-sm">
-                                <div className="flex items-center gap-2">
+                              <div key={cost.id} className="flex flex-wrap items-center justify-between gap-2 p-2 bg-[var(--color-panel-soft)] rounded-lg text-sm">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
                                   <span className="px-1.5 py-0.5 bg-[rgba(239,68,68,0.1)] text-[var(--color-danger)] text-xs rounded">
                                     {cost.cost_type}
                                   </span>
-                                  <span className="text-[var(--color-text)]">{cost.item_name || cost.item_id}</span>
+                                  <span className="min-w-0 truncate text-[var(--color-text)]">{cost.item_name || cost.item_id}</span>
                                   <span className="text-[var(--color-text-subtle)]">×{cost.count}</span>
                                   {cost.is_realtime && (
                                     <span className="px-1 py-0.5 bg-[var(--color-success)]/20 text-[var(--color-success)] text-xs rounded">
@@ -654,7 +654,7 @@ export default function StrategiesPage() {
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-3">
+                                <div className="flex flex-shrink-0 items-center gap-3">
                                   <span className="text-[var(--color-text-muted)]">
                                     {cost.total_fire.toFixed(1)} 火
                                   </span>
@@ -691,9 +691,9 @@ export default function StrategiesPage() {
                         ) : (
                           <div className="space-y-2">
                             {strategy.outputs.map((output) => (
-                              <div key={output.id} className="flex items-center justify-between p-2 bg-[var(--color-panel-soft)] rounded-lg text-sm">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[var(--color-text)]">{output.item_name}</span>
+                              <div key={output.id} className="flex flex-wrap items-center justify-between gap-2 p-2 bg-[var(--color-panel-soft)] rounded-lg text-sm">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                  <span className="min-w-0 truncate text-[var(--color-text)]">{output.item_name}</span>
                                   <span className="px-1 py-0.5 bg-[var(--color-panel)] text-[var(--color-text-muted)] text-xs rounded">
                                     {output.item_type}
                                   </span>

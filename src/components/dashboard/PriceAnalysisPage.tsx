@@ -178,7 +178,7 @@ function HoardCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3 mt-4">
+      <div className="grid grid-cols-1 gap-3 mt-4 sm:grid-cols-2 xl:grid-cols-4">
         <Surface padding="sm" className="bg-[var(--color-panel-soft)]">
           <div className="text-xs text-[var(--color-text-subtle)] mb-1">当前价格</div>
           <div className="text-sm font-bold text-[var(--color-text)]">{analysis.current_price.toFixed(1)}</div>
@@ -302,7 +302,7 @@ export default function PriceAnalysisPage() {
         iconAsset="price-analysis"
       />
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="分析物品"
           value={stats.total}
