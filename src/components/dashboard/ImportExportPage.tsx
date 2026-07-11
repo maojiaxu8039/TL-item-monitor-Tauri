@@ -294,6 +294,90 @@ export default function ImportExportPage() {
     },
   });
 
+  const importAlertRulesMutation = useMutation({
+    mutationFn: async () => {
+      const file = await open({
+        multiple: false,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!file) return null;
+      const content = await readTextFile(file);
+      const result = await cmd.importAlertRulesCsv(content);
+      return { result };
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      setImportResult(data.result);
+      setShowImportDetails(false);
+    },
+    onError: (err) => {
+      toast.error(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
+    },
+  });
+
+  const importStrategiesMutation = useMutation({
+    mutationFn: async () => {
+      const file = await open({
+        multiple: false,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!file) return null;
+      const content = await readTextFile(file);
+      const result = await cmd.importStrategiesCsv(content);
+      return { result };
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      setImportResult(data.result);
+      setShowImportDetails(false);
+    },
+    onError: (err) => {
+      toast.error(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
+    },
+  });
+
+  const importSeasonsMutation = useMutation({
+    mutationFn: async () => {
+      const file = await open({
+        multiple: false,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!file) return null;
+      const content = await readTextFile(file);
+      const result = await cmd.importSeasonsCsv(content);
+      return { result };
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      setImportResult(data.result);
+      setShowImportDetails(false);
+    },
+    onError: (err) => {
+      toast.error(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
+    },
+  });
+
+  const importFireHistoryMutation = useMutation({
+    mutationFn: async () => {
+      const file = await open({
+        multiple: false,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!file) return null;
+      const content = await readTextFile(file);
+      const result = await cmd.importFireHistoryCsv(content);
+      return { result };
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      setImportResult(data.result);
+      setShowImportDetails(false);
+    },
+    onError: (err) => {
+      toast.error(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
+    },
+  });
+
   const exportCsvMutation = useMutation({
     mutationFn: async () => {
       const file = await save({
@@ -369,13 +453,64 @@ export default function ImportExportPage() {
         filters: [{ name: "CSV", extensions: ["csv"] }],
       });
       if (!file) return null;
-      const csv = await cmd.exportArbitrageRecipesCsv(marketContext.seasonId, marketContext.marketMode);
+      const csv = await cmd.exportArbitrageRecipesCsv();
       await writeTextFile(file, csv);
       return file;
     },
     onSuccess: (file) => {
       if (!file) return;
       toast.success("套利比价 CSV 导出成功");
+    },
+  });
+
+  const exportAlertRulesMutation = useMutation({
+    mutationFn: async () => {
+      const file = await save({
+        defaultPath: "torchscan_alert_rules.csv",
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!file) return null;
+      const csv = await cmd.exportAlertRulesCsv();
+      await writeTextFile(file, csv);
+      return file;
+    },
+    onSuccess: (file) => {
+      if (!file) return;
+      toast.success("预警规则 CSV 导出成功");
+    },
+  });
+
+  const exportStrategiesMutation = useMutation({
+    mutationFn: async () => {
+      const file = await save({
+        defaultPath: "torchscan_strategies.csv",
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!file) return null;
+      const csv = await cmd.exportStrategiesCsv();
+      await writeTextFile(file, csv);
+      return file;
+    },
+    onSuccess: (file) => {
+      if (!file) return;
+      toast.success("策略 CSV 导出成功");
+    },
+  });
+
+  const exportSeasonsMutation = useMutation({
+    mutationFn: async () => {
+      const file = await save({
+        defaultPath: "torchscan_seasons.csv",
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!file) return null;
+      const csv = await cmd.exportSeasonsCsv();
+      await writeTextFile(file, csv);
+      return file;
+    },
+    onSuccess: (file) => {
+      if (!file) return;
+      toast.success("赛季配置 CSV 导出成功");
     },
   });
 
@@ -584,6 +719,74 @@ export default function ImportExportPage() {
               </Button>
             </div>
 
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">预警规则</span>
+                </div>
+              </div>
+              <Button
+                onClick={() => importAlertRulesMutation.mutate()}
+                disabled={importAlertRulesMutation.isPending}
+                variant="warning"
+              >
+                <Upload className="w-4 h-4 mr-1.5" />
+                {importAlertRulesMutation.isPending ? "导入中..." : "导入 CSV"}
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">策略</span>
+                </div>
+              </div>
+              <Button
+                onClick={() => importStrategiesMutation.mutate()}
+                disabled={importStrategiesMutation.isPending}
+                variant="warning"
+              >
+                <Upload className="w-4 h-4 mr-1.5" />
+                {importStrategiesMutation.isPending ? "导入中..." : "导入 CSV"}
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">赛季配置</span>
+                </div>
+              </div>
+              <Button
+                onClick={() => importSeasonsMutation.mutate()}
+                disabled={importSeasonsMutation.isPending}
+                variant="warning"
+              >
+                <Upload className="w-4 h-4 mr-1.5" />
+                {importSeasonsMutation.isPending ? "导入中..." : "导入 CSV"}
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">火价历史</span>
+                </div>
+              </div>
+              <Button
+                onClick={() => importFireHistoryMutation.mutate()}
+                disabled={importFireHistoryMutation.isPending}
+                variant="warning"
+              >
+                <Upload className="w-4 h-4 mr-1.5" />
+                {importFireHistoryMutation.isPending ? "导入中..." : "导入 CSV"}
+              </Button>
+            </div>
+
             {importResult && (
               <Surface padding="md" className={importResult.errors.length > 0 ? "bg-[rgba(255,184,0,0.08)] border-[rgba(255,184,0,0.25)]" : "bg-[rgba(34,197,94,0.1)] border-[rgba(34,197,94,0.25)]"}>
                 <div className="flex items-center gap-2 mb-2">
@@ -716,6 +919,57 @@ export default function ImportExportPage() {
               >
                 <Download className="w-4 h-4 mr-1.5" />
                 {exportArbitrageMutation.isPending ? "导出中..." : "导出"}
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">预警规则</span>
+                </div>
+              </div>
+              <Button
+                onClick={() => handleExport(exportAlertRulesMutation)}
+                disabled={exportAlertRulesMutation.isPending}
+                variant="success"
+              >
+                <Download className="w-4 h-4 mr-1.5" />
+                {exportAlertRulesMutation.isPending ? "导出中..." : "导出"}
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">策略</span>
+                </div>
+              </div>
+              <Button
+                onClick={() => handleExport(exportStrategiesMutation)}
+                disabled={exportStrategiesMutation.isPending}
+                variant="success"
+              >
+                <Download className="w-4 h-4 mr-1.5" />
+                {exportStrategiesMutation.isPending ? "导出中..." : "导出"}
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-[var(--color-border-soft)] pt-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--color-text-subtle)]" />
+                  <span className="text-sm font-medium text-[var(--color-text)]">赛季配置</span>
+                </div>
+              </div>
+              <Button
+                onClick={() => handleExport(exportSeasonsMutation)}
+                disabled={exportSeasonsMutation.isPending}
+                variant="success"
+              >
+                <Download className="w-4 h-4 mr-1.5" />
+                {exportSeasonsMutation.isPending ? "导出中..." : "导出"}
               </Button>
             </div>
           </div>

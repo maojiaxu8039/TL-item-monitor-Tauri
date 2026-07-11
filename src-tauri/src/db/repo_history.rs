@@ -948,3 +948,81 @@ pub async fn fix_bad_scraped_at_and_season_day(
     }
     Ok(total_fixed)
 }
+
+/// Recalculate all season_day values using a bulk SQL UPDATE.
+/// This is much faster than row-by-row and ensures consistency with the current season start.
+/// Covers item_snapshots, fire_price (realtime), and fire_price_snapshots tables.
+pub async fn recalculate_all_season_days(pool: &SqlitePool) -> Result<u64, AppError> {
+    let seasons: Vec<(String,)> = sqlx::query_as("SELECT id FROM seasons ORDER BY started_at DESC")
+        .fetch_all(pool)
+        .await?;
+    let modes = ["season_normal", "season_expert"];
+    let mut total_updated = 0u64;
+
+    for (season_id,) in &seasons {
+        let season_start = match get_season_start_from_db(pool, season_id).await {
+            Ok(ts) => ts,
+            Err(_) => match crate::core::constants::get_season_start(season_id) {
+                Some(ts) => ts,
+                None => continue,
+            },
+        };
+
+        for mode in &modes {
+            if TableResolver::validate(season_id, mode).is_err() {
+                continue;
+            }
+
+            let tables = vec![
+                TableResolver::item_snapshots_table(season_id, mode),
+                TableResolver::fire_price_snapshots_table(season_id, mode),
+            ];
+
+            for table in &tables {
+                let result = sqlx::query(&format!(
+                    r#"UPDATE {} SET season_day = CASE
+                        WHEN (scraped_at - {}) / 86400 + 1 < 1 THEN 1
+                        ELSE (scraped_at - {}) / 86400 + 1
+                    END
+                    WHERE season_day IS NULL
+                       OR season_day != CASE
+                           WHEN (scraped_at - {}) / 86400 + 1 < 1 THEN 1
+                           ELSE (scraped_at - {}) / 86400 + 1
+                       END"#,
+                    table, season_start, season_start, season_start, season_start
+                ))
+                .execute(pool)
+                .await;
+
+                match result {
+                    Ok(r) => total_updated += r.rows_affected(),
+                    Err(e) => tracing::warn!("[SEASON-DAY-RECALC] Failed for {}: {}", table, e),
+                }
+            }
+
+            let rt_table = TableResolver::fire_price_table(season_id, mode);
+            let result = sqlx::query(&format!(
+                r#"UPDATE {} SET season_day = CASE
+                    WHEN (scraped_at - {}) / 86400 + 1 < 1 THEN 1
+                    ELSE (scraped_at - {}) / 86400 + 1
+                END
+                WHERE season_day IS NULL
+                   OR season_day != CASE
+                       WHEN (scraped_at - {}) / 86400 + 1 < 1 THEN 1
+                       ELSE (scraped_at - {}) / 86400 + 1
+                   END"#,
+                rt_table, season_start, season_start, season_start, season_start
+            ))
+            .execute(pool)
+            .await;
+
+            match result {
+                Ok(r) => total_updated += r.rows_affected(),
+                Err(e) => tracing::warn!("[SEASON-DAY-RECALC] Failed for {}: {}", rt_table, e),
+            }
+        }
+    }
+
+    tracing::info!("[SEASON-DAY-RECALC] Total records updated: {}", total_updated);
+    Ok(total_updated)
+}

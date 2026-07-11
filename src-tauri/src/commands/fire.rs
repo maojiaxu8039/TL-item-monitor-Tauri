@@ -1,4 +1,4 @@
-use crate::commands::types::{DashboardSummary, FirePriceUI, OkResponse};
+use crate::commands::types::{DashboardSummary, FirePriceUI, ImportResp, OkResponse};
 use crate::core::events::{
     emit_fire_price_updated, emit_items_updated, emit_task_status_changed, FirePricePayload,
     ItemsUpdatedPayload, TaskStatusPayload,
@@ -11,6 +11,7 @@ use crate::db::repo_inventory;
 use crate::db::repo_item_realtime_prices;
 use crate::db::repo_items;
 use crate::db::repo_sections;
+use crate::db::table_resolver::TableResolver;
 use crate::scraper;
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -45,7 +46,7 @@ pub async fn get_dashboard_summary(
     let history_fire = if let Some(ref current_fire) = fire {
         let season_start = repo_fire::get_season_start(&state.db, &ctx.season_id)
             .await
-            .unwrap_or(1776384000);
+            .unwrap_or(1776355200);
         let current_season_day =
             crate::core::constants::calculate_season_day(current_fire.scraped_at, season_start);
         let current_hour = ((current_fire.scraped_at % 86400) / 3600) as i32;
@@ -507,6 +508,82 @@ pub async fn export_fire_history_csv(
     }
     let data = wtr.into_inner().map_err(|e| e.to_string())?;
     String::from_utf8(data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn import_fire_history_csv(
+    state: State<'_, Arc<AppState>>,
+    content: String,
+) -> Result<ImportResp, String> {
+    let ctx = state.active_context.read().clone();
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(content.as_bytes());
+
+    let mut imported_count = 0;
+    let mut error_list: Vec<String> = Vec::new();
+
+    let table = TableResolver::fire_price_table(&ctx.season_id, ctx.market_mode.as_str());
+
+    for (idx, result) in reader.records().enumerate() {
+        let record = match result {
+            Ok(r) => r,
+            Err(e) => {
+                error_list.push(format!("行 {}: 解析失败: {}", idx + 2, e));
+                continue;
+            }
+        };
+
+        let rmb_per_10k_fire: f64 = match record.get(0).unwrap_or("0").parse() {
+            Ok(v) if v > 0.0 => v,
+            _ => {
+                error_list.push(format!("行 {}: 无效的火价", idx + 2));
+                continue;
+            }
+        };
+        let fire_per_rmb: f64 = record.get(1).unwrap_or("0").parse().unwrap_or(0.0);
+        let increase_ratio: Option<f64> = record.get(2).and_then(|s| {
+            if s.is_empty() {
+                None
+            } else {
+                s.parse().ok()
+            }
+        });
+        let scraped_at: i64 = record
+            .get(3)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or_else(|| chrono::Utc::now().timestamp());
+
+        let now = chrono::Utc::now().timestamp();
+
+        let result = sqlx::query(&format!(
+            r#"INSERT INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, created_at)
+               VALUES (?, ?, ?, NULL, 'import', NULL, ?, ?)
+               ON CONFLICT(scraped_at) DO UPDATE SET
+                   rmb_per_10k_fire = excluded.rmb_per_10k_fire,
+                   fire_per_rmb = excluded.fire_per_rmb,
+                   increase_ratio = excluded.increase_ratio,
+                   created_at = excluded.created_at"#,
+            table
+        ))
+        .bind(rmb_per_10k_fire)
+        .bind(fire_per_rmb)
+        .bind(increase_ratio)
+        .bind(scraped_at)
+        .bind(now)
+        .execute(&state.db)
+        .await;
+
+        match result {
+            Ok(_) => imported_count += 1,
+            Err(e) => error_list.push(format!("行 {}: {}", idx + 2, e)),
+        }
+    }
+
+    Ok(ImportResp {
+        imported: imported_count,
+        errors: error_list,
+    })
 }
 
 #[tauri::command]

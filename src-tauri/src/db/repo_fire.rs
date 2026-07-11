@@ -288,7 +288,7 @@ mod tests {
 
     #[test]
     fn test_calculate_season_day_ss12() {
-        let ss12_start = 1776384000i64;
+        let ss12_start = 1776355200i64;
         assert_eq!(calculate_season_day(ss12_start, ss12_start), 1);
         assert_eq!(calculate_season_day(ss12_start + 86400, ss12_start), 2);
         assert_eq!(calculate_season_day(ss12_start - 86400, ss12_start), 1);

@@ -793,14 +793,25 @@ export const cmd = {
     invoke<number | null>("get_arbitrage_item_price", { itemId }),
   toggleArbitrageRecipeEnabled: (recipeId: string, enabled: boolean) =>
     invoke<OkResponse>("toggle_arbitrage_recipe_enabled", { recipeId, enabled }),
-  exportArbitrageRecipesCsv: (seasonId: string, marketMode: string) =>
-    invoke<string>("export_arbitrage_recipes_csv", { seasonId, marketMode }),
+  exportArbitrageRecipesCsv: () =>
+    invoke<string>("export_arbitrage_recipes_csv"),
   importArbitrageRecipesCsv: (content: string) =>
     invoke<ImportResp>("import_arbitrage_recipes_csv", { content }),
   importInventoryCsv: (content: string) =>
     invoke<ImportResp>("import_inventory_csv", { content }),
   importBuyWatchesCsv: (content: string) =>
     invoke<ImportResp>("import_buy_watches_csv", { content }),
+  exportAlertRulesCsv: () => invoke<string>("export_alert_rules_csv"),
+  importAlertRulesCsv: (content: string) =>
+    invoke<ImportResp>("import_alert_rules_csv", { content }),
+  exportStrategiesCsv: () => invoke<string>("export_strategies_csv"),
+  importStrategiesCsv: (content: string) =>
+    invoke<ImportResp>("import_strategies_csv", { content }),
+  exportSeasonsCsv: () => invoke<string>("export_seasons_csv"),
+  importSeasonsCsv: (content: string) =>
+    invoke<ImportResp>("import_seasons_csv", { content }),
+  importFireHistoryCsv: (content: string) =>
+    invoke<ImportResp>("import_fire_history_csv", { content }),
 
   // Window mode commands
   getWindowModeState: () => invoke<WindowModeState>("get_window_mode_state"),

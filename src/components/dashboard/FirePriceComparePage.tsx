@@ -503,8 +503,34 @@ export default function FirePriceComparePage() {
                 axisLine={false}
               />
               <Tooltip
-                formatter={(value: unknown) => [`¥${Number(value).toFixed(2)}/万火`]}
-                contentStyle={{ borderRadius: "8px", border: "1px solid var(--color-border)", fontSize: "12px" }}
+                content={({ active, payload, label }) => {
+                  if (!active || !payload || payload.length === 0) return null;
+                  return (
+                    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] px-3 py-2 shadow-lg" style={{ fontSize: "12px" }}>
+                      <div className="text-[var(--color-text-subtle)] mb-1.5 font-medium">{label}</div>
+                      {payload.map((entry, idx) => {
+                        const isCurrent = entry.dataKey === "current";
+                        const name = isCurrent ? currentSeason.toUpperCase() : historySeason.toUpperCase();
+                        const color = isCurrent ? "var(--color-brand-gold)" : "var(--color-text-muted)";
+                        return (
+                          <div key={idx} className="flex items-center gap-2" style={{ color }}>
+                            <span
+                              className="inline-block w-2.5 h-2.5 rounded-sm"
+                              style={{
+                                backgroundColor: color,
+                                opacity: isCurrent ? 1 : 0.6,
+                              }}
+                            />
+                            <span className="font-medium">{name}</span>
+                            <span className="ml-auto font-semibold">
+                              {entry.value != null ? `¥${Number(entry.value).toFixed(2)}/万火` : "--"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                }}
               />
               <Line
                 type="monotone"

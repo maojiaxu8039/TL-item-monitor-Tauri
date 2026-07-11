@@ -330,6 +330,10 @@ async fn run_migrations(pool: &SqlitePool, db_path: &Path, db_existed: bool) -> 
         tracing::warn!("[STARTUP] Failed to fix bad scraped_at/season_day: {}", e);
     }
 
+    if let Err(e) = crate::db::repo_history::recalculate_all_season_days(pool).await {
+        tracing::warn!("[STARTUP] Failed to recalculate season_day: {}", e);
+    }
+
     tracing::info!("Database migrations complete");
     Ok(())
 }
@@ -602,22 +606,40 @@ async fn run_legacy_migrations(pool: &SqlitePool, current_version: i64) -> Resul
 
     if current_version < 23 {
         tracing::info!("Applying migration v23: add estimated cost/revenue to strategy_details");
-        apply_sql_migration(
+        add_column_if_missing(
             pool,
-            23,
-            include_str!("db/migrations/023_add_estimated_cost_revenue.sql"),
+            "strategy_details",
+            "estimated_cost",
+            "REAL NOT NULL DEFAULT 0",
         )
         .await?;
+        add_column_if_missing(
+            pool,
+            "strategy_details",
+            "estimated_revenue_min",
+            "REAL NOT NULL DEFAULT 0",
+        )
+        .await?;
+        add_column_if_missing(
+            pool,
+            "strategy_details",
+            "estimated_revenue_max",
+            "REAL NOT NULL DEFAULT 0",
+        )
+        .await?;
+        record_migration(pool, 23).await?;
     }
 
     if current_version < 24 {
         tracing::info!("Applying migration v24: add runs_per_hour to strategy_details");
-        apply_sql_migration(
+        add_column_if_missing(
             pool,
-            24,
-            include_str!("db/migrations/024_add_runs_per_hour.sql"),
+            "strategy_details",
+            "runs_per_hour",
+            "REAL NOT NULL DEFAULT 0",
         )
         .await?;
+        record_migration(pool, 24).await?;
     }
 
     Ok(())
@@ -1957,7 +1979,7 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
 async fn seed_seasons(pool: &SqlitePool) -> Result<(), String> {
     let now = chrono::Utc::now().timestamp();
 
-    let seasons = vec![("ss12", "SS12 当前赛季", "ss12", 1, 1776384000)];
+    let seasons = vec![("ss12", "SS12 当前赛季", "ss12", 1, 1776355200)];
 
     for (id, name, code, is_current, started_at) in seasons {
         sqlx::query(
@@ -2267,6 +2289,38 @@ mod migration_tests {
     }
 
     #[tokio::test]
+    async fn migrations_resume_when_v23_v24_columns_already_exist() {
+        let db_path = temp_db_path();
+        let pool = file_pool(&db_path).await;
+
+        run_migrations(&pool, &db_path, false)
+            .await
+            .expect("fresh migrations should complete");
+        sqlx::query("DELETE FROM _migrations WHERE version >= 23")
+            .execute(&pool)
+            .await
+            .expect("migration markers should be removable for resume test");
+
+        assert_eq!(read_schema_version(&pool).await.unwrap(), 22);
+        run_migrations(&pool, &db_path, true)
+            .await
+            .expect("partially applied v23/v24 migrations should resume");
+
+        assert_columns(
+            &pool,
+            "strategy_details",
+            &[
+                "estimated_cost",
+                "estimated_revenue_min",
+                "estimated_revenue_max",
+                "runs_per_hour",
+            ],
+        )
+        .await;
+        assert_eq!(read_schema_version(&pool).await.unwrap(), LATEST_SCHEMA_VERSION);
+    }
+
+    #[tokio::test]
     async fn migrations_repair_legacy_strategy_and_realtime_tables() {
         let db_path = temp_db_path();
         let pool = file_pool(&db_path).await;
@@ -2383,7 +2437,17 @@ mod migration_tests {
         assert_columns(
             &pool,
             "strategy_details",
-            &["name", "label", "difficulty", "output_value", "image_url"],
+            &[
+                "name",
+                "label",
+                "difficulty",
+                "output_value",
+                "image_url",
+                "estimated_cost",
+                "estimated_revenue_min",
+                "estimated_revenue_max",
+                "runs_per_hour",
+            ],
         )
         .await;
         assert_columns(&pool, "item_realtime_prices", &["name", "fire_price"]).await;
@@ -2412,6 +2476,8 @@ mod migration_tests {
         .await
         .unwrap();
         assert_eq!(backup_count, 1);
+
+        assert_eq!(read_schema_version(&pool).await.unwrap(), LATEST_SCHEMA_VERSION);
 
         let copied: (String, f64) = sqlx::query_as(
             "SELECT name, fire_price FROM item_realtime_prices WHERE item_id = 'item-1'",

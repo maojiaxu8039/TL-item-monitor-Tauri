@@ -1,7 +1,8 @@
 use crate::commands::types::{ImportResp, OkResponse};
 use crate::core::state::AppState;
 use crate::db::models_arbitrage::{
-    ArbitrageRecipe, ArbitrageRecipeWithDetails, ArbitrageResponse, CreateRecipeRequest,
+    ArbitrageIngredient, ArbitrageOutput, ArbitrageRecipe, ArbitrageRecipeWithDetails,
+    ArbitrageResponse, CreateIngredientRequest, CreateOutputRequest, CreateRecipeRequest,
     UpdateIngredientsRequest, UpdateOutputsRequest, UpdateRecipeRequest,
 };
 use crate::db::repo_arbitrage;
@@ -216,24 +217,46 @@ pub async fn toggle_arbitrage_recipe_enabled(
 #[tauri::command]
 pub async fn export_arbitrage_recipes_csv(
     state: State<'_, Arc<AppState>>,
-    _season_id: String,
-    _market_mode: String,
 ) -> Result<String, String> {
     let recipes = repo_arbitrage::get_all_recipes(&state.db)
         .await
         .map_err(|e| e.to_string())?;
 
-    let mut wtr = csv::Writer::from_writer(vec![]);
-    wtr.write_record(["name", "recipe_type", "season_id", "market_mode", "enabled"])
+    let details = repo_arbitrage::get_all_recipes_with_details(&state.db)
+        .await
         .map_err(|e| e.to_string())?;
 
+    let mut wtr = csv::Writer::from_writer(vec![]);
+    wtr.write_record([
+        "name",
+        "recipe_type",
+        "season_id",
+        "market_mode",
+        "enabled",
+        "ingredients",
+        "outputs",
+    ])
+    .map_err(|e| e.to_string())?;
+
     for recipe in recipes {
+        let (ingredients, outputs) = details
+            .get(&recipe.id)
+            .cloned()
+            .unwrap_or_else(|| (Vec::<ArbitrageIngredient>::new(), Vec::<ArbitrageOutput>::new()));
+
+        let ingredients_str =
+            format_detail_list(&ingredients, |i: &ArbitrageIngredient| (i.item_name.as_str(), i.count));
+        let outputs_str =
+            format_detail_list(&outputs, |o: &ArbitrageOutput| (o.item_name.as_str(), o.count));
+
         wtr.write_record([
             recipe.name.as_str(),
             recipe.recipe_type.as_str(),
             recipe.season_id.as_str(),
             recipe.market_mode.as_str(),
             if recipe.enabled != 0 { "1" } else { "0" },
+            ingredients_str.as_str(),
+            outputs_str.as_str(),
         ])
         .map_err(|e| e.to_string())?;
     }
@@ -259,24 +282,35 @@ pub async fn import_arbitrage_recipes_csv(
             if record.len() >= 4 {
                 let name = record.get(0).unwrap_or("").to_string();
                 let recipe_type = record.get(1).unwrap_or("normal").to_string();
-                let _season_id = record.get(2).unwrap_or("").to_string();
-                let _market_mode = record.get(3).unwrap_or("season_normal").to_string();
+                let season_id = record.get(2).unwrap_or("").to_string();
+                let market_mode = record.get(3).unwrap_or("season_normal").to_string();
                 let enabled = record.get(4).and_then(|s| s.parse().ok()).unwrap_or(true);
+                let ingredients_str = record.get(5).unwrap_or("");
+                let outputs_str = record.get(6).unwrap_or("");
 
                 if name.is_empty() {
                     error_list.push(format!("行 {}: 配方名称不能为空", idx + 2));
                     continue;
                 }
 
+                let ingredients: Vec<CreateIngredientRequest> = parse_detail_pairs(ingredients_str)
+                    .into_iter()
+                    .map(|(item_name, count)| CreateIngredientRequest { item_name, count })
+                    .collect();
+                let outputs: Vec<CreateOutputRequest> = parse_detail_pairs(outputs_str)
+                    .into_iter()
+                    .map(|(item_name, count)| CreateOutputRequest { item_name, count })
+                    .collect();
+
                 match repo_arbitrage::create_recipe(
                     &state.db,
                     &name,
                     &recipe_type,
-                    &_season_id,
-                    &_market_mode,
+                    &season_id,
+                    &market_mode,
                     enabled,
-                    &[],
-                    &[],
+                    &ingredients,
+                    &outputs,
                 )
                 .await
                 {
@@ -295,4 +329,40 @@ pub async fn import_arbitrage_recipes_csv(
         imported: imported_count,
         errors: error_list,
     })
+}
+
+/// 将明细列表格式化为 "item_name:count|item_name:count" 字符串
+fn format_detail_list<T>(items: &[T], get_fn: impl Fn(&T) -> (&str, f64)) -> String {
+    items
+        .iter()
+        .map(|item| {
+            let (name, count) = get_fn(item);
+            format!("{}:{}", name, count)
+        })
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
+/// 解析 "item_name:count|item_name:count" 格式，返回 (item_name, count) 列表
+/// 空字符串返回空列表；非法条目会被跳过
+fn parse_detail_pairs(line: &str) -> Vec<(String, f64)> {
+    if line.is_empty() {
+        return Vec::new();
+    }
+    line.split('|')
+        .filter_map(|part| {
+            let part = part.trim();
+            if part.is_empty() {
+                return None;
+            }
+            // 使用 rsplit_once，允许 item_name 中包含 ':'
+            let (name, count_str) = part.rsplit_once(':')?;
+            let name = name.trim().to_string();
+            let count: f64 = count_str.trim().parse().ok()?;
+            if name.is_empty() {
+                return None;
+            }
+            Some((name, count))
+        })
+        .collect()
 }

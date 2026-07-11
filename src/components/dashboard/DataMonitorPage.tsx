@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Database, Download, RefreshCw, Server, Wifi, WifiOff, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp, Loader2, Zap } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Database, Download, RefreshCw, Server, Wifi, WifiOff, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { cmd } from "@/lib/commands";
 import { errorMessage } from "@/lib/utils";
 import { formatTimestamp } from "@/lib/format";
@@ -8,7 +8,7 @@ import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { useSyncContext } from "@/contexts/SyncContext";
 import { toast } from "sonner";
 import ServerAdminPanel from "./ServerAdminPanel";
-import type { SyncJobState, SyncFailure, LatestPricesResponse } from "@/lib/commands";
+import type { SyncJobState, SyncFailure } from "@/lib/commands";
 import { PageShell } from "@/components/ui/PageShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
@@ -81,7 +81,7 @@ type DataType = "fire" | "items";
 type SyncMode = "normal" | "expert";
 type TimeRange = "24h" | "3d" | "7d" | "30d" | "season";
 
-const PAGE_SIZE = 500;
+const PAGE_SIZE = 1000;
 const ITEMS_SYNC_CURSOR_PREFIX = "items_sync_cursor_v2";
 
 function getTimeRangeHours(range: TimeRange): number | null {
@@ -136,16 +136,13 @@ export default function DataMonitorPage() {
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
   const [dataType, setDataType] = useState<DataType>("fire");
   const [syncMode, setSyncMode] = useState<SyncMode>("normal");
-  const [syncMethod, setSyncMethod] = useState<"normal" | "fast" | "latest">("normal");
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
   const [showFailures, setShowFailures] = useState(false);
-  const [fastSyncStats, setFastSyncStats] = useState<{ items: number; days: number } | null>(null);
   const { marketContext } = useSectionRefresh();
   const [lastItemsSyncTimestamp, setLastItemsSyncTimestamp] = useState<number | null>(() =>
     readItemsSyncCursor(serverUrl, marketContext.seasonId, syncMode)
   );
   const { syncJob, setSyncJob, restoreSyncJob } = useSyncContext();
-  const queryClient = useQueryClient();
   const syncAbortRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -270,7 +267,6 @@ export default function DataMonitorPage() {
   };
 
   const syncPaginated = useCallback(async () => {
-    // Cancel any existing sync
     if (syncAbortRef.current) {
       syncAbortRef.current();
       syncAbortRef.current = null;
@@ -297,106 +293,83 @@ export default function DataMonitorPage() {
     let beforeTimestamp: number | null = null;
     let beforeId: number | null = null;
 
-    try {
+    const buildUrl = (cursorTs: number | null, cursorId: number | null) => {
       if (dataType === "fire") {
-        const timestampParam = rangeSinceTimestamp ? `&since_timestamp=${rangeSinceTimestamp}` : "";
-        const baseUrl = `${serverUrl}/fire-history-all?mode=${modeParam}${timestampParam}`;
-
-        while (hasMore && !cancelled) {
-          const cursorParam = beforeTimestamp !== null && beforeId !== null
-            ? `&before_timestamp=${beforeTimestamp}&before_id=${beforeId}`
-            : "";
-          const url = `${baseUrl}&limit=${PAGE_SIZE}${cursorParam}`;
-          const result = await cmd.fetchServerJson<{ success: boolean; data: FireHistoryRecord[]; error?: string }>(url);
-          if (cancelled) break;
-          if (!result.success) throw new Error(result.error || "Unknown error");
-
-          const records = result.data as FireHistoryRecord[];
-
-          if (records.length === 0) {
-            hasMore = false;
-            break;
-          }
-
-          const pageResult = await syncSinglePage(records, dataType, marketMode, marketContext);
-          if (cancelled) break;
-          const lastRecord = records[records.length - 1];
-          beforeTimestamp = lastRecord.scraped_at ?? null;
-          beforeId = lastRecord.cursor_id ?? null;
-          totalSuccess += pageResult.success;
-          totalFailed += pageResult.failed;
-          allFailures = [...allFailures, ...pageResult.failures];
-
-          const processedCount = totalSuccess + totalFailed;
-          job = {
-            ...job,
-            success: processedCount,
-            failed: totalFailed,
-            total: records.length < PAGE_SIZE ? processedCount : processedCount + PAGE_SIZE,
-            failures: allFailures.slice(0, 10),
-          };
-          pageCount++;
-          const now = Date.now();
-          if (pageCount % 5 === 0 || now - lastUiUpdate >= 500 || records.length < PAGE_SIZE) {
-            setSyncJob(job);
-            lastUiUpdate = now;
-          }
-
-          if (records.length < PAGE_SIZE) {
-            hasMore = false;
-          }
-        }
+        const tsParam = rangeSinceTimestamp ? `&since_timestamp=${rangeSinceTimestamp}` : "";
+        const base = `${serverUrl}/fire-history-all?mode=${modeParam}${tsParam}`;
+        const cursorParam = cursorTs !== null && cursorId !== null
+          ? `&before_timestamp=${cursorTs}&before_id=${cursorId}`
+          : "";
+        return `${base}&limit=${PAGE_SIZE}${cursorParam}`;
       } else {
         const syncSinceTimestamp = Math.max(rangeSinceTimestamp ?? 0, lastItemsSyncTimestamp ?? 0);
-        const timestampParam = syncSinceTimestamp ? `&since_timestamp=${syncSinceTimestamp}` : "";
-        const baseUrl = `${serverUrl}/items-history-all?mode=${modeParam}${timestampParam}`;
+        const tsParam = syncSinceTimestamp ? `&since_timestamp=${syncSinceTimestamp}` : "";
+        const base = `${serverUrl}/items-history-all?mode=${modeParam}${tsParam}`;
+        const cursorParam = cursorTs !== null && cursorId !== null
+          ? `&before_timestamp=${cursorTs}&before_id=${cursorId}`
+          : "";
+        return `${base}&limit=${PAGE_SIZE}${cursorParam}`;
+      }
+    };
 
-        while (hasMore && !cancelled) {
-          const cursorParam = beforeTimestamp !== null && beforeId !== null
-            ? `&before_timestamp=${beforeTimestamp}&before_id=${beforeId}`
-            : "";
-          const url = `${baseUrl}&limit=${PAGE_SIZE}${cursorParam}`;
-          const result = await cmd.fetchServerJson<{ success: boolean; data: ItemsHistoryRecord[]; error?: string }>(url);
+    try {
+      let pendingWrite: Promise<{ success: number; failed: number; skipped: number; failures: SyncFailure[] }> | null = null;
+
+      while (hasMore && !cancelled) {
+        const url = buildUrl(beforeTimestamp, beforeId);
+
+        const result = await cmd.fetchServerJson<{ success: boolean; data: FireHistoryRecord[] | ItemsHistoryRecord[]; error?: string }>(url);
+        if (cancelled) break;
+        if (!result.success) throw new Error(result.error || "Unknown error");
+
+        const records = result.data as (FireHistoryRecord[] | ItemsHistoryRecord[]);
+
+        if (records.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        if (pendingWrite) {
+          const pageResult = await pendingWrite;
           if (cancelled) break;
-          if (!result.success) throw new Error(result.error || "Unknown error");
-
-          const records = result.data as ItemsHistoryRecord[];
-
-          if (records.length === 0) {
-            hasMore = false;
-            break;
-          }
-
-          const pageResult = await syncSinglePage(records, dataType, marketMode, marketContext);
-          if (cancelled) break;
-          const lastRecord = records[records.length - 1];
-          beforeTimestamp = lastRecord.scraped_at ?? null;
-          beforeId = lastRecord.cursor_id ?? null;
-          if (pageResult.success > 0) {
-            records.forEach(r => { if (r.scraped_at > maxScrapedAt) maxScrapedAt = r.scraped_at; });
-          }
           totalSuccess += pageResult.success;
           totalFailed += pageResult.failed;
           allFailures = [...allFailures, ...pageResult.failures];
+        }
 
-          const processedCount = totalSuccess + totalFailed;
-          job = {
-            ...job,
-            success: processedCount,
-            failed: totalFailed,
-            total: records.length < PAGE_SIZE ? processedCount : processedCount + PAGE_SIZE,
-            failures: allFailures.slice(0, 10),
-          };
-          pageCount++;
-          const now = Date.now();
-          if (pageCount % 5 === 0 || now - lastUiUpdate >= 500 || records.length < PAGE_SIZE) {
-            setSyncJob(job);
-            lastUiUpdate = now;
-          }
+        pendingWrite = syncSinglePage(records, dataType, marketMode, marketContext);
 
-          if (records.length < PAGE_SIZE) {
-            hasMore = false;
-          }
+        const lastRecord = records[records.length - 1] as { scraped_at: number; cursor_id?: number | null };
+        beforeTimestamp = lastRecord.scraped_at ?? null;
+        beforeId = lastRecord.cursor_id ?? null;
+        if (lastRecord.scraped_at > maxScrapedAt) maxScrapedAt = lastRecord.scraped_at;
+
+        pageCount++;
+        const processedCount = totalSuccess + totalFailed + records.length;
+        job = {
+          ...job,
+          success: totalSuccess,
+          failed: totalFailed,
+          total: records.length < PAGE_SIZE ? processedCount : processedCount + PAGE_SIZE,
+          failures: allFailures.slice(0, 10),
+        };
+        const now = Date.now();
+        if (pageCount % 3 === 0 || now - lastUiUpdate >= 500 || records.length < PAGE_SIZE) {
+          setSyncJob(job);
+          lastUiUpdate = now;
+        }
+
+        if (records.length < PAGE_SIZE) {
+          hasMore = false;
+        }
+      }
+
+      if (pendingWrite) {
+        const pageResult = await pendingWrite;
+        if (!cancelled) {
+          totalSuccess += pageResult.success;
+          totalFailed += pageResult.failed;
+          allFailures = [...allFailures, ...pageResult.failures];
         }
       }
 
@@ -427,18 +400,18 @@ export default function DataMonitorPage() {
       if (totalSuccess + totalFailed === 0) {
         toast.info("没有可同步的数据");
       } else if (job.status === "partial") {
-        toast.error(`部分同步成功: 成功 ${totalSuccess}，失败 ${totalFailed}`);
+        toast.warning(`部分同步成功: 成功 ${totalSuccess}，失败 ${totalFailed}`);
       } else if (job.status === "failed") {
         toast.error(`同步失败: ${errorMessage(allFailures[0]?.reason)}`);
       } else {
-        toast.success(`同步成功: ${totalSuccess} 条`);
+        const elapsed = ((Date.now() - job.startedAt) / 1000).toFixed(1);
+        toast.success(`同步成功: ${totalSuccess} 条, 耗时 ${elapsed}s`);
       }
     } catch (err) {
-      job.status = "failed";
-      job.finishedAt = Date.now();
-      job.firstError = errorMessage(err);
-      setSyncJob({ ...job });
+      job = { ...job, status: "failed" as const, finishedAt: Date.now(), firstError: errorMessage(err) };
+      setSyncJob(job);
       toast.error(`同步失败: ${job.firstError}`);
+      syncAbortRef.current = null;
     }
 
     refetchStatus();
@@ -507,180 +480,9 @@ export default function DataMonitorPage() {
   const normalStatus = serverStatus?.last_collection?.normal;
   const expertStatus = serverStatus?.last_collection?.expert;
 
-  const syncFast = useCallback(async () => {
-    const marketMode = syncMode === "expert" ? "season_expert" : "season_normal";
-    const mode = syncMode;
-
-    const jobState: SyncJobState = {
-      id: `sync-${Date.now()}`,
-      dataType: "items",
-      mode,
-      range: timeRange,
-      status: "running",
-      total: 0,
-      success: 0,
-      failed: 0,
-      skipped: 0,
-      startedAt: Date.now(),
-      finishedAt: null,
-      firstError: null,
-      failures: [],
-    };
-    setSyncJob(jobState);
-
-    try {
-      const baseUrl = serverUrl.replace(/\/$/, "");
-      const rangeDays = timeRange === "season" ? 0 :
-        timeRange === "30d" ? 30 :
-        timeRange === "7d" ? 7 :
-        timeRange === "3d" ? 3 : 1;
-
-      toast.info("正在快速同步数据...");
-
-      const result = await cmd.fastSyncItems({
-        server_url: baseUrl,
-        season_id: marketContext.seasonId,
-        market_mode: marketMode,
-        range_days: rangeDays,
-      });
-
-      setFastSyncStats({ items: result.total_items, days: result.total_days });
-
-      const elapsed = (result.elapsed_ms / 1000).toFixed(1);
-
-      const finalState: SyncJobState = {
-        ...jobState,
-        status: "success",
-        total: result.total_records,
-        success: result.inserted,
-        failed: 0,
-        skipped: result.total_records - result.inserted,
-        finishedAt: Date.now(),
-      };
-      setSyncJob(finalState);
-
-      toast.success(
-        `快速同步完成: ${result.total_items} 个物品, ${result.total_days} 天, 新增 ${result.inserted} 条, 已存在 ${result.total_records - result.inserted} 条, 耗时 ${elapsed}s`
-      );
-
-      queryClient.invalidateQueries({ queryKey: queryKeys.marketContext });
-
-    } catch (error) {
-      const errorMsg = errorMessage(error as Error);
-      toast.error(`快速同步失败: ${errorMsg}`);
-
-      const finalState: SyncJobState = {
-        ...jobState,
-        status: "failed",
-        finishedAt: Date.now(),
-        firstError: errorMsg,
-      };
-      setSyncJob(finalState);
-    }
-  }, [syncMode, timeRange, serverUrl, marketContext.seasonId, setSyncJob, queryClient]);
-
-  const syncLatest = useCallback(async () => {
-    const marketMode = syncMode === "expert" ? "season_expert" : "season_normal";
-    const mode = syncMode;
-
-    const jobState: SyncJobState = {
-      id: `sync-${Date.now()}`,
-      dataType: "items",
-      mode,
-      range: timeRange,
-      status: "running",
-      total: 0,
-      success: 0,
-      failed: 0,
-      skipped: 0,
-      startedAt: Date.now(),
-      finishedAt: null,
-      firstError: null,
-      failures: [],
-    };
-    setSyncJob(jobState);
-
-    try {
-      const startTime = Date.now();
-      const baseUrl = serverUrl.replace(/\/$/, "");
-
-      toast.info("正在获取最新价格数据...");
-
-      const data = await cmd.fetchServerJson<{ success: boolean; data?: LatestPricesResponse; error?: string }>(
-        `${baseUrl}/prices-latest?season=${marketContext.seasonId}&mode=${mode}`
-      );
-
-      if (!data.success || !data.data) {
-        throw new Error(data.error || "获取数据失败");
-      }
-
-      const result: LatestPricesResponse = data.data;
-
-      const allItems = result.prices.map(price => ({
-        season_id: marketContext.seasonId,
-        market_mode: marketMode,
-        item_id: price.item_id,
-        name: price.name,
-        item_type: null,
-        price: price.fire_price,
-        last_time: null,
-        recorded_at: Date.now(),
-      }));
-
-      const batchResult = await cmd.syncItemsBatch({
-        season_id: marketContext.seasonId,
-        market_mode: marketMode,
-        items: allItems,
-      });
-
-      const elapsed = Date.now() - startTime;
-
-      const finalState: SyncJobState = {
-        ...jobState,
-        status: batchResult.success ? "success" : "partial",
-        total: result.prices.length,
-        success: batchResult.success ? result.prices.length : 0,
-        failed: batchResult.success ? 0 : result.prices.length,
-        skipped: 0,
-        finishedAt: Date.now(),
-      };
-      setSyncJob(finalState);
-
-      toast.success(
-        `最新价格同步完成: ${result.prices.length} 个物品, 耗时 ${(elapsed / 1000).toFixed(1)}s`
-      );
-
-      queryClient.invalidateQueries({ queryKey: queryKeys.marketContext });
-
-    } catch (error) {
-      const errorMsg = errorMessage(error as Error);
-      toast.error(`最新价格同步失败: ${errorMsg}`);
-
-      const finalState: SyncJobState = {
-        ...jobState,
-        status: "failed",
-        finishedAt: Date.now(),
-        firstError: errorMsg,
-      };
-      setSyncJob(finalState);
-    }
-  }, [syncMode, timeRange, serverUrl, marketContext.seasonId, setSyncJob, queryClient]);
-
   const handleSync = useCallback(() => {
-    if (syncMethod === "fast") {
-      syncFast();
-    } else if (syncMethod === "latest") {
-      syncLatest();
-    } else {
-      syncPaginated();
-    }
-  }, [syncMethod, syncPaginated, syncFast, syncLatest]);
-
-  useEffect(() => {
-    if (dataType === "fire" && syncMethod !== "normal") {
-      setSyncMethod("normal");
-    }
-  }, [dataType, syncMethod]);
+    syncPaginated();
+  }, [syncPaginated]);
 
   const isSyncing = syncJob?.status === "running";
 
@@ -959,60 +761,6 @@ export default function DataMonitorPage() {
             </label>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="text-xs text-[var(--color-text-subtle)]">同步方式</label>
-            <div className="flex rounded-lg border border-[var(--color-border)] overflow-hidden">
-              <button
-                onClick={() => setSyncMethod("normal")}
-                disabled={isSyncing}
-                className={`px-3 py-1.5 text-xs flex items-center gap-1 ${
-                  syncMethod === "normal"
-                    ? "bg-[var(--color-panel)] text-[var(--color-text)] border border-[var(--color-brand)]"
-                    : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
-                } disabled:opacity-50`}
-              >
-                <RefreshCw className="w-3 h-3" />
-                普通
-              </button>
-              <button
-                onClick={() => setSyncMethod("fast")}
-                disabled={isSyncing || dataType === "fire"}
-                className={`px-3 py-1.5 text-xs flex items-center gap-1 ${
-                  syncMethod === "fast"
-                    ? "bg-[var(--color-brand)] text-black"
-                    : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
-                } disabled:opacity-50`}
-              >
-                <Zap className="w-3 h-3" />
-                快速
-              </button>
-              <button
-                onClick={() => setSyncMethod("latest")}
-                disabled={isSyncing || dataType === "fire"}
-                className={`px-3 py-1.5 text-xs flex items-center gap-1 ${
-                  syncMethod === "latest"
-                    ? "bg-[var(--color-success)] text-black"
-                    : "bg-[var(--color-panel)] text-[var(--color-text-muted)] hover:bg-[var(--color-panel-soft)]"
-                } disabled:opacity-50`}
-              >
-                <Download className="w-3 h-3" />
-                最新
-              </button>
-            </div>
-            <span className="text-xs text-[var(--color-text-subtle)]">
-              {syncMethod === "normal" && "（串行分页，较慢）"}
-              {syncMethod === "fast" && "（服务端聚合，推荐）"}
-              {syncMethod === "latest" && "（仅最新价格）"}
-              {dataType === "fire" && "（火价使用普通同步）"}
-            </span>
-          </div>
-
-          {fastSyncStats && (
-            <div className="text-xs text-[var(--color-text-subtle)] bg-[var(--color-panel-soft)] rounded-lg px-3 py-2">
-              上次快速同步: {fastSyncStats.items} 个物品, {fastSyncStats.days} 天
-            </div>
-          )}
-
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <Button
               onClick={handleSync}
@@ -1027,8 +775,8 @@ export default function DataMonitorPage() {
                 </>
               ) : (
                 <>
-                  {syncMethod === "fast" ? <Zap className="w-4 h-4" /> : syncMethod === "latest" ? <Download className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
-                  {syncMethod === "fast" ? "快速同步" : syncMethod === "latest" ? "获取最新" : "同步数据"}
+                  <RefreshCw className="w-4 h-4" />
+                  同步数据
                 </>
               )}
             </Button>

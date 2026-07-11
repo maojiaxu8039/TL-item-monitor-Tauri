@@ -35,7 +35,7 @@ pub struct SeasonInfo {
 pub const SEASONS: &[SeasonInfo] = &[
     SeasonInfo {
         id: "ss12",
-        start_timestamp: 1776384000, // 2026-04-16 00:00:00 UTC+8
+        start_timestamp: 1776355200, // 2026-04-17 00:00:00 UTC+8 (Beijing)
         name: "SS12 当前赛季",
         is_current: true,
     },
@@ -95,7 +95,7 @@ mod tests {
 
     #[test]
     fn test_get_season_start_ss12() {
-        assert_eq!(get_season_start("ss12"), Some(1776384000));
+        assert_eq!(get_season_start("ss12"), Some(1776355200));
     }
 
     #[test]
@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn test_calculate_season_day() {
-        let ss12_start = 1776384000i64;
+        let ss12_start = 1776355200i64;
         assert_eq!(calculate_season_day(ss12_start, ss12_start), 1);
         assert_eq!(calculate_season_day(ss12_start + 86400, ss12_start), 2);
         assert_eq!(calculate_season_day(ss12_start - 86400, ss12_start), 1);

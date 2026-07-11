@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from "react"
+import { useState, useRef, type ReactNode } from "react"
 import { cmd, type InventoryPositionView, type InventoryBuyWatchView, type CreatePositionRequest, type CreateBuyWatchRequest, type UpdatePositionRequest, type UpdateBuyWatchRequest } from "@/lib/commands"
 
 interface ItemSuggestion {
@@ -9,7 +9,7 @@ import { useSectionRefresh } from "@/contexts/SectionRefreshContext"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { errorMessage } from "@/lib/utils"
-import { RefreshCw, Plus, TrendingUp, DollarSign, Check, X, ShoppingCart, Pencil } from "lucide-react"
+import { RefreshCw, Plus, TrendingUp, DollarSign, Check, ShoppingCart, Pencil, CircleCheck, EyeOff } from "lucide-react"
 import { PageShell } from "@/components/ui/PageShell"
 import { PageHeader } from "@/components/ui/PageHeader"
 import { Surface } from "@/components/ui/Surface"
@@ -409,11 +409,13 @@ function PositionCard({
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit} title="编辑">
             <Pencil className="w-4 h-4 text-[var(--color-text-subtle)]" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onMarkSold} title="标记出货">
-            <Check className="w-4 h-4 text-[var(--color-success)]" />
+          <Button variant="ghost" size="sm" className="h-8 px-2 gap-1" onClick={onMarkSold} title="标记为已出货">
+            <CircleCheck className="w-3.5 h-3.5 text-[var(--color-success)]" />
+            <span className="text-xs text-[var(--color-success)]">出货</span>
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onMarkIgnored} title="标记忽略">
-            <X className="w-4 h-4 text-[var(--color-text-subtle)]" />
+          <Button variant="ghost" size="sm" className="h-8 px-2 gap-1" onClick={onMarkIgnored} title="标记为已忽略">
+            <EyeOff className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
+            <span className="text-xs text-[var(--color-text-muted)]">忽略</span>
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete} title="删除">
             <TrashIcon className="w-4 h-4 text-[var(--color-danger)]" />
@@ -504,7 +506,6 @@ function AddPositionDialog({
   const [note, setNote] = useState("")
   const [loading, setLoading] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
-  const [suggestions, setSuggestions] = useState<ItemSuggestion[]>([])
   const selectingRef = useRef(false)
 
   const searchQuery = useQuery({
@@ -513,35 +514,22 @@ function AddPositionDialog({
     enabled: itemName.length >= 1,
   })
 
-  useEffect(() => {
-    if (selectingRef.current) {
-      selectingRef.current = false
-      return
-    }
-    if (searchQuery.data?.items && itemName.length >= 1) {
-      const items = searchQuery.data.items.slice(0, 8).map(item => ({
-        item_id: item.item_id,
-        item_name: item.name,
-      }))
-      setSuggestions(items)
-      setShowSuggestions(true)
-    } else {
-      setSuggestions([])
-      setShowSuggestions(false)
-    }
-  }, [searchQuery.data, itemName])
+  const suggestions = searchQuery.data?.items?.slice(0, 8).map(item => ({
+    item_id: item.item_id,
+    item_name: item.name,
+  })) ?? []
 
   const handleSelectItem = (item: ItemSuggestion) => {
     selectingRef.current = true
     setItemName(item.item_name)
     setItemId(item.item_id)
-    setSuggestions([])
     setShowSuggestions(false)
   }
 
   const handleInputChange = (value: string) => {
     setItemName(value)
     setItemId("")
+    setShowSuggestions(true)
   }
 
   const createMutation = useMutation({
@@ -909,7 +897,6 @@ function AddWatchDialog({
   const [note, setNote] = useState("")
   const [loading, setLoading] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
-  const [suggestions, setSuggestions] = useState<ItemSuggestion[]>([])
   const selectingRef = useRef(false)
 
   const searchQuery = useQuery({
@@ -918,35 +905,22 @@ function AddWatchDialog({
     enabled: itemName.length >= 1,
   })
 
-  useEffect(() => {
-    if (selectingRef.current) {
-      selectingRef.current = false
-      return
-    }
-    if (searchQuery.data?.items && itemName.length >= 1) {
-      const items = searchQuery.data.items.slice(0, 8).map(item => ({
-        item_id: item.item_id,
-        item_name: item.name,
-      }))
-      setSuggestions(items)
-      setShowSuggestions(true)
-    } else {
-      setSuggestions([])
-      setShowSuggestions(false)
-    }
-  }, [searchQuery.data, itemName])
+  const suggestions = searchQuery.data?.items?.slice(0, 8).map(item => ({
+    item_id: item.item_id,
+    item_name: item.name,
+  })) ?? []
 
   const handleSelectItem = (item: ItemSuggestion) => {
     selectingRef.current = true
     setItemName(item.item_name)
     setItemId(item.item_id)
-    setSuggestions([])
     setShowSuggestions(false)
   }
 
   const handleInputChange = (value: string) => {
     setItemName(value)
     setItemId("")
+    setShowSuggestions(true)
   }
 
   const createMutation = useMutation({
