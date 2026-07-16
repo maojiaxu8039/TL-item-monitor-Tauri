@@ -283,7 +283,14 @@ pub async fn export_inventory_csv(
         "quantity",
         "target_sell_price",
         "total_cost",
+        "extra_cost",
+        "fee_rate",
+        "status",
+        "sold_price",
+        "sold_at",
+        "alert_enabled",
         "note",
+        "bought_at",
         "created_at",
     ])
     .map_err(|e| e.to_string())?;
@@ -297,7 +304,14 @@ pub async fn export_inventory_csv(
             &pos.quantity.to_string(),
             &pos.target_sell_price.unwrap_or(0.0).to_string(),
             &total_cost.to_string(),
+            &pos.extra_cost.to_string(),
+            &pos.fee_rate.to_string(),
+            pos.status.as_str(),
+            &pos.sold_price.unwrap_or(0.0).to_string(),
+            &pos.sold_at.map(|v| v.to_string()).unwrap_or_default(),
+            if pos.alert_enabled { "true" } else { "false" },
             pos.note.as_str(),
+            &pos.bought_at.to_string(),
             &pos.created_at.to_string(),
         ])
         .map_err(|e| e.to_string())?;

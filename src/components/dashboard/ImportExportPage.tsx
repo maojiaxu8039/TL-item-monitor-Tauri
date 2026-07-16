@@ -186,8 +186,15 @@ export default function ImportExportPage() {
     { key: "quantity", aliases: ["数量", "qty"], defaultValue: "1", validate: validateInteger },
     { key: "target_sell_price", aliases: ["目标卖价", "sell_price"], defaultValue: "" },
     { key: "total_cost", aliases: ["总成本", "cost"], defaultValue: "0", validate: validateNumber },
+    { key: "extra_cost", aliases: ["额外成本"], defaultValue: "0", validate: validateNumber },
+    { key: "fee_rate", aliases: ["手续费率"], defaultValue: "0.125", validate: validateNumber },
+    { key: "status", aliases: ["状态"], defaultValue: "holding" },
+    { key: "sold_price", aliases: ["卖出价格"], defaultValue: "" },
+    { key: "sold_at", aliases: ["卖出时间"], defaultValue: "" },
+    { key: "alert_enabled", aliases: ["启用预警"], defaultValue: "true" },
     { key: "note", aliases: ["备注", "remark"], defaultValue: "" },
     { key: "bought_at", aliases: ["买入时间", "created_at"], defaultValue: "" },
+    { key: "created_at", aliases: ["创建时间"], defaultValue: "" },
   ];
 
   // 买入监控：对应后端 import_buy_watches_csv
@@ -201,7 +208,10 @@ export default function ImportExportPage() {
       return null;
     } },
     { key: "max_quantity", aliases: ["最大数量", "qty"], defaultValue: "" },
+    { key: "alert_enabled", aliases: ["启用预警"], defaultValue: "true" },
+    { key: "auto_create_position", aliases: ["自动创建持仓"], defaultValue: "false" },
     { key: "note", aliases: ["备注", "remark"], defaultValue: "" },
+    { key: "created_at", aliases: ["创建时间"], defaultValue: "" },
   ];
 
   // 套利配方：对应后端 import_arbitrage_recipes_csv
@@ -211,6 +221,8 @@ export default function ImportExportPage() {
     { key: "season_id", aliases: ["赛季ID", "season"], defaultValue: marketContext.seasonId },
     { key: "market_mode", aliases: ["市场模式", "mode"], defaultValue: marketContext.marketMode },
     { key: "enabled", aliases: ["启用"], defaultValue: "true" },
+    { key: "ingredients", aliases: ["原料", "材料"], defaultValue: "" },
+    { key: "outputs", aliases: ["产物", "输出"], defaultValue: "" },
   ];
 
   // 共享的 CSV 导入流水线：选文件 → 预处理 → 调后端 → 合并错误
