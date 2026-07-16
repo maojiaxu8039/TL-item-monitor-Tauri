@@ -65,7 +65,7 @@ fn get_config_path() -> String {
 
 #[derive(Clone)]
 struct ServerState {
-    config: ServerConfig,
+    config: Arc<RwLock<ServerConfig>>,
     db: SqlitePool,
     last_collection: Arc<RwLock<CollectionStatus>>,
     rate_limiter: Arc<RwLock<RateLimiter>>,
@@ -465,7 +465,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let state = Arc::new(ServerState {
-        config: config.clone(),
+        config: Arc::new(RwLock::new(config.clone())),
         db: pool,
         last_collection: Arc::new(RwLock::new(CollectionStatus::default())),
         metrics: Arc::new(metrics::Metrics::new()),
@@ -726,7 +726,7 @@ async fn handle_request(
     }
 
     let request = String::from_utf8_lossy(&buffer);
-    let client_ip = get_client_ip(&request, client_addr, state.config.trust_proxy_headers);
+    let client_ip = get_client_ip(&request, client_addr, state.config.read().await.trust_proxy_headers);
 
     {
         let dynamic = state.dynamic_config.read().await;
@@ -876,9 +876,10 @@ async fn handle_request(
             let last_collection = state.last_collection.read().await.clone();
 
             // 优先用数据库里 is_current=1 的赛季（fallback 到 config 默认值）
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let display_season_id = db::get_current_or_recent_season_id(&state.db)
                 .await
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
 
             // 查询该赛季的开服/归档时间
             let (season_started_at, season_ended_at) =
@@ -973,12 +974,13 @@ async fn handle_request(
             return;
         }
         ("GET", "/api/admin/status") => {
+            let season_id = state.config.read().await.season_id.clone();
             let body = serde_json::to_string_pretty(&ApiResponse {
                 success: true,
                 data: Some(serde_json::json!({
                     "version": SERVER_VERSION,
                     "uptime_seconds": Utc::now().timestamp() - start_time,
-                    "season_id": state.config.season_id,
+                    "season_id": season_id,
                     "last_collection": state.last_collection.read().await.clone(),
                     "next_collection": get_next_collection_time(),
                 })),
@@ -994,7 +996,7 @@ async fn handle_request(
             }
             match serde_json::from_str::<StatusRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
+                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
                         let body = serde_json::to_string_pretty(&ApiResponse::<()> {
                             success: false,
                             data: None,
@@ -1004,24 +1006,25 @@ async fn handle_request(
                         (401, body)
                     } else {
                         let dynamic = state.dynamic_config.read().await;
+                        let cfg = state.config.read().await;
                         let body = serde_json::to_string_pretty(&ApiResponse {
                             success: true,
                             data: Some(serde_json::json!({
                                 "version": SERVER_VERSION,
                                 "uptime_seconds": Utc::now().timestamp() - start_time,
-                                "season_id": state.config.season_id,
+                                "season_id": cfg.season_id,
                                 "last_collection": state.last_collection.read().await.clone(),
                                 "next_collection": get_next_collection_time(),
                                 "config": {
-                                    "season_id": state.config.season_id,
-                                    "http_port": state.config.http_port,
+                                    "season_id": cfg.season_id,
+                                    "http_port": cfg.http_port,
                                     "cors_allowed_origins": dynamic.cors_allowed_origins,
                                     "rate_limit": {
                                         "enabled": dynamic.rate_limit_enabled,
-                                        "requests_per_minute": state.config.rate_limit.requests_per_minute,
-                                        "burst_size": state.config.rate_limit.burst_size,
+                                        "requests_per_minute": cfg.rate_limit.requests_per_minute,
+                                        "burst_size": cfg.rate_limit.burst_size,
                                     },
-                                    "api_config": state.config.api_config,
+                                    "api_config": cfg.api_config,
                                     "scrape_modes": dynamic.scrape_modes,
                                 }
                             })),
@@ -1058,7 +1061,7 @@ async fn handle_request(
             }
             match serde_json::from_str::<ConfigRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
+                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
                         let body = serde_json::to_string_pretty(&ApiResponse::<()> {
                             success: false,
                             data: None,
@@ -1068,18 +1071,19 @@ async fn handle_request(
                         (401, body)
                     } else {
                         let dynamic = state.dynamic_config.read().await;
+                        let cfg = state.config.read().await;
                         let body = serde_json::to_string_pretty(&ApiResponse {
                             success: true,
                             data: Some(serde_json::json!({
-                                "season_id": state.config.season_id,
-                                "http_port": state.config.http_port,
+                                "season_id": cfg.season_id,
+                                "http_port": cfg.http_port,
                                 "cors_allowed_origins": dynamic.cors_allowed_origins,
                                 "rate_limit": {
                                     "enabled": dynamic.rate_limit_enabled,
-                                    "requests_per_minute": state.config.rate_limit.requests_per_minute,
-                                    "burst_size": state.config.rate_limit.burst_size,
+                                    "requests_per_minute": cfg.rate_limit.requests_per_minute,
+                                    "burst_size": cfg.rate_limit.burst_size,
                                 },
-                                "api_config": state.config.api_config,
+                                "api_config": cfg.api_config,
                                 "scrape_modes": dynamic.scrape_modes,
                             })),
                             error: None,
@@ -1115,7 +1119,7 @@ async fn handle_request(
             match serde_json::from_str::<UpdateConfigRequest>(&request_body) {
                 Ok(req) => {
                     if let Some(password) = &req.password {
-                        if let Err(e) = verify_admin(password, &state.config.admin_password) {
+                        if let Err(e) = verify_admin(password, &state.config.read().await.admin_password) {
                             db::insert_audit_log(
                                 &state.db,
                                 "update-config",
@@ -1132,7 +1136,7 @@ async fn handle_request(
                             .unwrap_or_default();
                             (401, body)
                         } else {
-                            let mut new_config = state.config.clone();
+                            let mut new_config = state.config.read().await.clone();
                             let mut dynamic_updated = false;
                             let mut config_changes: Vec<String> = Vec::new();
 
@@ -1277,8 +1281,9 @@ async fn handle_request(
                 "season_normal"
             };
 
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let season_id = get_query_param(query_string, "season")
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
 
             if let Err(e) = db::validate_season_id(&season_id) {
                 let body = serde_json::to_string_pretty(&ApiResponse::<()> {
@@ -1350,8 +1355,9 @@ async fn handle_request(
                 "season_normal"
             };
 
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let season_id = get_query_param(query_string, "season")
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
 
             if let Some(item_id) = item_id {
                 if let Err(e) = db::validate_season_id(&season_id) {
@@ -1424,8 +1430,9 @@ async fn handle_request(
                 "season_normal"
             };
 
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let season_id = get_query_param(query_string, "season")
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
 
             if let Err(e) = db::validate_season_id(&season_id) {
                 let body = serde_json::to_string_pretty(&ApiResponse::<()> {
@@ -1512,8 +1519,9 @@ async fn handle_request(
                 "season_normal"
             };
 
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let season_id = get_query_param(query_string, "season")
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
 
             if let Err(e) = db::validate_season_id(&season_id) {
                 let body = serde_json::to_string_pretty(&ApiResponse::<()> {
@@ -1609,8 +1617,9 @@ async fn handle_request(
             }
         }
         ("GET", "/season-start") => {
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let season_id = get_query_param(query_string, "season")
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
             if let Err(e) = db::validate_season_id(&season_id) {
                 let body = serde_json::to_string_pretty(&ApiResponse::<()> {
                     success: false,
@@ -1634,8 +1643,9 @@ async fn handle_request(
             }
         }
         ("GET", "/stats") => {
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let season_id = get_query_param(query_string, "season")
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
             let cache_key = format!("/stats?{}", query_string);
             let cached = {
                 let mut cache = state.response_cache.lock().await;
@@ -1704,7 +1714,7 @@ async fn handle_request(
 
             match serde_json::from_str::<AuditLogRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
+                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
                         db::insert_audit_log(
                             &state.db,
                             "audit-log",
@@ -1770,7 +1780,7 @@ async fn handle_request(
         ("POST", "/admin/init-season") => {
             match serde_json::from_str::<InitSeasonRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
+                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
                         db::insert_audit_log(
                             &state.db,
                             "init-season",
@@ -1799,6 +1809,17 @@ async fn handle_request(
                         .await
                         {
                             Ok(tables) => {
+                                // 更新内存中的 config season_id
+                                {
+                                    let mut cfg = state.config.write().await;
+                                    cfg.season_id = req.season_id.clone();
+                                }
+                                // 持久化到配置文件
+                                if let Err(e) = config::save_config(&*get_config_path(), &*state.config.read().await) {
+                                    warn!("更新配置文件中的 season_id 失败: {}", e);
+                                } else {
+                                    info!("已更新配置文件中的 season_id 为 {}", req.season_id);
+                                }
                                 info!("新赛季 {} 初始化成功，触发首次采集", req.season_id);
                                 {
                                     let mut cache = state.season_cache.write().await;
@@ -1881,7 +1902,7 @@ async fn handle_request(
             match serde_json::from_str::<serde_json::Value>(&request_body) {
                 Ok(req) => {
                     let password = req["password"].as_str().unwrap_or("");
-                    if let Err(e) = verify_admin(password, &state.config.admin_password) {
+                    if let Err(e) = verify_admin(password, &state.config.read().await.admin_password) {
                         db::insert_audit_log(
                             &state.db,
                             "archive-season",
@@ -1966,7 +1987,7 @@ async fn handle_request(
         ("POST", "/admin/update-api-config") => {
             match serde_json::from_str::<UpdateApiConfigRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
+                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
                         db::insert_audit_log(
                             &state.db,
                             "update-api-config",
@@ -1983,7 +2004,7 @@ async fn handle_request(
                         .unwrap_or_default();
                         (401, body)
                     } else {
-                        let mut new_config = state.config.clone();
+                        let mut new_config = state.config.read().await.clone();
                         new_config.api_config = req.api_config;
 
                         if let Err(e) = config::save_config(&*get_config_path(), &new_config) {
@@ -2053,7 +2074,7 @@ async fn handle_request(
             }
             match serde_json::from_str::<ResetTableRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
+                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
                         db::insert_audit_log(
                             &state.db,
                             "reset-table",
@@ -2152,7 +2173,7 @@ async fn handle_request(
             }
             match serde_json::from_str::<ResetSeasonRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.admin_password) {
+                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
                         db::insert_audit_log(
                             &state.db,
                             "reset-season",
@@ -2237,8 +2258,9 @@ async fn handle_request(
 
         // ==================== 高速数据同步 API ====================
         ("GET", "/sync-fast") => {
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let season_id = get_query_param(query_string, "season")
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
             let mode =
                 parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
@@ -2288,8 +2310,9 @@ async fn handle_request(
         }
 
         ("GET", "/prices-latest") => {
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let season_id = get_query_param(query_string, "season")
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
             let mode =
                 parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
@@ -2321,8 +2344,9 @@ async fn handle_request(
         }
 
         ("GET", "/dual-source-overview") => {
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let season_id = get_query_param(query_string, "season")
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
             let mode =
                 parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
@@ -2364,8 +2388,9 @@ async fn handle_request(
         }
 
         ("GET", "/dual-source-history") => {
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let season_id = get_query_param(query_string, "season")
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
             let mode =
                 parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
@@ -2422,8 +2447,9 @@ async fn handle_request(
         }
 
         ("GET", "/items-sync-stats") => {
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let season_id = get_query_param(query_string, "season")
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
             let mode =
                 parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
@@ -2455,8 +2481,9 @@ async fn handle_request(
         }
 
         ("GET", "/items-sync") => {
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let season_id = get_query_param(query_string, "season")
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
             let mode =
                 parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
@@ -2547,8 +2574,9 @@ async fn handle_request(
         }
 
         ("GET", "/items-daily") => {
+            let cfg_season_id = state.config.read().await.season_id.clone();
             let season_id = get_query_param(query_string, "season")
-                .unwrap_or_else(|| state.config.season_id.clone());
+                .unwrap_or_else(|| cfg_season_id.clone());
             let mode =
                 parse_mode_param(query_string);
             let market_mode = if mode == "expert" {
@@ -3115,10 +3143,11 @@ async fn scrape_fire_with_retry(
     let mut last_error = String::new();
 
     for attempt in 1..=MAX_RETRIES {
+        let cfg = state.config.read().await;
         match Scraper::scrape_fire_price(
             market_mode,
-            &state.config.api_config,
-            &state.config.api_endpoints,
+            &cfg.api_config,
+            &cfg.api_endpoints,
         )
         .await
         {
@@ -3150,11 +3179,12 @@ async fn scrape_items_with_retry(
     let mut last_error = String::new();
 
     for attempt in 1..=MAX_RETRIES {
+        let cfg = state.config.read().await;
         match Scraper::scrape_items(
             season,
             market_mode,
-            &state.config.api_config,
-            &state.config.api_endpoints,
+            &cfg.api_config,
+            &cfg.api_endpoints,
         )
         .await
         {
@@ -3562,7 +3592,7 @@ async fn handle_ws_connection(
                                 let password = json["password"].as_str().unwrap_or("");
                                 // 缓存 client_ip 字符串,避免 ws 认证分支里 1~2 次重复分配
                                 let client_ip_str = client_addr.ip().to_string();
-                                if password_hash::verify_password(password, &state.config.admin_password).is_ok() {
+                                if password_hash::verify_password(password, &state.config.read().await.admin_password).is_ok() {
                                     info!("WebSocket {} 认证成功", client_addr);
                                     let mut w = write.lock().await;
                                     let _ = w.send(Message::Text(r#"{"type":"auth_success"}"#.into())).await;
@@ -3763,7 +3793,7 @@ mod e2e_tests {
 
         let state = Arc::new(ServerState {
             db: pool,
-            config: server_config.clone(),
+            config: Arc::new(RwLock::new(server_config.clone())),
             response_cache: Arc::new(tokio::sync::Mutex::new(LruCache::new())),
             rate_limiter: Arc::new(tokio::sync::RwLock::new(RateLimiter::new(
                 rate_limit_cfg,
