@@ -27,6 +27,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Surface } from "@/components/ui/Surface";
 import { ToolbarActions } from "@/components/ui/Toolbar";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StrategyFormDialog } from "./strategies/StrategyFormDialog";
 import { StrategyItemAddDialog } from "./strategies/StrategyItemAddDialog";
 import { ImagePreviewDialog } from "./strategies/ImagePreviewDialog";
@@ -265,8 +266,18 @@ export default function StrategiesPage() {
     }
   }, [editForm, resetForm, loadStrategies]);
 
-  const handleDelete = useCallback(async (id: string) => {
-    if (!confirm("确定要删除这个策略吗？")) return;
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+
+  const handleDelete = useCallback((id: string) => {
+    const target = strategies.find((s) => s.id === id);
+    if (!target) return;
+    setDeleteTarget({ id, name: target.name ?? id });
+  }, [strategies]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
+    setDeleteTarget(null);
     try {
       await cmd.deleteStrategyDetail(id);
       toast.success("策略已删除");
@@ -274,7 +285,7 @@ export default function StrategiesPage() {
     } catch {
       toast.error("删除策略失败");
     }
-  }, [loadStrategies]);
+  }, [deleteTarget, loadStrategies]);
 
   const handleAddCost = useCallback(async () => {
     if (!costForm.item_id.trim() && !costForm.item_name.trim()) {
@@ -891,6 +902,17 @@ export default function StrategiesPage() {
         onOpenChange={(open) => {
           if (!open) setPreviewImage(null)
         }}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="删除策略"
+        message={deleteTarget ? `确定要删除策略 "${deleteTarget.name}" 吗？此操作无法撤销。` : ""}
+        confirmText="删除"
+        cancelText="取消"
+        variant="danger"
+        onConfirm={confirmDelete}
       />
     </PageShell>
   );

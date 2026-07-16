@@ -14,6 +14,7 @@ import { formatTimestamp } from "@/lib/format";
 import { useToast } from "@/hooks/useToast";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
 import { Dialog } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -59,6 +60,7 @@ export default function AlertsPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<"all" | "enabled" | "disabled">("all");
+  const [deleteTarget, setDeleteTarget] = useState<AlertRule | null>(null);
 
   const [createForm, setCreateForm] = useState<CreateRuleForm>({
     rule_type: "price_below",
@@ -225,7 +227,15 @@ export default function AlertsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("确定要删除这个预警规则吗？")) return;
+    const target = rules.find((r) => r.id === id);
+    if (!target) return;
+    setDeleteTarget(target);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
+    setDeleteTarget(null);
     try {
       await cmd.deleteAlertRule(id);
       addToast("success", "规则已删除");
@@ -392,6 +402,17 @@ export default function AlertsPage() {
       )}
 
       {/* 最近预警事件已隐藏 */}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="删除预警规则"
+        message={deleteTarget ? `确定要删除规则 "${deleteTarget.item_name ?? deleteTarget.item_id}" 吗？此操作无法撤销。` : ""}
+        confirmText="删除"
+        cancelText="取消"
+        variant="danger"
+        onConfirm={confirmDelete}
+      />
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <div className="bg-[var(--color-panel)] rounded-xl shadow-xl w-full max-w-md mx-4">
