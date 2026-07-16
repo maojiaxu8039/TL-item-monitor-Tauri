@@ -671,7 +671,7 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between pl-4 border-l-2 border-[var(--color-brand)]/30">
               <div>
                 <div className="text-sm font-medium text-[var(--color-text-muted)]">语音文件路径</div>
-                <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">支持 .mp3 或 .wav 文件（留空或路径失效时使用内置萝莉音）</div>
+                <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">支持 .mp3 或 .wav 文件，可填绝对路径或相对资源目录路径（留空或路径无效时使用内置萝莉音）</div>
               </div>
               <input
                 type="text"

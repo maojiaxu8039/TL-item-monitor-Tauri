@@ -9,10 +9,12 @@ interface DialogProps {
 
 function Dialog({ open, onOpenChange, children }: DialogProps) {
   const containerRef = React.useRef<HTMLDivElement>(null)
+  const onOpenChangeRef = React.useRef(onOpenChange)
+  onOpenChangeRef.current = onOpenChange
 
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && onOpenChange) {
-      onOpenChange(false)
+    if (e.target === e.currentTarget && onOpenChangeRef.current) {
+      onOpenChangeRef.current(false)
     }
   }
 
@@ -33,7 +35,7 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault()
-        onOpenChange?.(false)
+        onOpenChangeRef.current?.(false)
         return
       }
       if (event.key !== "Tab") return
@@ -64,7 +66,7 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
       document.body.style.overflow = previousOverflow
       previousFocus?.focus()
     }
-  }, [open, onOpenChange])
+  }, [open])
 
   if (!open) return null
   return (

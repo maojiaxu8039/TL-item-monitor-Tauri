@@ -527,10 +527,12 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
         }
         #[cfg(target_os = "windows")]
         {
+            use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-            // 使用 mcisendstring 或 PowerShell 播放音频
-            // 先尝试使用系统默认播放器
+            // 将 Windows 反斜杠路径转换为正斜杠，用于 file:/// URI
+            let uri_path = voice_path.replace('\\', "/");
+
             let script = format!(
                 r#"
                 Add-Type -AssemblyName PresentationCore
@@ -539,7 +541,7 @@ async fn play_voice_alert(voice_path: std::path::PathBuf, count: usize) -> Resul
                 $player.Play()
                 Start-Sleep -Seconds 3
                 "#,
-                voice_path.replace("'", "''")
+                uri_path.replace("'", "''")
             );
 
             let mut command = tokio::process::Command::new("powershell");
