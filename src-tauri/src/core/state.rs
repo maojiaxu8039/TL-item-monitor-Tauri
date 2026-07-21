@@ -230,17 +230,17 @@ pub struct SeasonApiConfig {
 
 impl Default for SeasonApiConfig {
     fn default() -> Self {
-        // SS12 defaults
+        // SS13 defaults (SS12: normal=1401, expert=1431)
         Self {
             qiandao_tag_id_normal: "1560053".to_string(),
             qiandao_spec_id_normal: "267416".to_string(),
             qiandao_tag_id_expert: "1560053".to_string(),
             qiandao_spec_id_expert: "267417".to_string(),
-            luosi_season_id_normal: 1401,
-            luosi_season_id_expert: 1431,
+            luosi_season_id_normal: 1501,
+            luosi_season_id_expert: 1531,
             // 易火与刷图小助手使用相同的赛季ID
-            etor_season_id_normal: 1401,
-            etor_season_id_expert: 1431,
+            etor_season_id_normal: 1501,
+            etor_season_id_expert: 1531,
         }
     }
 }
@@ -288,7 +288,7 @@ impl Default for DataSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            season_id: "ss12".to_string(),
+            season_id: "ss13".to_string(),
             language: "zh-CN".to_string(),
             auto_update: false,
         }

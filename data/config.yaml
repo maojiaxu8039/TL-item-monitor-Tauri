@@ -45,6 +45,6 @@ data:
   history_retention: permanent
   compress_history: false
 app:
-  season_id: ss12
+  season_id: ss13
   language: zh-CN
   auto_update: false

@@ -92,6 +92,8 @@ impl TableResolver {
     /// For dynamic season discovery at runtime, query the database seasons table.
     pub fn supported_combinations() -> Vec<(&'static str, &'static str)> {
         vec![
+            ("ss13", "season_normal"),
+            ("ss13", "season_expert"),
             ("ss12", "season_normal"),
             ("ss12", "season_expert"),
             ("ss11", "season_normal"),

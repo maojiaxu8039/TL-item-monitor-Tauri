@@ -1979,7 +1979,10 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
 async fn seed_seasons(pool: &SqlitePool) -> Result<(), String> {
     let now = chrono::Utc::now().timestamp();
 
-    let seasons = vec![("ss12", "SS12 当前赛季", "ss12", 1, 1776355200)];
+    let seasons = vec![
+        ("ss13", "SS13 当前赛季", "ss13", 1, 1784332800),
+        ("ss12", "SS12 历史赛季", "ss12", 0, 1776355200),
+    ];
 
     for (id, name, code, is_current, started_at) in seasons {
         sqlx::query(
@@ -1998,7 +2001,7 @@ async fn seed_seasons(pool: &SqlitePool) -> Result<(), String> {
         .map_err(|e| format!("Failed to seed season {}: {}", id, e))?;
     }
 
-    if let Err(e) = sqlx::query("DELETE FROM seasons WHERE id NOT IN ('ss12')")
+    if let Err(e) = sqlx::query("DELETE FROM seasons WHERE id NOT IN ('ss12', 'ss13')")
         .execute(pool)
         .await
     {

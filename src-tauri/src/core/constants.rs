@@ -34,10 +34,16 @@ pub struct SeasonInfo {
 
 pub const SEASONS: &[SeasonInfo] = &[
     SeasonInfo {
+        id: "ss13",
+        start_timestamp: 1784332800, // 2026-07-16 00:00:00 UTC+8 (Beijing)
+        name: "SS13 当前赛季",
+        is_current: true,
+    },
+    SeasonInfo {
         id: "ss12",
         start_timestamp: 1776355200, // 2026-04-17 00:00:00 UTC+8 (Beijing)
-        name: "SS12 当前赛季",
-        is_current: true,
+        name: "SS12 历史赛季",
+        is_current: false,
     },
     SeasonInfo {
         id: "ss11",

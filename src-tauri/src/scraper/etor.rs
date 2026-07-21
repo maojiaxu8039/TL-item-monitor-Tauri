@@ -108,7 +108,12 @@ pub async fn scrape_items(
             now.saturating_sub(cached.fetched_at),
             cached.items.len()
         );
-        return Ok(cached.items);
+        // 命中缓存时刷新 updated_at，避免数据库显示时间停留在首次抓取
+        let mut items = cached.items;
+        for item in items.iter_mut() {
+            item.updated_at = now;
+        }
+        return Ok(items);
     }
 
     // 双源模式以本地 item_id_mapping 为全集。易火逐个按 itemId 查价格，
