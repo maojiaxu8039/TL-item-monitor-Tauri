@@ -718,6 +718,37 @@ export const cmd = {
       etorSeasonIdExpert: config.etor_season_id_expert,
     }),
 
+  /**
+   * 探测 4 个 API season_id 是否返回实时数据（最近 1 小时有交易）
+   */
+  probeSeasonApi: (
+    luosiSeasonIdNormal: number,
+    luosiSeasonIdExpert: number,
+    etorSeasonIdNormal: number,
+    etorSeasonIdExpert: number,
+  ) =>
+    invoke<{
+      luosi_normal_ok: boolean;
+      luosi_normal_latest: number | null;
+      luosi_expert_ok: boolean;
+      luosi_expert_latest: number | null;
+      etor_normal_ok: boolean;
+      etor_normal_latest: number | null;
+      etor_expert_ok: boolean;
+      etor_expert_latest: number | null;
+    }>("probe_season_api_cmd", {
+      luosiSeasonIdNormal,
+      luosiSeasonIdExpert,
+      etorSeasonIdNormal,
+      etorSeasonIdExpert,
+    }),
+
+  /**
+   * 切换当前活跃赛季：传入 season_id，自动 is_current=1
+   */
+  switchCurrentSeason: (seasonId: string) =>
+    invoke<OkResponse>("switch_current_season_cmd", { seasonId }),
+
   // Item mapping management
   updateItemMapping: () =>
     invoke<ItemMappingUpdateResult>("update_item_mapping"),

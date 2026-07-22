@@ -166,6 +166,8 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             list_seasons,
             get_season_api_config_cmd,
             set_season_api_config_cmd,
+            probe_season_api_cmd,
+            switch_current_season_cmd,
             update_item_mapping,
             get_item_mapping_count,
             fetch_server_json_cmd,

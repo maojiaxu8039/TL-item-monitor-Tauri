@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
 import { ErrorState, LoadingState } from "@/components/ui/LoadingState";
 import { invalidateItemsData, queryKeys } from "@/lib/queryKeys";
+import SeasonSwitchWizard from "./SeasonSwitchWizard";
 
 
 const FIRE_INTERVAL_OPTIONS = [
@@ -458,6 +459,14 @@ export default function SettingsPage() {
               </div>
             );
           })()}
+
+          {/* 赛季切换向导：探测 API + 一键应用 */}
+          {seasonsQuery.data && seasonsQuery.data.length > 0 && (
+            <SeasonSwitchWizard
+              currentSeasonId={seasonId}
+              seasons={seasonsQuery.data}
+            />
+          )}
 
           {/* API Config for Current Season */}
           <div className="border-t border-[var(--color-border-soft)] pt-4">
