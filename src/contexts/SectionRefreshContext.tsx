@@ -21,7 +21,7 @@ const SectionRefreshContext = createContext<SectionRefreshContextType>({
   refreshSections: () => {},
   refreshTrigger: 0,
   refreshData: () => {},
-  marketContext: { seasonId: "ss12", marketMode: "season_normal" },
+  marketContext: { seasonId: "", marketMode: "season_normal" },
   marketContextReady: false,
   setMarketContext: () => {},
 })
@@ -30,7 +30,7 @@ export function SectionRefreshProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [marketContext, setMarketContextState] = useState<MarketContext>({
-    seasonId: "ss12",
+    seasonId: "",
     marketMode: "season_normal",
   })
   const [marketContextReady, setMarketContextReady] = useState(false)
@@ -44,8 +44,9 @@ export function SectionRefreshProvider({ children }: { children: ReactNode }) {
     let mounted = true
     cmd.getConfig().then((cfg) => {
       if (!mounted) return
+      // 不再硬编码 ss12 兜底：config 为空就保持空字符串，由调用方决定如何显示
       setMarketContextState({
-        seasonId: cfg.app.season_id || "ss12",
+        seasonId: cfg.app.season_id || "",
         marketMode: cfg.scrape.fire_price_mode || "season_normal",
       })
       setMarketContextReady(true)

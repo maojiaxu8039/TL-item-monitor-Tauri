@@ -73,7 +73,7 @@ export default function SettingsPage() {
   const [itemsScrapeExpert, setItemsScrapeExpert] = useState(false);
   const [jsonPath, setJsonPath] = useState("");
   const [jsonPathValidation, setJsonPathValidation] = useState<JsonFileValidationResult | null>(null);
-  const [seasonId, setSeasonId] = useState("ss12");
+  const [seasonId, setSeasonId] = useState("");
   const [itemCount, setItemCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -427,8 +427,17 @@ export default function SettingsPage() {
               <div className="text-sm font-medium text-[var(--color-text)]">当前赛季 ID</div>
               <div className="text-xs text-[var(--color-text-subtle)] mt-0.5">赛季归档与初始化由服务器端统一处理</div>
             </div>
-            <StatusBadge variant="primary" className="px-4 py-1.5 text-sm font-semibold">
-              {seasonId.toUpperCase()}
+            <StatusBadge
+              variant="primary"
+              className="px-4 py-1.5 text-sm font-semibold"
+              data-testid="current-season-badge"
+            >
+              {(() => {
+                // 三级兜底：config 加载值 → 数据库 is_current → 加载中占位
+                const dbCurrent = seasonsQuery.data?.find((s) => s.is_current)?.season_id;
+                const display = seasonId || dbCurrent;
+                return display ? display.toUpperCase() : "加载中…";
+              })()}
             </StatusBadge>
           </div>
 

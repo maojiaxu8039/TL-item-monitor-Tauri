@@ -68,7 +68,10 @@ export default function SeasonSwitchWizard({
 }: SeasonSwitchWizardProps) {
   const queryClient = useQueryClient();
   const { marketContext, setMarketContext } = useSectionRefresh();
-  const currentNumber = Number.parseInt(currentSeasonId.replace(/^ss/i, ""), 10) || 12;
+  // 用数据库 is_current 兜底，避免硬编码 SS12
+  const dbCurrentId = seasons.find((s) => s.is_current)?.season_id ?? currentSeasonId;
+  const parsed = Number.parseInt((dbCurrentId || "").replace(/^ss/i, ""), 10);
+  const currentNumber = Number.isFinite(parsed) && parsed > 0 ? parsed : 13;
   const initialTargetNumber = currentNumber + 1;
   const initialIds = calculateSeasonApiIds(initialTargetNumber);
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -101,8 +104,15 @@ export default function SeasonSwitchWizard({
         data.luosi_normal.status === "live" || data.etor_normal.status === "live";
       const expertNotOpen =
         data.luosi_expert.status === "not_open" || data.etor_expert.status === "not_open";
+      const bothLuosiDown =
+        data.luosi_normal.status === "error" && data.luosi_expert.status === "error";
       if (normalLive) {
         toast.success("普通服数据正常，可以切换");
+      } else if (bothLuosiDown) {
+        toast.warning("luosi 网站暂不可用，依赖易火 API 即可", {
+          description: "等刷图小助手服务恢复后再探测会更准确",
+          duration: 6000,
+        });
       } else {
         toast.warning("普通服暂无数据，请检查 season_id");
       }
@@ -202,7 +212,10 @@ export default function SeasonSwitchWizard({
       {step === 1 && (
         <div className="space-y-3">
           <p className="text-xs text-[var(--color-text-subtle)]">
-            当前赛季：<span className="font-mono font-bold">{currentSeasonId}</span>
+            当前赛季：
+            <span className="font-mono font-bold">
+              {currentSeasonId || seasons.find((s) => s.is_current)?.season_id || "（加载中）"}
+            </span>
             （共 {seasons.length} 个赛季记录）
           </p>
           <div>
