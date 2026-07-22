@@ -33,6 +33,9 @@ jobs:
           shared-key: "server-test"
 
       - name: Test server
+        env:
+          # CI runner / 分区可能 < 100MB，跳过磁盘告警检查避免污染 current_round_alerts
+          SKIP_DISK_CHECK: "1"
         run: cargo test --manifest-path server-standalone/Cargo.toml -- --test-threads=1
 
   build:

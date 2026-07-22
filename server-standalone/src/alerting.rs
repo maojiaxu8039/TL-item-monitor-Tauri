@@ -58,7 +58,11 @@ impl AlertState {
         self.check_scrape_staleness(metrics);
         self.check_5xx_ratio(metrics);
         self.check_db_pool(metrics);
-        self.check_disk_space();
+        // 磁盘检查依赖运行环境,容器/CI 上 / 分区可能 < 100MB,
+        // 通过 SKIP_DISK_CHECK=1 环境变量跳过（测试也用此开关）
+        if std::env::var("SKIP_DISK_CHECK").as_deref() != Ok("1") {
+            self.check_disk_space();
+        }
         self.last_check_at = Instant::now();
     }
 
