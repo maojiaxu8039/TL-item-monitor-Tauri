@@ -33,7 +33,7 @@ jobs:
           shared-key: "server-test"
 
       - name: Test server
-        run: cargo test --manifest-path server-standalone/Cargo.toml
+        run: cargo test --manifest-path server-standalone/Cargo.toml -- --test-threads=1
 
   build:
     needs: test
