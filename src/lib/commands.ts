@@ -719,7 +719,8 @@ export const cmd = {
     }),
 
   /**
-   * 探测 4 个 API season_id 是否返回实时数据（最近 1 小时有交易）
+   * 探测 4 个 API season_id 的状态
+   * status: 'live' (1h内有数据) | 'not_open' (赛季未开/数据陈旧) | 'error' (网络/解析失败)
    */
   probeSeasonApi: (
     luosiSeasonIdNormal: number,
@@ -728,14 +729,11 @@ export const cmd = {
     etorSeasonIdExpert: number,
   ) =>
     invoke<{
-      luosi_normal_ok: boolean;
-      luosi_normal_latest: number | null;
-      luosi_expert_ok: boolean;
-      luosi_expert_latest: number | null;
-      etor_normal_ok: boolean;
-      etor_normal_latest: number | null;
-      etor_expert_ok: boolean;
-      etor_expert_latest: number | null;
+      luosi_normal: { status: "live" | "not_open" | "error"; latest: number | null; message: string | null };
+      luosi_expert: { status: "live" | "not_open" | "error"; latest: number | null; message: string | null };
+      etor_normal: { status: "live" | "not_open" | "error"; latest: number | null; message: string | null };
+      etor_expert: { status: "live" | "not_open" | "error"; latest: number | null; message: string | null };
+      season_open: boolean;
     }>("probe_season_api_cmd", {
       luosiSeasonIdNormal,
       luosiSeasonIdExpert,

@@ -23,3 +23,52 @@ describe("season switch helpers", () => {
     vi.useRealTimers();
   });
 });
+
+describe("season probe result shape", () => {
+  // 探测结果 3 态：live / not_open / error
+  // 保护前端 components/dashboard/SeasonSwitchWizard.tsx 的展示逻辑
+  type Status = "live" | "not_open" | "error";
+  type Entry = { status: Status; latest: number | null; message: string | null };
+  type Result = {
+    luosi_normal: Entry;
+    luosi_expert: Entry;
+    etor_normal: Entry;
+    etor_expert: Entry;
+    season_open: boolean;
+  };
+
+  it("treats normal-live + expert-not_open as season open (wizard can proceed)", () => {
+    const result: Result = {
+      luosi_normal: { status: "live", latest: 1784714438, message: null },
+      luosi_expert: { status: "not_open", latest: null, message: "API 返回空数据" },
+      etor_normal: { status: "live", latest: 1784714400, message: null },
+      etor_expert: { status: "not_open", latest: null, message: "trend 数组为空" },
+      season_open: true,
+    };
+    expect(result.season_open).toBe(true);
+    expect(result.luosi_normal.status).toBe("live");
+    expect(result.luosi_expert.status).toBe("not_open");
+  });
+
+  it("blocks switch when normal服 neither live (both error)", () => {
+    const result: Result = {
+      luosi_normal: { status: "error", latest: null, message: "HTTP 404" },
+      luosi_expert: { status: "error", latest: null, message: "HTTP 404" },
+      etor_normal: { status: "error", latest: null, message: "网络请求失败" },
+      etor_expert: { status: "error", latest: null, message: "网络请求失败" },
+      season_open: false,
+    };
+    expect(result.season_open).toBe(false);
+  });
+
+  it("only requires at least one normal API to be live", () => {
+    const result: Result = {
+      luosi_normal: { status: "error", latest: null, message: "HTTP 500" },
+      luosi_expert: { status: "not_open", latest: null, message: "赛季/服尚未开放" },
+      etor_normal: { status: "live", latest: 1784714400, message: null },
+      etor_expert: { status: "not_open", latest: null, message: "赛季/服尚未开放" },
+      season_open: true,
+    };
+    expect(result.season_open).toBe(true);
+  });
+});

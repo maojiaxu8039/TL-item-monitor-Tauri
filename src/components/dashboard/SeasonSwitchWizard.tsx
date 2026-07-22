@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sparkles, Loader2, CheckCircle2, XCircle, ArrowRight, Database } from "lucide-react";
+import { Sparkles, Loader2, CheckCircle2, XCircle, Clock, ArrowRight, Database, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { cmd, type SeasonInfo } from "@/lib/commands";
 import { errorMessage } from "@/lib/utils";
@@ -16,15 +16,26 @@ interface SeasonSwitchWizardProps {
   seasons: SeasonInfo[];
 }
 
+type ProbeStatus = "live" | "not_open" | "error";
+type ProbeEntry = { status: ProbeStatus; latest: number | null; message: string | null };
 type ProbeResult = {
-  luosi_normal_ok: boolean;
-  luosi_normal_latest: number | null;
-  luosi_expert_ok: boolean;
-  luosi_expert_latest: number | null;
-  etor_normal_ok: boolean;
-  etor_normal_latest: number | null;
-  etor_expert_ok: boolean;
-  etor_expert_latest: number | null;
+  luosi_normal: ProbeEntry;
+  luosi_expert: ProbeEntry;
+  etor_normal: ProbeEntry;
+  etor_expert: ProbeEntry;
+  season_open: boolean;
+};
+
+const STATUS_LABEL: Record<ProbeStatus, string> = {
+  live: "实时",
+  not_open: "赛季未开",
+  error: "ID 错误",
+};
+
+const STATUS_COLOR: Record<ProbeStatus, string> = {
+  live: "bg-green-500/10 text-green-700 dark:text-green-300",
+  not_open: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  error: "bg-red-500/10 text-red-700 dark:text-red-300",
 };
 
 const DEFAULT_CONFIG = {
@@ -85,15 +96,21 @@ export default function SeasonSwitchWizard({
       ),
     onSuccess: (data) => {
       setProbeResult(data);
-      const allOk =
-        data.luosi_normal_ok &&
-        data.luosi_expert_ok &&
-        data.etor_normal_ok &&
-        data.etor_expert_ok;
-      if (allOk) {
-        toast.success("所有 API 都返回了 1 小时内的实时数据");
+      // 普通服实时 → 切换就绪
+      const normalLive =
+        data.luosi_normal.status === "live" || data.etor_normal.status === "live";
+      const expertNotOpen =
+        data.luosi_expert.status === "not_open" || data.etor_expert.status === "not_open";
+      if (normalLive) {
+        toast.success("普通服数据正常，可以切换");
       } else {
-        toast.warning("部分 API 没有返回实时数据，请检查 season_id");
+        toast.warning("普通服暂无数据，请检查 season_id");
+      }
+      // 静默提示专家服未开
+      if (expertNotOpen) {
+        toast.info("专家服未开放（赛季刚开时常有），切换后只采集普通服", {
+          duration: 5000,
+        });
       }
     },
     onError: (err) => toast.error(`探测失败: ${errorMessage(err)}`),
@@ -287,32 +304,55 @@ export default function SeasonSwitchWizard({
           {probeResult && (
             <div className="space-y-1.5 mt-2">
               {[
-                { key: "luosi_normal", label: "刷图小助手 普通服", ok: probeResult.luosi_normal_ok, ts: probeResult.luosi_normal_latest },
-                { key: "luosi_expert", label: "刷图小助手 专家服", ok: probeResult.luosi_expert_ok, ts: probeResult.luosi_expert_latest },
-                { key: "etor_normal", label: "易火 普通服", ok: probeResult.etor_normal_ok, ts: probeResult.etor_normal_latest },
-                { key: "etor_expert", label: "易火 专家服", ok: probeResult.etor_expert_ok, ts: probeResult.etor_expert_latest },
-              ].map((row) => (
-                <div
-                  key={row.key}
-                  className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs ${
-                    row.ok
-                      ? "bg-green-500/10 text-green-700 dark:text-green-300"
-                      : "bg-red-500/10 text-red-700 dark:text-red-300"
-                  }`}
-                >
-                  {row.ok ? (
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                  ) : (
-                    <XCircle className="w-3.5 h-3.5" />
-                  )}
-                  <span className="font-medium">{row.label}</span>
-                  <span className="text-[var(--color-text-subtle)]">·</span>
-                  <span>{row.ok ? `${tsAgeMin(row.ts)}实时` : "无实时数据"}</span>
-                  <span className="text-[var(--color-text-subtle)] ml-auto font-mono">
-                    {formatTs(row.ts)}
-                  </span>
-                </div>
-              ))}
+                { key: "luosi_normal", label: "刷图小助手 普通服", entry: probeResult.luosi_normal },
+                { key: "luosi_expert", label: "刷图小助手 专家服", entry: probeResult.luosi_expert },
+                { key: "etor_normal", label: "易火 普通服", entry: probeResult.etor_normal },
+                { key: "etor_expert", label: "易火 专家服", entry: probeResult.etor_expert },
+              ].map((row) => {
+                const status = row.entry.status;
+                const Icon =
+                  status === "live" ? CheckCircle2
+                    : status === "not_open" ? Clock
+                    : XCircle;
+                const detail =
+                  status === "live"
+                    ? `${tsAgeMin(row.entry.latest)}实时`
+                    : status === "not_open"
+                    ? (row.entry.message ?? "赛季/服尚未开放")
+                    : (row.entry.message ?? "ID 错误或网络异常");
+                return (
+                  <div
+                    key={row.key}
+                    className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs ${STATUS_COLOR[status]}`}
+                  >
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <span className="font-medium shrink-0">{row.label}</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-black/10 dark:bg-white/10 shrink-0">
+                      {STATUS_LABEL[status]}
+                    </span>
+                    <span className="truncate">{detail}</span>
+                    <span className="text-[var(--color-text-subtle)] ml-auto font-mono shrink-0">
+                      {formatTs(row.entry.latest)}
+                    </span>
+                  </div>
+                );
+              })}
+
+              {/* 专家服未开时给出友好说明 */}
+              {(probeResult.luosi_expert.status === "not_open" ||
+                probeResult.etor_expert.status === "not_open") &&
+                probeResult.season_open && (
+                  <div className="mt-2 px-3 py-2 rounded bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-medium mb-0.5">专家服尚未开放</div>
+                      <div className="text-[11px] opacity-80">
+                        赛季刚开时专家服通常会晚几天。切换后只采集普通服数据，
+                        等专家服开放时再单独启用 scraper。
+                      </div>
+                    </div>
+                  </div>
+                )}
             </div>
           )}
 
@@ -322,12 +362,7 @@ export default function SeasonSwitchWizard({
                 variant="default"
                 size="sm"
                 onClick={() => setStep(3)}
-                disabled={
-                  !probeResult.luosi_normal_ok ||
-                  !probeResult.luosi_expert_ok ||
-                  !probeResult.etor_normal_ok ||
-                  !probeResult.etor_expert_ok
-                }
+                disabled={!probeResult.season_open}
               >
                 下一步：应用
                 <ArrowRight className="w-3 h-3 ml-1" />

@@ -3,53 +3,118 @@ use crate::db::table_resolver::TableResolver;
 use std::sync::Arc;
 use tauri::State;
 
+/// 探测结果状态
+/// - Live: API 返回了最近 1 小时内的交易数据
+/// - NotOpen: API 返回成功（HTTP 200）但数据为空 → 赛季/服尚未开放
+/// - Error: HTTP 失败、解析失败或 ID 错误
+#[derive(Debug, Clone, Copy, serde::Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProbeStatus {
+    Live,
+    NotOpen,
+    Error,
+}
+
+/// 单个 season_id 的探测结果
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ProbeEntry {
+    pub status: ProbeStatus,
+    pub latest: Option<i64>,
+    pub message: Option<String>,
+}
+
 /// 探测给定 luosi/etor season_id 是否返回实时数据（最近 1 小时有交易）
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SeasonProbeResult {
-    pub luosi_normal_ok: bool,
-    pub luosi_normal_latest: Option<i64>,
-    pub luosi_expert_ok: bool,
-    pub luosi_expert_latest: Option<i64>,
-    pub etor_normal_ok: bool,
-    pub etor_normal_latest: Option<i64>,
-    pub etor_expert_ok: bool,
-    pub etor_expert_latest: Option<i64>,
+    pub luosi_normal: ProbeEntry,
+    pub luosi_expert: ProbeEntry,
+    pub etor_normal: ProbeEntry,
+    pub etor_expert: ProbeEntry,
+    /// 当前赛季是否已开始（任何 luosi normal 实时即视为赛季已开）
+    pub season_open: bool,
 }
 
 const ETOR_BASE_URL: &str = "https://etor.710421059.xyz";
 
 /// 探测单个螺蛳粉 season_id
-async fn probe_luosi_season(client: &reqwest::Client, season_id: i32) -> (bool, Option<i64>) {
+async fn probe_luosi_season(client: &reqwest::Client, season_id: i32) -> ProbeEntry {
     let url = crate::scraper::luosi::api_url_for_season(season_id);
-    match client.get(&url).send().await {
-        Ok(resp) if resp.status().is_success() => match resp.text().await {
-            Ok(body) => {
-                if let Ok(map) = serde_json::from_str::<
-                    std::collections::HashMap<String, serde_json::Value>,
-                >(&body)
-                {
-                    let latest = map
-                        .values()
-                        .filter_map(|v| v.get("last_time").and_then(|x| x.as_i64()))
-                        .max();
-                    let now = chrono::Utc::now().timestamp();
-                    let is_recent = latest
-                        .map(|t| (0..3600).contains(&(now - t)))
-                        .unwrap_or(false);
-                    (is_recent, latest)
-                } else {
-                    (false, None)
-                }
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(_) => {
+            return ProbeEntry {
+                status: ProbeStatus::Error,
+                latest: None,
+                message: Some("网络请求失败".into()),
+            };
+        }
+    };
+    if !resp.status().is_success() {
+        return ProbeEntry {
+            status: ProbeStatus::Error,
+            latest: None,
+            message: Some(format!("HTTP {}", resp.status())),
+        };
+    }
+    let body = match resp.text().await {
+        Ok(b) => b,
+        Err(_) => {
+            return ProbeEntry {
+                status: ProbeStatus::Error,
+                latest: None,
+                message: Some("读取响应失败".into()),
+            };
+        }
+    };
+    let map: std::collections::HashMap<String, serde_json::Value> = match serde_json::from_str(&body) {
+        Ok(m) => m,
+        Err(_) => {
+            return ProbeEntry {
+                status: ProbeStatus::Error,
+                latest: None,
+                message: Some("响应非 JSON 格式".into()),
+            };
+        }
+    };
+    if map.is_empty() {
+        // API 返回 200 但无数据 → 赛季/服未开
+        return ProbeEntry {
+            status: ProbeStatus::NotOpen,
+            latest: None,
+            message: Some("API 返回空数据".into()),
+        };
+    }
+    let latest = map
+        .values()
+        .filter_map(|v| v.get("last_time").and_then(|x| x.as_i64()))
+        .max();
+    let now = chrono::Utc::now().timestamp();
+    if let Some(t) = latest {
+        if (now - t) < 3600 {
+            ProbeEntry {
+                status: ProbeStatus::Live,
+                latest: Some(t),
+                message: None,
             }
-            Err(_) => (false, None),
-        },
-        _ => (false, None),
+        } else {
+            // 数据陈旧（>1 小时）→ 可能赛季未开或暂停
+            ProbeEntry {
+                status: ProbeStatus::NotOpen,
+                latest: Some(t),
+                message: Some("数据陈旧（>1 小时）".into()),
+            }
+        }
+    } else {
+        ProbeEntry {
+            status: ProbeStatus::NotOpen,
+            latest: None,
+            message: Some("无 last_time 字段".into()),
+        }
     }
 }
 
 /// 探测单个易火 season_id（用任意已知 item_id 测试）
-async fn probe_etor_season(client: &reqwest::Client, season_id: i32) -> (bool, Option<i64>) {
-    // 用一个常见 item_id 测试响应（5200 是 SS12/SS13 都可能有的物品）
+async fn probe_etor_season(client: &reqwest::Client, season_id: i32) -> ProbeEntry {
     let test_ids = ["5200", "10001", "113335"];
     let url_template = |id: &str| {
         format!(
@@ -57,9 +122,11 @@ async fn probe_etor_season(client: &reqwest::Client, season_id: i32) -> (bool, O
             ETOR_BASE_URL, season_id, id
         )
     };
+    let mut last_status = ProbeStatus::Error;
+    let mut last_message = "所有测试物品都返回空".to_string();
     for item_id in test_ids {
         let url = url_template(item_id);
-        match client
+        let resp = match client
             .get(&url)
             .header("x-frontend-version", "10.5.50")
             .header("playroid", "20")
@@ -69,29 +136,65 @@ async fn probe_etor_season(client: &reqwest::Client, season_id: i32) -> (bool, O
             .send()
             .await
         {
-            Ok(resp) if resp.status().is_success() => {
-                if let Ok(body) = resp.text().await {
-                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&body) {
-                        if let Some(trend) = parsed.get("trend").and_then(|t| t.as_array()) {
-                            if !trend.is_empty() {
-                                let latest_ts = trend
-                                    .iter()
-                                    .filter_map(|t| t.get("timestamp").and_then(|x| x.as_i64()))
-                                    .max();
-                                let now = chrono::Utc::now().timestamp() * 1000;
-                                let is_recent = latest_ts
-                                    .map(|t| (0..3600 * 1000).contains(&(now - t)))
-                                    .unwrap_or(false);
-                                return (is_recent, latest_ts.map(|t| t / 1000));
-                            }
-                        }
+            Ok(r) => r,
+            Err(_) => {
+                last_message = "网络请求失败".into();
+                continue;
+            }
+        };
+        if !resp.status().is_success() {
+            last_status = ProbeStatus::Error;
+            last_message = format!("HTTP {}", resp.status());
+            continue;
+        }
+        let body = match resp.text().await {
+            Ok(b) => b,
+            Err(_) => {
+                last_status = ProbeStatus::Error;
+                last_message = "读取响应失败".into();
+                continue;
+            }
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&body) {
+            Ok(p) => p,
+            Err(_) => {
+                last_status = ProbeStatus::Error;
+                last_message = "响应非 JSON 格式".into();
+                continue;
+            }
+        };
+        if let Some(trend) = parsed.get("trend").and_then(|t| t.as_array()) {
+            if !trend.is_empty() {
+                let latest_ts = trend
+                    .iter()
+                    .filter_map(|t| t.get("timestamp").and_then(|x| x.as_i64()))
+                    .max();
+                let now = chrono::Utc::now().timestamp() * 1000;
+                if let Some(t) = latest_ts {
+                    if (now - t) < 3600 * 1000 {
+                        return ProbeEntry {
+                            status: ProbeStatus::Live,
+                            latest: Some(t / 1000),
+                            message: None,
+                        };
+                    } else {
+                        last_status = ProbeStatus::NotOpen;
+                        last_message = "数据陈旧（>1 小时）".into();
+                        continue;
                     }
                 }
+            } else {
+                last_status = ProbeStatus::NotOpen;
+                last_message = "trend 数组为空".into();
+                continue;
             }
-            _ => {}
         }
     }
-    (false, None)
+    ProbeEntry {
+        status: last_status,
+        latest: None,
+        message: Some(last_message),
+    }
 }
 
 /// 一次性探测 4 个 API season_id 是否返回实时数据
@@ -106,26 +209,21 @@ pub async fn probe_season_api_cmd(
         .timeout(std::time::Duration::from_secs(8))
         .build()
         .map_err(|e| format!("创建赛季探测客户端失败: {}", e))?;
-    let (
-        (luosi_normal_ok, luosi_normal_latest),
-        (luosi_expert_ok, luosi_expert_latest),
-        (etor_normal_ok, etor_normal_latest),
-        (etor_expert_ok, etor_expert_latest),
-    ) = tokio::join!(
+    let (luosi_normal, luosi_expert, etor_normal, etor_expert) = tokio::join!(
         probe_luosi_season(&client, luosiSeasonIdNormal),
         probe_luosi_season(&client, luosiSeasonIdExpert),
         probe_etor_season(&client, etorSeasonIdNormal),
         probe_etor_season(&client, etorSeasonIdExpert),
     );
+    // 普通服任一 API 实时 → 赛季已开始
+    let season_open = luosi_normal.status == ProbeStatus::Live
+        || etor_normal.status == ProbeStatus::Live;
     Ok(SeasonProbeResult {
-        luosi_normal_ok,
-        luosi_normal_latest,
-        luosi_expert_ok,
-        luosi_expert_latest,
-        etor_normal_ok,
-        etor_normal_latest,
-        etor_expert_ok,
-        etor_expert_latest,
+        luosi_normal,
+        luosi_expert,
+        etor_normal,
+        etor_expert,
+        season_open,
     })
 }
 
