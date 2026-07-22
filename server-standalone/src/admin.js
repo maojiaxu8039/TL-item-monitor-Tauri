@@ -815,7 +815,7 @@ async function saveApiConfig(buttonId = 'btn-save-item-api') {
         }, 30000);
 
         if (data.success) {
-            showAlert('success', 'API配置已保存，重启后生效');
+            showAlert('success', 'API配置已保存并立即生效');
         } else {
             showAlert('error', data.error || '保存失败');
         }

@@ -2025,6 +2025,11 @@ async fn handle_request(
                             (500, body)
                         } else {
                             clear_response_cache(&state).await;
+                            // 同步更新内存中的 config，避免重启前采集任务仍使用旧赛季ID
+                            {
+                                let mut cfg_guard = state.config.write().await;
+                                *cfg_guard = new_config;
+                            }
                             db::insert_audit_log(
                                 &state.db,
                                 "update-api-config",
@@ -2036,7 +2041,7 @@ async fn handle_request(
                             let body = serde_json::to_string_pretty(&ApiResponse {
                                 success: true,
                                 data: Some(
-                                    "API配置已保存到文件，请重启服务器使配置生效".to_string(),
+                                    "API配置已保存并立即生效".to_string(),
                                 ),
                                 error: None,
                             })
