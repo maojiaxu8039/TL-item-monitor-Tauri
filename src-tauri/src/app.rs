@@ -167,6 +167,29 @@ pub async fn init_app(_app_handle: &tauri::AppHandle) -> Result<AppState, String
         AppConfig::default()
     });
 
+    // The database current-season marker is authoritative. This also recovers
+    // from a process exit after the DB transaction committed but before the
+    // YAML config file was updated.
+    let database_season: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM seasons WHERE is_current = 1 ORDER BY updated_at DESC LIMIT 1",
+    )
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| format!("Failed to load current season from database: {}", e))?;
+    if let Some(database_season) = database_season {
+        if config.app.season_id != database_season {
+            tracing::info!(
+                "[STARTUP] Repairing config season {} from database value {}",
+                config.app.season_id,
+                database_season
+            );
+            config.app.season_id = database_season;
+            if let Err(e) = crate::core::config::save_config(&config) {
+                tracing::warn!("Failed to persist repaired season config: {}", e);
+            }
+        }
+    }
+
     // Startup fire scraping begins with normal mode, so keep the initial UI
     // context aligned even if the previous session ended in expert mode.
     config.scrape.fire_price_mode = MarketMode::SeasonNormal.as_str().to_string();
@@ -651,11 +674,11 @@ async fn finalize_schema(pool: &SqlitePool) -> Result<(), String> {
     ensure_item_realtime_prices_schema(pool).await?;
     ensure_arbitrage_schema(pool).await?;
     ensure_legacy_schema(pool).await?;
+    seed_seasons(pool).await?;
     ensure_split_tables(pool).await?;
     apply_season_day_migration(pool).await?;
     apply_snapshot_metadata_migration(pool).await?;
     apply_performance_indexes_migration(pool).await?;
-    seed_seasons(pool).await?;
     Ok(())
 }
 
@@ -1357,10 +1380,34 @@ async fn ensure_strategy_detail_schema(pool: &SqlitePool) -> Result<(), String> 
     .map_err(|e| format!("Failed to ensure strategy_details table: {}", e))?;
 
     add_column_if_missing(pool, "strategy_details", "image_url", "TEXT DEFAULT ''").await?;
-    add_column_if_missing(pool, "strategy_details", "estimated_cost", "REAL NOT NULL DEFAULT 0").await?;
-    add_column_if_missing(pool, "strategy_details", "estimated_revenue_min", "REAL NOT NULL DEFAULT 0").await?;
-    add_column_if_missing(pool, "strategy_details", "estimated_revenue_max", "REAL NOT NULL DEFAULT 0").await?;
-    add_column_if_missing(pool, "strategy_details", "runs_per_hour", "REAL NOT NULL DEFAULT 0").await?;
+    add_column_if_missing(
+        pool,
+        "strategy_details",
+        "estimated_cost",
+        "REAL NOT NULL DEFAULT 0",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "strategy_details",
+        "estimated_revenue_min",
+        "REAL NOT NULL DEFAULT 0",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "strategy_details",
+        "estimated_revenue_max",
+        "REAL NOT NULL DEFAULT 0",
+    )
+    .await?;
+    add_column_if_missing(
+        pool,
+        "strategy_details",
+        "runs_per_hour",
+        "REAL NOT NULL DEFAULT 0",
+    )
+    .await?;
 
     ensure_strategy_detail_child_tables(pool).await
 }
@@ -1817,7 +1864,7 @@ async fn apply_snapshot_metadata_migration(pool: &SqlitePool) -> Result<(), Stri
 /// Idempotently ensure all tables exist.
 /// Real-time tables (items_*, fire_price_*): no season suffix, always current season
 /// Snapshot tables (*_snapshots_ss{season}_*): with season suffix, for historical data
-async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
+pub(crate) async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
     use crate::db::table_resolver::TableResolver;
 
     // 1. Ensure real-time tables (no season suffix)
@@ -1887,14 +1934,20 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
         );
     }
 
-    // 2. Ensure snapshot tables (with season suffix)
-    for (season, mode) in TableResolver::supported_combinations() {
-        let snapshots_table = TableResolver::item_snapshots_table(season, mode);
-        let fire_snapshots_table = TableResolver::fire_price_snapshots_table(season, mode);
+    // 2. Ensure snapshot tables for every season registered in the database.
+    let seasons: Vec<(String,)> =
+        sqlx::query_as("SELECT id FROM seasons ORDER BY started_at DESC, id DESC")
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("Failed to load seasons for snapshot tables: {}", e))?;
+    for (season,) in seasons {
+        for mode in ["season_normal", "season_expert"] {
+            let snapshots_table = TableResolver::item_snapshots_table(&season, mode);
+            let fire_snapshots_table = TableResolver::fire_price_snapshots_table(&season, mode);
 
-        // Item snapshots table - hourly snapshots (server定时写入)
-        sqlx::query(&format!(
-            "CREATE TABLE IF NOT EXISTS {} (
+            // Item snapshots table - hourly snapshots (server定时写入)
+            sqlx::query(&format!(
+                "CREATE TABLE IF NOT EXISTS {} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 item_id TEXT NOT NULL,
                 name TEXT NOT NULL DEFAULT '',
@@ -1904,36 +1957,38 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
                 season_day INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(item_id, scraped_at)
             )",
-            snapshots_table
-        ))
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            format!(
-                "Failed to ensure item snapshots table {}: {}",
-                snapshots_table, e
+                snapshots_table
+            ))
+            .execute(pool)
+            .await
+            .map_err(|e| {
+                format!(
+                    "Failed to ensure item snapshots table {}: {}",
+                    snapshots_table, e
+                )
+            })?;
+
+            add_column_if_missing(pool, &snapshots_table, "name", "TEXT NOT NULL DEFAULT ''")
+                .await?;
+            add_column_if_missing(
+                pool,
+                &snapshots_table,
+                "item_type",
+                "TEXT NOT NULL DEFAULT ''",
             )
-        })?;
+            .await?;
 
-        add_column_if_missing(pool, &snapshots_table, "name", "TEXT NOT NULL DEFAULT ''").await?;
-        add_column_if_missing(
-            pool,
-            &snapshots_table,
-            "item_type",
-            "TEXT NOT NULL DEFAULT ''",
-        )
-        .await?;
-        add_column_if_missing(
-            pool,
-            &snapshots_table,
-            "season_day",
-            "INTEGER NOT NULL DEFAULT 1",
-        )
-        .await?;
+            add_column_if_missing(
+                pool,
+                &snapshots_table,
+                "season_day",
+                "INTEGER NOT NULL DEFAULT 1",
+            )
+            .await?;
 
-        // Fire price snapshots table - hourly snapshots (server定时写入)
-        sqlx::query(&format!(
-            "CREATE TABLE IF NOT EXISTS {} (
+            // Fire price snapshots table - hourly snapshots (server定时写入)
+            sqlx::query(&format!(
+                "CREATE TABLE IF NOT EXISTS {} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 rmb_per_10k_fire REAL NOT NULL,
                 fire_per_rmb REAL NOT NULL DEFAULT 0,
@@ -1945,32 +2000,62 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
                 season_day INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(scraped_at)
             )",
-            fire_snapshots_table
-        ))
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            format!(
-                "Failed to ensure fire_price snapshots table {}: {}",
-                fire_snapshots_table, e
+                fire_snapshots_table
+            ))
+            .execute(pool)
+            .await
+            .map_err(|e| {
+                format!(
+                    "Failed to ensure fire_price snapshots table {}: {}",
+                    fire_snapshots_table, e
+                )
+            })?;
+
+            add_column_if_missing(
+                pool,
+                &fire_snapshots_table,
+                "season_day",
+                "INTEGER NOT NULL DEFAULT 1",
             )
-        })?;
+            .await?;
 
-        add_column_if_missing(
-            pool,
-            &fire_snapshots_table,
-            "season_day",
-            "INTEGER NOT NULL DEFAULT 1",
-        )
-        .await?;
+            let mode_suffix = if mode == "season_expert" {
+                "expert"
+            } else {
+                "normal"
+            };
+            for sql in [
+                format!(
+                    "CREATE INDEX IF NOT EXISTS idx_{}_{}_snapshots_season_day ON {}(season_day)",
+                    season, mode_suffix, snapshots_table
+                ),
+                format!(
+                    "CREATE INDEX IF NOT EXISTS idx_{}_{}_snapshots_name ON {}(name)",
+                    season, mode_suffix, snapshots_table
+                ),
+                format!(
+                    "CREATE INDEX IF NOT EXISTS idx_{}_{}_snapshots_type ON {}(item_type)",
+                    season, mode_suffix, snapshots_table
+                ),
+                format!(
+                "CREATE INDEX IF NOT EXISTS idx_fire_{}_{}_snapshots_season_day ON {}(season_day)",
+                season, mode_suffix, fire_snapshots_table
+            ),
+            ] {
+                sqlx::query(&sql)
+                    .execute(pool)
+                    .await
+                    .map_err(|e| format!("Failed to create dynamic snapshot index: {}", e))?;
+            }
 
-        tracing::info!(
-            "Ensured snapshot tables for {}/{}: {}, {}",
-            season,
-            mode,
-            snapshots_table,
-            fire_snapshots_table
-        );
+            tracing::info!(
+                "Ensured snapshot tables for {}/{}: {}, {}",
+                season,
+                mode,
+                snapshots_table,
+                fire_snapshots_table
+            );
+        }
     }
 
     Ok(())
@@ -1978,34 +2063,35 @@ async fn ensure_split_tables(pool: &SqlitePool) -> Result<(), String> {
 
 async fn seed_seasons(pool: &SqlitePool) -> Result<(), String> {
     let now = chrono::Utc::now().timestamp();
+    let has_current: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM seasons WHERE is_current = 1)")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| format!("Failed to inspect current season before seeding: {}", e))?;
 
-    let seasons = vec![
+    let seasons = [
         ("ss13", "SS13 当前赛季", "ss13", 1, 1784332800),
         ("ss12", "SS12 历史赛季", "ss12", 0, 1776355200),
+        ("ss11", "SS11 历史赛季", "ss11", 0, 1768521600),
+        ("ss10", "SS10 历史赛季", "ss10", 0, 1699392000),
     ];
 
     for (id, name, code, is_current, started_at) in seasons {
         sqlx::query(
-            r#"INSERT OR REPLACE INTO seasons (id, name, code, is_current, started_at, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+            r#"INSERT INTO seasons (id, name, code, is_current, started_at, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO NOTHING"#,
         )
         .bind(id)
         .bind(name)
         .bind(code)
-        .bind(is_current)
+        .bind(if has_current { 0 } else { is_current })
         .bind(started_at)
         .bind(now)
         .bind(now)
         .execute(pool)
         .await
         .map_err(|e| format!("Failed to seed season {}: {}", id, e))?;
-    }
-
-    if let Err(e) = sqlx::query("DELETE FROM seasons WHERE id NOT IN ('ss12', 'ss13')")
-        .execute(pool)
-        .await
-    {
-        tracing::warn!("Failed to clean up stale seasons: {}", e);
     }
 
     tracing::info!("Seasons seed data ensured");
@@ -2320,7 +2406,49 @@ mod migration_tests {
             ],
         )
         .await;
-        assert_eq!(read_schema_version(&pool).await.unwrap(), LATEST_SCHEMA_VERSION);
+        assert_eq!(
+            read_schema_version(&pool).await.unwrap(),
+            LATEST_SCHEMA_VERSION
+        );
+    }
+
+    #[tokio::test]
+    async fn startup_preserves_dynamic_seasons_and_creates_snapshot_tables() {
+        let db_path = temp_db_path();
+        let pool = file_pool(&db_path).await;
+        run_migrations(&pool, &db_path, false)
+            .await
+            .expect("fresh migrations should complete");
+
+        sqlx::query("DELETE FROM seasons")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO seasons (id, name, code, is_current, started_at, created_at, updated_at)
+             VALUES ('ss14', 'SS14 当前赛季', 'ss14', 1, 1792108800, 1, 1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        run_migrations(&pool, &db_path, true)
+            .await
+            .expect("startup schema finalization should preserve dynamic seasons");
+
+        let current: String = sqlx::query_scalar("SELECT id FROM seasons WHERE is_current = 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(current, "ss14");
+        for table in [
+            "item_snapshots_ss14_normal",
+            "item_snapshots_ss14_expert",
+            "fire_price_snapshots_ss14_normal",
+            "fire_price_snapshots_ss14_expert",
+        ] {
+            assert!(table_exists(&pool, table).await.unwrap(), "missing {table}");
+        }
     }
 
     #[tokio::test]
@@ -2480,7 +2608,10 @@ mod migration_tests {
         .unwrap();
         assert_eq!(backup_count, 1);
 
-        assert_eq!(read_schema_version(&pool).await.unwrap(), LATEST_SCHEMA_VERSION);
+        assert_eq!(
+            read_schema_version(&pool).await.unwrap(),
+            LATEST_SCHEMA_VERSION
+        );
 
         let copied: (String, f64) = sqlx::query_as(
             "SELECT name, fire_price FROM item_realtime_prices WHERE item_id = 'item-1'",

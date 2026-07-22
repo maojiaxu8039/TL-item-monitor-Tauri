@@ -41,38 +41,18 @@
       "identifier": "fs:allow-read-text-file",
       "allow": [
         { "path": "$APPLOCALDATA/**" },
-        { "path": "$APPDATA/**" },
-        { "path": "$DESKTOP/**" },
-        { "path": "$DOCUMENT/**" },
-        { "path": "$DOWNLOAD/**" }
+        { "path": "$APPDATA/**" }
       ]
     },
     {
       "identifier": "fs:allow-write-text-file",
       "allow": [
         { "path": "$APPLOCALDATA/**" },
-        { "path": "$APPDATA/**" },
-        { "path": "$DESKTOP/**" },
-        { "path": "$DOCUMENT/**" },
-        { "path": "$DOWNLOAD/**" }
+        { "path": "$APPDATA/**" }
       ]
     },
     "fs:allow-exists",
     "fs:allow-create",
-    "fs:allow-copy-file",
-    "opener:default",
-    "opener:allow-open-url",
-    "opener:allow-open-path",
-    "process:default",
-    "process:allow-exit",
-    "http:default",
-    {
-      "identifier": "http:allow-fetch",
-      "allow": [
-        { "url": "http://100.124.122.65:38457/**" },
-        { "url": "http://*.vicp.fun/**" },
-        { "url": "https://*.vicp.fun/**" }
-      ]
-    }
+    "fs:allow-copy-file"
   ]
 }

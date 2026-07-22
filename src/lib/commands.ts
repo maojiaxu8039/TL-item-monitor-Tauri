@@ -749,6 +749,20 @@ export const cmd = {
   switchCurrentSeason: (seasonId: string) =>
     invoke<OkResponse>("switch_current_season_cmd", { seasonId }),
 
+  /** Create/update a season, persist its API config, and make it current. */
+  applySeasonSwitch: (
+    seasonId: string,
+    seasonName: string,
+    startedAt: number,
+    config: SeasonApiConfigInput,
+  ) =>
+    invoke<OkResponse>("apply_season_switch_cmd", {
+      seasonId,
+      seasonName,
+      startedAt,
+      config,
+    }),
+
   // Item mapping management
   updateItemMapping: () =>
     invoke<ItemMappingUpdateResult>("update_item_mapping"),

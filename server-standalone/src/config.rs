@@ -198,11 +198,45 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig, String> {
     if config.api_endpoints.qiandao_fire_endpoint.is_empty() {
         config.api_endpoints.qiandao_fire_endpoint = default_qiandao_fire_endpoint();
     }
+    config.api_endpoints.luosi = normalize_api_base_url("luosi", &config.api_endpoints.luosi)?;
+    config.api_endpoints.qiandao =
+        normalize_api_base_url("qiandao", &config.api_endpoints.qiandao)?;
+    validate_api_path(
+        "qiandao_fire_endpoint",
+        &config.api_endpoints.qiandao_fire_endpoint,
+    )?;
     config.scrape_modes = normalize_scrape_modes(config.scrape_modes);
 
     validate_config(&config);
 
     Ok(config)
+}
+
+fn normalize_api_base_url(name: &str, value: &str) -> Result<String, String> {
+    let parsed =
+        reqwest::Url::parse(value.trim()).map_err(|e| format!("{} API 地址无效: {}", name, e))?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+        return Err(format!("{} API 地址必须使用 http 或 https", name));
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(format!("{} API 地址不能包含用户名或密码", name));
+    }
+    if parsed.query().is_some() || parsed.fragment().is_some() {
+        return Err(format!("{} API 基础地址不能包含查询参数或 fragment", name));
+    }
+    Ok(parsed.as_str().trim_end_matches('/').to_string())
+}
+
+fn validate_api_path(name: &str, value: &str) -> Result<(), String> {
+    if !value.starts_with('/')
+        || value.starts_with("//")
+        || value.contains("://")
+        || value.contains('?')
+        || value.contains('#')
+    {
+        return Err(format!("{} 必须是无查询参数的站内绝对路径", name));
+    }
+    Ok(())
 }
 
 /// 启动期配置校验：打印告警日志，但不阻塞启动（让运维有纠错机会）
@@ -212,19 +246,18 @@ fn validate_config(config: &ServerConfig) {
     if config.http_port == 0 {
         error!("http_port=0 会导致服务绑定失败,请在 server_config.yaml 修改");
     } else if config.http_port < 1024 && cfg!(unix) {
-        warn!("http_port={} 是特权端口(Linux),需要 root 权限", config.http_port);
+        warn!(
+            "http_port={} 是特权端口(Linux),需要 root 权限",
+            config.http_port
+        );
     }
 
     if config.rate_limit.enabled && config.rate_limit.requests_per_minute == 0 {
-        error!(
-            "rate_limit.enabled=true 但 requests_per_minute=0,所有请求将被拒绝"
-        );
+        error!("rate_limit.enabled=true 但 requests_per_minute=0,所有请求将被拒绝");
     }
 
     if config.admin_password.is_empty() {
-        warn!(
-            "admin_password 为空,所有管理 API 都会被拒绝 (verify_password 错误)"
-        );
+        warn!("admin_password 为空,所有管理 API 都会被拒绝 (verify_password 错误)");
     }
 
     if config.cors_allowed_origins.is_empty() {
@@ -248,6 +281,10 @@ fn validate_config(config: &ServerConfig) {
             "luosi api 端点仍是占位值 '{}',请修改为真实 API 地址",
             config.api_endpoints.luosi
         );
+    }
+
+    if config.api_endpoints.luosi.starts_with("http://") {
+        warn!("luosi API 使用明文 HTTP；建议在生产环境配置 HTTPS 反向代理");
     }
 }
 
@@ -308,4 +345,44 @@ pub fn normalize_scrape_modes(modes: Vec<ScrapeMode>) -> Vec<ScrapeMode> {
             enabled: expert.unwrap_or(true),
         },
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_api_base_url, validate_api_path};
+
+    #[test]
+    fn normalizes_safe_api_base_urls() {
+        assert_eq!(
+            normalize_api_base_url("test", "https://proxy.example.com/api/").unwrap(),
+            "https://proxy.example.com/api"
+        );
+        assert!(normalize_api_base_url("test", "http://127.0.0.1:8080").is_ok());
+    }
+
+    #[test]
+    fn rejects_unsafe_api_base_urls() {
+        for value in [
+            "file:///tmp/api",
+            "https://user:secret@example.com/api",
+            "https://example.com/api?token=secret",
+            "https://example.com/api#fragment",
+            "not-a-url",
+        ] {
+            assert!(normalize_api_base_url("test", value).is_err(), "{value}");
+        }
+    }
+
+    #[test]
+    fn validates_relative_api_endpoint_path() {
+        assert!(validate_api_path("endpoint", "/v1/prices").is_ok());
+        for value in [
+            "v1/prices",
+            "//evil.example/path",
+            "/v1?a=1",
+            "https://evil.example",
+        ] {
+            assert!(validate_api_path("endpoint", value).is_err(), "{value}");
+        }
+    }
 }

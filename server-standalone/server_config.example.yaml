@@ -24,6 +24,7 @@ api_config:
   etor_season_id_expert: 1431
 
 api_endpoints:
+  # 上游默认仅提供 HTTP；生产环境建议改为自建 HTTPS 反向代理地址。
   luosi: "http://115.231.176.101:8080"
   qiandao: "https://api.qiandao.com"
   qiandao_fire_endpoint: "/c2c-web/v1/common/currency-spu-price-list"

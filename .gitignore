@@ -2,6 +2,8 @@ node_modules/
 src-tauri/target/
 dist/
 dist-react/
+coverage/
+src/coverage/
 *.log
 .DS_Store
 src/node_modules/

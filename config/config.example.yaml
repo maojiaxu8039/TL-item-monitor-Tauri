@@ -6,7 +6,7 @@ scrape:
   fire_scrape_normal_enabled: true
   fire_scrape_expert_enabled: false
   items_source: dual
-  items_json_path: ''
+  items_json_path: ""
   items_reload_interval: 300
   auto_reload: true
   items_scrape_normal_enabled: true
@@ -20,14 +20,14 @@ desktop:
   mini_always_on_top: true
   mini_width: 360
   mini_height: 540
-  mini_x: 270
-  mini_y: 66
+  mini_x: 0
+  mini_y: 0
 notification:
   system_notifications: true
   mac_desktop_notifications: true
   win_desktop_notifications: true
   voice_alert_enabled: true
-  voice_alert_path: ''
+  voice_alert_path: ""
   price_alert_enabled: true
   price_alert_cooldown_seconds: 600
   buy_alert_enabled: true

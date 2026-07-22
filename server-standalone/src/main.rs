@@ -567,6 +567,12 @@ fn verify_admin(input_password: &str, stored_password: &str) -> Result<(), Strin
     password_hash::verify_password(input_password, stored_password)
 }
 
+/// 从运行时配置中复制密码后再校验，确保配置读锁不会跨越后续 await 或写锁。
+async fn verify_admin_for_state(input_password: &str, state: &ServerState) -> Result<(), String> {
+    let stored_password = state.config.read().await.admin_password.clone();
+    verify_admin(input_password, &stored_password)
+}
+
 async fn handle_request(
     stream: tokio::net::TcpStream,
     client_addr: std::net::SocketAddr,
@@ -996,7 +1002,7 @@ async fn handle_request(
             }
             match serde_json::from_str::<StatusRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
+                    if let Err(e) = verify_admin_for_state(&req.password, &state).await {
                         let body = serde_json::to_string_pretty(&ApiResponse::<()> {
                             success: false,
                             data: None,
@@ -1061,7 +1067,7 @@ async fn handle_request(
             }
             match serde_json::from_str::<ConfigRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
+                    if let Err(e) = verify_admin_for_state(&req.password, &state).await {
                         let body = serde_json::to_string_pretty(&ApiResponse::<()> {
                             success: false,
                             data: None,
@@ -1119,7 +1125,7 @@ async fn handle_request(
             match serde_json::from_str::<UpdateConfigRequest>(&request_body) {
                 Ok(req) => {
                     if let Some(password) = &req.password {
-                        if let Err(e) = verify_admin(password, &state.config.read().await.admin_password) {
+                        if let Err(e) = verify_admin_for_state(password, &state).await {
                             db::insert_audit_log(
                                 &state.db,
                                 "update-config",
@@ -1714,7 +1720,7 @@ async fn handle_request(
 
             match serde_json::from_str::<AuditLogRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
+                    if let Err(e) = verify_admin_for_state(&req.password, &state).await {
                         db::insert_audit_log(
                             &state.db,
                             "audit-log",
@@ -1780,7 +1786,7 @@ async fn handle_request(
         ("POST", "/admin/init-season") => {
             match serde_json::from_str::<InitSeasonRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
+                    if let Err(e) = verify_admin_for_state(&req.password, &state).await {
                         db::insert_audit_log(
                             &state.db,
                             "init-season",
@@ -1902,7 +1908,7 @@ async fn handle_request(
             match serde_json::from_str::<serde_json::Value>(&request_body) {
                 Ok(req) => {
                     let password = req["password"].as_str().unwrap_or("");
-                    if let Err(e) = verify_admin(password, &state.config.read().await.admin_password) {
+                    if let Err(e) = verify_admin_for_state(password, &state).await {
                         db::insert_audit_log(
                             &state.db,
                             "archive-season",
@@ -1987,7 +1993,7 @@ async fn handle_request(
         ("POST", "/admin/update-api-config") => {
             match serde_json::from_str::<UpdateApiConfigRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
+                    if let Err(e) = verify_admin_for_state(&req.password, &state).await {
                         db::insert_audit_log(
                             &state.db,
                             "update-api-config",
@@ -2079,7 +2085,7 @@ async fn handle_request(
             }
             match serde_json::from_str::<ResetTableRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
+                    if let Err(e) = verify_admin_for_state(&req.password, &state).await {
                         db::insert_audit_log(
                             &state.db,
                             "reset-table",
@@ -2178,7 +2184,7 @@ async fn handle_request(
             }
             match serde_json::from_str::<ResetSeasonRequest>(&request_body) {
                 Ok(req) => {
-                    if let Err(e) = verify_admin(&req.password, &state.config.read().await.admin_password) {
+                    if let Err(e) = verify_admin_for_state(&req.password, &state).await {
                         db::insert_audit_log(
                             &state.db,
                             "reset-season",
@@ -3597,7 +3603,7 @@ async fn handle_ws_connection(
                                 let password = json["password"].as_str().unwrap_or("");
                                 // 缓存 client_ip 字符串,避免 ws 认证分支里 1~2 次重复分配
                                 let client_ip_str = client_addr.ip().to_string();
-                                if password_hash::verify_password(password, &state.config.read().await.admin_password).is_ok() {
+                                if verify_admin_for_state(password, &state).await.is_ok() {
                                     info!("WebSocket {} 认证成功", client_addr);
                                     let mut w = write.lock().await;
                                     let _ = w.send(Message::Text(r#"{"type":"auth_success"}"#.into())).await;
@@ -4079,14 +4085,7 @@ mod e2e_tests {
             None,
         )
         .await;
-        // 错误密码: 当前实现返回 500 (因为 auth 失败走 generic error 路径)
-        // 实际期望是 401, 但保持测试宽松避免误导
-        assert!(
-            status == 401 || status == 500 || status == 200,
-            "wrong password, got status={}, body: {}",
-            status,
-            body
-        );
+        assert_eq!(status, 401, "wrong password body: {}", body);
         assert!(body.contains("\"success\": false"), "body: {}", body);
     }
 
@@ -4112,13 +4111,17 @@ mod e2e_tests {
     #[tokio::test]
     async fn e2e_admin_init_season_success() {
         let (addr, _state, _handle) = spawn_test_server().await;
-        let (status, body) = http_post_json(
-            addr,
-            "/admin/init-season",
-            r#"{"password":"test123","season_id":"ss12","started_at":1776384000}"#,
-            None,
+        let (status, body) = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            http_post_json(
+                addr,
+                "/admin/init-season",
+                r#"{"password":"test123","season_id":"ss12","started_at":1776384000}"#,
+                None,
+            ),
         )
-        .await;
+        .await
+        .expect("init-season request should not deadlock");
         assert_eq!(status, 200, "body: {}", body);
         assert!(body.contains("\"success\": true"), "body: {}", body);
     }

@@ -6,7 +6,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'node_modules']),
+  globalIgnores(['dist', 'node_modules', 'coverage', 'src/coverage']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -37,6 +37,6 @@ export default defineConfig([
     },
   },
   {
-    ignores: ['dist', 'node_modules'],
+    ignores: ['dist', 'node_modules', 'coverage', 'src/coverage'],
   },
 ])

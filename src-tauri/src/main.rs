@@ -68,18 +68,14 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
     let rt_handle = rt.handle().clone();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(tauri_plugin_log::log::LevelFilter::Info)
                 .build(),
         )
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_http::init())
         .invoke_handler(tauri::generate_handler![
             get_dashboard_summary,
             set_active_market_context,
@@ -168,6 +164,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             set_season_api_config_cmd,
             probe_season_api_cmd,
             switch_current_season_cmd,
+            apply_season_switch_cmd,
             update_item_mapping,
             get_item_mapping_count,
             fetch_server_json_cmd,

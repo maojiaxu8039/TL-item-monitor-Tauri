@@ -7,7 +7,43 @@ use std::sync::LazyLock;
 // SECURITY NOTE: This third-party API endpoint only supports HTTP (not HTTPS).
 // The upstream service provider does not offer TLS, so all traffic to this
 // endpoint is unencrypted. No sensitive credentials are transmitted.
-const LUOSI_BASE_URL: &str = "http://115.231.176.101:8080/get";
+const DEFAULT_LUOSI_API_URL: &str = "http://115.231.176.101:8080/get";
+
+static LUOSI_API_URL: LazyLock<String> = LazyLock::new(|| {
+    let configured =
+        std::env::var("TL_LUOSI_API_URL").unwrap_or_else(|_| DEFAULT_LUOSI_API_URL.to_string());
+    let url = normalize_luosi_api_url(&configured).unwrap_or_else(|| {
+        tracing::warn!(
+            "[LUOSI] TL_LUOSI_API_URL 无效，回退到默认地址 {}",
+            DEFAULT_LUOSI_API_URL
+        );
+        DEFAULT_LUOSI_API_URL.to_string()
+    });
+    if url.starts_with("http://") {
+        tracing::warn!(
+            "[LUOSI] 当前数据源使用明文 HTTP；建议通过 TL_LUOSI_API_URL 配置 HTTPS 反向代理"
+        );
+    }
+    url
+});
+
+fn normalize_luosi_api_url(candidate: &str) -> Option<String> {
+    let parsed = reqwest::Url::parse(candidate.trim()).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return None;
+    }
+    Some(parsed.as_str().trim_end_matches('/').to_string())
+}
+
+pub(crate) fn api_url_for_season(api_season_id: i32) -> String {
+    format!("{}?season_id={}", LUOSI_API_URL.as_str(), api_season_id)
+}
 
 static LUOSI_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
@@ -80,7 +116,7 @@ pub async fn scrape_items_with_api_id(
 pub async fn fetch_luosi_item_list(
     api_season_id: i32,
 ) -> Result<HashMap<String, LuosiItem>, AppError> {
-    let url = format!("{}?season_id={}", LUOSI_BASE_URL, api_season_id);
+    let url = api_url_for_season(api_season_id);
     tracing::info!("[LUOSI] Fetching item list for mapping update: {}", url);
 
     let resp = LUOSI_CLIENT
@@ -114,7 +150,7 @@ async fn scrape_by_season_id(
     season_id: &str,
     market_mode: &str,
 ) -> Result<Vec<Item>, AppError> {
-    let url = format!("{}?season_id={}", LUOSI_BASE_URL, api_season_id);
+    let url = api_url_for_season(api_season_id);
 
     tracing::info!("[LUOSI] Sending HTTP request to: {}", url);
 
@@ -187,4 +223,34 @@ async fn scrape_by_season_id(
         market_mode
     );
     Ok(items)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_luosi_api_url;
+
+    #[test]
+    fn accepts_safe_http_and_https_endpoints() {
+        assert_eq!(
+            normalize_luosi_api_url("https://proxy.example.com/luosi/get/"),
+            Some("https://proxy.example.com/luosi/get".to_string())
+        );
+        assert_eq!(
+            normalize_luosi_api_url("http://127.0.0.1:8080/get"),
+            Some("http://127.0.0.1:8080/get".to_string())
+        );
+    }
+
+    #[test]
+    fn rejects_unsafe_or_ambiguous_endpoints() {
+        for value in [
+            "file:///tmp/data.json",
+            "https://user:secret@example.com/get",
+            "https://example.com/get?season_id=1",
+            "https://example.com/get#fragment",
+            "not-a-url",
+        ] {
+            assert_eq!(normalize_luosi_api_url(value), None, "{value}");
+        }
+    }
 }
