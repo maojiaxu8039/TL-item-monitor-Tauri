@@ -2084,8 +2084,6 @@ async fn seed_seasons(pool: &SqlitePool) -> Result<(), String> {
             0,
             crate::core::constants::SS12_START_TIMESTAMP,
         ),
-        ("ss11", "SS11 历史赛季", "ss11", 0, 1768521600),
-        ("ss10", "SS10 历史赛季", "ss10", 0, 1699392000),
     ];
 
     for (id, name, code, is_current, started_at) in seasons {
