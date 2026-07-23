@@ -2070,8 +2070,20 @@ async fn seed_seasons(pool: &SqlitePool) -> Result<(), String> {
             .map_err(|e| format!("Failed to inspect current season before seeding: {}", e))?;
 
     let seasons = [
-        ("ss13", "SS13 当前赛季", "ss13", 1, 1784332800),
-        ("ss12", "SS12 历史赛季", "ss12", 0, 1776355200),
+        (
+            "ss13",
+            "SS13 当前赛季",
+            "ss13",
+            1,
+            crate::core::constants::SS13_START_TIMESTAMP,
+        ),
+        (
+            "ss12",
+            "SS12 历史赛季",
+            "ss12",
+            0,
+            crate::core::constants::SS12_START_TIMESTAMP,
+        ),
         ("ss11", "SS11 历史赛季", "ss11", 0, 1768521600),
         ("ss10", "SS10 历史赛季", "ss10", 0, 1699392000),
     ];
@@ -2080,7 +2092,11 @@ async fn seed_seasons(pool: &SqlitePool) -> Result<(), String> {
         sqlx::query(
             r#"INSERT INTO seasons (id, name, code, is_current, started_at, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(id) DO NOTHING"#,
+               ON CONFLICT(id) DO UPDATE SET
+                   started_at = excluded.started_at,
+                   updated_at = excluded.updated_at
+               WHERE (seasons.id = 'ss13' AND seasons.started_at = 1784332800)
+                  OR (seasons.id = 'ss12' AND seasons.started_at = 1776355200)"#,
         )
         .bind(id)
         .bind(name)

@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { BarChart2, ArrowDownCircle, ArrowUpCircle, CalendarDays } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BarChart2, ArrowDownCircle, ArrowUpCircle, CalendarDays, RefreshCw } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { cmd } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
@@ -12,6 +12,10 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { queryKeys } from "@/lib/queryKeys";
 import { useVisiblePolling } from "@/hooks/useVisiblePolling";
+import { beijingHour, buildHourlyFireComparison } from "@/lib/firePriceCompare";
+import { errorMessage } from "@/lib/utils";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 type TimeRange = "all" | "3d" | "7d" | "14d" | "30d";
 type DayRange = { start: number; end: number };
@@ -20,6 +24,17 @@ interface FireDataPoint {
   scraped_at: number;
   rmb_per_10k_fire: number;
   season_day: number;
+}
+
+interface ServerFireDataPoint extends FireDataPoint {
+  cursor_id?: number;
+  season_id: string;
+  market_mode?: string;
+  fire_per_rmb: number;
+  increase_ratio: number | null;
+  trading_volume: string;
+  source: string;
+  source_time: string;
 }
 
 import { DEFAULT_HISTORY_SEASON } from "@/lib/constants";
@@ -38,6 +53,7 @@ const timeRanges: { label: string; value: TimeRange; dayRange: DayRange }[] = [
 ];
 
 export default function FirePriceComparePage() {
+  const queryClient = useQueryClient();
   const [historySeason, setHistorySeason] = useState(DEFAULT_HISTORY_SEASON);
   const [timeRange, setTimeRange] = useState<TimeRange>("all");
   const [customDayRange, setCustomDayRange] = useState<DayRange>({ start: 1, end: 7 });
@@ -47,6 +63,8 @@ export default function FirePriceComparePage() {
   const currentSeason = marketContext.seasonId;
   const marketMode = marketContext.marketMode;
   const currentRefetchInterval = useVisiblePolling(5 * 60 * 1000);
+  const serverUrl = (localStorage.getItem("server_url") || "http://100.124.122.65:38457")
+    .replace(/\/+$/, "");
 
   // 动态加载数据库所有赛季，供"对比赛季"下拉框使用
   const seasonsQuery = useQuery<Array<{ season_id: string; name: string; is_current: boolean; started_at: number | null; ended_at: number | null }>>({
@@ -87,27 +105,24 @@ export default function FirePriceComparePage() {
   // 过滤掉当前赛季和无数据的赛季
   const compareOptions = useMemo(() => {
     const list = seasonsQuery.data ?? [];
-    const counts = probesQuery.data ?? {};
     return list
       .filter((s) => s.season_id !== currentSeason)
-      .filter((s) => (counts[s.season_id] ?? 0) > 0)
       .sort((a, b) => b.season_id.localeCompare(a.season_id));
-  }, [seasonsQuery.data, currentSeason, probesQuery.data]);
+  }, [seasonsQuery.data, currentSeason]);
 
   // 第一次拿到列表后，若历史赛季不在列表里则兜底选最新的一个
   useEffect(() => {
-    if (seasonsQuery.data && seasonsQuery.data.length > 0) {
-      const ids = new Set(seasonsQuery.data.map((s) => s.season_id));
+    if (compareOptions.length > 0) {
+      const ids = new Set(compareOptions.map((s) => s.season_id));
       if (!ids.has(historySeason)) {
-        const fallback = compareOptions[0]?.season_id ?? "";
-        if (fallback) setHistorySeason(fallback);
+        setHistorySeason(compareOptions[0].season_id);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seasonsQuery.data]);
+  }, [compareOptions, historySeason]);
 
   // 动态获取当前赛季的 started_at（用于计算 currentMaxDay）
   const currentSeasonStart = seasonsQuery.data?.find((s) => s.season_id === currentSeason)?.started_at ?? null;
+  const historySeasonStart = seasonsQuery.data?.find((s) => s.season_id === historySeason)?.started_at ?? null;
 
   // 计算每个赛季已经开了多少天（用 started_at）
   const currentMaxDay = useMemo(() => {
@@ -137,75 +152,89 @@ export default function FirePriceComparePage() {
   const currentData = useMemo(() => (currentQuery.data || []) as FireDataPoint[], [currentQuery.data]);
   const historyData = useMemo(() => (historyQuery.data || []) as FireDataPoint[], [historyQuery.data]);
 
+  const syncHistoryMutation = useMutation({
+    mutationFn: async () => {
+      if (!historySeason) throw new Error("请先选择历史赛季");
+      const mode = marketMode === "season_expert" ? "expert" : "normal";
+      const pageSize = 1000;
+      let beforeTimestamp: number | null = null;
+      let beforeId: number | null = null;
+      let downloaded = 0;
+
+      for (let page = 0; page < 500; page += 1) {
+        const params = new URLSearchParams({
+          season: historySeason,
+          mode,
+          limit: String(pageSize),
+        });
+        if (beforeTimestamp != null && beforeId != null) {
+          params.set("before_timestamp", String(beforeTimestamp));
+          params.set("before_id", String(beforeId));
+        }
+        const response = await cmd.fetchServerJson<{
+          success: boolean;
+          data?: ServerFireDataPoint[];
+          error?: string;
+        }>(`${serverUrl}/fire-history-all?${params.toString()}`);
+        if (!response.success) throw new Error(response.error || "服务器返回失败");
+        const records = response.data ?? [];
+        if (records.length === 0) break;
+
+        await cmd.syncFireBatch({
+          season_id: historySeason,
+          market_mode: marketMode,
+          records: records.map((record) => ({
+            season_id: historySeason,
+            market_mode: marketMode,
+            rmb_per_10k_fire: record.rmb_per_10k_fire,
+            fire_per_rmb: record.fire_per_rmb,
+            increase_ratio: record.increase_ratio ?? 0,
+            trading_volume: record.trading_volume ?? "",
+            source: record.source ?? "server_sync",
+            source_time: record.source_time ?? "",
+            recorded_at: record.scraped_at,
+          })),
+        });
+        downloaded += records.length;
+
+        const last = records[records.length - 1];
+        if (records.length < pageSize) break;
+        if (last.scraped_at === beforeTimestamp && (last.cursor_id ?? null) === beforeId) {
+          throw new Error("服务器分页游标未推进，已停止同步");
+        }
+        beforeTimestamp = last.scraped_at;
+        beforeId = last.cursor_id ?? null;
+        if (beforeId == null) throw new Error("服务器响应缺少分页游标");
+      }
+      return downloaded;
+    },
+    onSuccess: async (downloaded) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.fireTrendHistory }),
+        queryClient.invalidateQueries({ queryKey: ["fire-price-probe"] }),
+      ]);
+      toast.success(`已同步 ${historySeason.toUpperCase()} 火价记录 ${downloaded} 条（按小时保存）`);
+    },
+    onError: (error) => toast.error(`历史火价同步失败：${errorMessage(error)}`),
+  });
+
   const dayRange = useMemo((): DayRange | null => {
     if (useCustomRange) return customDayRange;
     const range = timeRanges.find(r => r.value === timeRange);
     return range?.dayRange ?? null;
   }, [useCustomRange, customDayRange, timeRange]);
 
-  // 按"小时桶"对齐两个赛季：每个小时桶 = 一个数据点
-  // 用各自的 season_day 字段（数据库存的）映射到 day_offset（从 1 开始）
-  // season_day - min(season_day) + 1 = day_offset
-  // 这样 SS12 数据（season_day=91-97）→ day_offset=1-7，与 SS13（season_day=1-6）→ day_offset=1-6 对齐
   const chartData = useMemo(() => {
-    if (currentData.length === 0 && historyData.length === 0) return [];
-
-    // 计算每个赛季的 day_offset（基于各自 season_day 字段，最小值为 1）
-    const curMinDay = currentData.length > 0 ? Math.min(...currentData.map((r) => r.season_day)) : 1;
-    const histMinDay = historyData.length > 0 ? Math.min(...historyData.map((r) => r.season_day)) : 1;
-
-    // 按 (day_offset, hour) 分桶
-    const currentByBucket = new Map<string, number>();
-    const historyByBucket = new Map<string, number>();
-    const bucketTs = new Map<string, number>();
-
-    currentData.forEach((r) => {
-      const dayOffset = r.season_day - curMinDay + 1;
-      const hour = new Date(r.scraped_at * 1000).getHours();
-      const key = `${dayOffset}-${hour}`;
-      // 同一小时桶取最后一条（最新）
-      currentByBucket.set(key, r.rmb_per_10k_fire);
-      bucketTs.set(key, r.scraped_at);
-    });
-
-    historyData.forEach((r) => {
-      const dayOffset = r.season_day - histMinDay + 1;
-      const hour = new Date(r.scraped_at * 1000).getHours();
-      const key = `${dayOffset}-${hour}`;
-      historyByBucket.set(key, r.rmb_per_10k_fire);
-      if (!bucketTs.has(key)) bucketTs.set(key, r.scraped_at);
-    });
-
-    // 过滤掉 0 值（异常/未采集）
-    // 按 day_offset-hour 排序
-    const allKeys = Array.from(new Set([...currentByBucket.keys(), ...historyByBucket.keys()]))
-      .sort((a, b) => {
-        const [dA, hA] = a.split("-").map(Number);
-        const [dB, hB] = b.split("-").map(Number);
-        if (dA !== dB) return dA - dB;
-        return hA - hB;
-      });
-
-    return allKeys.map((key) => {
-      const [dayOffset, hour] = key.split("-").map(Number);
-      const ts = bucketTs.get(key) || 0;
-      const date = new Date(ts * 1000);
-      const month = date.getMonth() + 1;
-      const dayOfMonth = date.getDate();
-      const label = `${month}/${dayOfMonth} ${String(hour).padStart(2, "0")}:00`;
-      const curVal = currentByBucket.get(key);
-      const histVal = historyByBucket.get(key);
-      return {
-        label,
-        sortKey: dayOffset * 100 + hour,
-        dayOffset,
-        hour,
-        // 0 视为无效（数据未采集/异常），返回 null 让曲线断点
-        current: curVal != null && curVal > 0 ? curVal : null,
-        history: histVal != null && histVal > 0 ? histVal : null,
-      };
-    });
-  }, [currentData, historyData]);
+    if (!currentSeasonStart || !historySeasonStart) return [];
+    const rows = buildHourlyFireComparison(
+      currentData,
+      historyData,
+      currentSeasonStart,
+      historySeasonStart,
+    );
+    if (!dayRange) return rows;
+    return rows.filter((row) => row.dayOffset >= dayRange.start && row.dayOffset <= dayRange.end);
+  }, [currentData, historyData, currentSeasonStart, historySeasonStart, dayRange]);
 
   const allValues = chartData.flatMap(d => [d.current, d.history]).filter((v): v is number => v !== null);
   const minValue = allValues.length > 0 ? Math.min(...allValues) : 0;
@@ -264,20 +293,20 @@ export default function FirePriceComparePage() {
 
     const minPoint = {
       day: sortedData[globalMinIdx].season_day,
-      hour: new Date(sortedData[globalMinIdx].scraped_at * 1000).getHours(),
+      hour: beijingHour(sortedData[globalMinIdx].scraped_at),
       price: minPrice,
     };
 
     const maxPoint = {
       day: sortedData[globalMaxIdx].season_day,
-      hour: new Date(sortedData[globalMaxIdx].scraped_at * 1000).getHours(),
+      hour: beijingHour(sortedData[globalMaxIdx].scraped_at),
       price: maxPrice,
     };
 
     const groupByDay = new Map<number, { hour: number; price: number }[]>();
     sortedData.forEach(r => {
       const day = r.season_day;
-      const hour = new Date(r.scraped_at * 1000).getHours();
+      const hour = beijingHour(r.scraped_at);
       if (!groupByDay.has(day)) groupByDay.set(day, []);
       groupByDay.get(day)!.push({ hour, price: r.rmb_per_10k_fire });
     });
@@ -440,6 +469,7 @@ export default function FirePriceComparePage() {
                   <option key={s.season_id} value={s.season_id}>
                     {s.season_id.toUpperCase()}
                     {s.name ? ` · ${s.name}` : ""}
+                    {(probesQuery.data?.[s.season_id] ?? 0) === 0 ? " · 未同步" : ""}
                   </option>
                 ))
               )}
@@ -447,6 +477,17 @@ export default function FirePriceComparePage() {
             <span className="text-sm text-[var(--color-text-subtle)]">|</span>
             <span className="text-sm font-medium text-[var(--color-text)]">{currentSeason.toUpperCase()}</span>
             <StatusBadge variant="primary">当前</StatusBadge>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!historySeason || syncHistoryMutation.isPending}
+              onClick={() => syncHistoryMutation.mutate()}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 mr-1 ${syncHistoryMutation.isPending ? "animate-spin" : ""}`} />
+              {syncHistoryMutation.isPending
+                ? `正在同步 ${historySeason.toUpperCase()}`
+                : `从服务器同步 ${historySeason.toUpperCase()}`}
+            </Button>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -563,7 +604,7 @@ export default function FirePriceComparePage() {
         ) : chartData.length === 0 ? (
           <EmptyState
             title="暂无数据"
-            description="请先在数据监控页面同步火价数据"
+            description="请选择历史赛季并点击“从服务器同步”，系统会按小时保存后进行比较"
             icon={BarChart2}
           />
         ) : (
@@ -620,7 +661,6 @@ export default function FirePriceComparePage() {
                 strokeWidth={1.5}
                 strokeDasharray="4 4"
                 dot={false}
-                connectNulls
                 activeDot={{ r: 3, fill: "var(--color-text-muted)" }}
               />
               <Line
@@ -629,7 +669,6 @@ export default function FirePriceComparePage() {
                 stroke="var(--color-brand)"
                 strokeWidth={2}
                 dot={false}
-                connectNulls
                 activeDot={{ r: 4, fill: "var(--color-brand)" }}
               />
             </LineChart>

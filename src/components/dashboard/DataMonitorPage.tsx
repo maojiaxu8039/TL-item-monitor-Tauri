@@ -296,7 +296,7 @@ export default function DataMonitorPage() {
     const buildUrl = (cursorTs: number | null, cursorId: number | null) => {
       if (dataType === "fire") {
         const tsParam = rangeSinceTimestamp ? `&since_timestamp=${rangeSinceTimestamp}` : "";
-        const base = `${serverUrl}/fire-history-all?mode=${modeParam}${tsParam}`;
+        const base = `${serverUrl}/fire-history-all?season=${encodeURIComponent(marketContext.seasonId)}&mode=${modeParam}${tsParam}`;
         const cursorParam = cursorTs !== null && cursorId !== null
           ? `&before_timestamp=${cursorTs}&before_id=${cursorId}`
           : "";
@@ -304,7 +304,7 @@ export default function DataMonitorPage() {
       } else {
         const syncSinceTimestamp = Math.max(rangeSinceTimestamp ?? 0, lastItemsSyncTimestamp ?? 0);
         const tsParam = syncSinceTimestamp ? `&since_timestamp=${syncSinceTimestamp}` : "";
-        const base = `${serverUrl}/items-history-all?mode=${modeParam}${tsParam}`;
+        const base = `${serverUrl}/items-history-all?season=${encodeURIComponent(marketContext.seasonId)}&mode=${modeParam}${tsParam}`;
         const cursorParam = cursorTs !== null && cursorId !== null
           ? `&before_timestamp=${cursorTs}&before_id=${cursorId}`
           : "";

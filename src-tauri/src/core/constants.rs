@@ -24,6 +24,11 @@ pub const DEFAULT_ALERT_COOLDOWN_SECONDS: i32 = 1800;
 pub const DEFAULT_STALE_TIME_MS: u64 = 30_000;
 pub const DEFAULT_GC_TIME_MS: u64 = 300_000;
 
+/// SS13 opened at 2026-07-17 10:00:00 Asia/Shanghai.
+pub const SS13_START_TIMESTAMP: i64 = 1_784_253_600;
+/// SS12 opened at 2026-04-17 08:00:00 Asia/Shanghai.
+pub const SS12_START_TIMESTAMP: i64 = 1_776_384_000;
+
 #[derive(Debug, Clone, Copy)]
 pub struct SeasonInfo {
     pub id: &'static str,
@@ -35,13 +40,13 @@ pub struct SeasonInfo {
 pub const SEASONS: &[SeasonInfo] = &[
     SeasonInfo {
         id: "ss13",
-        start_timestamp: 1784332800, // 2026-07-16 00:00:00 UTC+8 (Beijing)
+        start_timestamp: SS13_START_TIMESTAMP,
         name: "SS13 当前赛季",
         is_current: true,
     },
     SeasonInfo {
         id: "ss12",
-        start_timestamp: 1776355200, // 2026-04-17 00:00:00 UTC+8 (Beijing)
+        start_timestamp: SS12_START_TIMESTAMP,
         name: "SS12 历史赛季",
         is_current: false,
     },
@@ -101,7 +106,12 @@ mod tests {
 
     #[test]
     fn test_get_season_start_ss12() {
-        assert_eq!(get_season_start("ss12"), Some(1776355200));
+        assert_eq!(get_season_start("ss12"), Some(SS12_START_TIMESTAMP));
+    }
+
+    #[test]
+    fn test_get_season_start_ss13() {
+        assert_eq!(get_season_start("ss13"), Some(SS13_START_TIMESTAMP));
     }
 
     #[test]
@@ -111,7 +121,7 @@ mod tests {
 
     #[test]
     fn test_calculate_season_day() {
-        let ss12_start = 1776355200i64;
+        let ss12_start = SS12_START_TIMESTAMP;
         assert_eq!(calculate_season_day(ss12_start, ss12_start), 1);
         assert_eq!(calculate_season_day(ss12_start + 86400, ss12_start), 2);
         assert_eq!(calculate_season_day(ss12_start - 86400, ss12_start), 1);

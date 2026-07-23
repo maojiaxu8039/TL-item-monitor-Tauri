@@ -46,7 +46,7 @@ pub async fn get_dashboard_summary(
     let history_fire = if let Some(ref current_fire) = fire {
         let season_start = repo_fire::get_season_start(&state.db, &ctx.season_id)
             .await
-            .unwrap_or(1776355200);
+            .unwrap_or(crate::core::constants::SS12_START_TIMESTAMP);
         let current_season_day =
             crate::core::constants::calculate_season_day(current_fire.scraped_at, season_start);
         let current_hour = ((current_fire.scraped_at % 86400) / 3600) as i32;
@@ -465,9 +465,9 @@ pub async fn get_fire_history_by_season(
     if let Err(e) = crate::db::table_resolver::TableResolver::validate(&season_id, &market_mode) {
         return Err(e.to_string());
     }
-    // Always return all data for the season
-    // Time filtering is done on the frontend based on user's selected range
-    Ok(repo_fire::get_fire_history_all(&state.db, &season_id, &market_mode, 10000, 0).await?)
+    // The analysis page compares seasons at hourly granularity. Collapse any
+    // higher-frequency legacy/server samples to the latest sample per hour.
+    Ok(repo_fire::get_fire_history_hourly(&state.db, &season_id, &market_mode).await?)
 }
 
 #[tauri::command]
@@ -542,13 +542,10 @@ pub async fn import_fire_history_csv(
             }
         };
         let fire_per_rmb: f64 = record.get(1).unwrap_or("0").parse().unwrap_or(0.0);
-        let increase_ratio: Option<f64> = record.get(2).and_then(|s| {
-            if s.is_empty() {
-                None
-            } else {
-                s.parse().ok()
-            }
-        });
+        let increase_ratio: Option<f64> =
+            record
+                .get(2)
+                .and_then(|s| if s.is_empty() { None } else { s.parse().ok() });
         let scraped_at: i64 = record
             .get(3)
             .and_then(|s| s.parse().ok())
@@ -668,6 +665,8 @@ pub async fn sync_fire_batch(
         return Ok(OkResponse::success("No records to sync"));
     }
 
+    let target_season = params.season_id.clone();
+    let target_mode = params.market_mode.clone();
     let batch_items: Vec<repo_history::FireSnapshotBatchItem> = params
         .records
         .into_iter()
@@ -680,19 +679,32 @@ pub async fn sync_fire_batch(
                 trading_volume: Some(r.trading_volume),
                 source: r.source,
                 source_time: Some(r.source_time),
-                scraped_at: r.recorded_at,
+                scraped_at: r.recorded_at.div_euclid(3600) * 3600,
             },
-            scraped_at: r.recorded_at,
+            scraped_at: r.recorded_at.div_euclid(3600) * 3600,
         })
         .collect();
 
-    let inserted = repo_history::insert_fire_snapshots_batch(
-        &state.db,
-        &params.season_id,
-        &params.market_mode,
-        batch_items,
-    )
-    .await
+    let active_context = state.active_context.read().clone();
+    let inserted = if active_context.season_id == target_season
+        && active_context.market_mode.as_str() == target_mode
+    {
+        repo_history::insert_fire_snapshots_batch(
+            &state.db,
+            &target_season,
+            &target_mode,
+            batch_items,
+        )
+        .await
+    } else {
+        repo_history::insert_fire_history_snapshots_batch(
+            &state.db,
+            &target_season,
+            &target_mode,
+            batch_items,
+        )
+        .await
+    }
     .map_err(|e| e.to_string())?;
 
     Ok(OkResponse::success(&format!(

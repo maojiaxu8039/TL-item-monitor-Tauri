@@ -178,7 +178,7 @@ mod tests {
     fn check_scrape_staleness_skips_when_never_scraped() {
         let m = Metrics::new();
         let mut s = AlertState::new();
-        s.run_once(&m);
+        s.check_scrape_staleness(&m);
         // 0 应该是跳过, 不告警
         assert!(s.current_round_alerts.is_empty());
     }
@@ -189,10 +189,7 @@ mod tests {
         m.set_last_scrape(chrono::Utc::now().timestamp() - 600); // 10 分钟前
         let mut s = AlertState::new();
         s.run_once(&m);
-        assert!(
-            !s.current_round_alerts.is_empty(),
-            "10分钟前未更新应该告警"
-        );
+        assert!(!s.current_round_alerts.is_empty(), "10分钟前未更新应该告警");
         assert!(s.current_round_alerts[0].starts_with("scrape_stale:"));
     }
 
@@ -207,7 +204,7 @@ mod tests {
             m.record_http("GET", "/test", 500, 1000);
         }
         let mut s = AlertState::new();
-        s.run_once(&m);
+        s.check_5xx_ratio(&m);
         // 5% 边界, 不应告警
         assert!(s.current_round_alerts.is_empty(), "5% 5xx 不应告警");
     }

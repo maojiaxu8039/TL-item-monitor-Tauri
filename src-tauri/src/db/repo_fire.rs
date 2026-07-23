@@ -282,13 +282,56 @@ pub async fn get_fire_history_all(
     Ok(result)
 }
 
+/// Return at most one (the latest) fire-price sample for each season-day/hour bucket.
+/// Hour buckets are absolute Unix hours; `season_day` provides the Beijing-day boundary.
+pub async fn get_fire_history_hourly(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<Vec<serde_json::Value>, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
+    let table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
+    let season_start = get_season_start_from_db(pool, season_id).await?;
+    let records: Vec<FirePriceSnapshotRecord> = sqlx::query_as(&format!(
+        r#"SELECT id, season_id, market_mode, rmb_per_10k_fire, fire_per_rmb,
+                  increase_ratio, trading_volume, source, source_time, scraped_at,
+                  season_day, created_at
+           FROM (
+             SELECT id, '{}' AS season_id, '{}' AS market_mode,
+                    rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume,
+                    source, source_time, scraped_at, season_day, scraped_at AS created_at,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY season_day, CAST(scraped_at / 3600 AS INTEGER)
+                      ORDER BY scraped_at DESC, id DESC
+                    ) AS bucket_rank
+             FROM {}
+             WHERE scraped_at >= ?
+               AND rmb_per_10k_fire > 0
+               AND fire_per_rmb > 0
+               AND ABS(rmb_per_10k_fire * fire_per_rmb - 10000.0) <= 100.0
+           ) ranked
+           WHERE bucket_rank = 1
+           ORDER BY season_day ASC, scraped_at ASC"#,
+        season_id, market_mode, table
+    ))
+    .bind(season_start)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(records
+        .into_iter()
+        .map(|r| serde_json::to_value(r).unwrap_or_default())
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::core::constants::calculate_season_day;
+    use sqlx::sqlite::SqlitePoolOptions;
 
     #[test]
     fn test_calculate_season_day_ss12() {
-        let ss12_start = 1776355200i64;
+        let ss12_start = crate::core::constants::SS12_START_TIMESTAMP;
         assert_eq!(calculate_season_day(ss12_start, ss12_start), 1);
         assert_eq!(calculate_season_day(ss12_start + 86400, ss12_start), 2);
         assert_eq!(calculate_season_day(ss12_start - 86400, ss12_start), 1);
@@ -303,5 +346,64 @@ mod tests {
             calculate_season_day(ss11_start + 29 * 86400, ss11_start),
             30
         );
+    }
+
+    #[tokio::test]
+    async fn hourly_history_keeps_latest_sample_per_bucket() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(":memory:")
+            .await
+            .expect("memory database should connect");
+        sqlx::query("CREATE TABLE seasons (id TEXT PRIMARY KEY, started_at INTEGER NOT NULL)")
+            .execute(&pool)
+            .await
+            .expect("seasons table should be created");
+        sqlx::query("INSERT INTO seasons (id, started_at) VALUES ('ss12', 100)")
+            .execute(&pool)
+            .await
+            .expect("season should insert");
+        sqlx::query(
+            "CREATE TABLE fire_price_snapshots_ss12_normal (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rmb_per_10k_fire REAL NOT NULL,
+                fire_per_rmb REAL NOT NULL,
+                increase_ratio REAL,
+                trading_volume TEXT,
+                source TEXT NOT NULL,
+                source_time TEXT,
+                scraped_at INTEGER NOT NULL,
+                season_day INTEGER NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .expect("snapshot table should be created");
+        for (price, timestamp, day) in [
+            (99.0, 50_i64, 1_i32),
+            (20.0, 100, 1),
+            (22.0, 200, 1),
+            (30.0, 4000, 1),
+        ] {
+            sqlx::query(
+                "INSERT INTO fire_price_snapshots_ss12_normal
+                 (rmb_per_10k_fire, fire_per_rmb, source, scraped_at, season_day)
+                 VALUES (?, ?, 'test', ?, ?)",
+            )
+            .bind(price)
+            .bind(10_000.0 / price)
+            .bind(timestamp)
+            .bind(day)
+            .execute(&pool)
+            .await
+            .expect("sample should insert");
+        }
+
+        let rows = super::get_fire_history_hourly(&pool, "ss12", "season_normal")
+            .await
+            .expect("hourly query should succeed");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["rmb_per_10k_fire"], 22.0);
+        assert_eq!(rows[1]["rmb_per_10k_fire"], 30.0);
     }
 }

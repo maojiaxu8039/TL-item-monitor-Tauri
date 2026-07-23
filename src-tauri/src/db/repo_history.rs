@@ -145,7 +145,7 @@ pub async fn insert_fire_snapshots_batch(
     pool: &SqlitePool,
     season_id: &str,
     market_mode: &str,
-    items: Vec<FireSnapshotBatchItem>,
+    mut items: Vec<FireSnapshotBatchItem>,
 ) -> Result<usize, crate::core::errors::AppError> {
     if items.is_empty() {
         return Ok(0);
@@ -153,6 +153,10 @@ pub async fn insert_fire_snapshots_batch(
 
     let now = Utc::now().timestamp();
     let season_start = get_season_start_from_db(pool, season_id).await?;
+    items.retain(|item| item.scraped_at >= season_start);
+    if items.is_empty() {
+        return Ok(0);
+    }
     TableResolver::validate(season_id, market_mode)?;
     let realtime_table = TableResolver::fire_price_table(season_id, market_mode);
     TableResolver::validate(season_id, market_mode)?;
@@ -207,6 +211,52 @@ pub async fn insert_fire_snapshots_batch(
                 .push_bind(season_day);
         });
         qb.build().execute(&mut *tx).await?;
+    }
+
+    tx.commit().await?;
+    Ok(inserted)
+}
+
+/// Insert server-synced historical fire prices without touching the shared
+/// real-time table used by the active season dashboard.
+pub async fn insert_fire_history_snapshots_batch(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    mut items: Vec<FireSnapshotBatchItem>,
+) -> Result<usize, crate::core::errors::AppError> {
+    if items.is_empty() {
+        return Ok(0);
+    }
+
+    let season_start = get_season_start_from_db(pool, season_id).await?;
+    items.retain(|item| item.scraped_at >= season_start);
+    if items.is_empty() {
+        return Ok(0);
+    }
+    TableResolver::validate(season_id, market_mode)?;
+    let snapshots_table = TableResolver::fire_price_snapshots_table(season_id, market_mode);
+    let mut tx = pool.begin().await?;
+    let mut inserted = 0usize;
+
+    for chunk in items.chunks(BATCH_SIZE_SMALL) {
+        let mut qb: sqlx::query_builder::QueryBuilder<sqlx::Sqlite> =
+            sqlx::query_builder::QueryBuilder::new(&format!(
+                "INSERT OR IGNORE INTO {} (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume, source, source_time, scraped_at, season_day) ",
+                snapshots_table
+            ));
+        qb.push_values(chunk, |mut b, item| {
+            let season_day = calculate_season_day(item.scraped_at, season_start);
+            b.push_bind(item.snapshot.rmb_per_10k_fire)
+                .push_bind(item.snapshot.fire_per_rmb)
+                .push_bind(item.snapshot.increase_ratio)
+                .push_bind(&item.snapshot.trading_volume)
+                .push_bind(&item.snapshot.source)
+                .push_bind(&item.snapshot.source_time)
+                .push_bind(item.scraped_at)
+                .push_bind(season_day);
+        });
+        inserted += qb.build().execute(&mut *tx).await?.rows_affected() as usize;
     }
 
     tx.commit().await?;
@@ -504,6 +554,10 @@ pub struct ComparePoint {
     pub current_price: Option<f64>,
 }
 
+fn beijing_hour(timestamp: i64) -> i64 {
+    (timestamp + 8 * 3600).rem_euclid(86400) / 3600
+}
+
 pub async fn get_fire_price_compare(
     pool: &SqlitePool,
     current_season: &str,
@@ -550,10 +604,11 @@ pub async fn get_fire_price_compare(
         };
 
     let is_stale = age_seconds > 3600;
-    let current_hour = (current_scraped_at % 86400) / 3600;
+    let current_hour = beijing_hour(current_scraped_at);
 
     let history_records: Vec<(f64, i64, i64)> = sqlx::query_as(&format!(
         "SELECT rmb_per_10k_fire, scraped_at, season_day FROM {} \
+             WHERE rmb_per_10k_fire > 0 \
              ORDER BY scraped_at ASC",
         history_snapshots_table
     ))
@@ -585,7 +640,7 @@ pub async fn get_fire_price_compare(
     let mut compare_data: Vec<ComparePoint> = vec![];
 
     for (price, scraped, season_day) in &history_records {
-        let hour = (scraped % 86400) / 3600;
+        let hour = beijing_hour(*scraped);
         all_prices.push(*price);
 
         if *season_day == current_season_day {
@@ -855,9 +910,7 @@ pub async fn get_season_trends(
 /// - Records with scraped_at in milliseconds (> 1e12) get converted to seconds.
 /// - Records with scraped_at in 1970 range (< 1e9) get recalculated from season_day.
 /// - Records with NULL season_day get it calculated from scraped_at.
-pub async fn fix_bad_scraped_at_and_season_day(
-    pool: &SqlitePool,
-) -> Result<u64, AppError> {
+pub async fn fix_bad_scraped_at_and_season_day(pool: &SqlitePool) -> Result<u64, AppError> {
     let seasons: Vec<(String,)> = sqlx::query_as("SELECT id FROM seasons ORDER BY started_at DESC")
         .fetch_all(pool)
         .await?;
@@ -921,17 +974,16 @@ pub async fn fix_bad_scraped_at_and_season_day(
                     .await;
 
                     match result {
-                        Ok(_) => { total_fixed += 1; }
+                        Ok(_) => {
+                            total_fixed += 1;
+                        }
                         Err(e) => {
                             let err_str = e.to_string();
                             if err_str.contains("UNIQUE constraint") {
-                                sqlx::query(&format!(
-                                    "DELETE FROM {} WHERE rowid = ?",
-                                    table
-                                ))
-                                .bind(rowid)
-                                .execute(pool)
-                                .await?;
+                                sqlx::query(&format!("DELETE FROM {} WHERE rowid = ?", table))
+                                    .bind(rowid)
+                                    .execute(pool)
+                                    .await?;
                                 total_fixed += 1;
                             } else {
                                 return Err(AppError::Db(e.to_string()));
@@ -944,7 +996,10 @@ pub async fn fix_bad_scraped_at_and_season_day(
     }
 
     if total_fixed > 0 {
-        tracing::info!("[HISTORY-FIX] Fixed {} records with bad scraped_at/season_day", total_fixed);
+        tracing::info!(
+            "[HISTORY-FIX] Fixed {} records with bad scraped_at/season_day",
+            total_fixed
+        );
     }
     Ok(total_fixed)
 }
@@ -1023,6 +1078,85 @@ pub async fn recalculate_all_season_days(pool: &SqlitePool) -> Result<u64, AppEr
         }
     }
 
-    tracing::info!("[SEASON-DAY-RECALC] Total records updated: {}", total_updated);
+    tracing::info!(
+        "[SEASON-DAY-RECALC] Total records updated: {}",
+        total_updated
+    );
     Ok(total_updated)
+}
+
+#[cfg(test)]
+mod fire_compare_tests {
+    use super::beijing_hour;
+    use crate::core::state::FirePriceSnapshot;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    #[test]
+    fn calculates_beijing_hour() {
+        assert_eq!(beijing_hour(0), 8);
+        assert_eq!(beijing_hour(16 * 3600), 0);
+        assert_eq!(beijing_hour(-1), 7);
+    }
+
+    #[tokio::test]
+    async fn historical_sync_does_not_touch_realtime_table() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(":memory:")
+            .await
+            .expect("memory database should connect");
+        sqlx::query("CREATE TABLE seasons (id TEXT PRIMARY KEY, started_at INTEGER NOT NULL)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO seasons (id, started_at) VALUES ('ss12', 1000)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        for sql in [
+            "CREATE TABLE fire_price_normal (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, rmb_per_10k_fire REAL NOT NULL,
+                fire_per_rmb REAL NOT NULL, increase_ratio REAL, trading_volume TEXT,
+                source TEXT NOT NULL, source_time TEXT, scraped_at INTEGER NOT NULL UNIQUE,
+                season_day INTEGER NOT NULL, created_at INTEGER NOT NULL
+            )",
+            "CREATE TABLE fire_price_snapshots_ss12_normal (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, rmb_per_10k_fire REAL NOT NULL,
+                fire_per_rmb REAL NOT NULL, increase_ratio REAL, trading_volume TEXT,
+                source TEXT NOT NULL, source_time TEXT, scraped_at INTEGER NOT NULL UNIQUE,
+                season_day INTEGER NOT NULL
+            )",
+        ] {
+            sqlx::query(sql).execute(&pool).await.unwrap();
+        }
+        let item = super::FireSnapshotBatchItem {
+            snapshot: FirePriceSnapshot {
+                price_per_wan: 30.0,
+                rmb_per_10k_fire: 30.0,
+                fire_per_rmb: 333.33,
+                increase_ratio: None,
+                trading_volume: None,
+                source: "server_sync".to_string(),
+                source_time: None,
+                scraped_at: 3600,
+            },
+            scraped_at: 3600,
+        };
+
+        super::insert_fire_history_snapshots_batch(&pool, "ss12", "season_normal", vec![item])
+            .await
+            .unwrap();
+
+        let history_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM fire_price_snapshots_ss12_normal")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let realtime_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM fire_price_normal")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(history_count, 1);
+        assert_eq!(realtime_count, 0);
+    }
 }
