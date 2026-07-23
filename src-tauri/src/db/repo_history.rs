@@ -1034,15 +1034,19 @@ pub async fn recalculate_all_season_days(pool: &SqlitePool) -> Result<u64, AppEr
             ];
 
             for table in &tables {
+                // 用 beijing_day_start 算法（按北京自然日切）
+                // season_day = (beijing_day_start(scraped_at) - beijing_day_start(season_start)) / 86400 + 1
+                // SQL 里直接展开：
+                //   beijing_day_start(ts) = ((ts + 8*3600) / 86400) * 86400 - 8*3600
                 let result = sqlx::query(&format!(
                     r#"UPDATE {} SET season_day = CASE
-                        WHEN (scraped_at - {}) / 86400 + 1 < 1 THEN 1
-                        ELSE (scraped_at - {}) / 86400 + 1
+                        WHEN scraped_at < {} THEN 1
+                        ELSE ((scraped_at + 28800) / 86400 - ({} + 28800) / 86400) + 1
                     END
                     WHERE season_day IS NULL
                        OR season_day != CASE
-                           WHEN (scraped_at - {}) / 86400 + 1 < 1 THEN 1
-                           ELSE (scraped_at - {}) / 86400 + 1
+                           WHEN scraped_at < {} THEN 1
+                           ELSE ((scraped_at + 28800) / 86400 - ({} + 28800) / 86400) + 1
                        END"#,
                     table, season_start, season_start, season_start, season_start
                 ))
@@ -1058,13 +1062,13 @@ pub async fn recalculate_all_season_days(pool: &SqlitePool) -> Result<u64, AppEr
             let rt_table = TableResolver::fire_price_table(season_id, mode);
             let result = sqlx::query(&format!(
                 r#"UPDATE {} SET season_day = CASE
-                    WHEN (scraped_at - {}) / 86400 + 1 < 1 THEN 1
-                    ELSE (scraped_at - {}) / 86400 + 1
+                    WHEN scraped_at < {} THEN 1
+                    ELSE ((scraped_at + 28800) / 86400 - ({} + 28800) / 86400) + 1
                 END
                 WHERE season_day IS NULL
                    OR season_day != CASE
-                       WHEN (scraped_at - {}) / 86400 + 1 < 1 THEN 1
-                       ELSE (scraped_at - {}) / 86400 + 1
+                       WHEN scraped_at < {} THEN 1
+                       ELSE ((scraped_at + 28800) / 86400 - ({} + 28800) / 86400) + 1
                    END"#,
                 rt_table, season_start, season_start, season_start, season_start
             ))
