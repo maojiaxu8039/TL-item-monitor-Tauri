@@ -24,7 +24,10 @@ interface FireDataPoint {
 
 import { DEFAULT_HISTORY_SEASON } from "@/lib/constants";
 
-const SS12_START = 1776355200;
+// SS 起始时间用动态加载（从数据库 seasons.started_at 读）
+// 之前硬编码 SS12_START 导致 currentMaxDay 永远按错时间算，且图表按 day 合并时
+// 两个赛季的 day 永远不会重叠（SS12=91-97，SS13=1-6）
+// 新方案：按"距各自赛季起点 N 天"对齐，图表横轴统一用 day_offset
 
 const timeRanges: { label: string; value: TimeRange; dayRange: DayRange }[] = [
   { label: "第1-3天", value: "3d", dayRange: { start: 1, end: 3 } },
@@ -46,7 +49,7 @@ export default function FirePriceComparePage() {
   const currentRefetchInterval = useVisiblePolling(5 * 60 * 1000);
 
   // 动态加载数据库所有赛季，供"对比赛季"下拉框使用
-  const seasonsQuery = useQuery<Array<{ season_id: string; name: string; is_current: boolean }>>({
+  const seasonsQuery = useQuery<Array<{ season_id: string; name: string; is_current: boolean; started_at: number | null; ended_at: number | null }>>({
     queryKey: queryKeys.seasons,
     queryFn: () => cmd.listSeasons(),
     staleTime: 60 * 1000,
@@ -72,6 +75,22 @@ export default function FirePriceComparePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seasonsQuery.data]);
 
+  // 动态获取两个赛季的 started_at，用于按 day_offset 对齐
+  const currentSeasonStart = useMemo(() => {
+    return seasonsQuery.data?.find((s) => s.season_id === currentSeason)?.started_at ?? null;
+  }, [seasonsQuery.data, currentSeason]);
+
+  const historySeasonStart = useMemo(() => {
+    return seasonsQuery.data?.find((s) => s.season_id === historySeason)?.started_at ?? null;
+  }, [seasonsQuery.data, historySeason]);
+
+  // 计算每个赛季已经开了多少天（用 started_at）
+  const currentMaxDay = useMemo(() => {
+    if (!currentSeasonStart) return 30; // 数据库还没加载完时的兜底
+    const days = Math.floor((Date.now() / 1000 - currentSeasonStart) / 86400) + 1;
+    return Math.max(1, days);
+  }, [currentSeasonStart]);
+
   const currentQuery = useQuery({
     queryKey: [...queryKeys.fireTrendCurrent, currentSeason, marketMode, timeRange],
     queryFn: () => cmd.getFireHistoryBySeason(currentSeason, marketMode, 99999),
@@ -93,12 +112,6 @@ export default function FirePriceComparePage() {
   const currentData = useMemo(() => (currentQuery.data || []) as FireDataPoint[], [currentQuery.data]);
   const historyData = useMemo(() => (historyQuery.data || []) as FireDataPoint[], [historyQuery.data]);
 
-  const currentMaxDay = useMemo(() => {
-    const now = Date.now() / 1000;
-    const daysSinceStart = Math.floor((now - SS12_START) / 86400) + 1;
-    return Math.max(1, daysSinceStart);
-  }, []);
-
   const dayRange = useMemo((): DayRange | null => {
     if (useCustomRange) return customDayRange;
     const range = timeRanges.find(r => r.value === timeRange);
@@ -114,14 +127,20 @@ export default function FirePriceComparePage() {
       filteredHistory = historyData.filter(r => r.season_day >= dayRange.start && r.season_day <= dayRange.end);
     }
 
+    // 用各自赛季的 started_at 计算 day_offset，确保两个赛季按"距开服第 N 天"对齐
+    // 例如 SS12 day=91 SS13 day=1 → day_offset 都是 1（都是开服第 1 天采集的）
     const currentByDayHour = new Map<string, number>();
     const historyByDayHour = new Map<string, number>();
     const currentTimestamps = new Map<string, number>();
     const historyTimestamps = new Map<string, number>();
 
     filteredCurrent.forEach((r) => {
+      if (!currentSeasonStart) return;
+      const dayOffset = Math.max(1, Math.floor((r.scraped_at - currentSeasonStart) / 86400) + 1);
+      // 按 dayRange 过滤（如果设了）
+      if (dayRange !== null && (dayOffset < dayRange.start || dayOffset > dayRange.end)) return;
       const hour = new Date(r.scraped_at * 1000).getHours();
-      const key = `${r.season_day}-${hour}`;
+      const key = `${dayOffset}-${hour}`;
       if (!currentByDayHour.has(key)) {
         currentByDayHour.set(key, r.rmb_per_10k_fire);
         currentTimestamps.set(key, r.scraped_at);
@@ -129,8 +148,12 @@ export default function FirePriceComparePage() {
     });
 
     filteredHistory.forEach((r) => {
+      if (!historySeasonStart) return;
+      const dayOffset = Math.max(1, Math.floor((r.scraped_at - historySeasonStart) / 86400) + 1);
+      // 按 dayRange 过滤（如果设了）
+      if (dayRange !== null && (dayOffset < dayRange.start || dayOffset > dayRange.end)) return;
       const hour = new Date(r.scraped_at * 1000).getHours();
-      const key = `${r.season_day}-${hour}`;
+      const key = `${dayOffset}-${hour}`;
       if (!historyByDayHour.has(key)) {
         historyByDayHour.set(key, r.rmb_per_10k_fire);
         historyTimestamps.set(key, r.scraped_at);
@@ -143,25 +166,30 @@ export default function FirePriceComparePage() {
     ]);
 
     const sortedKeys = Array.from(allKeys).sort((a, b) => {
-      const tsA = currentTimestamps.get(a) || historyTimestamps.get(a) || 0;
-      const tsB = currentTimestamps.get(b) || historyTimestamps.get(b) || 0;
-      return tsA - tsB;
+      // 解析 dayOffset-hour，按 dayOffset 排序；同一天内按小时
+      const [dA, hA] = a.split("-").map(Number);
+      const [dB, hB] = b.split("-").map(Number);
+      if (dA !== dB) return dA - dB;
+      return hA - hB;
     });
 
     return sortedKeys.map((key) => {
-      const [, hour] = key.split("-").map(Number);
-      const date = new Date((currentTimestamps.get(key) || historyTimestamps.get(key) || 0) * 1000);
+      const [dayOffset, hour] = key.split("-").map(Number);
+      // 用 currentSeasonStart 算显示日期（横轴日期按当前赛季），让用户看到的是同一时间窗口的对比
+      const displayTs = (currentSeasonStart ?? historySeasonStart ?? 0) + (dayOffset - 1) * 86400;
+      const date = new Date(displayTs * 1000);
       const month = date.getMonth() + 1;
       const dayOfMonth = date.getDate();
       const label = `${month}/${dayOfMonth} ${String(hour).padStart(2, "0")}:00`;
       return {
         label,
-        sortKey: (currentTimestamps.get(key) || historyTimestamps.get(key) || 0),
+        sortKey: dayOffset * 100 + hour,
+        dayOffset,
         current: currentByDayHour.get(key) ?? null,
         history: historyByDayHour.get(key) ?? null,
       };
     });
-  }, [currentData, historyData, dayRange]);
+  }, [currentData, historyData, dayRange, currentSeasonStart, historySeasonStart]);
 
   const allValues = chartData.flatMap(d => [d.current, d.history]).filter((v): v is number => v !== null);
   const minValue = allValues.length > 0 ? Math.min(...allValues) : 0;
