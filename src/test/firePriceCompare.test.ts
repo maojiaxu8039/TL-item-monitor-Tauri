@@ -81,4 +81,41 @@ describe("buildHourlyFireComparison", () => {
     expect(rows.length).toBe(1);
     expect(rows[0].current).toBe(200); // 取最新的
   });
+
+  // 防止 (season_day - min_season_day) * 24 + beijingHour 的双重编码 bug
+  // 场景：season_day 切日时间不固定，beijingHour 按 0 点切
+  // 之前实现：elapsedHour 在 7/18 00:00 (season_day=1 hour=0) 跳到 0
+  //           然后在 7/18 01:00 (season_day=2 hour=1) 跳到 25
+  //           → elapsedHour=24 永远不存在，图表永远断
+  // 正确实现：纯物理时间偏移，elapsedHour 单调递增
+  it("produces monotonically increasing elapsed hours across season_day boundaries", () => {
+    // 7/17 13:00 北京 = 1784264400 UTC，scrape 时刻按小时+1h
+    // season_day 按服务器分配（不一定 0 点切）
+    const current: FirePricePoint[] = [
+      { scraped_at: 1784264400, rmb_per_10k_fire: 100, season_day: 1 }, // 7/17 13:00
+      { scraped_at: 1784268000, rmb_per_10k_fire: 110, season_day: 1 }, // 7/17 14:00
+      { scraped_at: 1784300400, rmb_per_10k_fire: 120, season_day: 1 }, // 7/17 23:00
+      // 跨日：season_day 没变但 beijingHour=0
+      { scraped_at: 1784304000, rmb_per_10k_fire: 130, season_day: 1 }, // 7/18 00:00
+      // season_day 切到 2
+      { scraped_at: 1784307600, rmb_per_10k_fire: 140, season_day: 2 }, // 7/18 01:00
+      { scraped_at: 1784340000, rmb_per_10k_fire: 150, season_day: 2 }, // 7/18 10:00
+    ];
+
+    const rows = buildHourlyFireComparison(current, [], 0, 0);
+    expect(rows.length).toBe(6);
+
+    // 每个 row 的 sortKey 应该是 0, 1, 10, 11, 12, 21（从 7/17 13:00 起算的小时数）
+    expect(rows[0].sortKey).toBe(0);
+    expect(rows[1].sortKey).toBe(1);
+    expect(rows[2].sortKey).toBe(10);
+    expect(rows[3].sortKey).toBe(11);
+    expect(rows[4].sortKey).toBe(12);
+    expect(rows[5].sortKey).toBe(21);
+
+    // sortKey 必须单调递增
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i].sortKey).toBeGreaterThan(rows[i-1].sortKey);
+    }
+  });
 });

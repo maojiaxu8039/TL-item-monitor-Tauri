@@ -21,25 +21,29 @@ export function beijingHour(timestampSeconds: number): number {
 
 /**
  * 把每个赛季的数据按 (day_offset, hour) 分桶
- * - day_offset: 用 season_day 字段（数据库存的），取相对于 min(season_day) 的偏移
- *   例如 SS12 data season_day=91 (开服第 91 天) → day_offset = 90
- *   例如 SS13 data season_day=1 (开服第 1 天) → day_offset = 0
- *   这样两个赛季的"开服第 N 天"会真正对齐
- * - hour: 用 beijingHour (按北京时间算)
  *
- * 不用 seasonStart 算的原因:
- *   SS13 数据采集时间（7/16 ~ 7/23）部分早于 SS13 开服日（7/18），
- *   导致 elapsedHour 出现负数被过滤 → SS13 数据完全丢失
+ * day_offset = (scraped_at - earliest_scraped_at) / 86400  // 从最早数据点算起
+ * hour = beijingHour(scraped_at)                            // 北京时间 0-23
+ *
+ * 之前用 (season_day - min_season_day) * 24 + beijingHour 有一个 bug:
+ * season_day 是按服务器/数据库逻辑切日（不一定 0 点切），beijingHour 是按北京 0 点切。
+ * 两者不是线性叠加，会出现：
+ *   season_day=1 hour=23 → elapsedHour=23
+ *   season_day=1 hour=0  → elapsedHour=0   （跳回 0）
+ *   season_day=2 hour=1  → elapsedHour=25  （跳到 25）
+ * elapsedHour=24 永远不存在 → 图表永远断
+ *
+ * 正确做法：elapsedHour = (scraped_at - earliest_in_this_data) / 3600
+ * 用纯物理时间偏移计算，单调递增，不存在跳号。
  */
 function latestHourlyPrices(rows: FirePricePoint[]) {
   const buckets = new Map<number, { price: number; scrapedAt: number }>();
   if (rows.length === 0) return buckets;
-  const minDay = Math.min(...rows.map((r) => r.season_day));
+  const baseTs = Math.min(...rows.map((r) => r.scraped_at));
   for (const row of rows) {
     if (row.rmb_per_10k_fire <= 0) continue;
-    const dayOffset = row.season_day - minDay; // 0-based
-    const hour = beijingHour(row.scraped_at); // 0-23 北京时间
-    const elapsedHour = dayOffset * 24 + hour;
+    // elapsedHour = 真实经过的小时数（从最早数据点起算，单调递增）
+    const elapsedHour = Math.floor((row.scraped_at - baseTs) / 3600);
     const existing = buckets.get(elapsedHour);
     if (!existing || row.scraped_at > existing.scrapedAt) {
       buckets.set(elapsedHour, {
