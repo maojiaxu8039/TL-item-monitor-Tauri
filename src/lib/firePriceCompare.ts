@@ -20,30 +20,29 @@ export function beijingHour(timestampSeconds: number): number {
 }
 
 /**
- * 把每个赛季的数据按 (day_offset, hour) 分桶
+ * 把每个赛季的数据按 (dayOffset, hour) 分桶
  *
- * day_offset = (scraped_at - earliest_scraped_at) / 86400  // 从最早数据点算起
- * hour = beijingHour(scraped_at)                            // 北京时间 0-23
+ * 关键：用数据库里已经计算好的 season_day 字段 + beijingHour(scraped_at)
+ * - season_day 数据库已经按"北京自然日 0:00 切"算好（开服=day 1，下个 0:00=day 2）
+ * - dayOffset = season_day - min_season_day + 1 = 1-based day（每个赛季从 1 开始）
+ * - hour = beijingHour(scraped_at) = 0-23 北京时间
  *
- * 之前用 (season_day - min_season_day) * 24 + beijingHour 有一个 bug:
- * season_day 是按服务器/数据库逻辑切日（不一定 0 点切），beijingHour 是按北京 0 点切。
- * 两者不是线性叠加，会出现：
- *   season_day=1 hour=23 → elapsedHour=23
- *   season_day=1 hour=0  → elapsedHour=0   （跳回 0）
- *   season_day=2 hour=1  → elapsedHour=25  （跳到 25）
- * elapsedHour=24 永远不存在 → 图表永远断
+ * 之前 (scraped_at - baseTs) / 3600 + baseTs%24 算法：
+ *   假设 SS13 最早数据 7/17 13:00，baseTs=7/17 13:00
+ *   7/17 13:00 → elapsedHour=0, hour = 0%24 = 0 ❌（实际 hour 应该是 13）
+ *   → 图表显示"第1天 00:00"，但实际数据是 13:00
  *
- * 正确做法：elapsedHour = (scraped_at - earliest_in_this_data) / 3600
- * 用纯物理时间偏移计算，单调递增，不存在跳号。
+ * 正确算法：用 season_day 算 dayOffset，用 beijingHour 算 hour
  */
 function latestHourlyPrices(rows: FirePricePoint[]) {
   const buckets = new Map<number, { price: number; scrapedAt: number }>();
   if (rows.length === 0) return buckets;
-  const baseTs = Math.min(...rows.map((r) => r.scraped_at));
+  const minDay = Math.min(...rows.map((r) => r.season_day));
   for (const row of rows) {
     if (row.rmb_per_10k_fire <= 0) continue;
-    // elapsedHour = 真实经过的小时数（从最早数据点起算，单调递增）
-    const elapsedHour = Math.floor((row.scraped_at - baseTs) / 3600);
+    const dayOffset = row.season_day - minDay; // 0-based
+    const hour = beijingHour(row.scraped_at); // 0-23
+    const elapsedHour = dayOffset * 24 + hour;
     const existing = buckets.get(elapsedHour);
     if (!existing || row.scraped_at > existing.scrapedAt) {
       buckets.set(elapsedHour, {

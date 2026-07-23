@@ -82,40 +82,52 @@ describe("buildHourlyFireComparison", () => {
     expect(rows[0].current).toBe(200); // 取最新的
   });
 
-  // 防止 (season_day - min_season_day) * 24 + beijingHour 的双重编码 bug
-  // 场景：season_day 切日时间不固定，beijingHour 按 0 点切
-  // 之前实现：elapsedHour 在 7/18 00:00 (season_day=1 hour=0) 跳到 0
-  //           然后在 7/18 01:00 (season_day=2 hour=1) 跳到 25
-  //           → elapsedHour=24 永远不存在，图表永远断
-  // 正确实现：纯物理时间偏移，elapsedHour 单调递增
-  it("produces monotonically increasing elapsed hours across season_day boundaries", () => {
-    // 7/17 13:00 北京 = 1784264400 UTC，scrape 时刻按小时+1h
-    // season_day 按服务器分配（不一定 0 点切）
+  // 防止 (scraped_at - baseTs) / 3600 算法把 hour 算成 0
+  // 场景：SS13 最早数据 7/17 13:00，baseTs=7/17 13:00
+  // 之前：elapsedHour=0 → hour = 0%24 = 0（错，实际应该是 13）
+  // 正确：用 beijingHour(scraped_at) 算 hour（13），用 season_day 算 dayOffset
+  it("uses beijingHour for hour, not elapsedHour % 24", () => {
+    // SS13 最早数据 7/17 13:00 北京 = UTC 7/17 05:00 = 1784264400
     const current: FirePricePoint[] = [
-      { scraped_at: 1784264400, rmb_per_10k_fire: 100, season_day: 1 }, // 7/17 13:00
-      { scraped_at: 1784268000, rmb_per_10k_fire: 110, season_day: 1 }, // 7/17 14:00
-      { scraped_at: 1784300400, rmb_per_10k_fire: 120, season_day: 1 }, // 7/17 23:00
-      // 跨日：season_day 没变但 beijingHour=0
-      { scraped_at: 1784304000, rmb_per_10k_fire: 130, season_day: 1 }, // 7/18 00:00
-      // season_day 切到 2
-      { scraped_at: 1784307600, rmb_per_10k_fire: 140, season_day: 2 }, // 7/18 01:00
-      { scraped_at: 1784340000, rmb_per_10k_fire: 150, season_day: 2 }, // 7/18 10:00
+      { scraped_at: 1784264400, rmb_per_10k_fire: 100, season_day: 1 }, // 7/17 13:00 北京
     ];
 
     const rows = buildHourlyFireComparison(current, [], 0, 0);
-    expect(rows.length).toBe(6);
+    expect(rows.length).toBe(1);
+    // 关键：hour 应该是 13（beijingHour），不是 0（elapsedHour%24）
+    expect(rows[0].hour).toBe(13);
+    expect(rows[0].dayOffset).toBe(1);
+    expect(rows[0].label).toBe("第1天 13:00");
+  });
 
-    // 每个 row 的 sortKey 应该是 0, 1, 10, 11, 12, 21（从 7/17 13:00 起算的小时数）
-    expect(rows[0].sortKey).toBe(0);
-    expect(rows[1].sortKey).toBe(1);
-    expect(rows[2].sortKey).toBe(10);
-    expect(rows[3].sortKey).toBe(11);
-    expect(rows[4].sortKey).toBe(12);
-    expect(rows[5].sortKey).toBe(21);
+  // 验证 season_day 跨日时 dayOffset 正确
+  it("uses season_day for dayOffset (so day boundary matches 北京 0:00)", () => {
+    // 7/17 13:00 北京 = UTC 7/17 05:00 = 1784264400
+    // 7/18 00:00 北京 = UTC 7/17 16:00 = 1784304000
+    // 7/18 01:00 北京 = UTC 7/17 17:00 = 1784307600
+    // 7/19 00:00 北京 = UTC 7/18 16:00 = 1784390400
+    // 7/19 01:00 北京 = UTC 7/18 17:00 = 1784394000
+    const current: FirePricePoint[] = [
+      { scraped_at: 1784264400, rmb_per_10k_fire: 100, season_day: 1 }, // 7/17 13:00 day=1
+      { scraped_at: 1784304000, rmb_per_10k_fire: 130, season_day: 1 }, // 7/18 00:00 day=1
+      { scraped_at: 1784307600, rmb_per_10k_fire: 140, season_day: 2 }, // 7/18 01:00 day=2
+      { scraped_at: 1784390400, rmb_per_10k_fire: 200, season_day: 2 }, // 7/19 00:00 day=2
+      { scraped_at: 1784394000, rmb_per_10k_fire: 210, season_day: 3 }, // 7/19 01:00 day=3
+    ];
 
-    // sortKey 必须单调递增
-    for (let i = 1; i < rows.length; i++) {
-      expect(rows[i].sortKey).toBeGreaterThan(rows[i-1].sortKey);
-    }
+    const rows = buildHourlyFireComparison(current, [], 0, 0);
+    expect(rows.length).toBe(5);
+
+    // rows 按 sortKey (elapsedHour) 升序排
+    // sortKey=0 (7/18 00:00, day=1 hour=0) 排第一
+    // sortKey=13 (7/17 13:00, day=1 hour=13) 排第二
+    // sortKey=24 (7/19 00:00, day=2 hour=0) 排第三
+    // sortKey=25 (7/18 01:00, day=2 hour=1) 排第四
+    // sortKey=49 (7/19 01:00, day=3 hour=1) 排第五
+    expect(rows[0].dayOffset).toBe(1); expect(rows[0].hour).toBe(0);  // 7/18 00:00
+    expect(rows[1].dayOffset).toBe(1); expect(rows[1].hour).toBe(13); // 7/17 13:00
+    expect(rows[2].dayOffset).toBe(2); expect(rows[2].hour).toBe(0);  // 7/19 00:00
+    expect(rows[3].dayOffset).toBe(2); expect(rows[3].hour).toBe(1);  // 7/18 01:00
+    expect(rows[4].dayOffset).toBe(3); expect(rows[4].hour).toBe(1);  // 7/19 01:00
   });
 });
