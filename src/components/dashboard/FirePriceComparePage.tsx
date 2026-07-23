@@ -143,121 +143,69 @@ export default function FirePriceComparePage() {
     return range?.dayRange ?? null;
   }, [useCustomRange, customDayRange, timeRange]);
 
-  // 计算两个赛季各自的 day_offset 基准点：取两边最早的采集时间作为 day=1
-  // 这样 SS12（数据 season_day=91-97）和 SS13（数据 season_day=1-6）的同一物理时间会
-  // 对齐到同一个 day_offset（例如 7/16 15:00 都是 day=1）
-  const { currentBaseTs, historyBaseTs } = useMemo(() => {
-    const cMin = currentData.length > 0 ? Math.min(...currentData.map((r) => r.scraped_at)) : 0;
-    const hMin = historyData.length > 0 ? Math.min(...historyData.map((r) => r.scraped_at)) : 0;
-    return { currentBaseTs: cMin, historyBaseTs: hMin };
-  }, [currentData, historyData]);
-
+  // 按"小时桶"对齐两个赛季：每个小时桶 = 一个数据点
+  // 用各自的 season_day 字段（数据库存的）映射到 day_offset（从 1 开始）
+  // season_day - min(season_day) + 1 = day_offset
+  // 这样 SS12 数据（season_day=91-97）→ day_offset=1-7，与 SS13（season_day=1-6）→ day_offset=1-6 对齐
   const chartData = useMemo(() => {
-    // 用最早采集时间做 day_offset 基准（而不是 started_at）
-    // 避免 SS12 (day=91) 和 SS13 (day=1) 物理时间相同却 day_offset 不同
-    const currentByDayHour = new Map<string, number>();
-    const historyByDayHour = new Map<string, number>();
+    if (currentData.length === 0 && historyData.length === 0) return [];
+
+    // 计算每个赛季的 day_offset（基于各自 season_day 字段，最小值为 1）
+    const curMinDay = currentData.length > 0 ? Math.min(...currentData.map((r) => r.season_day)) : 1;
+    const histMinDay = historyData.length > 0 ? Math.min(...historyData.map((r) => r.season_day)) : 1;
+
+    // 按 (day_offset, hour) 分桶
+    const currentByBucket = new Map<string, number>();
+    const historyByBucket = new Map<string, number>();
+    const bucketTs = new Map<string, number>();
 
     currentData.forEach((r) => {
-      if (!currentBaseTs) return;
-      // 北京时间 0 点对齐：把基准时间归到当天 0 点
-      const dayOffset = Math.floor((r.scraped_at - currentBaseTs) / 86400) + 1;
+      const dayOffset = r.season_day - curMinDay + 1;
       const hour = new Date(r.scraped_at * 1000).getHours();
       const key = `${dayOffset}-${hour}`;
-      if (!currentByDayHour.has(key)) {
-        currentByDayHour.set(key, r.rmb_per_10k_fire);
-      }
+      // 同一小时桶取最后一条（最新）
+      currentByBucket.set(key, r.rmb_per_10k_fire);
+      bucketTs.set(key, r.scraped_at);
     });
 
     historyData.forEach((r) => {
-      if (!historyBaseTs) return;
-      const dayOffset = Math.floor((r.scraped_at - historyBaseTs) / 86400) + 1;
+      const dayOffset = r.season_day - histMinDay + 1;
       const hour = new Date(r.scraped_at * 1000).getHours();
       const key = `${dayOffset}-${hour}`;
-      if (!historyByDayHour.has(key)) {
-        historyByDayHour.set(key, r.rmb_per_10k_fire);
-      }
+      historyByBucket.set(key, r.rmb_per_10k_fire);
+      if (!bucketTs.has(key)) bucketTs.set(key, r.scraped_at);
     });
 
-    // 收集所有 dayOffset（去重）
-    const allDayOffsets = new Set<number>();
-    currentByDayHour.forEach((_, key) => allDayOffsets.add(Number(key.split("-")[0])));
-    historyByDayHour.forEach((_, key) => allDayOffsets.add(Number(key.split("-")[0])));
+    // 过滤掉 0 值（异常/未采集）
+    // 按 day_offset-hour 排序
+    const allKeys = Array.from(new Set([...currentByBucket.keys(), ...historyByBucket.keys()]))
+      .sort((a, b) => {
+        const [dA, hA] = a.split("-").map(Number);
+        const [dB, hB] = b.split("-").map(Number);
+        if (dA !== dB) return dA - dB;
+        return hA - hB;
+      });
 
-    // 按 dayOffset 排序
-    const sortedDays = Array.from(allDayOffsets).sort((a, b) => a - b);
-
-    // 用当前赛季数据计算每行对应的物理时间（用于显示标签）
-    // 默认以 currentSeason 真实采集时间为基准
-    const baseTs = currentBaseTs || historyBaseTs;
-    const rows: Array<{
-      label: string;
-      sortKey: number;
-      dayOffset: number;
-      current: number | null;
-      history: number | null;
-    }> = [];
-
-    sortedDays.forEach((day) => {
-      // 找这一天的第一个数据点（任一赛季），用来生成时间标签
-      let sampleTs = 0;
-      for (const [key, _] of currentByDayHour) {
-        if (key.startsWith(`${day}-`)) {
-          sampleTs = currentData.find((r) => {
-            const k = `${Math.floor((r.scraped_at - currentBaseTs) / 86400) + 1}-${new Date(r.scraped_at * 1000).getHours()}`;
-            return k === key;
-          })?.scraped_at ?? 0;
-          break;
-        }
-      }
-      if (!sampleTs) {
-        for (const [key, _] of historyByDayHour) {
-          if (key.startsWith(`${day}-`)) {
-            sampleTs = historyData.find((r) => {
-              const k = `${Math.floor((r.scraped_at - historyBaseTs) / 86400) + 1}-${new Date(r.scraped_at * 1000).getHours()}`;
-              return k === key;
-            })?.scraped_at ?? 0;
-            break;
-          }
-        }
-      }
-      if (!sampleTs) sampleTs = (baseTs || 0) + (day - 1) * 86400;
-
-      const date = new Date(sampleTs * 1000);
+    return allKeys.map((key) => {
+      const [dayOffset, hour] = key.split("-").map(Number);
+      const ts = bucketTs.get(key) || 0;
+      const date = new Date(ts * 1000);
       const month = date.getMonth() + 1;
       const dayOfMonth = date.getDate();
-      const label = `${month}/${dayOfMonth}`;
-
-      rows.push({
+      const label = `${month}/${dayOfMonth} ${String(hour).padStart(2, "0")}:00`;
+      const curVal = currentByBucket.get(key);
+      const histVal = historyByBucket.get(key);
+      return {
         label,
-        sortKey: day,
-        dayOffset: day,
-        current: null,
-        history: null,
-      });
-
-      // 把这一天的所有小时点压成一行（或多行，按 hour 分组）
-      // 这里采用按"日聚合"：取当天的最新一条火价作为代表
-      // 但用均值更平滑；我们采用均值
-      const curDayPoints: number[] = [];
-      const histDayPoints: number[] = [];
-      currentByDayHour.forEach((v, key) => {
-        if (key.startsWith(`${day}-`)) curDayPoints.push(v);
-      });
-      historyByDayHour.forEach((v, key) => {
-        if (key.startsWith(`${day}-`)) histDayPoints.push(v);
-      });
-      const last = rows[rows.length - 1];
-      last.current = curDayPoints.length > 0
-        ? curDayPoints.reduce((a, b) => a + b, 0) / curDayPoints.length
-        : null;
-      last.history = histDayPoints.length > 0
-        ? histDayPoints.reduce((a, b) => a + b, 0) / histDayPoints.length
-        : null;
+        sortKey: dayOffset * 100 + hour,
+        dayOffset,
+        hour,
+        // 0 视为无效（数据未采集/异常），返回 null 让曲线断点
+        current: curVal != null && curVal > 0 ? curVal : null,
+        history: histVal != null && histVal > 0 ? histVal : null,
+      };
     });
-
-    return rows;
-  }, [currentData, historyData, currentBaseTs, historyBaseTs]);
+  }, [currentData, historyData]);
 
   const allValues = chartData.flatMap(d => [d.current, d.history]).filter((v): v is number => v !== null);
   const minValue = allValues.length > 0 ? Math.min(...allValues) : 0;
