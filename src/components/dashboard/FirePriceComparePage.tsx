@@ -55,13 +55,44 @@ export default function FirePriceComparePage() {
     staleTime: 60 * 1000,
   });
 
-  // 过滤掉当前赛季，按 id 倒序（SS13 > SS12 > SS11...）
-  const compareOptions = useMemo(() => {
+  // 给候选赛季发轻量探测（每赛季只查 1 条），用于过滤无数据的赛季
+  const candidateIds = useMemo(() => {
     const list = seasonsQuery.data ?? [];
     return list
       .filter((s) => s.season_id !== currentSeason)
-      .sort((a, b) => b.season_id.localeCompare(a.season_id));
+      .map((s) => s.season_id);
   }, [seasonsQuery.data, currentSeason]);
+
+  // 并发探测每个候选赛季的火价数据条数（取 1 条就够判断是否有数据）
+  const probesQuery = useQuery({
+    queryKey: ["fire-price-probe", candidateIds, marketMode],
+    queryFn: async () => {
+      const results: Record<string, number> = {};
+      await Promise.all(
+        candidateIds.map(async (id) => {
+          try {
+            const rows = await cmd.getFireHistoryBySeason(id, marketMode, 1);
+            results[id] = Array.isArray(rows) ? rows.length : 0;
+          } catch {
+            results[id] = 0;
+          }
+        }),
+      );
+      return results;
+    },
+    enabled: candidateIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // 过滤掉当前赛季和无数据的赛季
+  const compareOptions = useMemo(() => {
+    const list = seasonsQuery.data ?? [];
+    const counts = probesQuery.data ?? {};
+    return list
+      .filter((s) => s.season_id !== currentSeason)
+      .filter((s) => (counts[s.season_id] ?? 0) > 0)
+      .sort((a, b) => b.season_id.localeCompare(a.season_id));
+  }, [seasonsQuery.data, currentSeason, probesQuery.data]);
 
   // 第一次拿到列表后，若历史赛季不在列表里则兜底选最新的一个
   useEffect(() => {
@@ -75,14 +106,8 @@ export default function FirePriceComparePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seasonsQuery.data]);
 
-  // 动态获取两个赛季的 started_at，用于按 day_offset 对齐
-  const currentSeasonStart = useMemo(() => {
-    return seasonsQuery.data?.find((s) => s.season_id === currentSeason)?.started_at ?? null;
-  }, [seasonsQuery.data, currentSeason]);
-
-  const historySeasonStart = useMemo(() => {
-    return seasonsQuery.data?.find((s) => s.season_id === historySeason)?.started_at ?? null;
-  }, [seasonsQuery.data, historySeason]);
+  // 动态获取当前赛季的 started_at（用于计算 currentMaxDay）
+  const currentSeasonStart = seasonsQuery.data?.find((s) => s.season_id === currentSeason)?.started_at ?? null;
 
   // 计算每个赛季已经开了多少天（用 started_at）
   const currentMaxDay = useMemo(() => {
@@ -118,78 +143,121 @@ export default function FirePriceComparePage() {
     return range?.dayRange ?? null;
   }, [useCustomRange, customDayRange, timeRange]);
 
+  // 计算两个赛季各自的 day_offset 基准点：取两边最早的采集时间作为 day=1
+  // 这样 SS12（数据 season_day=91-97）和 SS13（数据 season_day=1-6）的同一物理时间会
+  // 对齐到同一个 day_offset（例如 7/16 15:00 都是 day=1）
+  const { currentBaseTs, historyBaseTs } = useMemo(() => {
+    const cMin = currentData.length > 0 ? Math.min(...currentData.map((r) => r.scraped_at)) : 0;
+    const hMin = historyData.length > 0 ? Math.min(...historyData.map((r) => r.scraped_at)) : 0;
+    return { currentBaseTs: cMin, historyBaseTs: hMin };
+  }, [currentData, historyData]);
+
   const chartData = useMemo(() => {
-    let filteredCurrent = currentData;
-    let filteredHistory = historyData;
-
-    if (dayRange !== null) {
-      filteredCurrent = currentData.filter(r => r.season_day >= dayRange.start && r.season_day <= dayRange.end);
-      filteredHistory = historyData.filter(r => r.season_day >= dayRange.start && r.season_day <= dayRange.end);
-    }
-
-    // 用各自赛季的 started_at 计算 day_offset，确保两个赛季按"距开服第 N 天"对齐
-    // 例如 SS12 day=91 SS13 day=1 → day_offset 都是 1（都是开服第 1 天采集的）
+    // 用最早采集时间做 day_offset 基准（而不是 started_at）
+    // 避免 SS12 (day=91) 和 SS13 (day=1) 物理时间相同却 day_offset 不同
     const currentByDayHour = new Map<string, number>();
     const historyByDayHour = new Map<string, number>();
-    const currentTimestamps = new Map<string, number>();
-    const historyTimestamps = new Map<string, number>();
 
-    filteredCurrent.forEach((r) => {
-      if (!currentSeasonStart) return;
-      const dayOffset = Math.max(1, Math.floor((r.scraped_at - currentSeasonStart) / 86400) + 1);
-      // 按 dayRange 过滤（如果设了）
-      if (dayRange !== null && (dayOffset < dayRange.start || dayOffset > dayRange.end)) return;
+    currentData.forEach((r) => {
+      if (!currentBaseTs) return;
+      // 北京时间 0 点对齐：把基准时间归到当天 0 点
+      const dayOffset = Math.floor((r.scraped_at - currentBaseTs) / 86400) + 1;
       const hour = new Date(r.scraped_at * 1000).getHours();
       const key = `${dayOffset}-${hour}`;
       if (!currentByDayHour.has(key)) {
         currentByDayHour.set(key, r.rmb_per_10k_fire);
-        currentTimestamps.set(key, r.scraped_at);
       }
     });
 
-    filteredHistory.forEach((r) => {
-      if (!historySeasonStart) return;
-      const dayOffset = Math.max(1, Math.floor((r.scraped_at - historySeasonStart) / 86400) + 1);
-      // 按 dayRange 过滤（如果设了）
-      if (dayRange !== null && (dayOffset < dayRange.start || dayOffset > dayRange.end)) return;
+    historyData.forEach((r) => {
+      if (!historyBaseTs) return;
+      const dayOffset = Math.floor((r.scraped_at - historyBaseTs) / 86400) + 1;
       const hour = new Date(r.scraped_at * 1000).getHours();
       const key = `${dayOffset}-${hour}`;
       if (!historyByDayHour.has(key)) {
         historyByDayHour.set(key, r.rmb_per_10k_fire);
-        historyTimestamps.set(key, r.scraped_at);
       }
     });
 
-    const allKeys = new Set([
-      ...currentByDayHour.keys(),
-      ...historyByDayHour.keys(),
-    ]);
+    // 收集所有 dayOffset（去重）
+    const allDayOffsets = new Set<number>();
+    currentByDayHour.forEach((_, key) => allDayOffsets.add(Number(key.split("-")[0])));
+    historyByDayHour.forEach((_, key) => allDayOffsets.add(Number(key.split("-")[0])));
 
-    const sortedKeys = Array.from(allKeys).sort((a, b) => {
-      // 解析 dayOffset-hour，按 dayOffset 排序；同一天内按小时
-      const [dA, hA] = a.split("-").map(Number);
-      const [dB, hB] = b.split("-").map(Number);
-      if (dA !== dB) return dA - dB;
-      return hA - hB;
-    });
+    // 按 dayOffset 排序
+    const sortedDays = Array.from(allDayOffsets).sort((a, b) => a - b);
 
-    return sortedKeys.map((key) => {
-      const [dayOffset, hour] = key.split("-").map(Number);
-      // 用 currentSeasonStart 算显示日期（横轴日期按当前赛季），让用户看到的是同一时间窗口的对比
-      const displayTs = (currentSeasonStart ?? historySeasonStart ?? 0) + (dayOffset - 1) * 86400;
-      const date = new Date(displayTs * 1000);
+    // 用当前赛季数据计算每行对应的物理时间（用于显示标签）
+    // 默认以 currentSeason 真实采集时间为基准
+    const baseTs = currentBaseTs || historyBaseTs;
+    const rows: Array<{
+      label: string;
+      sortKey: number;
+      dayOffset: number;
+      current: number | null;
+      history: number | null;
+    }> = [];
+
+    sortedDays.forEach((day) => {
+      // 找这一天的第一个数据点（任一赛季），用来生成时间标签
+      let sampleTs = 0;
+      for (const [key, _] of currentByDayHour) {
+        if (key.startsWith(`${day}-`)) {
+          sampleTs = currentData.find((r) => {
+            const k = `${Math.floor((r.scraped_at - currentBaseTs) / 86400) + 1}-${new Date(r.scraped_at * 1000).getHours()}`;
+            return k === key;
+          })?.scraped_at ?? 0;
+          break;
+        }
+      }
+      if (!sampleTs) {
+        for (const [key, _] of historyByDayHour) {
+          if (key.startsWith(`${day}-`)) {
+            sampleTs = historyData.find((r) => {
+              const k = `${Math.floor((r.scraped_at - historyBaseTs) / 86400) + 1}-${new Date(r.scraped_at * 1000).getHours()}`;
+              return k === key;
+            })?.scraped_at ?? 0;
+            break;
+          }
+        }
+      }
+      if (!sampleTs) sampleTs = (baseTs || 0) + (day - 1) * 86400;
+
+      const date = new Date(sampleTs * 1000);
       const month = date.getMonth() + 1;
       const dayOfMonth = date.getDate();
-      const label = `${month}/${dayOfMonth} ${String(hour).padStart(2, "0")}:00`;
-      return {
+      const label = `${month}/${dayOfMonth}`;
+
+      rows.push({
         label,
-        sortKey: dayOffset * 100 + hour,
-        dayOffset,
-        current: currentByDayHour.get(key) ?? null,
-        history: historyByDayHour.get(key) ?? null,
-      };
+        sortKey: day,
+        dayOffset: day,
+        current: null,
+        history: null,
+      });
+
+      // 把这一天的所有小时点压成一行（或多行，按 hour 分组）
+      // 这里采用按"日聚合"：取当天的最新一条火价作为代表
+      // 但用均值更平滑；我们采用均值
+      const curDayPoints: number[] = [];
+      const histDayPoints: number[] = [];
+      currentByDayHour.forEach((v, key) => {
+        if (key.startsWith(`${day}-`)) curDayPoints.push(v);
+      });
+      historyByDayHour.forEach((v, key) => {
+        if (key.startsWith(`${day}-`)) histDayPoints.push(v);
+      });
+      const last = rows[rows.length - 1];
+      last.current = curDayPoints.length > 0
+        ? curDayPoints.reduce((a, b) => a + b, 0) / curDayPoints.length
+        : null;
+      last.history = histDayPoints.length > 0
+        ? histDayPoints.reduce((a, b) => a + b, 0) / histDayPoints.length
+        : null;
     });
-  }, [currentData, historyData, dayRange, currentSeasonStart, historySeasonStart]);
+
+    return rows;
+  }, [currentData, historyData, currentBaseTs, historyBaseTs]);
 
   const allValues = chartData.flatMap(d => [d.current, d.history]).filter((v): v is number => v !== null);
   const minValue = allValues.length > 0 ? Math.min(...allValues) : 0;
