@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart2, ArrowDownCircle, ArrowUpCircle, CalendarDays } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
@@ -44,6 +44,33 @@ export default function FirePriceComparePage() {
   const currentSeason = marketContext.seasonId;
   const marketMode = marketContext.marketMode;
   const currentRefetchInterval = useVisiblePolling(5 * 60 * 1000);
+
+  // 动态加载数据库所有赛季，供"对比赛季"下拉框使用
+  const seasonsQuery = useQuery<Array<{ season_id: string; name: string; is_current: boolean }>>({
+    queryKey: queryKeys.seasons,
+    queryFn: () => cmd.listSeasons(),
+    staleTime: 60 * 1000,
+  });
+
+  // 过滤掉当前赛季，按 id 倒序（SS13 > SS12 > SS11...）
+  const compareOptions = useMemo(() => {
+    const list = seasonsQuery.data ?? [];
+    return list
+      .filter((s) => s.season_id !== currentSeason)
+      .sort((a, b) => b.season_id.localeCompare(a.season_id));
+  }, [seasonsQuery.data, currentSeason]);
+
+  // 第一次拿到列表后，若历史赛季不在列表里则兜底选最新的一个
+  useEffect(() => {
+    if (seasonsQuery.data && seasonsQuery.data.length > 0) {
+      const ids = new Set(seasonsQuery.data.map((s) => s.season_id));
+      if (!ids.has(historySeason)) {
+        const fallback = compareOptions[0]?.season_id ?? "";
+        if (fallback) setHistorySeason(fallback);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seasonsQuery.data]);
 
   const currentQuery = useQuery({
     queryKey: [...queryKeys.fireTrendCurrent, currentSeason, marketMode, timeRange],
@@ -359,9 +386,19 @@ export default function FirePriceComparePage() {
             <select
               value={historySeason}
               onChange={(e) => setHistorySeason(e.target.value)}
-              className="px-3 py-1.5 border border-[var(--color-border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 bg-[var(--color-panel)]"
+              disabled={compareOptions.length === 0}
+              className="px-3 py-1.5 border border-[var(--color-border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 bg-[var(--color-panel)] disabled:opacity-60"
             >
-              <option value="ss11">SS11</option>
+              {compareOptions.length === 0 ? (
+                <option value="">（加载中…）</option>
+              ) : (
+                compareOptions.map((s) => (
+                  <option key={s.season_id} value={s.season_id}>
+                    {s.season_id.toUpperCase()}
+                    {s.name ? ` · ${s.name}` : ""}
+                  </option>
+                ))
+              )}
             </select>
             <span className="text-sm text-[var(--color-text-subtle)]">|</span>
             <span className="text-sm font-medium text-[var(--color-text)]">{currentSeason.toUpperCase()}</span>
