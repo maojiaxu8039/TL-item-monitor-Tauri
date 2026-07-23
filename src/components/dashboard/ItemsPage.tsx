@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, memo } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { devLog } from "@/lib/devLog";
 import { DEFAULT_HISTORY_SEASON } from "@/lib/constants";
-import { useQueryClient } from "@tanstack/react-query";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   createColumnHelper,
   flexRender,
@@ -217,6 +216,26 @@ export default function ItemsPage() {
     queryFn: cmd.getItemTypes,
     staleTime: 5 * 60 * 1000,
   });
+
+  // 拉取赛季列表，用于自动选"当前赛季的上一个赛季"
+  const seasonsQuery = useQuery<Array<{ season_id: string; name: string; is_current: boolean }>>({
+    queryKey: queryKeys.seasons,
+    queryFn: () => cmd.listSeasons(),
+    staleTime: 60 * 1000,
+  });
+
+  useEffect(() => {
+    const list = seasonsQuery.data ?? [];
+    const candidates = list
+      .filter((s) => s.season_id !== marketContext.seasonId)
+      .sort((a, b) => b.season_id.localeCompare(a.season_id));
+    if (candidates.length === 0) return;
+    const ids = new Set(candidates.map((s) => s.season_id));
+    const previousSeason = candidates[0].season_id;
+    if (!historySeason || !ids.has(historySeason)) {
+      setHistorySeason(previousSeason);
+    }
+  }, [seasonsQuery.data, marketContext.seasonId, historySeason]);
 
   const { data: priceCompareData, isLoading: isCompareLoading, error: compareError } = useQuery({
     queryKey: [...queryKeys.itemsCompare, marketContext.seasonId, historySeason, marketContext.marketMode, dayFilter],

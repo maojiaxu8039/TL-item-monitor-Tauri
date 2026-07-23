@@ -50,18 +50,6 @@ pub const SEASONS: &[SeasonInfo] = &[
         name: "SS12 历史赛季",
         is_current: false,
     },
-    SeasonInfo {
-        id: "ss11",
-        start_timestamp: 1768521600, // 2026-01-07 00:00:00 UTC+8
-        name: "SS11 历史赛季",
-        is_current: false,
-    },
-    SeasonInfo {
-        id: "ss10",
-        start_timestamp: 1699392000, // 2023-11-07 00:00:00 UTC+8
-        name: "SS10 历史赛季",
-        is_current: false,
-    },
 ];
 
 pub fn get_season_start(season_id: &str) -> Option<i64> {

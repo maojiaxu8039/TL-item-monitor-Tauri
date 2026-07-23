@@ -110,12 +110,17 @@ export default function FirePriceComparePage() {
       .sort((a, b) => b.season_id.localeCompare(a.season_id));
   }, [seasonsQuery.data, currentSeason]);
 
-  // 第一次拿到列表后，若历史赛季不在列表里则兜底选最新的一个
+  // 第一次拿到列表后，自动选"当前赛季的上一个赛季"（按 season_id 字典序倒排）
+  // 期望：当前 ss13 → 默认 ss12；当前 ss12 → 默认 ss11（但 ss11 已删除，会跳过）
   useEffect(() => {
     if (compareOptions.length > 0) {
       const ids = new Set(compareOptions.map((s) => s.season_id));
-      if (!ids.has(historySeason)) {
-        setHistorySeason(compareOptions[0].season_id);
+      // 当前赛季的"上一个" = 列表里按 season_id 倒排的第一个（不包括当前）
+      // 因为 compareOptions 已按 season_id 倒排
+      const previousSeason = compareOptions[0].season_id;
+      if (!historySeason || !ids.has(historySeason)) {
+        // 还没选过，或者选的不在列表里 → 选上一个赛季
+        setHistorySeason(previousSeason);
       }
     }
   }, [compareOptions, historySeason]);
