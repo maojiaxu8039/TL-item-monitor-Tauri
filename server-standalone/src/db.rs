@@ -30,6 +30,29 @@ pub fn validate_season_id(season_id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// 判断 item_id 是否属于当前赛季的合法物品 ID
+///
+/// 背景: SS12 及更早赛季的物品 ID 包含特殊格式，如 `support_skill:8111:sublime:t2`、
+/// `catalyst_skill:8023:t0`，这些是 SS12 独有的「辅助技能」「触媒」类型。
+/// 在某些 scrape 异常场景下，这些 item_id 会被错误地写入 SS13 表，造成
+/// 跨赛季数据污染（item_id 类型不同，无法用 UNIQUE(item_id, scraped_at) 阻止）。
+///
+/// 保护策略: SS13（及之后赛季）只接受纯数字 item_id（5~7 位数字字符串）。
+/// 数字 item_id 是所有赛季的主流物品 ID 格式，不会误杀。
+///
+/// 历史:
+/// - SS12: 数字 ID + skill/catalyst 复合 ID（数字部分仍是合法物品）
+/// - SS13+: 只用数字 ID（详见 item_id_mapping.json）
+pub fn is_valid_season_item_id(item_id: &str) -> bool {
+    if item_id.is_empty() {
+        return false;
+    }
+    // 必须全部是 ASCII 数字，且长度在 2~10 之间（实际 item_id 都是 4~7 位数字）
+    item_id.len() >= 2
+        && item_id.len() <= 10
+        && item_id.chars().all(|c| c.is_ascii_digit())
+}
+
 #[derive(Debug, Clone)]
 pub enum MarketMode {
     Normal,
@@ -167,6 +190,31 @@ mod validation_tests {
         let start = 1_704_067_200_i64;
         let day_90 = calculate_season_day(start, start + 89 * 86400);
         assert_eq!(day_90, 90);
+    }
+
+    // ===== is_valid_season_item_id 测试 =====
+    #[test]
+    fn is_valid_season_item_id_accepts_numeric() {
+        // 标准数字 item_id（SS12/SS13 主流物品）
+        assert!(is_valid_season_item_id("10001"));
+        assert!(is_valid_season_item_id("110301"));
+        assert!(is_valid_season_item_id("99999999"));
+    }
+
+    #[test]
+    fn is_valid_season_item_id_rejects_special() {
+        // SS12 特殊格式（应被过滤）
+        assert!(!is_valid_season_item_id("support_skill:8111:sublime:t2"));
+        assert!(!is_valid_season_item_id("catalyst_skill:8023:t0"));
+        // 含字母 / 特殊字符
+        assert!(!is_valid_season_item_id("abc123"));
+        assert!(!is_valid_season_item_id("10001a"));
+        assert!(!is_valid_season_item_id("100-01"));
+        assert!(!is_valid_season_item_id("10001 "));
+        // 空
+        assert!(!is_valid_season_item_id(""));
+        // 太长（>10 位）
+        assert!(!is_valid_season_item_id("12345678901"));
     }
 }
 
@@ -880,7 +928,43 @@ pub async fn insert_items_snapshots(
     let season_day = calculate_season_day(season_start, scraped_at);
     let mut total_count = 0;
 
-    for chunk in items.chunks(BATCH_SIZE) {
+    // 跨赛季数据保护: 过滤掉非数字 item_id（防止 SS12 的 skill_* 类型污染 SS13 表）
+    let valid_items: Vec<&Item> = items
+        .iter()
+        .filter(|item| {
+            let valid = is_valid_season_item_id(&item.item_id);
+            if !valid {
+                warn!(
+                    "[GUARD] 跨赛季数据保护: 丢弃 item_id={:?} (含非数字字符，不是当前赛季合法 ID)",
+                    item.item_id
+                );
+            }
+            valid
+        })
+        .collect();
+
+    if valid_items.is_empty() {
+        warn!(
+            "[GUARD] insert_items_snapshots: {} 个 item 全部被过滤（season={}, mode={}）",
+            items.len(),
+            season_id,
+            market_mode
+        );
+        return Ok(0);
+    }
+
+    if valid_items.len() != items.len() {
+        warn!(
+            "[GUARD] insert_items_snapshots: season={}, mode={}, 过滤 {} 个非法 item_id（{} -> {}）",
+            season_id,
+            market_mode,
+            items.len() - valid_items.len(),
+            items.len(),
+            valid_items.len()
+        );
+    }
+
+    for chunk in valid_items.chunks(BATCH_SIZE) {
         let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
         let placeholders: Vec<String> = chunk
