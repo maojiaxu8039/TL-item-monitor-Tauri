@@ -21,19 +21,56 @@ pub async fn scrape_by_mode_with_api_config(
 ) -> Result<FirePriceSnapshot, AppError> {
     tracing::info!("Starting fire price scrape for mode: {}", mode);
 
-    // 千岛 API 对 Rust reqwest 的 HTTP/2 连接不稳定（经常 hang 住或返回 405），
-    // 优先使用 Node.js 原生 http2 模块（nghttp2）作为第一选择，
-    // 只有当 Node.js fallback 不可用时才尝试 Rust reqwest。
-    match scrape_via_node_script(mode, api_config).await {
-        Ok(snapshot) => Ok(snapshot),
-        Err(e) => {
-            tracing::warn!(
-                "Node.js Qiandao scrape failed: {}; falling back to Rust reqwest",
-                e
-            );
-            scrape_via_rust(mode, api_config).await
+    // 千岛 API 偶发超时/连接重置/临时 5xx。
+    // 失败立即重试：第 1 次失败 → 等 5s 重试 → 第 2 次失败 → 等 15s 重试 → 第 3 次失败 → 放弃
+    // 这样能扛过短暂的 API 抖动，避免 hourly snapshot 整点漏抓。
+    const MAX_ATTEMPTS: usize = 3;
+    const BACKOFF_SECS: [u64; 2] = [5, 15];
+
+    let mut last_err: Option<AppError> = None;
+    for attempt in 1..=MAX_ATTEMPTS {
+        // 千岛 API 对 Rust reqwest 的 HTTP/2 连接不稳定（经常 hang 住或返回 405），
+        // 优先使用 Node.js 原生 http2 模块（nghttp2）作为第一选择，
+        // 只有当 Node.js fallback 不可用时才尝试 Rust reqwest。
+        let result = match scrape_via_node_script(mode, api_config).await {
+            Ok(snapshot) => Ok(snapshot),
+            Err(node_err) => {
+                tracing::warn!(
+                    "Node.js Qiandao scrape failed (attempt {}/{}): {}; falling back to Rust reqwest",
+                    attempt, MAX_ATTEMPTS, node_err
+                );
+                scrape_via_rust(mode, api_config).await
+            }
+        };
+
+        match result {
+            Ok(snapshot) => {
+                if attempt > 1 {
+                    tracing::info!(
+                        "Qiandao scrape succeeded on attempt {}/{}",
+                        attempt, MAX_ATTEMPTS
+                    );
+                }
+                return Ok(snapshot);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Qiandao scrape failed (attempt {}/{}): {}",
+                    attempt, MAX_ATTEMPTS, e
+                );
+                last_err = Some(e);
+                if attempt < MAX_ATTEMPTS {
+                    let backoff = BACKOFF_SECS.get(attempt - 1).copied().unwrap_or(15);
+                    tracing::info!("Retrying in {}s...", backoff);
+                    tokio::time::sleep(Duration::from_secs(backoff)).await;
+                }
+            }
         }
     }
+
+    Err(last_err.unwrap_or_else(|| {
+        AppError::Scrape("Qiandao scrape failed after retries with no captured error".to_string())
+    }))
 }
 
 async fn scrape_via_rust(
