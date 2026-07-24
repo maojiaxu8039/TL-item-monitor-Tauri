@@ -3145,7 +3145,7 @@ async fn run_collector(state: Arc<ServerState>, mut abort_rx: broadcast::Receive
 }
 
 const MAX_RETRIES: u32 = 3;
-const RETRY_DELAY_MS: u64 = 1000;
+const RETRY_DELAY_MS: u64 = 5000;  // 5s 间隔（与桌面端 scrape 一致）
 
 async fn scrape_fire_with_retry(
     state: &Arc<ServerState>,

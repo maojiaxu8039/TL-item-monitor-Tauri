@@ -109,7 +109,7 @@ pub struct Item {
 }
 
 const SCRAPE_MAX_RETRIES: u32 = 3;
-const SCRAPE_RETRY_DELAY_MS: u64 = 1000;
+const SCRAPE_RETRY_DELAY_MS: u64 = 5000;  // 5s 间隔（与桌面端 scrape 一致）
 const ETOR_BASE_URL: &str = "https://etor.710421059.xyz";
 const ETOR_INVALID_PRICE_MARKER: f64 = 710421059.0;
 const ETOR_CHART_CONCURRENCY: usize = 48;
