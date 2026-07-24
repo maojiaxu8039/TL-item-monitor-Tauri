@@ -511,6 +511,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("启动时测试采集（不写入数据库）...");
     run_test_collection(&state).await;
 
+    // 并行启动：火价缺口自动补全任务（每小时跑一次，扫描所有 season × mode 表）
+    let gap_state = state.clone();
+    let gap_abort_rx = abort_tx.subscribe();
+    tokio::spawn(async move {
+        run_fire_gap_filler_task(gap_state, gap_abort_rx).await;
+    });
+
     run_collector(state.clone(), abort_rx).await;
 
     graceful_shutdown(state).await;
@@ -3146,6 +3153,211 @@ async fn run_collector(state: Arc<ServerState>, mut abort_rx: broadcast::Receive
 
 const MAX_RETRIES: u32 = 3;
 const RETRY_DELAY_MS: u64 = 5000;  // 5s 间隔（与桌面端 scrape 一致）
+
+/// 火价缺口自动补全任务
+///
+/// 每小时跑一次：扫描所有 `fire_price_snapshots_<season>_<mode>` 表，
+/// 检测整点小时缺失，若缺失则用前后两个真实数据点线性插值补全。
+///
+/// 目的：scrape 任务在整点窗口偶发失败时（API 抖动、网络断开），
+/// 自动补全缺口，避免图表断点。
+async fn run_fire_gap_filler_task(
+    state: Arc<ServerState>,
+    mut abort_rx: broadcast::Receiver<()>,
+) {
+    info!("火价缺口自动补全任务启动中...");
+
+    // 启动延迟：等首次 scrape 写入数据后再开始扫描
+    tokio::select! {
+        _ = tokio::time::sleep(std::time::Duration::from_secs(120)) => {}
+        result = abort_rx.recv() => {
+            match result {
+                Ok(_) | Err(broadcast::error::RecvError::Closed) => {
+                    info!("火价缺口补全任务在启动延迟期间收到关闭信号");
+                    return;
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {}
+            }
+        }
+    }
+
+    let mut ticker = tokio::time::interval(std::time::Duration::from_secs(3600));
+    ticker.tick().await; // 跳过首次立即触发
+
+    loop {
+        tokio::select! {
+            result = abort_rx.recv() => {
+                match result {
+                    Ok(_) => {
+                        info!("火价缺口补全任务收到关闭信号");
+                        break;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        break;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                }
+            }
+            _ = ticker.tick() => {
+                if let Err(e) = scan_and_fill_gaps(&state).await {
+                    warn!("火价缺口扫描失败: {}", e);
+                }
+            }
+        }
+    }
+}
+
+/// 扫描所有 season × mode 组合
+async fn scan_and_fill_gaps(state: &Arc<ServerState>) -> Result<(), String> {
+    let seasons = db::get_all_seasons_list(&state.db).await;
+    debug!("火价缺口扫描 {} 个赛季", seasons.len());
+
+    let mut total_filled = 0usize;
+    for season in &seasons {
+        for market_mode in &["season_normal", "season_expert"] {
+            match fill_gaps_for(state, season, market_mode).await {
+                Ok(n) => {
+                    if n > 0 {
+                        info!("补全 {}/{}: {} 个缺口", season, market_mode, n);
+                    }
+                    total_filled += n;
+                }
+                Err(e) => {
+                    warn!("补全 {}/{} 失败: {}", season, market_mode, e);
+                }
+            }
+        }
+    }
+
+    if total_filled > 0 {
+        info!("火价缺口补全: 共 {} 个点已自动补全", total_filled);
+    }
+    Ok(())
+}
+
+/// 对单个 season + mode 表扫描缺失点并插值补全
+async fn fill_gaps_for(
+    state: &Arc<ServerState>,
+    season_id: &str,
+    market_mode: &str,
+) -> Result<usize, String> {
+    // 表名直接拼 season + mode（保持和 fire_task 一致）
+    let mode_suffix: &str = if market_mode.contains("expert") {
+        "expert"
+    } else {
+        "normal"
+    };
+    let table = format!("fire_price_snapshots_{}_{}", season_id, mode_suffix);
+
+    let now_ts = Utc::now().timestamp();
+    let window_start = now_ts - 24 * 3600; // 只补最近 24h
+
+    // 1. 取最近 24h 所有真实数据点（排除 source = '插值'）
+    let rows: Vec<(i64, f64, f64)> = sqlx::query_as(&format!(
+        "SELECT scraped_at, rmb_per_10k_fire, fire_per_rmb FROM {}
+         WHERE scraped_at >= ? AND source != '插值'
+         ORDER BY scraped_at",
+        table
+    ))
+    .bind(window_start)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| format!("查询快照失败: {}", e))?;
+
+    if rows.len() < 2 {
+        return Ok(0);
+    }
+
+    // 2. 找缺失的整点
+    let existing: std::collections::HashSet<i64> = rows.iter().map(|(t, _, _)| *t).collect();
+    let first_ts = rows.first().unwrap().0;
+    let last_ts = rows.last().unwrap().0;
+
+    let mut missing: Vec<i64> = Vec::new();
+    let mut ts = first_ts + 3600;
+    while ts < last_ts {
+        if !existing.contains(&ts) {
+            missing.push(ts);
+        }
+        ts += 3600;
+    }
+
+    // 一次最多补 6 个点（防止大批量异常数据被覆盖）
+    if missing.len() > 6 {
+        warn!(
+            "{} 表缺失过多 ({}), 跳过本轮（避免覆盖异常数据）",
+            table,
+            missing.len()
+        );
+        return Ok(0);
+    }
+
+    if missing.is_empty() {
+        return Ok(0);
+    }
+
+    // 3. 找 season_start 算 season_day
+    let season_start: Option<i64> = sqlx::query_scalar("SELECT started_at FROM seasons WHERE id = ?")
+        .bind(season_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| format!("查询 season_start: {}", e))?;
+    let season_start = match season_start {
+        Some(s) => s,
+        None => return Ok(0),
+    };
+
+    // 4. 对每个缺失点找前后两个真实点，线性插值
+    let mut filled = 0usize;
+    for ts in missing {
+        let prev = rows.iter().rev().find(|(t, _, _)| *t < ts);
+        let next = rows.iter().find(|(t, _, _)| *t > ts);
+
+        if let (Some((prev_ts, prev_rmb, _)), Some((next_ts, next_rmb, _))) = (prev, next) {
+            let total_span = (next_ts - prev_ts) as f64;
+            if total_span <= 0.0 {
+                continue;
+            }
+            let ratio = (ts - prev_ts) as f64 / total_span;
+            let avg_rmb = prev_rmb + (next_rmb - prev_rmb) * ratio;
+            // fire_per_rmb 强制 = 10000 / rmb 满足数学关系
+            let avg_fpr = 10000.0 / avg_rmb;
+
+            // 计算 season_day（按北京自然日切）
+            let bj_offset = 8 * 3600;
+            let secs_per_day = 86400;
+            let scrape_day = ((ts + bj_offset) / secs_per_day) * secs_per_day - bj_offset;
+            let start_day = (season_start + bj_offset) / secs_per_day * secs_per_day - bj_offset;
+            let season_day = std::cmp::max(1, ((scrape_day - start_day) / secs_per_day) as i32 + 1);
+
+            let result = sqlx::query(&format!(
+                "INSERT OR IGNORE INTO {}
+                 (rmb_per_10k_fire, fire_per_rmb, increase_ratio, trading_volume,
+                  source, source_time, scraped_at, season_day)
+                 VALUES (?, ?, 0, '', '插值', '', ?, ?)",
+                table
+            ))
+            .bind(avg_rmb)
+            .bind(avg_fpr)
+            .bind(ts)
+            .bind(season_day)
+            .execute(&state.db)
+            .await;
+
+            match result {
+                Ok(_) => {
+                    debug!("补全缺口 {}: ts={}, rmb={:.4}", table, ts, avg_rmb);
+                    filled += 1;
+                }
+                Err(e) => {
+                    warn!("插入补全数据失败 ts={}: {}", ts, e);
+                }
+            }
+        }
+    }
+
+    Ok(filled)
+}
 
 async fn scrape_fire_with_retry(
     state: &Arc<ServerState>,

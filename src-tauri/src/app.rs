@@ -10,6 +10,7 @@ use crate::db::repo_item_realtime_prices;
 use crate::db::repo_items;
 use crate::scheduler::alert_task::run_price_alert_task;
 use crate::scheduler::fire_task::run_fire_scrape_task;
+use crate::scheduler::fire_gap_filler::run_fire_gap_filler_task;
 use crate::scheduler::history_task::run_hourly_snapshot_task;
 use crate::scheduler::items_task::run_items_reload_task;
 use crate::scheduler::SchedulerHandle;
@@ -2686,6 +2687,7 @@ pub fn start_background_tasks(
     let (items_abort_tx, items_abort_rx) = broadcast::channel::<()>(1);
     let (snapshot_abort_tx, snapshot_abort_rx) = broadcast::channel::<()>(1);
     let (alert_abort_tx, alert_abort_rx) = broadcast::channel::<()>(1);
+    let (gap_filler_abort_tx, gap_filler_abort_rx) = broadcast::channel::<()>(1);
 
     {
         let app = app.clone();
@@ -2721,10 +2723,19 @@ pub fn start_background_tasks(
         });
     }
 
+    {
+        // 火价缺口自动补全任务：每小时扫一次，发现整点缺失就用前后真实数据插值
+        let state = state.clone();
+        rt.spawn(async move {
+            run_fire_gap_filler_task(state, gap_filler_abort_rx).await;
+        });
+    }
+
     SchedulerHandle {
         fire_scrape_abort: fire_abort_tx,
         items_reload_abort: items_abort_tx,
         hourly_snapshot_abort: snapshot_abort_tx,
         alert_task_abort: alert_abort_tx,
+        fire_gap_filler_abort: gap_filler_abort_tx,
     }
 }

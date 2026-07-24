@@ -1,4 +1,5 @@
 pub mod alert_task;
+pub mod fire_gap_filler;
 pub mod fire_task;
 pub mod history_task;
 pub mod items_task;
@@ -12,6 +13,7 @@ pub struct SchedulerHandle {
     pub items_reload_abort: broadcast::Sender<()>,
     pub hourly_snapshot_abort: broadcast::Sender<()>,
     pub alert_task_abort: broadcast::Sender<()>,
+    pub fire_gap_filler_abort: broadcast::Sender<()>,
 }
 
 impl SchedulerHandle {
@@ -21,5 +23,6 @@ impl SchedulerHandle {
         let _ = self.items_reload_abort.send(());
         let _ = self.hourly_snapshot_abort.send(());
         let _ = self.alert_task_abort.send(());
+        let _ = self.fire_gap_filler_abort.send(());
     }
 }
