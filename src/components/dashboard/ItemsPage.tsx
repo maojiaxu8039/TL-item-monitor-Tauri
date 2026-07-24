@@ -224,18 +224,21 @@ export default function ItemsPage() {
     staleTime: 60 * 1000,
   });
 
-  useEffect(() => {
+  const availableSeasons = useMemo(() => {
     const list = seasonsQuery.data ?? [];
-    const candidates = list
+    return list
       .filter((s) => s.season_id !== marketContext.seasonId)
       .sort((a, b) => b.season_id.localeCompare(a.season_id));
-    if (candidates.length === 0) return;
-    const ids = new Set(candidates.map((s) => s.season_id));
-    const previousSeason = candidates[0].season_id;
+  }, [seasonsQuery.data, marketContext.seasonId]);
+
+  useEffect(() => {
+    if (availableSeasons.length === 0) return;
+    const ids = new Set(availableSeasons.map((s) => s.season_id));
+    const previousSeason = availableSeasons[0].season_id;
     if (!historySeason || !ids.has(historySeason)) {
       setHistorySeason(previousSeason);
     }
-  }, [seasonsQuery.data, marketContext.seasonId, historySeason]);
+  }, [availableSeasons, historySeason]);
 
   const { data: priceCompareData, isLoading: isCompareLoading, error: compareError } = useQuery({
     queryKey: [...queryKeys.itemsCompare, marketContext.seasonId, historySeason, marketContext.marketMode, dayFilter],
@@ -546,7 +549,14 @@ export default function ItemsPage() {
                 onChange={(e) => setHistorySeason(e.target.value)}
                 className="w-full pl-9 pr-8 py-2 border border-[var(--color-border)] rounded-lg text-sm bg-[var(--color-panel)] outline-none cursor-pointer appearance-none hover:border-[var(--color-border)] transition-colors focus:ring-2 focus:ring-[var(--color-brand)]/30"
               >
-                <option value="ss11">对比赛季 SS11</option>
+                {availableSeasons.length === 0 && (
+                  <option value="">加载中...</option>
+                )}
+                {availableSeasons.map((s) => (
+                  <option key={s.season_id} value={s.season_id}>
+                    对比赛季 {s.season_id.toUpperCase()}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="relative min-w-[130px] flex-1 sm:flex-none">
