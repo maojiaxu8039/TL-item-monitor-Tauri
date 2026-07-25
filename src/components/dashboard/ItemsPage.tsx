@@ -25,7 +25,6 @@ import {
   BarChart3,
   Filter,
   Package,
-  CalendarDays,
   GitCompare,
   ArrowUpDown,
   ArrowDown,
@@ -120,54 +119,6 @@ const SectionPicker = memo(function SectionPicker({
   );
 });
 
-const DayRangeInput = memo(function DayRangeInput({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (val: string) => void;
-}) {
-  const [inputValue, setInputValue] = useState(value === "all" ? "" : value);
-
-  const handleBlur = useCallback(() => {
-    const num = parseInt(inputValue);
-    if (!isNaN(num) && num >= 1 && num <= 90) {
-      onChange(String(num));
-    } else {
-      setInputValue("");
-      onChange("all");
-    }
-  }, [inputValue, onChange]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleBlur();
-    }
-  }, [handleBlur]);
-
-  useEffect(() => {
-    setInputValue(value === "all" ? "" : value);
-  }, [value]);
-
-  return (
-    <div className="relative flex items-center">
-      <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
-      <input
-        type="number"
-        aria-label="赛季天数筛选"
-        min={1}
-        max={90}
-        placeholder="第几天"
-        value={inputValue}
-        onChange={(e) => setInputValue(e.target.value)}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        className="pl-9 pr-3 py-2 w-28 border border-[var(--color-border)] rounded-lg text-sm bg-[var(--color-panel)] outline-none focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30 placeholder:text-[var(--color-text-subtle)] transition-all"
-      />
-    </div>
-  );
-});
-
 export default function ItemsPage() {
   const [searchKeyword, setSearchKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
@@ -176,7 +127,6 @@ export default function ItemsPage() {
   const { toasts, addToast, dismissToast } = useToast();
   const [historySeason, setHistorySeason] = useState(DEFAULT_HISTORY_SEASON);
   const [trendItem, setTrendItem] = useState<{ itemId: string; name: string } | null>(null);
-  const [dayFilter, setDayFilter] = useState("all");
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -190,14 +140,14 @@ export default function ItemsPage() {
   const queryClient = useQueryClient();
 
   const { data: searchResult, isLoading, refetch } = useQuery({
-    queryKey: [...queryKeys.itemsSearch, marketContext.seasonId, marketContext.marketMode, debouncedKeyword, typeFilter, page, dayFilter],
+    queryKey: [...queryKeys.itemsSearch, marketContext.seasonId, marketContext.marketMode, debouncedKeyword, typeFilter, page],
     queryFn: () => {
       const keyword = debouncedKeyword;
       return cmd.searchItems(
-        keyword, 
-        page, 
-        PAGE_SIZE, 
-        dayFilter === "all" ? undefined : parseInt(dayFilter),
+        keyword,
+        page,
+        PAGE_SIZE,
+        undefined,
         typeFilter === "all" ? undefined : typeFilter
       );
     },
@@ -241,13 +191,13 @@ export default function ItemsPage() {
   }, [availableSeasons, historySeason]);
 
   const { data: priceCompareData, isLoading: isCompareLoading, error: compareError } = useQuery({
-    queryKey: [...queryKeys.itemsCompare, marketContext.seasonId, historySeason, marketContext.marketMode, dayFilter],
+    queryKey: [...queryKeys.itemsCompare, marketContext.seasonId, historySeason, marketContext.marketMode],
     staleTime: 60 * 1000,
     queryFn: async () => {
       try {
         const result = await cmd.getItemsPriceCompare(
           historySeason,
-          dayFilter === "all" ? undefined : parseInt(dayFilter)
+          undefined
         );
         return result;
       } catch (err) {
@@ -476,7 +426,7 @@ export default function ItemsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedKeyword, typeFilter, dayFilter]);
+  }, [debouncedKeyword, typeFilter]);
 
   return (
     <PageShell size="xl" className="space-y-5">
@@ -540,7 +490,6 @@ export default function ItemsPage() {
       <Surface padding="sm">
         <Toolbar>
           <div className="flex flex-1 flex-wrap items-center gap-3">
-            <DayRangeInput value={dayFilter} onChange={setDayFilter} />
             <div className="relative min-w-[150px] flex-1 sm:flex-none">
               <GitCompare className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-subtle)]" />
               <select
