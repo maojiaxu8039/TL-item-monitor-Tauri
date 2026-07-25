@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { X, CalendarRange } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { cmd, SeasonInfo, ItemHistoryRecord } from "@/lib/commands";
 import { useSectionRefresh } from "@/contexts/SectionRefreshContext";
@@ -11,16 +11,16 @@ interface Props {
   itemId: string;
   itemName: string;
   historySeason: string;
-  currentDay: number;
   onClose: () => void;
 }
 
-type ViewMode = "day" | "season";
-
-export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDay, onClose }: Props) {
+export function ItemPriceTrendModal({ itemId, itemName, historySeason, onClose }: Props) {
   const { marketContext } = useSectionRefresh();
   const currentSeason = marketContext.seasonId;
-  const [viewMode, setViewMode] = useState<ViewMode>("day");
+
+  // 区间天数（手动输入）：起始天 + 结束天
+  const [startDay, setStartDay] = useState<number>(1);
+  const [endDay, setEndDay] = useState<number>(10);
 
   const seasonsQuery = useQuery<SeasonInfo[]>({
     queryKey: queryKeys.itemTrend.seasons,
@@ -29,11 +29,12 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
   });
 
   const getSeasonStartTime = (seasonId: string, seasons: SeasonInfo[]): number => {
-    const season = seasons.find(s => s.season_id === seasonId);
+    const season = seasons.find((s) => s.season_id === seasonId);
     if (season && season.started_at && season.started_at > 0) {
       return season.started_at;
     }
     const fallback: Record<string, number> = {
+      ss13: 1784253600,
       ss12: 1776384000,
       ss11: 1768521600,
       ss10: 1760140800,
@@ -41,112 +42,107 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
     return fallback[seasonId] || 1776384000;
   };
 
-  const currentSeasonStart = seasonsQuery.data 
+  // 启动时拉一次 SS12 / SS13 的 season_day 范围，作为默认值
+  useEffect(() => {
+    if (seasonsQuery.data) {
+      const cs = seasonsQuery.data.find((s) => s.season_id === currentSeason);
+      const hs = seasonsQuery.data.find((s) => s.season_id === historySeason);
+      // 默认当前赛季最近 10 天；历史赛季前 10 天
+      if (cs && cs.current_season_day) {
+        const current = cs.current_season_day;
+        setStartDay(Math.max(1, current - 9));
+        setEndDay(current);
+      }
+      if (hs && hs.current_season_day) {
+        // 让历史赛季范围与当前赛季匹配，便于同区间对比
+        // （historySeason 已经结束了，current_season_day 是最终值）
+      }
+    }
+  }, [seasonsQuery.data, currentSeason, historySeason]);
+
+  const currentSeasonStart = seasonsQuery.data
     ? getSeasonStartTime(currentSeason, seasonsQuery.data)
-    : 1776384000;
-  
+    : 1784253600;
+
   const historySeasonStart = seasonsQuery.data
     ? getSeasonStartTime(historySeason, seasonsQuery.data)
-    : 1768521600;
+    : 1776384000;
 
+  const currentSeasonMaxDay = useMemo(() => {
+    const cs = seasonsQuery.data?.find((s) => s.season_id === currentSeason);
+    return cs?.current_season_day ?? 90;
+  }, [seasonsQuery.data, currentSeason]);
 
+  const historySeasonMaxDay = useMemo(() => {
+    const hs = seasonsQuery.data?.find((s) => s.season_id === historySeason);
+    return hs?.current_season_day ?? 90;
+  }, [seasonsQuery.data, historySeason]);
 
-  const currentDayQuery = useQuery<ItemHistoryRecord[]>({
-    queryKey: queryKeys.itemTrend.currentDay(itemId, currentSeason, currentDay),
-    queryFn: () => cmd.getItemHistoryByDay(itemId, currentSeason, currentDay),
+  // 用 [startDay, endDay] 区间查询
+  const startDayClamp = Math.max(1, Math.min(startDay, endDay));
+  const endDayClamp = Math.max(startDayClamp, endDay);
+
+  // 当前赛季：按区间批量查询
+  const currentRangeQuery = useQuery<ItemHistoryRecord[]>({
+    queryKey: [...queryKeys.itemTrend.currentSeason(itemId, currentSeason), startDayClamp, endDayClamp],
+    queryFn: () => cmd.getItemHistoryByRange(itemId, currentSeason, startDayClamp, endDayClamp),
     enabled: !!itemId && !!currentSeason,
   });
 
-  const historyDayQuery = useQuery<ItemHistoryRecord[]>({
-    queryKey: queryKeys.itemTrend.historyDay(itemId, historySeason, currentDay),
-    queryFn: () => cmd.getItemHistoryByDay(itemId, historySeason, currentDay),
+  // 历史赛季：按区间批量查询
+  const historyRangeQuery = useQuery<ItemHistoryRecord[]>({
+    queryKey: [...queryKeys.itemTrend.historySeason(itemId, historySeason), startDayClamp, endDayClamp],
+    queryFn: () => cmd.getItemHistoryByRange(itemId, historySeason, startDayClamp, endDayClamp),
     enabled: !!itemId && !!historySeason,
   });
 
-  const currentSeasonQuery = useQuery<ItemHistoryRecord[]>({
-    queryKey: queryKeys.itemTrend.currentSeason(itemId, currentSeason),
-    queryFn: () => cmd.getItemHistoryBySeason(itemId, currentSeason, 1000),
-    enabled: !!itemId && !!currentSeason && viewMode === "season",
-  });
+  const currentData = currentRangeQuery.data || [];
+  const historyData = historyRangeQuery.data || [];
 
-  const historySeasonQuery = useQuery<ItemHistoryRecord[]>({
-    queryKey: queryKeys.itemTrend.historySeason(itemId, historySeason),
-    queryFn: () => cmd.getItemHistoryBySeason(itemId, historySeason, 1000),
-    enabled: !!itemId && !!historySeason && viewMode === "season",
-  });
-
-  const currentData = useMemo(() =>
-    viewMode === "day" ? (currentDayQuery.data || []) : (currentSeasonQuery.data || []),
-    [viewMode, currentDayQuery.data, currentSeasonQuery.data]
-  );
-
-  const historyData = useMemo(() =>
-    viewMode === "day" ? (historyDayQuery.data || []) : (historySeasonQuery.data || []),
-    [viewMode, historyDayQuery.data, historySeasonQuery.data]
-  );
-
-  const isLoading = viewMode === "day"
-    ? (currentDayQuery.isLoading || historyDayQuery.isLoading)
-    : (currentSeasonQuery.isLoading || historySeasonQuery.isLoading);
-
-  const isError = viewMode === "day"
-    ? (currentDayQuery.isError || historyDayQuery.isError)
-    : (currentSeasonQuery.isError || historySeasonQuery.isError);
-
-  const errorMsg = viewMode === "day"
-    ? (currentDayQuery.error || historyDayQuery.error)
-    : (currentSeasonQuery.error || historySeasonQuery.error);
+  const isLoading = currentRangeQuery.isLoading || historyRangeQuery.isLoading;
+  const isError = currentRangeQuery.isError || historyRangeQuery.isError;
+  const errorMsg = currentRangeQuery.error || historyRangeQuery.error;
 
   const chartData = useMemo(() => {
-    type HourData = { hour: number; current: number | null; history: number | null };
     type DayData = { day: number; current: number | null; history: number | null };
 
-    if (viewMode === "day") {
-      const dataMap = new Map<number, HourData>();
+    const dataMap = new Map<number, DayData>();
 
-      currentData.forEach((record) => {
-        const hour = new Date(record.scraped_at * 1000).getHours();
-        if (!dataMap.has(hour)) {
-          dataMap.set(hour, { hour, current: null, history: null });
-        }
-        dataMap.get(hour)!.current = record.fire_price;
-      });
-
-      historyData.forEach((record) => {
-        const hour = new Date(record.scraped_at * 1000).getHours();
-        if (!dataMap.has(hour)) {
-          dataMap.set(hour, { hour, current: null, history: null });
-        }
-        dataMap.get(hour)!.history = record.fire_price;
-      });
-
-      return Array.from(dataMap.values()).sort((a, b) => a.hour - b.hour) as (HourData | DayData)[];
-    } else {
-      const dataMap = new Map<number, DayData>();
-
-      currentData.forEach((record) => {
-        const day = record.season_day != null && record.season_day > 0
-          ? record.season_day
-          : Math.floor((record.scraped_at - currentSeasonStart) / 86400) + 1;
-        if (!dataMap.has(day)) {
-          dataMap.set(day, { day, current: null, history: null });
-        }
-        dataMap.get(day)!.current = record.fire_price;
-      });
-
-      historyData.forEach((record) => {
-        const day = record.season_day != null && record.season_day > 0
-          ? record.season_day
-          : Math.floor((record.scraped_at - historySeasonStart) / 86400) + 1;
-        if (!dataMap.has(day)) {
-          dataMap.set(day, { day, current: null, history: null });
-        }
-        dataMap.get(day)!.history = record.fire_price;
-      });
-
-      return Array.from(dataMap.values()).sort((a, b) => a.day - b.day) as (HourData | DayData)[];
+    // 初始化区间内所有天
+    for (let d = startDayClamp; d <= endDayClamp; d++) {
+      dataMap.set(d, { day: d, current: null, history: null });
     }
-  }, [viewMode, currentData, historyData, currentSeasonStart, historySeasonStart]);
+
+    currentData.forEach((record) => {
+      let day: number;
+      if (record.season_day != null && record.season_day > 0) {
+        day = record.season_day;
+      } else {
+        day = Math.floor((record.scraped_at - currentSeasonStart) / 86400) + 1;
+      }
+      if (day < startDayClamp || day > endDayClamp) return;
+      if (!dataMap.has(day)) {
+        dataMap.set(day, { day, current: null, history: null });
+      }
+      dataMap.get(day)!.current = record.fire_price;
+    });
+
+    historyData.forEach((record) => {
+      let day: number;
+      if (record.season_day != null && record.season_day > 0) {
+        day = record.season_day;
+      } else {
+        day = Math.floor((record.scraped_at - historySeasonStart) / 86400) + 1;
+      }
+      if (day < startDayClamp || day > endDayClamp) return;
+      if (!dataMap.has(day)) {
+        dataMap.set(day, { day, current: null, history: null });
+      }
+      dataMap.get(day)!.history = record.fire_price;
+    });
+
+    return Array.from(dataMap.values()).sort((a, b) => a.day - b.day);
+  }, [currentData, historyData, currentSeasonStart, historySeasonStart, startDayClamp, endDayClamp]);
 
   const stats = useMemo(() => {
     if (currentData.length === 0) return null;
@@ -156,17 +152,17 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
     const currentMax = Math.max(...currentPrices);
     const currentMin = Math.min(...currentPrices);
 
-    let historyAvg = null;
-    let historyMax = null;
-    let historyMin = null;
-    let premiumRate = null;
+    let historyAvg: number | null = null;
+    let historyMax: number | null = null;
+    let historyMin: number | null = null;
+    let premiumRate: number | null = null;
 
     if (historyData.length > 0) {
       const historyPrices = historyData.map((r) => r.fire_price);
       historyAvg = historyPrices.reduce((a, b) => a + b, 0) / historyPrices.length;
       historyMax = Math.max(...historyPrices);
       historyMin = Math.min(...historyPrices);
-      premiumRate = historyAvg !== 0 ? ((currentAvg - historyAvg) / historyAvg * 100) : null;
+      premiumRate = historyAvg !== 0 ? ((currentAvg - historyAvg) / historyAvg) * 100 : null;
     }
 
     return {
@@ -188,9 +184,7 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
           <div>
             <h2 className="text-lg font-semibold text-[var(--color-text)]">{itemName}</h2>
             <p className="mt-0.5 text-sm text-[var(--color-text-subtle)]">
-              {viewMode === "day" 
-                ? `第 ${currentDay} 天 24h 物价走势` 
-                : `全赛季物价走势`} · {currentSeason.toUpperCase()} vs {historySeason.toUpperCase()}
+              区间第 {startDayClamp}\~{endDayClamp} 天物价走势 · {currentSeason.toUpperCase()} vs {historySeason.toUpperCase()}
             </p>
           </div>
           <button
@@ -202,29 +196,34 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
           </button>
         </div>
 
-        {/* View Mode Toggle */}
-        <div className="border-b border-[var(--color-border-soft)] bg-[rgba(255,184,0,0.035)] px-6 py-3">
-          <div className="inline-flex items-center gap-1 rounded-lg border border-[rgba(255,184,0,0.16)] bg-[rgba(8,10,12,0.82)] p-1">
-            <button
-              onClick={() => setViewMode("day")}
-              className={`rounded-md px-4 py-2 text-sm transition-colors ${
-                viewMode === "day"
-                  ? "bg-[rgba(255,184,0,0.14)] text-[var(--color-brand-gold)]"
-                  : "text-[var(--color-text-muted)] hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-text)]"
-              }`}
-            >
-              当天24h
-            </button>
-            <button
-              onClick={() => setViewMode("season")}
-              className={`rounded-md px-4 py-2 text-sm transition-colors ${
-                viewMode === "season"
-                  ? "bg-[rgba(255,184,0,0.14)] text-[var(--color-brand-gold)]"
-                  : "text-[var(--color-text-muted)] hover:bg-[rgba(255,184,0,0.08)] hover:text-[var(--color-text)]"
-              }`}
-            >
-              全赛季
-            </button>
+        {/* Day Range Picker */}
+        <div className="flex items-center gap-3 border-b border-[var(--color-border-soft)] bg-[rgba(255,184,0,0.035)] px-6 py-3">
+          <CalendarRange className="h-4 w-4 text-[var(--color-text-subtle)]" />
+          <span className="text-sm text-[var(--color-text-subtle)]">查询区间</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[var(--color-text-muted)]">从</span>
+            <input
+              type="number"
+              min={1}
+              max={currentSeasonMaxDay}
+              value={startDay}
+              onChange={(e) => setStartDay(Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-20 rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
+              aria-label="起始天"
+            />
+            <span className="text-xs text-[var(--color-text-muted)]">到</span>
+            <input
+              type="number"
+              min={1}
+              max={currentSeasonMaxDay}
+              value={endDay}
+              onChange={(e) => setEndDay(Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-20 rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
+              aria-label="结束天"
+            />
+            <span className="text-xs text-[var(--color-text-muted)]">
+              天（共 {Math.max(0, endDayClamp - startDayClamp + 1)} 天，{currentSeason.toUpperCase()} 上限 {currentSeasonMaxDay}）
+            </span>
           </div>
         </div>
 
@@ -285,18 +284,18 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 50 }}>
                 <XAxis
-                  dataKey={viewMode === "day" ? "hour" : "day"}
+                  dataKey="day"
                   tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
                   tickLine={false}
                   axisLine={{ stroke: "var(--color-border)" }}
-                  label={{ 
-                    value: viewMode === "day" ? "小时" : "开服天数", 
-                    position: "insideBottom", 
-                    offset: -30, 
-                    fontSize: 12, 
-                    fill: "var(--color-text-muted)" 
+                  label={{
+                    value: "开服天数",
+                    position: "insideBottom",
+                    offset: -30,
+                    fontSize: 12,
+                    fill: "var(--color-text-muted)",
                   }}
-                  tickFormatter={(v) => viewMode === "day" ? `${v}h` : `第${v}天`}
+                  tickFormatter={(v: number) => `第${v}天`}
                 />
                 <YAxis
                   tickFormatter={(v: number) => `${v.toFixed(0)}`}
@@ -317,11 +316,11 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
                     if (value === null) return ["—", String(name)];
                     return [`${Number(value).toFixed(2)} 火`, String(name)];
                   }}
-                  labelFormatter={(label: unknown) => viewMode === "day" ? `${String(label)}:00` : `第 ${String(label)} 天`}
+                  labelFormatter={(label: unknown) => `第 ${String(label)} 天`}
                 />
-                <Legend 
-                  verticalAlign="top" 
-                  align="center" 
+                <Legend
+                  verticalAlign="top"
+                  align="center"
                   layout="horizontal"
                   wrapperStyle={{ paddingBottom: 10 }}
                 />
@@ -331,9 +330,9 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
                   name={`${currentSeason.toUpperCase()} 当前赛季`}
                   stroke="var(--color-brand-gold)"
                   strokeWidth={2}
-                  dot={false}
+                  dot={{ r: 3, fill: "var(--color-brand-gold)" }}
                   connectNulls
-                  activeDot={{ r: 4, fill: "var(--color-brand-gold)" }}
+                  activeDot={{ r: 5, fill: "var(--color-brand-gold)" }}
                 />
                 <Line
                   type="monotone"
@@ -342,9 +341,9 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
                   stroke="var(--color-text-muted)"
                   strokeWidth={2}
                   strokeDasharray="5 5"
-                  dot={false}
+                  dot={{ r: 3, fill: "var(--color-text-muted)" }}
                   connectNulls
-                  activeDot={{ r: 4, fill: "var(--color-text-muted)" }}
+                  activeDot={{ r: 5, fill: "var(--color-text-muted)" }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -353,12 +352,11 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, currentDa
 
         {/* Footer */}
         <div className="border-t border-[var(--color-border-soft)] bg-[rgba(255,184,0,0.035)] px-6 py-3 text-xs text-[var(--color-text-subtle)]">
-          {viewMode === "day" 
-            ? `对比两个赛季第 ${currentDay} 天的 24 小时物价走势` 
-            : `对比两个赛季全周期的每日均价走势`}
+          对比 {currentSeason.toUpperCase()} 与 {historySeason.toUpperCase()} 在第 {startDayClamp}\~{endDayClamp} 天的日均火价走势
+          （SS13 当前已开 {currentSeasonMaxDay} 天，SS12 全部 {historySeasonMaxDay} 天）
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }

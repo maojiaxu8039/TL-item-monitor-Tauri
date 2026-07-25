@@ -443,6 +443,9 @@ pub struct SeasonInfo {
     pub ended_at: Option<i64>,
     pub item_count: i64,
     pub fire_record_count: i64,
+    /// 当前赛季开服至今的天数（按北京自然日）。
+    /// 对于已结束的赛季，返回最大 season_day；当前赛季实时计算。
+    pub current_season_day: i32,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -563,6 +566,11 @@ pub async fn list_seasons(state: State<'_, Arc<AppState>>) -> Result<Vec<SeasonI
             fire_count += count.0;
         }
 
+        // 计算 current_season_day：
+        //   当前赛季：now - started_at（按北京自然日）
+        //   历史赛季：item_snapshots 表里 MAX(season_day)
+        let current_season_day = compute_season_day(&state.db, &id, started_at, is_current_season, &item_table_normal).await;
+
         seasons.push(SeasonInfo {
             season_id: id,
             name,
@@ -571,8 +579,46 @@ pub async fn list_seasons(state: State<'_, Arc<AppState>>) -> Result<Vec<SeasonI
             ended_at,
             item_count,
             fire_record_count: fire_count,
+            current_season_day,
         });
     }
 
     Ok(seasons)
+}
+
+/// 计算赛季天数（用于前端显示）
+async fn compute_season_day(
+    db: &sqlx::SqlitePool,
+    _season_id: &str,
+    started_at: Option<i64>,
+    is_current_season: bool,
+    item_table_normal: &str,
+) -> i32 {
+    use crate::core::constants::SECONDS_PER_DAY;
+
+    const BEIJING_OFFSET_SECS: i64 = 8 * 3600;
+
+    if is_current_season {
+        // 当前赛季：实时计算 now - started_at（按北京自然日）
+        if let Some(start) = started_at {
+            let now = chrono::Utc::now().timestamp();
+            let days = ((now + BEIJING_OFFSET_SECS) / SECONDS_PER_DAY)
+                - ((start + BEIJING_OFFSET_SECS) / SECONDS_PER_DAY);
+            return ((days + 1).max(1)) as i32;
+        }
+        return 1;
+    }
+
+    // 历史赛季：从快照表里取 MAX(season_day)
+    let sql = format!("SELECT COALESCE(MAX(season_day), 0) FROM {}", item_table_normal);
+    let max_day: (i64,) = sqlx::query_as(&sql)
+        .fetch_one(db)
+        .await
+        .unwrap_or((0,));
+    if max_day.0 > 0 {
+        return max_day.0 as i32;
+    }
+
+    // 如果快照表为空，返回 1（占位）
+    1
 }

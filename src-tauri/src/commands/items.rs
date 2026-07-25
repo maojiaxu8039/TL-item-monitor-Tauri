@@ -669,6 +669,28 @@ pub async fn get_item_history_by_day(
 
 #[tauri::command]
 #[allow(non_snake_case)]
+pub async fn get_item_history_by_day_range(
+    state: State<'_, Arc<AppState>>,
+    #[allow(non_snake_case)] itemId: String,
+    #[allow(non_snake_case)] seasonId: String,
+    #[allow(non_snake_case)] startDay: i32,
+    #[allow(non_snake_case)] endDay: i32,
+) -> Result<Vec<repo_history::ItemHistoryRecord>, String> {
+    let ctx = state.active_context.read().clone();
+    repo_history::get_item_history_by_day_range(
+        &state.db,
+        &seasonId,
+        ctx.market_mode.as_str(),
+        &itemId,
+        startDay,
+        endDay,
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
 pub async fn get_items_price_compare(
     state: State<'_, Arc<AppState>>,
     #[allow(non_snake_case)] historySeason: String,

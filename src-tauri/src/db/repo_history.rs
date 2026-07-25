@@ -367,6 +367,51 @@ pub async fn get_item_history_by_day(
     Ok(records)
 }
 
+/// 按 season_day 区间 [start_day, end_day] 查询物品历史
+/// 返回该区间内所有快照（按 scraped_at 升序）
+pub async fn get_item_history_by_day_range(
+    pool: &SqlitePool,
+    season_id: &str,
+    market_mode: &str,
+    item_id: &str,
+    start_day: i32,
+    end_day: i32,
+) -> Result<Vec<ItemHistoryRecord>, crate::core::errors::AppError> {
+    TableResolver::validate(season_id, market_mode)?;
+    let table = TableResolver::item_snapshots_table(season_id, market_mode);
+    let season_start = get_season_start_from_db(pool, season_id).await?;
+
+    // 区间自动归一化：保证 start <= end，days >= 1
+    let s = start_day.min(end_day).max(1);
+    let e = end_day.max(s);
+    let range_start = season_start + ((s - 1) as i64 * SECONDS_PER_DAY);
+    let range_end = season_start + (e as i64 * SECONDS_PER_DAY);
+
+    tracing::info!(
+        "get_item_history_by_day_range: table={}, item_id={}, days=[{s}, {e}], time_range=[{range_start}, {range_end}]",
+        table, item_id
+    );
+
+    let records = sqlx::query_as::<_, ItemHistoryRecord>(&format!(
+        "SELECT item_id, '{}' as season_id, '{}' as market_mode, fire_price, scraped_at, season_day \
+             FROM {} \
+             WHERE item_id = ? AND scraped_at >= ? AND scraped_at < ? \
+             ORDER BY scraped_at ASC",
+        season_id, market_mode, table
+    ))
+    .bind(item_id)
+    .bind(range_start)
+    .bind(range_end)
+    .fetch_all(pool)
+    .await?;
+
+    tracing::debug!(
+        "get_item_history_by_day_range: records count={}",
+        records.len()
+    );
+    Ok(records)
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ItemPriceCompare {
     pub item_id: String,

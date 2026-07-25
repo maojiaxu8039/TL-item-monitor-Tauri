@@ -106,6 +106,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             fast_sync_items,
             get_item_history_by_season,
             get_item_history_by_day,
+            get_item_history_by_day_range,
             get_items_price_compare,
             get_realtime_fire_changes,
             get_sections,

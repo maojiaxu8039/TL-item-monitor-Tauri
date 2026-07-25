@@ -676,6 +676,13 @@ export const cmd = {
     invoke<ItemHistoryRecord[]>("get_item_history_by_season", { itemId, seasonId, limit }),
   getItemHistoryByDay: (itemId: string, seasonId: string, seasonDay: number) =>
     invoke<ItemHistoryRecord[]>("get_item_history_by_day", { itemId, seasonId, seasonDay }),
+  getItemHistoryByRange: (itemId: string, seasonId: string, startDay: number, endDay: number) =>
+    invoke<ItemHistoryRecord[]>("get_item_history_by_day_range", {
+      itemId,
+      seasonId,
+      startDay,
+      endDay,
+    }),
   getItemsPriceCompare: (historySeason: string, dayFilter?: number) => {
     const params: Record<string, unknown> = { historySeason };
     if (dayFilter !== undefined) {
@@ -955,6 +962,8 @@ export interface SeasonInfo {
   ended_at: number | null;
   item_count: number;
   fire_record_count: number;
+  /** 当前赛季开服至今的天数（按北京自然日）。已结束的赛季返回最大 season_day。*/
+  current_season_day: number;
 }
 
 export interface SeasonApiConfigResponse {

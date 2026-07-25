@@ -682,7 +682,6 @@ export default function ItemsPage() {
           itemId={trendItem.itemId}
           itemName={trendItem.name}
           historySeason={historySeason}
-          currentDay={dayFilter === "all" ? 1 : parseInt(dayFilter)}
           onClose={() => setTrendItem(null)}
         />
       )}
