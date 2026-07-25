@@ -96,8 +96,8 @@ export function ItemPriceTrendModal({ itemId, itemName, historySeason, onClose }
     enabled: !!itemId && !!historySeason,
   });
 
-  const currentData = currentRangeQuery.data || [];
-  const historyData = historyRangeQuery.data || [];
+  const currentData = useMemo(() => currentRangeQuery.data || [], [currentRangeQuery.data]);
+  const historyData = useMemo(() => historyRangeQuery.data || [], [historyRangeQuery.data]);
 
   const isLoading = currentRangeQuery.isLoading || historyRangeQuery.isLoading;
   const isError = currentRangeQuery.isError || historyRangeQuery.isError;

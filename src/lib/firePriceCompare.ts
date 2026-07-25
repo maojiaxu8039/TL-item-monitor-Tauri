@@ -57,11 +57,10 @@ function latestHourlyPrices(rows: FirePricePoint[]) {
 export function buildHourlyFireComparison(
   currentRows: FirePricePoint[],
   historyRows: FirePricePoint[],
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _currentSeasonStart: number,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _historySeasonStart: number,
 ): HourlyFireComparePoint[] {
+  // 参数前缀 _ 表示未使用（保持接口兼容）
   // seasonStart 参数现在不用了（保留签名以兼容调用方）
   const current = latestHourlyPrices(currentRows);
   const history = latestHourlyPrices(historyRows);
